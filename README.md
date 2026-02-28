@@ -37,6 +37,7 @@ It manages:
 
 # Project Structure
 
+```bash
 promptcore/
 ├── go.mod
 ├── go.sum
@@ -75,7 +76,7 @@ promptcore/
 └── tests/
     └── core_test.go
 
-
+```
 
 
 # Debugging with Delve (dlv)
