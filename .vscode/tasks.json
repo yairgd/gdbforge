@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "start-dlv-ex1",
+      "type": "shell",
+      "command": "mate-terminal -- bash -c 'dlv debug ./ex1 --headless --listen=:2345 --api-version=2 --accept-multiclient; exec bash'",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "problemMatcher": "$go"
+    },
+    {
+      "label": "start-dlv-ex2",
+      "type": "shell",
+      "command": "mate-terminal -- bash -c 'dlv debug ./ex2 --headless --listen=:2345 --api-version=2 --accept-multiclient; exec bash'",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "problemMatcher": "$go"
+    },
+    {
+      "label": "start-dlv-ex3",
+      "type": "shell",
+      "command": "mate-terminal -- bash -c 'dlv debug ./ex3 --headless --listen=:2345 --api-version=2 --accept-multiclient; exec bash'",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "problemMatcher": "$go"
+    }
+  ]
+}
