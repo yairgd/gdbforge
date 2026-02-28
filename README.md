@@ -38,43 +38,43 @@ It manages:
 # Project Structure
 
 ```bash
-promptcore/
-├── go.mod
-├── go.sum
-│
-├── cmd/
-│   └── tui/
-│       └── main.go          # Entry point → tea.NewProgram(...)
-│
-├── internal/
-│
-│   ├── core/                # 🧠 Business logic (no UI dependencies)
-│   │   ├── session.go       # Session management
-│   │   ├── message.go       # Message model
-│   │   ├── context.go       # Context manager
-│   │   ├── ai.go            # AI integration
-│   │   └── commands.go      # Command registry
-│   │
-│   ├── app/                 # Orchestration layer
-│   │   ├── app.go           # Connects UI ↔ core
-│   │   ├── state.go         # AppState
-│   │   └── events.go        # SubmitMessage, etc.
-│   │
-│   └── tui/                 # UI adapter layer
-│       ├── model.go         # Main tea.Model implementation
-│       ├── input.go
-│       ├── chat.go
-│       ├── command.go
-│       └── layout.go
-│
-├── playground/              # 🧪 Experiments and prototypes
-│   ├── bubbletea-ex1/
-│   │   └── main.go
-│   └── streaming-test/
-│       └── main.go
-│
-└── tests/
-    └── core_test.go
+promptcore/  
+├── go.mod  
+├── go.sum  
+│  
+├── cmd/  
+│   └── tui/  
+│       └── main.go          # Entry point → tea.NewProgram(...)  
+│  
+├── internal/  
+│  
+│   ├── core/                # 🧠 Business logic (no UI dependencies)  
+│   │   ├── session.go       # Session management  
+│   │   ├── message.go       # Message model  
+│   │   ├── context.go       # Context manager  
+│   │   ├── ai.go            # AI integration  
+│   │   └── commands.go      # Command registry  
+│   │  
+│   ├── app/                 # Orchestration layer  
+│   │   ├── app.go           # Connects UI ↔ core  
+│   │   ├── state.go         # AppState  
+│   │   └── events.go        # SubmitMessage, etc.  
+│   │  
+│   └── tui/                 # UI adapter layer  
+│       ├── model.go         # Main tea.Model implementation  
+│       ├── input.go  
+│       ├── chat.go  
+│       ├── command.go  
+│       └── layout.go  
+│  
+├── playground/              # 🧪 Experiments and prototypes  
+│   ├── bubbletea-ex1/  
+│   │   └── main.go  
+│   └── streaming-test/  
+│       └── main.go  
+│  
+└── tests/  
+    └── core_test.go  
 
 ```
 
