@@ -1,24 +1,88 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
+)
 
-func (m *Model) handleInsertMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+//
+// ===================== INPUT BOX COMPONENT =====================
+// Encapsulates textarea completely.
+//
 
-	if msg.String() == "esc" {
-		m.state.Mode = 1
-		m.input.Blur()
-		return m, nil
-	}
+type InputBox struct {
+	ta textarea.Model
+}
 
-	if msg.String() == "ctrl+s" {
-		text := m.input.Value()
-		m.state.SubmitText(text)
-		m.input.Reset()
-		m.refreshViewport()
-		return m, nil
+//
+// Constructor (recommended)
+//
+
+func NewInputBox() InputBox {
+	ta := textarea.New()
+	ta.Placeholder = "Write multi-line text here..."
+	ta.Focus()
+	ta.CharLimit = 0
+	ta.SetHeight(6)
+	ta.ShowLineNumbers = true
+
+	return InputBox{ta: ta}
+}
+
+//
+// Update handles ONLY textarea behavior.
+//
+
+func (i *InputBox) Update(msg tea.KeyMsg) tea.Cmd {
+
+	switch msg.Type {
+
+	case tea.KeyPgUp:
+		for j := 0; j < 10; j++ {
+			i.ta, _ = i.ta.Update(tea.KeyMsg{Type: tea.KeyUp})
+		}
+		return nil
+
+	case tea.KeyPgDown:
+		for j := 0; j < 10; j++ {
+			i.ta, _ = i.ta.Update(tea.KeyMsg{Type: tea.KeyDown})
+		}
+		return nil
 	}
 
 	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	i.ta, cmd = i.ta.Update(msg)
+	return cmd
+}
+
+//
+// Public API
+//
+
+func (i *InputBox) View() string {
+	return i.ta.View()
+}
+
+func (i *InputBox) Value() string {
+	return i.ta.Value()
+}
+
+func (i *InputBox) Reset() {
+	i.ta.Reset()
+}
+
+func (i *InputBox) Blur() {
+	i.ta.Blur()
+}
+
+func (i *InputBox) Focus() {
+	i.ta.Focus()
+}
+
+func (i *InputBox) SetWidth(w int) {
+	i.ta.SetWidth(w)
+}
+
+func (i *InputBox) SetHeight(h int) {
+	i.ta.SetHeight(h)
 }

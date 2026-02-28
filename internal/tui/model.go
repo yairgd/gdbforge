@@ -12,7 +12,7 @@ import (
 
 type Model struct {
 	state    app.State
-	input    textarea.Model
+	input    InputBox
 	viewport viewport.Model
 }
 
@@ -27,13 +27,88 @@ func NewModel() Model {
 
 	return Model{
 		state:    app.NewState(),
-		input:    ta,
+		input:    NewInputBox(),
 		viewport: vp,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	return nil
+}
+
+func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.state.Mode {
+	case app.InsertMode:
+		return m.handleInsertMode(msg)
+	case app.NormalMode:
+		return m.handleNormalMode(msg)
+	case app.CommandMode:
+		return m.handleCommandMode(msg)
+	}
+	return m, nil
+}
+
+func (m *Model) handleInsertMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+
+	switch msg.String() {
+
+	case "esc":
+		m.state.Mode = app.NormalMode
+		m.input.Blur()
+		return m, nil
+
+	case "ctrl+s":
+		text := m.input.Value()
+		m.state.SubmitText(text)
+		m.input.Reset()
+		m.refreshViewport()
+		return m, nil
+	}
+
+	cmd := m.input.Update(msg)
+	return m, cmd
+}
+
+func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+
+	if msg.String() == ":" {
+		m.state.Mode = app.CommandMode
+		return m, nil
+	}
+
+	// any other key returns to insert
+	m.state.Mode = app.InsertMode
+	m.input.Focus()
+	return m, nil
+}
+
+func (m *Model) handleCommandMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+
+	case tea.KeyEsc:
+		m.state.Mode = 1 // NormalMode
+		m.state.CommandInput = ""
+		return m, nil
+
+	case tea.KeyEnter:
+		quit := m.state.ExecuteCommand()
+		m.refreshViewport()
+		m.state.Mode = 1
+		if quit {
+			return m, tea.Quit
+		}
+		return m, nil
+
+	case tea.KeyBackspace:
+		if len(m.state.CommandInput) > 0 {
+			m.state.CommandInput = m.state.CommandInput[:len(m.state.CommandInput)-1]
+		}
+
+	case tea.KeyRunes:
+		m.state.CommandInput += string(msg.Runes)
+	}
+
+	return m, nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -51,24 +126,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetHeight(6)
 
 	case tea.KeyMsg:
-
-		switch m.state.Mode {
-
-		case 0: // InsertMode
-			return m.handleInsertMode(msg)
-
-		case 1: // NormalMode
-			if msg.String() == ":" {
-				m.state.Mode = 2
-				return m, nil
-			}
-			m.state.Mode = 0
-			m.input.Focus()
-			return m, nil
-
-		case 2: // CommandMode
-			return m.handleCommandMode(msg)
-		}
+		return m.handleKey(msg)
 	}
 
 	var cmd tea.Cmd
