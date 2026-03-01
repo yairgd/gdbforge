@@ -15,3 +15,8 @@ var cmdStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("0")).
 	Background(lipgloss.Color("10")).
 	Bold(true)
+
+var topStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("0")).
+	Background(lipgloss.Color("10")).
+	Bold(true)

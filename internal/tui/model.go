@@ -136,7 +136,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 
-	top := "Vim-Style TUI"
+	top := topStyle.Render("Vim-Style TUI")
 
 	vpBox := paneStyle.Width(m.state.Width).Render(m.viewport.View())
 	inputBox := inputStyle.Width(m.state.Width).Render(m.input.View())
@@ -144,13 +144,13 @@ func (m Model) View() string {
 	var cmdLine string
 
 	switch m.state.Mode {
-	case 2:
+	case app.CommandMode:
 		cmdLine = cmdStyle.Width(m.state.Width).
 			Render(":" + m.state.CommandInput)
-	case 1:
+	case app.NormalMode:
 		cmdLine = cmdStyle.Width(m.state.Width).
 			Render("-- NORMAL --")
-	default:
+	case app.InsertMode:
 		cmdLine = cmdStyle.Width(m.state.Width).
 			Render("-- INSERT --")
 	}
