@@ -13,6 +13,9 @@ import (
 type InputBox struct {
 	ta textarea.Model
 }
+type SubmitMsg struct {
+	Text string
+}
 
 //
 // Constructor (recommended)
@@ -48,8 +51,15 @@ func (i *InputBox) Update(msg tea.KeyMsg) tea.Cmd {
 			i.ta, _ = i.ta.Update(tea.KeyMsg{Type: tea.KeyDown})
 		}
 		return nil
-	}
 
+	case tea.KeyCtrlS:
+		text := i.ta.Value()
+		i.ta.Reset()
+
+		return func() tea.Msg {
+			return SubmitMsg{Text: text}
+		}
+	}
 	var cmd tea.Cmd
 	i.ta, cmd = i.ta.Update(msg)
 	return cmd

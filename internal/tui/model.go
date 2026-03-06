@@ -56,13 +56,6 @@ func (m *Model) handleInsertMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state.Mode = app.NormalMode
 		m.input.Blur()
 		return m, nil
-
-	case "ctrl+s":
-		text := m.input.Value()
-		m.state.SubmitText(text)
-		m.input.Reset()
-		m.refreshViewport()
-		return m, nil
 	}
 
 	cmd := m.input.Update(msg)
@@ -71,14 +64,27 @@ func (m *Model) handleInsertMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
-	if msg.String() == ":" {
-		m.state.Mode = app.CommandMode
-		return m, nil
+	switch msg.Type {
+
+	case tea.KeyEnter:
+		text := m.input.Value()
+
+		return m, func() tea.Msg {
+			m.input.Reset()
+			return SubmitMsg{Text: text}
+		}
+
+	case tea.KeyRunes:
+		if msg.String() == ":" {
+			m.state.Mode = app.CommandMode
+			return m, nil
+		}
 	}
 
 	// any other key returns to insert
 	m.state.Mode = app.InsertMode
 	m.input.Focus()
+
 	return m, nil
 }
 
@@ -127,8 +133,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
-	}
 
+	case SubmitMsg:
+		m.state.SubmitText(msg.Text)
+		m.refreshViewport()
+		return m, nil
+	}
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd

@@ -1,6 +1,8 @@
 package tui
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func (m *Model) refreshViewport() {
 	content := ""

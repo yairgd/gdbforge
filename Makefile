@@ -24,6 +24,11 @@ build:
 run:
 	go run ./cmd/tui
 
+# -------- Debug Dlv --------
+.PHONY: debug
+debug:
+	 dlv debug ./cmd/tui --headless --listen=:2345 --api-version=2
+
 # -------- Test --------
 .PHONY: test
 test:
