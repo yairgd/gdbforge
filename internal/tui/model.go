@@ -5,30 +5,33 @@ import (
 
 	"github.com/yairgd/promptcore/internal/app"
 
-	"github.com/charmbracelet/bubbles/textarea"
+	//"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type Model struct {
-	state    app.State
-	input    InputBox
+	state       app.State
+	input       InputBox
+	cmdInputBox *CmdInputBox
+
 	viewport viewport.Model
 }
 
 func NewModel() Model {
-	ta := textarea.New()
-	ta.Focus()
-	ta.CharLimit = 0
-	ta.SetHeight(6)
-	ta.ShowLineNumbers = true
+	//	ta := textarea.New()
+	//	ta.Focus()
+	//	ta.CharLimit = 0
+	//	ta.SetHeight(6)
+	//	ta.ShowLineNumbers = true
 
 	vp := viewport.New(80, 20)
 
 	return Model{
-		state:    app.NewState(),
-		input:    NewInputBox(),
-		viewport: vp,
+		state:       app.NewState(),
+		input:       NewInputBox(),
+		cmdInputBox: NewCmdInputBox(),
+		viewport:    vp,
 	}
 }
 
@@ -43,7 +46,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case app.NormalMode:
 		return m.handleNormalMode(msg)
 	case app.CommandMode:
-		return m.handleCommandMode(msg)
+		return m, m.cmdInputBox.Update(msg)
+		//return m.handleCommandMode(msg)
 	}
 	return m, nil
 }
@@ -74,9 +78,12 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return SubmitMsg{Text: text}
 		}
 
+	// Transition from normal mode to command mode.
+	// Command mode is activated when ':' is pressed (similar to Vim).
 	case tea.KeyRunes:
 		if msg.String() == ":" {
 			m.state.Mode = app.CommandMode
+			m.cmdInputBox.SetActive()
 			return m, nil
 		}
 	}
@@ -84,35 +91,6 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// any other key returns to insert
 	m.state.Mode = app.InsertMode
 	m.input.Focus()
-
-	return m, nil
-}
-
-func (m *Model) handleCommandMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-
-	case tea.KeyEsc:
-		m.state.Mode = 1 // NormalMode
-		m.state.CommandInput = ""
-		return m, nil
-
-	case tea.KeyEnter:
-		quit := m.state.ExecuteCommand()
-		m.refreshViewport()
-		m.state.Mode = 1
-		if quit {
-			return m, tea.Quit
-		}
-		return m, nil
-
-	case tea.KeyBackspace:
-		if len(m.state.CommandInput) > 0 {
-			m.state.CommandInput = m.state.CommandInput[:len(m.state.CommandInput)-1]
-		}
-
-	case tea.KeyRunes:
-		m.state.CommandInput += string(msg.Runes)
-	}
 
 	return m, nil
 }
@@ -131,8 +109,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetWidth(msg.Width)
 		m.input.SetHeight(6)
 
+		m.cmdInputBox.SetWidth(msg.Width)
+		m.cmdInputBox.SetHeight(1)
+
 	case tea.KeyMsg:
-		return m.handleKey(msg)
+		switch msg.String() {
+		case "ctrl+d", "q":
+			return m, tea.Quit
+
+		default:
+			return m.handleKey(msg)
+		}
+
+	case CancelCmdMode:
+		m.state.Mode = app.NormalMode
 
 	case SubmitMsg:
 		m.state.SubmitText(msg.Text)
@@ -146,29 +136,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 
-	top := topStyle.Render("Vim-Style TUI")
+	//	top := topStyle.Render("Vim-Style TUI")
 
 	vpBox := paneStyle.Width(m.state.Width).Render(m.viewport.View())
 	inputBox := inputStyle.Width(m.state.Width).Render(m.input.View())
+	cmdInputBox := cmdInputBoxStyle.Width(m.state.Width).Height(1).Render(m.cmdInputBox.View())
 
-	var cmdLine string
+	/*
+		var cmdLine string
 
-	switch m.state.Mode {
-	case app.CommandMode:
-		cmdLine = cmdStyle.Width(m.state.Width).
-			Render(":" + m.state.CommandInput)
-	case app.NormalMode:
-		cmdLine = cmdStyle.Width(m.state.Width).
-			Render("-- NORMAL --")
-	case app.InsertMode:
-		cmdLine = cmdStyle.Width(m.state.Width).
-			Render("-- INSERT --")
-	}
-
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n%s",
-		top,
+		switch m.state.Mode {
+		case app.CommandMode:
+			cmdLine = cmdStyle.Width(m.state.Width).
+				Render(":" + m.state.CommandInput)
+		case app.NormalMode:
+			cmdLine = cmdStyle.Width(m.state.Width).
+				Render("-- NORMAL --")
+		case app.InsertMode:
+			cmdLine = cmdStyle.Width(m.state.Width).
+				Render("-- INSERT --")
+		}
+	*/
+	return fmt.Sprintf("%s\n\n%s\n%s",
+		//	top,
 		vpBox,
 		inputBox,
-		cmdLine,
+		cmdInputBox,
+		//		cmdLine,
 	)
 }
