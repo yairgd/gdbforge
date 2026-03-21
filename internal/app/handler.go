@@ -2,23 +2,23 @@
 package app
 
 import (
-	"github.com/yairgd/promptcore/internal/events"
+	"github.com/yairgd/promptcore/internal/core"
 )
 
 // HandleEvent = הלב של המערכת
-func (a App) HandleEvent(e events.Event) ([]events.Event, error) {
+func (a App) HandleEvent(e core.Event) ([]core.Event, error) {
 
 	switch ev := e.(type) {
 
-	case events.SubmitMessage:
-		return []events.Event{
-			events.SubmitMessage{Text: "Echo: " + ev.Text},
+	case core.SubmitMessage:
+		return []core.Event{
+			core.SubmitMessage{Text: "Echo: " + ev.Text},
 		}, nil
 
-	case events.RunCommand:
+	case core.RunCommand:
 		if ev.Command == ":q" {
-			return []events.Event{
-				events.Quit{},
+			return []core.Event{
+				core.Quit{},
 			}, nil
 		}
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/yairgd/promptcore/internal/app"
-	"github.com/yairgd/promptcore/internal/events"
+	"github.com/yairgd/promptcore/internal/core"
 
 	//"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -21,7 +21,7 @@ type Model struct {
 }
 
 // emit event as tea.Cmd
-func emitEvent(e events.Event) tea.Cmd {
+func emitEvent(e core.Event) tea.Cmd {
 	return func() tea.Msg {
 		return e
 	}
@@ -30,7 +30,7 @@ func emitEvent(e events.Event) tea.Cmd {
 // simulate async work
 func sendMessageCmd(text string) tea.Cmd {
 	return func() tea.Msg {
-		return events.MessageSent{Text: text}
+		return core.MessageSent{Text: text}
 	}
 }
 
@@ -92,7 +92,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, func() tea.Msg {
 			m.input.Reset()
-			return events.SubmitMsg{Text: text}
+			return core.SubmitMsg{Text: text}
 		}
 
 	// Transition from normal mode to command mode.
@@ -140,19 +140,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CancelCmdMode:
 		m.state.Mode = app.NormalMode
 
-	case events.SubmitMsg:
+	case core.SubmitMsg:
 		m.state.SubmitText(msg.Text)
 		m.refreshViewport()
 		return m, nil
 
-	case events.Event:
+	case core.Event:
 		switch msg.(type) {
-		case events.Quit:
+		case core.Quit:
 			return m, tea.Quit
 		}
 		nextEvents, _ := m.app.HandleEvent(msg)
 
-		// chain events
+		// chain core
 		var cmds []tea.Cmd
 		for _, e := range nextEvents {
 			cmds = append(cmds, emitEvent(e))

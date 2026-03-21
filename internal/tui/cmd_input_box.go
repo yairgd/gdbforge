@@ -1,11 +1,11 @@
 package tui
 
 import (
+	"github.com/yairgd/promptcore/internal/core"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/events"
 )
 
 type CmdInputBox struct {
@@ -78,7 +78,7 @@ func (i *CmdInputBox) Update(msg tea.Msg) tea.Cmd {
 			i.ta.Reset()
 
 			return func() tea.Msg {
-				return events.RunCommand{Command: text}
+				return core.RunCommand{Command: text}
 			}
 
 		case tea.KeyUp:

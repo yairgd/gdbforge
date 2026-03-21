@@ -3,7 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/events"
+	"github.com/yairgd/promptcore/internal/core"
 )
 
 //
@@ -55,7 +55,7 @@ func (i *InputBox) Update(msg tea.KeyMsg) tea.Cmd {
 		i.ta.Reset()
 
 		return func() tea.Msg {
-			return events.SubmitMsg{Text: text}
+			return core.SubmitMsg{Text: text}
 		}
 	}
 	var cmd tea.Cmd
