@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/yairgd/promptcore/internal/events"
 )
 
 type CmdInputBox struct {
@@ -17,10 +18,6 @@ type CmdInputBox struct {
 
 	completions []string
 	compIndex   int
-}
-
-type SubmitCmdMsg struct {
-	Text string
 }
 
 type CancelCmdMode struct{}
@@ -42,7 +39,7 @@ func NewCmdInputBox() *CmdInputBox {
 
 	ti := textinput.New()
 
-	ti.Placeholder = "use vim style command"
+	ti.Placeholder = "type ESC + \":\" to use vim style commands"
 	ti.SetValue("")
 	ti.Focus()
 	ti.Prompt = ""
@@ -81,7 +78,7 @@ func (i *CmdInputBox) Update(msg tea.Msg) tea.Cmd {
 			i.ta.Reset()
 
 			return func() tea.Msg {
-				return SubmitCmdMsg{Text: text}
+				return events.RunCommand{Command: text}
 			}
 
 		case tea.KeyUp:
@@ -143,6 +140,7 @@ func (i *CmdInputBox) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg {
 				return CancelCmdMode{}
 			}
+
 		}
 	}
 

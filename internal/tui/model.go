@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/yairgd/promptcore/internal/app"
+	"github.com/yairgd/promptcore/internal/events"
 
 	//"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -14,8 +15,23 @@ type Model struct {
 	state       app.State
 	input       InputBox
 	cmdInputBox *CmdInputBox
+	app         *app.App
 
 	viewport viewport.Model
+}
+
+// emit event as tea.Cmd
+func emitEvent(e events.Event) tea.Cmd {
+	return func() tea.Msg {
+		return e
+	}
+}
+
+// simulate async work
+func sendMessageCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		return events.MessageSent{Text: text}
+	}
 }
 
 func NewModel() Model {
@@ -32,6 +48,7 @@ func NewModel() Model {
 		input:       NewInputBox(),
 		cmdInputBox: NewCmdInputBox(),
 		viewport:    vp,
+		app:         app.New(),
 	}
 }
 
@@ -75,7 +92,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, func() tea.Msg {
 			m.input.Reset()
-			return SubmitMsg{Text: text}
+			return events.SubmitMsg{Text: text}
 		}
 
 	// Transition from normal mode to command mode.
@@ -114,20 +131,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+d", "q":
+		case "ctrl+d":
 			return m, tea.Quit
 
 		default:
 			return m.handleKey(msg)
 		}
-
 	case CancelCmdMode:
 		m.state.Mode = app.NormalMode
 
-	case SubmitMsg:
+	case events.SubmitMsg:
 		m.state.SubmitText(msg.Text)
 		m.refreshViewport()
 		return m, nil
+
+	case events.Event:
+		switch msg.(type) {
+		case events.Quit:
+			return m, tea.Quit
+		}
+		nextEvents, _ := m.app.HandleEvent(msg)
+
+		// chain events
+		var cmds []tea.Cmd
+		for _, e := range nextEvents {
+			cmds = append(cmds, emitEvent(e))
+		}
+
+		return m, tea.Batch(cmds...)
+
 	}
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -142,21 +174,6 @@ func (m Model) View() string {
 	inputBox := inputStyle.Width(m.state.Width).Render(m.input.View())
 	cmdInputBox := cmdInputBoxStyle.Width(m.state.Width).Height(1).Render(m.cmdInputBox.View())
 
-	/*
-		var cmdLine string
-
-		switch m.state.Mode {
-		case app.CommandMode:
-			cmdLine = cmdStyle.Width(m.state.Width).
-				Render(":" + m.state.CommandInput)
-		case app.NormalMode:
-			cmdLine = cmdStyle.Width(m.state.Width).
-				Render("-- NORMAL --")
-		case app.InsertMode:
-			cmdLine = cmdStyle.Width(m.state.Width).
-				Render("-- INSERT --")
-		}
-	*/
 	return fmt.Sprintf("%s\n\n%s\n%s",
 		//	top,
 		vpBox,
