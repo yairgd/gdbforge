@@ -24,7 +24,7 @@ func NewModel() Model {
 	return Model{
 		state:       app.NewState(),
 		input:       NewInputBox(),
-		cmdInputBox: NewCmdInputBox(),
+		cmdInputBox: NewCmdInputBox(core.NewMemoryHistory(), nil),
 		viewport:    vp,
 		app:         app.New(),
 	}
@@ -42,7 +42,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNormalMode(msg)
 	case app.CommandMode:
 		return m, m.cmdInputBox.Update(msg)
-		//return m.handleCommandMode(msg)
 	}
 	return m, nil
 }
@@ -90,6 +89,15 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) refreshViewport() {
+	content := ""
+	for i, l := range m.state.Lines {
+		content += fmt.Sprintf("[%d]\n%s\n\n", i+1, l)
+	}
+	m.viewport.SetContent(content)
+	m.viewport.GotoBottom()
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
@@ -97,6 +105,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.state.Width = msg.Width
 		m.state.Height = msg.Height
+		m.input.SetWidth(m.state.Width - 2)
+	//	m.input.SetHeight(6)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+d":
@@ -137,7 +147,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 
 	//	top := topStyle.Render("Vim-Style TUI")
-
+	m.input.SetWidth(m.state.Width - 2)
+	m.input.SetHeight(6)
 	vpBox := paneStyle.Width(m.state.Width - 2).Height(m.state.Height - 12).Render(m.viewport.View())
 	inputBox := inputStyle.Width(m.state.Width - 2).Height(6).Render(m.input.View())
 	cmdInputBox := cmdInputBoxStyle.Width(m.state.Width).Height(1).Render(m.cmdInputBox.View())

@@ -24,7 +24,7 @@ func NewInputBox() InputBox {
 	ta.Placeholder = "Write multi-line text here..."
 	ta.Focus()
 	ta.CharLimit = 0
-	ta.SetHeight(6)
+	//ta.SetHeight(6)
 	ta.ShowLineNumbers = true
 
 	return InputBox{ta: ta}

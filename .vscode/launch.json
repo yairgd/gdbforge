@@ -30,6 +30,8 @@
       "preLaunchTask": "start-dlv-ex3"
     },
 
+
+
     // --- דיבאג רגיל (לא TUI) או תתי-אפליקציות ---
     {
       "name": "Launch ex1 (Standard)",
@@ -49,6 +51,17 @@
       "program": "${fileDirname}"
     },
 
+       {
+      "name": "Debug TUI: app",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "preLaunchTask": "start-dlv-tui-app"
+    },
+
+    
     // --- חיבור ידני (ליתר ביטחון) ---
     {
       "name": "Manual Attach (Port 2345)",

@@ -5,7 +5,7 @@ import (
 	"github.com/yairgd/promptcore/internal/core"
 )
 
-// HandleEvent = הלב של המערכת
+// HandleEvent
 func (a App) HandleEvent(e core.Event) ([]core.Event, error) {
 
 	switch ev := e.(type) {

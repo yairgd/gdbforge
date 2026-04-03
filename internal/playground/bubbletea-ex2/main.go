@@ -97,7 +97,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if text != "" {
 					m.lines = append(m.lines, text)
 					m.input.Reset()
-					m.refreshViewport()
+					m.refreshViewport_1()
 				}
 				return m, nil
 			}
@@ -120,7 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				text := m.input.Value()
 				if strings.TrimSpace(text) != "" {
 					m.lines = append(m.lines, text)
-					m.refreshViewport()
+					m.refreshViewport_1()
 					m.input.Reset()
 				}
 				return m, nil
@@ -176,22 +176,22 @@ func (m *model) executeCommand() tea.Cmd {
 
 	case "hello":
 		m.lines = append(m.lines, "🤖 hi this is hello command")
-		m.refreshViewport()
+		m.refreshViewport_1()
 		return nil
 
 	case "clear":
 		m.lines = []string{}
-		m.refreshViewport()
+		m.refreshViewport_1()
 		return nil
 
 	default:
 		m.lines = append(m.lines, "Unknown command: "+cmd)
-		m.refreshViewport()
+		m.refreshViewport_1()
 		return nil
 	}
 }
 
-func (m *model) refreshViewport() {
+func (m *model) refreshViewport_1() {
 	content := ""
 	for i, l := range m.lines {
 		content += fmt.Sprintf("[%d]\n%s\n\n", i+1, l)

@@ -24,10 +24,19 @@ build:
 run:
 	go run ./cmd/tui
 
+.PHONY: dbug
+dbug:
+	go run ./cmd/dbug
+
+
+
+
+
+
 # -------- Debug Dlv --------
 .PHONY: debug
 debug:
-	 dlv debug ./cmd/tui --headless --listen=:2345 --api-version=2
+	 dlv debug ./cmd/uitcell --headless --listen=:2345 --api-version=2
 
 # -------- Test --------
 .PHONY: test

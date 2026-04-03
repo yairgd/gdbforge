@@ -22,12 +22,15 @@ require (
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/davidrjenni/reftools v0.0.0-20250907133731-34b10582faa4 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/fatih/gomodifytags v1.17.0 // indirect
 	github.com/fatih/motion v1.2.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
+	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/gdamore/tcell/v2 v2.13.8 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/josharian/impl v1.5.0 // indirect
 	github.com/jstemmer/gotags v1.4.1 // indirect
@@ -56,7 +59,8 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260213145524-e0ab670178e1 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/tools/cmd/gorename v0.1.0-deprecated // indirect
 	golang.org/x/tools/cmd/guru v0.1.1-deprecated // indirect

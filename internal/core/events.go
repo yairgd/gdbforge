@@ -43,6 +43,14 @@ type Quit struct {
 
 func (Quit) Type() string { return "Quit" }
 
+// OutputMsg is sent to the UI layer
+type GdbOutputMsg struct {
+	Data string
+	Err  error
+}
+
+func (GdbOutputMsg) Type() string { return "GdbOutputMsg" }
+
 //////////////////////////////
 // Helpers
 //////////////////////////////
