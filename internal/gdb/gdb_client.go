@@ -1,12 +1,13 @@
 package gdb
 
 import (
-	"github.com/creack/pty"
-	"github.com/yairgd/promptcore/internal/core"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"os/exec"
+
+	"github.com/creack/pty"
+	"github.com/yairgd/promptcore/internal/core"
+	"golang.org/x/sys/unix"
 )
 
 type GDBClient struct {

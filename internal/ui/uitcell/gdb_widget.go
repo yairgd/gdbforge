@@ -19,21 +19,18 @@ type GDBWidget struct {
 	InputBuf string
 	Cursor   int
 
-	SendFunc func(string)
-	SendRaw  func(string)
-
-	Width  int
-	Height int
+	Debugger core.Debugger
+	Width    int
+	Height   int
 }
 
-func NewGDBWidget(sendFunc func(string), sendRaw func(string)) *GDBWidget {
+func NewGDBWidget(debugger core.Debugger) *GDBWidget {
 	buf := core.NewBuffer()
 
 	return &GDBWidget{
 		Buffer:   buf,
 		Viewport: core.Viewport{Height: 10},
-		SendFunc: sendFunc,
-		SendRaw:  sendRaw,
+		Debugger: debugger,
 		Cursor:   0,
 	}
 }
@@ -142,19 +139,19 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 		switch e.Key() {
 
 		case tcell.KeyCtrlC:
-			if m.SendRaw != nil {
-				m.SendRaw("\x03") // SIGINT
+			if m.Debugger.SendRaw != nil {
+				m.Debugger.SendRaw("\x03") // SIGINT
 			}
 			return
 		case tcell.KeyCtrlD:
-			if m.SendRaw != nil {
-				m.SendFunc("q\n") // SIGINT
+			if m.Debugger.Send != nil {
+				m.Debugger.Send("q\n") // SIGINT
 			}
 		//	return
 
 		case tcell.KeyEnter:
-			if m.SendFunc != nil {
-				m.SendFunc(m.InputBuf)
+			if m.Debugger.Send != nil {
+				m.Debugger.Send(m.InputBuf)
 			}
 
 			m.Buffer.AppendText(m.InputBuf)
@@ -180,13 +177,13 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 			}
 
 		case tcell.KeyUp:
-			if m.SendRaw != nil {
-				m.SendRaw("\x1b[A")
+			if m.Debugger.SendRaw != nil {
+				m.Debugger.SendRaw("\x1b[A")
 			}
 
 		case tcell.KeyDown:
-			if m.SendRaw != nil {
-				m.SendRaw("\x1b[B")
+			if m.Debugger.SendRaw != nil {
+				m.Debugger.SendRaw("\x1b[B")
 			}
 
 		case tcell.KeyRune:
