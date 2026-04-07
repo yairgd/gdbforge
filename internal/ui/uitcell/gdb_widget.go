@@ -29,7 +29,7 @@ type GDBWidget struct {
 
 func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
 	buf := core.NewBuffer()
-	client, outputChan, err := gdb.InitGdbClient()
+	client, outputChan, err := gdb.NewGDBClient()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,8 +42,23 @@ func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
 		Debugger:   client,
 		Cursor:     0,
 	}
-	StartGdbUIBridge(uiContext.Screen(), widget, outputChan)
+	widget.StartGdbUIBridge(uiContext.Screen(), widget, outputChan)
 	return widget
+}
+
+func (m *GDBWidget) StartGdbUIBridge(
+	screen tcell.Screen,
+	widget *GDBWidget,
+	outputChan <-chan core.GdbOutputMsg,
+) {
+	go func() {
+		for msg := range outputChan {
+			widget.OnGDBOutput(msg.Data)
+			screen.PostEvent(tcell.NewEventInterrupt(msg))
+		}
+
+		screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
+	}()
 }
 
 //////////////////////////

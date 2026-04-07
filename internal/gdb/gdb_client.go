@@ -15,21 +15,28 @@ type GDBClient struct {
 	ptmx *os.File
 }
 
-func NewGDBClient() (*GDBClient, error) {
+func NewGDBClient() (*GDBClient, chan core.GdbOutputMsg, error) {
 
 	// cmd := exec.Command("gdb", "--interpreter=mi")
 	cmd := exec.Command("gdb", "hello")
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	_ = setRaw(int(ptmx.Fd()))
 
-	return &GDBClient{
+	client := &GDBClient{
 		cmd:  cmd,
 		ptmx: ptmx,
-	}, nil
+	}
+
+	outputChan := make(chan core.GdbOutputMsg)
+
+	client.Start(outputChan)
+	client.Send("\n")
+
+	return client, outputChan, nil
 }
 
 // Start reads from PTY and pushes structured messages
