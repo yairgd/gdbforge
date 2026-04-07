@@ -145,18 +145,14 @@ func DrawANSIText(screen tcell.Screen, x, y int, text string, baseStyle tcell.St
 // ////////////////////////
 // EVENTS
 // ////////////////////////
-func (m *GDBWidget) HandleCoreEvent(ev core.Event) {
-	//	switch e := ev.(type) {
-	//	case core.GdbOutputMsg:
-	//		print("yair gadelov", e.Data)
-
-	// }
-}
-
-func (m *GDBWidget) HandleUIEvent(ev tcell.Event) {
+func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
-
+	case *tcell.EventInterrupt:
+		//switch data := e.Data().(type) {
+		//case core.GdbOutputMsg:
+		//	return
+		//}
 	case *tcell.EventResize:
 		w, h := e.Size()
 
