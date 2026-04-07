@@ -3,6 +3,7 @@ package uitcell
 import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/promptcore/internal/termui"
 
 	//	"github.com/muesli/ansi"
 	"strings"
@@ -13,6 +14,7 @@ import (
 //////////////////////////
 
 type GDBWidget struct {
+	termui.BaseWidget
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
@@ -20,8 +22,8 @@ type GDBWidget struct {
 	Cursor   int
 
 	Debugger core.Debugger
-	Width    int
-	Height   int
+	// Width    int
+	// Height   int
 }
 
 func NewGDBWidget(debugger core.Debugger) *GDBWidget {
@@ -38,12 +40,6 @@ func NewGDBWidget(debugger core.Debugger) *GDBWidget {
 //////////////////////////
 // PUBLIC API
 //////////////////////////
-
-func (m *GDBWidget) SetSize(w, h int) {
-	m.Width = w
-	m.Height = h
-	m.Viewport.Height = h - 1
-}
 
 func (m *GDBWidget) OnGDBOutput(data string) {
 	m.Buffer.AppendText(data)
@@ -132,7 +128,11 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 
 	case *tcell.EventResize:
-		m.SetSize(e.Size())
+		w, h := e.Size()
+
+		m.SetSize(w, h)
+
+		m.Viewport.Height = h - 1
 
 	case *tcell.EventKey:
 
@@ -208,22 +208,23 @@ func (m *GDBWidget) Draw(screen tcell.Screen) {
 
 	// --- OUTPUT ---
 	lines := m.Viewport.VisibleLines(m.Buffer)
-
 	for y, line := range lines {
 		for x, _ := range line {
-			if x >= m.Width {
+			w, _ := m.Size()
+			if x >= w {
 				break
 			}
-			DrawANSIText(screen, 0, y, line, style, m.Width)
+			DrawANSIText(screen, 0, y, line, style, w)
 			//	screen.SetContent(x, y, ch, nil, style)
 		}
 	}
 
 	// --- INPUT LINE ---
-	inputY := m.Height - 2
+	w, h := m.Size()
+	inputY := h - 2
 
 	for x, ch := range m.InputBuf {
-		if x >= m.Width {
+		if x >= w {
 			break
 		}
 		screen.SetContent(x+6, inputY, ch, nil, style)
@@ -233,4 +234,11 @@ func (m *GDBWidget) Draw(screen tcell.Screen) {
 	screen.ShowCursor(m.Cursor+6, inputY)
 
 	screen.Show()
+}
+
+func (w *GDBWidget) HandleEvent1(ev tcell.Event) {
+	w.App().RequestRedraw()
+
+	w.Emit(core.GdbOutputMsg{Data: "test"})
+
 }

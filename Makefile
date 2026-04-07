@@ -22,7 +22,7 @@ build:
 # -------- Run TUI --------
 .PHONY: run
 run:
-	go run ./cmd/tui
+	go run ./cmd/uitcell
 
 .PHONY: dbug
 dbug:
