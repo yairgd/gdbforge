@@ -23,8 +23,6 @@ type GDBWidget struct {
 	Cursor   int
 
 	Debugger core.Debugger
-	// Width    int
-	// Height   int
 }
 
 func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
@@ -55,6 +53,7 @@ func (m *GDBWidget) StartGdbUIBridge(
 		for msg := range outputChan {
 			widget.OnGDBOutput(msg.Data)
 			screen.PostEvent(tcell.NewEventInterrupt(msg))
+			widget.Emit(msg)
 		}
 
 		screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
@@ -143,11 +142,18 @@ func DrawANSIText(screen tcell.Screen, x, y int, text string, baseStyle tcell.St
 	}
 }
 
-//////////////////////////
+// ////////////////////////
 // EVENTS
-//////////////////////////
+// ////////////////////////
+func (m *GDBWidget) HandleCoreEvent(ev core.Event) {
+	//	switch e := ev.(type) {
+	//	case core.GdbOutputMsg:
+	//		print("yair gadelov", e.Data)
 
-func (m *GDBWidget) HandleEvent(ev tcell.Event) {
+	// }
+}
+
+func (m *GDBWidget) HandleUIEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
 

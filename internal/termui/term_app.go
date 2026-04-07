@@ -41,9 +41,9 @@ func (app *TermApp) Draw() {
 	}
 }
 
-func (app *TermApp) HandleEvent(ev tcell.Event) {
+func (app *TermApp) HandleUIEvent(ev tcell.Event) {
 	for _, w := range app.widgets {
-		w.HandleEvent(ev)
+		w.HandleUIEvent(ev)
 	}
 }
 
@@ -57,6 +57,49 @@ func (app *TermApp) Screen() tcell.Screen {
 	return app.screen
 }
 
+func (app *TermApp) dispatchCoreEvent(ev core.Event) {
+
+	for _, w := range app.widgets {
+		w.HandleCoreEvent(ev)
+	}
+
+}
+
+func (app *TermApp) dispatchCoreUIEvent(ev tcell.Event) bool {
+	switch e := ev.(type) {
+
+	case *tcell.EventInterrupt:
+		if e.Data() == "gdb-exit" {
+			return true
+		}
+		app.HandleUIEvent(ev)
+		return false
+
+	case *tcell.EventResize:
+		w, h := e.Size()
+		app.SetSize(w, h)
+
+	case *tcell.EventKey:
+		if e.Key() == tcell.KeyCtrlE {
+			return false
+		}
+	}
+	app.HandleUIEvent(ev)
+	return false
+
+}
+
+func (app *TermApp) handleCoreEvents() {
+	for {
+		select {
+		case ev := <-app.events:
+			app.dispatchCoreEvent(ev)
+		default:
+			return
+		}
+	}
+}
+
 func (app *TermApp) EventLoop() {
 
 	w, h := app.screen.Size()
@@ -65,32 +108,14 @@ func (app *TermApp) EventLoop() {
 	for {
 		app.Draw()
 
-		ev := app.screen.PollEvent()
+		app.handleCoreEvents()
 
-		switch e := ev.(type) {
-
-		case *tcell.EventInterrupt:
-			if e.Data() == "gdb-exit" {
-				return
-			}
-
-			app.HandleEvent(ev)
-			continue
-
-		case *tcell.EventResize:
-			w, h := e.Size()
-			app.SetSize(w, h)
-
-		case *tcell.EventKey:
-			if e.Key() == tcell.KeyCtrlE {
-				return
-			}
+		ev := app.screen.PollEvent() // blocking OK
+		if app.dispatchCoreUIEvent(ev) == true {
+			return
 		}
-
-		app.HandleEvent(ev)
 	}
 }
-
 func (app *TermApp) Emit(e core.Event) {
 	app.events <- e
 }
