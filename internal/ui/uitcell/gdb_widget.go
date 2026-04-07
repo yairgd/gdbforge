@@ -3,8 +3,9 @@ package uitcell
 import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/promptcore/internal/gdb"
 	"github.com/yairgd/promptcore/internal/termui"
-
+	"log"
 	//	"github.com/muesli/ansi"
 	"strings"
 )
@@ -26,15 +27,23 @@ type GDBWidget struct {
 	// Height   int
 }
 
-func NewGDBWidget(debugger core.Debugger) *GDBWidget {
+func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
 	buf := core.NewBuffer()
-
-	return &GDBWidget{
-		Buffer:   buf,
-		Viewport: core.Viewport{Height: 10},
-		Debugger: debugger,
-		Cursor:   0,
+	client, outputChan, err := gdb.InitGdbClient()
+	if err != nil {
+		log.Fatal(err)
 	}
+	//	defer client.Close()
+
+	widget := &GDBWidget{
+		BaseWidget: termui.NewBaseWidget(uiContext.Emit),
+		Buffer:     buf,
+		Viewport:   core.Viewport{Height: 10},
+		Debugger:   client,
+		Cursor:     0,
+	}
+	StartGdbUIBridge(uiContext.Screen(), widget, outputChan)
+	return widget
 }
 
 //////////////////////////

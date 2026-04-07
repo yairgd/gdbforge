@@ -53,7 +53,7 @@ func (app *TermApp) SetSize(w int, h int) {
 	}
 }
 
-func (app *TermApp) GetScreen() tcell.Screen {
+func (app *TermApp) Screen() tcell.Screen {
 	return app.screen
 }
 
@@ -89,4 +89,8 @@ func (app *TermApp) EventLoop() {
 
 		app.HandleEvent(ev)
 	}
+}
+
+func (app *TermApp) Emit(e core.Event) {
+	app.events <- e
 }

@@ -11,3 +11,8 @@ type AppAPI interface {
 	OpenWindow(w Widget)
 	Publish(event core.Event)
 }
+
+type UIContext interface {
+	Emit(core.Event)
+	Screen() tcell.Screen
+}

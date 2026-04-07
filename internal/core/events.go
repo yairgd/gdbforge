@@ -7,6 +7,7 @@ package core
 type Event interface {
 	Type() string
 }
+type Emitter func(Event)
 
 // user typed message
 type SubmitMessage struct {

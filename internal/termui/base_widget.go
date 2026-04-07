@@ -4,11 +4,9 @@ import (
 	"github.com/yairgd/promptcore/internal/core"
 )
 
-type Emitter func(core.Event)
-
 type BaseWidget struct {
 	app    AppAPI
-	emit   Emitter
+	emit   core.Emitter
 	width  int
 	height int
 	Test   int
@@ -34,5 +32,11 @@ func (b BaseWidget) App() AppAPI {
 func (b *BaseWidget) Emit(e core.Event) {
 	if b.emit != nil {
 		b.emit(e)
+	}
+}
+
+func NewBaseWidget(emit core.Emitter) BaseWidget {
+	return BaseWidget{
+		emit: emit,
 	}
 }
