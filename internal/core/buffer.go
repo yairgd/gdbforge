@@ -1,5 +1,9 @@
 package core
 
+import (
+	"strings"
+)
+
 type Buffer struct {
 	lines []string
 }
@@ -60,18 +64,16 @@ func (b *Buffer) AppendText(text string) {
 	if len(b.lines) == 0 {
 		b.lines = append(b.lines, "")
 	}
-	//	line := len(b.lines) - 1
-	current := b.lines[len(b.lines)-1]
 
-	for _, ch := range text {
-		if ch == '\n' {
-			b.lines[len(b.lines)-1] = current
-			b.lines = append(b.lines, "")
-			current = ""
-		} else {
-			current += string(ch)
-		}
+	// Split the incoming text by newlines immediately
+	// This is more efficient than checking byte-by-byte
+	parts := strings.Split(text, "\n")
+
+	// The first part completes the current last line
+	b.lines[len(b.lines)-1] += parts[0]
+
+	// If there were newlines, add the subsequent parts as new lines
+	if len(parts) > 1 {
+		b.lines = append(b.lines, parts[1:]...)
 	}
-
-	b.lines[len(b.lines)-1] = current
 }

@@ -52,6 +52,11 @@ type GdbOutputMsg struct {
 
 func (GdbOutputMsg) Type() string { return "GdbOutputMsg" }
 
+type ConsoleOutput struct{ Text string }
+type TargetOutput struct{ Text string }
+type LogOutput struct{ Text string }
+type BreakpointHit struct{ Line int }
+
 //////////////////////////////
 // Helpers
 //////////////////////////////
