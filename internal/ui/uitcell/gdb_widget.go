@@ -20,8 +20,9 @@ type GDBWidget struct {
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
-	InputBuf string
-	Cursor   int
+	InputBuf    string
+	lastCommand string
+	Cursor      int
 
 	Debugger core.Debugger
 }
@@ -308,6 +309,17 @@ func (m *GDBWidget) handleAsyncRecord(line string) {
 	// =breakpoint-created → לעדכן state
 }
 func (m *GDBWidget) handlePrompt() {
+	m.Buffer.AppendText("(gdb) ")
+
+	//	w, h := m.Size()
+
+	// Draw the static prompt
+	//	DrawANSIText(screen, m.Cursor, inputY, "(gdb) ", tcell.StyleDefault.Foreground(tcell.ColorYellow), w)
+
+	//	print("(gdb) \n")
+	// --- CURSOR ---
+	// Match the cursor position to the prompt offset
+
 	// אופציונלי — תלוי UI
 
 	// אם אתה רוצה להציג:
@@ -333,7 +345,24 @@ func (m *GDBWidget) handleResultRecord(line string) {
 
 	// לרוב ^done לא צריך להציג
 }
+func (m *GDBWidget) handleConsoleText(text string) {
+	lines := strings.Split(text, "\n")
 
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		if line == "" {
+			continue
+		}
+
+		// 🔴 זה ה־echo — תדלג
+		if line == m.lastCommand {
+			continue
+		}
+
+		m.Buffer.AppendText(line + "\n")
+	}
+}
 func (m *GDBWidget) OnGDBOutput(data string) {
 	lines := strings.Split(data, "\n")
 
@@ -352,6 +381,7 @@ func (m *GDBWidget) OnGDBOutput(data string) {
 		case strings.HasPrefix(line, "~\"") && strings.HasSuffix(line, "\""):
 			text := decodeMIString(line[2 : len(line)-1])
 			text = expandTabs(text, 8)
+			//	m.handleConsoleText(text)
 			consoleBuf.WriteString(text)
 
 		// --- Target output (@"...") ---
@@ -363,16 +393,7 @@ func (m *GDBWidget) OnGDBOutput(data string) {
 		// --- Log stream (&"...") ---
 		case strings.HasPrefix(line, "&\"") && strings.HasSuffix(line, "\""):
 			text := decodeMIString(line[2 : len(line)-1])
-			//	bytes := []byte{0xe2, 0x9d, 0x8c, 0xef, 0xb8, 0x8f, 0x20, 0x51, 0x75, 0x69, 0x74, 0x0a}
-
-			// Converting the byte slice directly to a string
-			//	result := string(bytes)
-
-			//	fmt.Print(result)
-
-			//	raw := extractQuoted(line)
 			m.Buffer.AppendText(text)
-		//	fmt.Printf("RAW LINE: %q\n", line)
 
 		// --- Result record (^done, ^error...) ---
 		case strings.HasPrefix(line, "^"):
@@ -512,9 +533,9 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 				m.Debugger.Send(m.InputBuf)
 			}
 
-			m.Buffer.AppendText("(gdb) " + m.InputBuf + "\n")
+			//			m.Buffer.AppendText("(gdb) " + m.InputBuf)
 			m.Viewport.FollowBottom(m.Buffer)
-
+			m.lastCommand = m.InputBuf
 			m.InputBuf = ""
 			m.Cursor = 0
 
