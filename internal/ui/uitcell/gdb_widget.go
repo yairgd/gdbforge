@@ -97,89 +97,6 @@ func (m *GDBWidget) handleAsyncRecord(line string) {
 //	}
 //}
 
-func (m *GDBWidget) OnGDBOutput(data string) {
-	lines := strings.Split(data, "\n")
-
-	var consoleBuf strings.Builder
-	var targetBuf strings.Builder
-	//	var logBuf strings.Builder
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		switch {
-		// --- Console stream (~"...") ---
-		case strings.HasPrefix(line, "~\"") && strings.HasSuffix(line, "\""):
-			text := gdb.DecodeMIString(line[2 : len(line)-1])
-			text = gdb.ExpandTabs(text, 8)
-			if text != m.lastCommand {
-				consoleBuf.WriteString(text)
-			}
-
-		// --- Target output (@"...") ---
-		case strings.HasPrefix(line, "@\"") && strings.HasSuffix(line, "\""):
-			text := gdb.DecodeMIString(line[2 : len(line)-1])
-			text = gdb.ExpandTabs(text, 8)
-			targetBuf.WriteString(text)
-
-		// --- Log stream (&"...") ---
-		case strings.HasPrefix(line, "&\"") && strings.HasSuffix(line, "\""):
-			text := gdb.DecodeMIString(line[2 : len(line)-1])
-			consoleBuf.WriteString(text)
-		//	m.Buffer.AppendText(text)
-
-		// --- Result record (^done, ^error...) ---
-		case strings.HasPrefix(line, "^"):
-			if strings.HasPrefix(line, "^error") {
-				msg := gdb.ExtractMIField(line, "msg")
-				consoleBuf.WriteString(msg)
-
-				//	if msg != "" {
-				//		consoleBuf.WriteString("ERROR: " + msg + "\n")
-				//	} else {
-				//		consoleBuf.WriteString("ERROR\n")
-				//	}
-				//	return
-			}
-
-		//	m.handleResultRecord(line)
-
-		// --- Async record (*stopped, =breakpoint...) ---
-		case strings.HasPrefix(line, "*") || strings.HasPrefix(line, "="):
-			m.handleAsyncRecord(line)
-		//	consoleBuf.WriteString(msg)
-
-		// --- Prompt ---
-		case line == "(gdb)":
-			consoleBuf.WriteString("(gdb) ")
-
-		//	m.handlePrompt()
-
-		default:
-			// fallback (sometimes garbage / partial lines)
-			//	consoleBuf.WriteString(line + "\n")
-		}
-	}
-
-	// --- Update UI (only what you want visible) ---
-	if consoleBuf.Len() > 0 {
-		m.Buffer.AppendText(consoleBuf.String())
-	}
-
-	if targetBuf.Len() > 0 {
-		// optional: separate pane later
-		//		m.Buffer.AppendText(targetBuf.String())
-	}
-
-	// logs usually hidden (debug only)
-	// if logBuf.Len() > 0 { ... }
-
-	m.Viewport.FollowBottom(m.Buffer)
-}
-
 // ////////////////////////
 // EVENTS
 // ////////////////////////
@@ -190,7 +107,33 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 		switch data := e.Data().(type) {
 
 		case core.GdbOutputMsg:
-			m.OnGDBOutput(data.Data) // ✔ רק כאן!
+			var consoleBuf strings.Builder
+
+			if data.Data != "" {
+				lines := strings.Split(data.Data, "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					//print(line + "\n")
+					//if line == "" {
+					//	continue
+					//}
+
+					consoleBuf = gdb.OnGDBOutput(line, m.lastCommand)
+					//print(consoleBuf.String() + "\n")
+
+					if consoleBuf.Len() > 0 {
+						m.Buffer.AppendText(consoleBuf.String())
+					}
+
+				}
+			} else {
+				consoleBuf = gdb.OnGDBOutput(m.lastCommand, m.lastCommand)
+				//	m.Buffer.AppendText(consoleBuf.String())
+
+			}
+
+			m.Viewport.FollowBottom(m.Buffer)
+
 		}
 	case *tcell.EventResize:
 		w, h := e.Size()
@@ -218,7 +161,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 			if m.Debugger.Send != nil {
 				if m.InputBuf != "" {
 					m.Debugger.Send(m.InputBuf)
-					m.lastCommand = m.InputBuf
+					m.lastCommand = m.InputBuf + "\n"
 				} else {
 					m.Debugger.Send(m.lastCommand)
 				}
@@ -264,6 +207,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 			m.Cursor += len(r)
 		}
 	}
+	return
 }
 
 // ////////////////////////

@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+type GdbState int
+
+const (
+	Done GdbState = iota
+	Error
+	Running
+)
+
+var state GdbState = Done
+
 func ExtractMIField(line, key string) string {
 	// מחפש pattern: key="value"
 
@@ -124,4 +134,101 @@ func DecodeMIString(raw string) string {
 	}
 
 	return string(result)
+}
+
+func OnGDBOutput(line string, lastCmd string) strings.Builder {
+	//	lines := strings.Split(data, "\n")
+
+	var consoleBuf strings.Builder
+	var targetBuf strings.Builder
+	//	var logBuf strings.Builder
+
+	//	lines := strings.Split(data, "\n")
+	//	for _, line := range lines {
+	//	line = strings.TrimSpace(line)
+	//	if line == "" {
+	//		continue
+	//	}
+
+	switch {
+	// --- Console stream (~"...") ---
+	case strings.HasPrefix(line, "~\"") && strings.HasSuffix(line, "\""):
+		text := DecodeMIString(line[2 : len(line)-1])
+		text = ExpandTabs(text, 8)
+		if state == Done {
+			consoleBuf.WriteString(text)
+		} else if state == Running {
+			consoleBuf.WriteString("\n" + text)
+		}
+	//	return consoleBuf
+	//	if text != lastCommand {
+	//		consoleBuf.WriteString(text)
+	//	}
+
+	// --- Target output (@"...") ---
+	case strings.HasPrefix(line, "@\"") && strings.HasSuffix(line, "\""):
+		text := DecodeMIString(line[2 : len(line)-1])
+		text = ExpandTabs(text, 8)
+		targetBuf.WriteString(text)
+
+	// --- Log stream (&"...") ---
+	case strings.HasPrefix(line, "&\"") && strings.HasSuffix(line, "\""):
+		text := DecodeMIString(line[2 : len(line)-1])
+		//msg := ExtractMIField(text, "msg")
+		if text != "\n" && text != "" && lastCmd != text {
+			if state == Error {
+				consoleBuf.WriteString("\n" + text)
+			} else {
+				consoleBuf.WriteString(text)
+			}
+		}
+		//m.Buffer.AppendText(text)
+
+	// --- Result record (^done, ^error...) ---
+	case strings.HasPrefix(line, "^"):
+		if strings.HasPrefix(line, "^error") {
+			state = Error
+			//	msg := ExtractMIField(line, "msg")
+			consoleBuf.Reset()
+			//	consoleBuf.WriteString("\n" + msg + "\n")
+		} else if strings.HasPrefix(line, "^running") {
+			state = Running
+		} else if strings.HasPrefix(line, "^done") {
+			state = Done
+		}
+
+	//	m.handleResultRecord(line)
+
+	// --- Async record (*stopped, =breakpoint...) ---
+	case strings.HasPrefix(line, "*") || strings.HasPrefix(line, "="):
+		//print(line + "\n")
+
+	// --- Prompt ---
+	case line == "(gdb)" && state != Running:
+		consoleBuf.Reset()
+		consoleBuf.WriteString("(gdb) ")
+
+	//	m.handlePrompt()
+
+	default:
+		// fallback (sometimes garbage / partial lines)
+		//	consoleBuf.WriteString(line + "\n")
+	}
+	//	}
+
+	// --- Update UI (only what you want visible) ---
+	//	if consoleBuf.Len() > 0 {
+	//		m.Buffer.AppendText(consoleBuf.String())
+	//	}
+
+	if targetBuf.Len() > 0 {
+		// optional: separate pane later
+		//		m.Buffer.AppendText(targetBuf.String())
+	}
+
+	return consoleBuf
+	// logs usually hidden (debug only)
+	// if logBuf.Len() > 0 { ... }
+
+	// m.Viewport.FollowBottom(m.Buffer)
 }
