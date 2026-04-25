@@ -23,7 +23,8 @@ type GDBWidget struct {
 	lastCommand string
 	Cursor      int
 
-	Debugger core.Debugger
+	Debugger      core.Debugger
+	gdbInputState gdb.GdbInputState
 }
 
 func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
@@ -35,11 +36,12 @@ func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
 	//	defer client.Close()
 
 	widget := &GDBWidget{
-		BaseWidget: termui.NewBaseWidget(uiContext.Emit),
-		Buffer:     buf,
-		Viewport:   core.Viewport{Height: 10},
-		Debugger:   client,
-		Cursor:     0,
+		BaseWidget:    termui.NewBaseWidget(uiContext.Emit),
+		Buffer:        buf,
+		Viewport:      core.Viewport{Height: 10},
+		Debugger:      client,
+		Cursor:        0,
+		gdbInputState: *gdb.NewGdbInputState(),
 	}
 	widget.StartGdbUIBridge(uiContext.Screen(), outputChan)
 	return widget
@@ -51,10 +53,22 @@ func (m *GDBWidget) StartGdbUIBridge(
 ) {
 	go func() {
 		for msg := range outputChan {
+			//fmt.Print(msg.Data)
+			//	if msg.Data == "(gdb) " {
+			//	screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
+			//	} else {
 			screen.PostEvent(tcell.NewEventInterrupt(msg))
+			//	}
 		}
-
 		screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
+
+	}()
+
+	go func() {
+		for {
+			<-m.gdbInputState.Timer.C
+			screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
+		}
 	}()
 }
 
@@ -107,34 +121,35 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 		switch data := e.Data().(type) {
 
 		case core.GdbOutputMsg:
-			var consoleBuf strings.Builder
 
 			if data.Data != "" {
 				lines := strings.Split(data.Data, "\n")
 				for _, line := range lines {
-					line = strings.TrimSpace(line)
-					//print(line + "\n")
-					//if line == "" {
-					//	continue
-					//}
-
-					consoleBuf = gdb.OnGDBOutput(line, m.lastCommand)
-					//print(consoleBuf.String() + "\n")
-
-					if consoleBuf.Len() > 0 {
-						m.Buffer.AppendText(consoleBuf.String())
-					}
+					m.gdbInputState.PushLine(line)
+					//consoleBuf = gdb.OnGDBOutput(line, m.lastCommand)
 
 				}
-			} else {
-				consoleBuf = gdb.OnGDBOutput(m.lastCommand, m.lastCommand)
-				//	m.Buffer.AppendText(consoleBuf.String())
-
 			}
+		case string:
+			if data == "gdb-timeout" {
+				buf := m.gdbInputState.Buffer()
+				m.gdbInputState.Clear()
+				miCmd := gdb.NewMiMsg(buf)
+				//	if miCmd.GdbState() != gdb.Error {
+				//	m.Buffer.AppendText(m.lastCommand)
+				//	}
+				m.Buffer.AppendBuffer(miCmd.CreateBufferForLine())
+				m.Buffer.AppendText("(gdb) ")
+				m.Viewport.FollowBottom(m.Buffer)
 
-			m.Viewport.FollowBottom(m.Buffer)
-
+				// 👉 100ms passed without input
+				//  if m.gdbInputState.IsTimeout(100 * time.Millisecond) {
+				//    m.flushMIBlock() // <-- your function
+				// }
+			}
 		}
+		//	m.Viewport.FollowBottom(m.Buffer)
+
 	case *tcell.EventResize:
 		w, h := e.Size()
 
@@ -161,7 +176,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 			if m.Debugger.Send != nil {
 				if m.InputBuf != "" {
 					m.Debugger.Send(m.InputBuf)
-					m.lastCommand = m.InputBuf + "\n"
+					m.lastCommand = m.InputBuf
 				} else {
 					m.Debugger.Send(m.lastCommand)
 				}

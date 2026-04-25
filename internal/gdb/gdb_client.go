@@ -18,7 +18,7 @@ type GDBClient struct {
 
 func NewGDBClient() (*GDBClient, chan core.GdbOutputMsg, error) {
 
-	cmd := exec.Command("gdb", "--interpreter=mi", "hello")
+	cmd := exec.Command("gdb", "--interpreter=mi2", "hello")
 	//cmd := exec.Command("gdb", "hello")
 
 	ptmx, err := pty.Start(cmd)

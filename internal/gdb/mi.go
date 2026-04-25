@@ -136,10 +136,11 @@ func DecodeMIString(raw string) string {
 	return string(result)
 }
 
-func OnGDBOutput(line string, lastCmd string) strings.Builder {
+var consoleBuf strings.Builder
+
+func OnGDBOutput1111(line string, lastCmd string) strings.Builder {
 	//	lines := strings.Split(data, "\n")
 
-	var consoleBuf strings.Builder
 	var targetBuf strings.Builder
 	//	var logBuf strings.Builder
 
@@ -155,10 +156,11 @@ func OnGDBOutput(line string, lastCmd string) strings.Builder {
 	case strings.HasPrefix(line, "~\"") && strings.HasSuffix(line, "\""):
 		text := DecodeMIString(line[2 : len(line)-1])
 		text = ExpandTabs(text, 8)
+		consoleBuf.Reset()
 		if state == Done {
 			consoleBuf.WriteString(text)
 		} else if state == Running {
-			consoleBuf.WriteString("\n" + text)
+			consoleBuf.WriteString(text)
 		}
 	//	return consoleBuf
 	//	if text != lastCommand {
@@ -173,15 +175,16 @@ func OnGDBOutput(line string, lastCmd string) strings.Builder {
 
 	// --- Log stream (&"...") ---
 	case strings.HasPrefix(line, "&\"") && strings.HasSuffix(line, "\""):
-		text := DecodeMIString(line[2 : len(line)-1])
+		//text := DecodeMIString(line[2 : len(line)-1])
+		consoleBuf.WriteString("\n")
 		//msg := ExtractMIField(text, "msg")
-		if text != "\n" && text != "" && lastCmd != text {
-			if state == Error {
-				consoleBuf.WriteString("\n" + text)
-			} else {
-				consoleBuf.WriteString(text)
-			}
-		}
+		//if text != "\n" && text != "" && lastCmd != text {
+		//	if state == Error {
+		//		consoleBuf.WriteString("\n" + text)
+		//	} else {
+		//		consoleBuf.WriteString(text)
+		//	}
+		//}
 		//m.Buffer.AppendText(text)
 
 	// --- Result record (^done, ^error...) ---
@@ -191,7 +194,10 @@ func OnGDBOutput(line string, lastCmd string) strings.Builder {
 			//	msg := ExtractMIField(line, "msg")
 			consoleBuf.Reset()
 			//	consoleBuf.WriteString("\n" + msg + "\n")
+			//	consoleBuf.WriteString("\n" + msg + "\n")
 		} else if strings.HasPrefix(line, "^running") {
+			consoleBuf.Reset()
+			//consoleBuf.WriteString("\n")
 			state = Running
 		} else if strings.HasPrefix(line, "^done") {
 			state = Done
@@ -201,16 +207,18 @@ func OnGDBOutput(line string, lastCmd string) strings.Builder {
 
 	// --- Async record (*stopped, =breakpoint...) ---
 	case strings.HasPrefix(line, "*") || strings.HasPrefix(line, "="):
+		consoleBuf.Reset()
 		//print(line + "\n")
 
 	// --- Prompt ---
 	case line == "(gdb)" && state != Running:
-		consoleBuf.Reset()
-		consoleBuf.WriteString("(gdb) ")
+	//	consoleBuf.Reset()
+	//	consoleBuf.WriteString("(gdb) ")
 
 	//	m.handlePrompt()
 
 	default:
+		consoleBuf.Reset()
 		// fallback (sometimes garbage / partial lines)
 		//	consoleBuf.WriteString(line + "\n")
 	}
