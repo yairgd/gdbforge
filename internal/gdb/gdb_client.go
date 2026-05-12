@@ -2,13 +2,14 @@ package gdb
 
 import (
 	//	"fmt"
-	"github.com/creack/pty"
-	"github.com/yairgd/promptcore/internal/core"
-	"golang.org/x/sys/unix"
+
 	"io"
 	"os"
 	"os/exec"
-	"strings"
+
+	"github.com/creack/pty"
+	"github.com/yairgd/promptcore/internal/core"
+	"golang.org/x/sys/unix"
 )
 
 type GDBClient struct {
@@ -44,16 +45,17 @@ func NewGDBClient() (*GDBClient, chan core.GdbOutputMsg, error) {
 func (c *GDBClient) Start(output chan<- core.GdbOutputMsg) {
 	go func() {
 		buf := make([]byte, 1024)
-
 		for {
 			n, err := c.ptmx.Read(buf)
 
 			if n > 0 {
 				data := make([]byte, n)
 				copy(data, buf[:n])
+				msg := string(data)
 				output <- core.GdbOutputMsg{
-					Data: string(data),
+					Data: msg,
 				}
+				//fmt.Print(msg)
 
 			}
 
@@ -64,49 +66,6 @@ func (c *GDBClient) Start(output chan<- core.GdbOutputMsg) {
 				}
 				close(output)
 
-				return
-			}
-		}
-	}()
-}
-
-func (c *GDBClient) Start1(output chan<- core.GdbOutputMsg) {
-	go func() {
-		buf := make([]byte, 1024)
-
-		var acc strings.Builder
-
-		for {
-			n, err := c.ptmx.Read(buf)
-
-			if n > 0 {
-				chunk := string(buf[:n])
-
-				// accumulate
-				acc.WriteString(chunk)
-
-				full := acc.String()
-				lines := strings.Split(full, "\n")
-
-				// כל השורות השלמות
-				for i := 0; i < len(lines)-1; i++ {
-					line := lines[i]
-
-					output <- core.GdbOutputMsg{
-						Data: line,
-					}
-				}
-
-				// השארית נשארת ב-buffer
-				acc.Reset()
-				acc.WriteString(lines[len(lines)-1])
-			}
-
-			if err != nil {
-				if err != io.EOF {
-					output <- core.GdbOutputMsg{Err: err}
-				}
-				close(output)
 				return
 			}
 		}

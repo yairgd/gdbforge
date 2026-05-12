@@ -5,11 +5,11 @@ import (
 )
 
 type BaseWidget struct {
-	app    AppAPI
-	emit   core.Emitter
-	width  int
-	height int
-	Test   int
+	app       AppAPI
+	uiContext UIContext
+	width     int
+	height    int
+	Test      int
 }
 
 func (b *BaseWidget) Size() (int, int) {
@@ -30,13 +30,13 @@ func (b BaseWidget) App() AppAPI {
 }
 
 func (b *BaseWidget) Emit(e core.Event) {
-	if b.emit != nil {
-		b.emit(e)
+	if b.uiContext.Emit != nil {
+		b.uiContext.Emit(e)
 	}
 }
 
-func NewBaseWidget(emit core.Emitter) BaseWidget {
+func NewBaseWidget(uiContext UIContext) BaseWidget {
 	return BaseWidget{
-		emit: emit,
+		uiContext: uiContext,
 	}
 }

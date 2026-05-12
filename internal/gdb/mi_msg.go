@@ -33,6 +33,10 @@ func (m *MiMsg) CreateBufferForLine() []string {
 	var buf []string
 
 	if m.gdbState == Done || m.gdbState == Running {
+		if len(m.GdbLog) > 0 {
+			buf = append(buf, m.GdbLog[0])
+
+		}
 		buf = append(buf, m.CmdLine...)
 	}
 	if m.gdbState == Error {
@@ -47,7 +51,7 @@ func (m *MiMsg) processLine(line string) {
 	//	lines := strings.Split(data, "\n")
 
 	line = strings.TrimSpace(line)
-	line = strings.TrimRight(line, "\r\n")
+	//	line = strings.TrimRight(line, "\r\n")
 
 	switch {
 
@@ -60,7 +64,7 @@ func (m *MiMsg) processLine(line string) {
 		text := DecodeMIString(line[2 : len(line)-1])
 		text = ExpandTabs(text, 8)
 		if len(m.CmdLine) == 0 {
-			m.CmdLine = append(m.CmdLine, "\n")
+			//	m.CmdLine = append(m.CmdLine, "\n")
 		}
 		m.CmdLine = append(m.CmdLine, text)
 

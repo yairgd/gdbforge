@@ -35,7 +35,7 @@ func NewGdbInputState() *GdbInputState {
 		gdbState: Done1,
 		buffer:   []string{},
 		Console:  []string{},
-		Timer:    time.NewTimer(100 * time.Millisecond),
+		Timer:    time.NewTimer(10 * time.Millisecond),
 	}
 
 	// stop timer initially
@@ -69,7 +69,7 @@ func (m *GdbInputState) Clear() {
 //
 
 // PushRaw should receive RAW chunks from GDB (not split lines!)
-func (m *GdbInputState) PushRaw(data string) {
+func (m *GdbInputState) PushRaw11111(data string) {
 
 	m.lineBuf += data
 
@@ -85,6 +85,15 @@ func (m *GdbInputState) PushRaw(data string) {
 		m.PushLine(line)
 	}
 }
+func ReplaceEscapedNewline(s string) string {
+	// אם אין בכלל "\n" כטקסט — נחזיר כמו שהוא
+	if !strings.Contains(s, `\n`) {
+		return s
+	}
+
+	// החלפה של "\" + "n" ל־newline אמיתי
+	return strings.ReplaceAll(s, `\n`, "\n")
+}
 
 func (m *GdbInputState) PushLine(line string) {
 
@@ -92,8 +101,21 @@ func (m *GdbInputState) PushLine(line string) {
 		return
 	}
 
+	// Check if escaped newline exists
+	hasEscapedNewline := strings.Contains(line, `\n`)
+
+	if hasEscapedNewline {
+		// Remove all occurrences of "\n"
+		//	line = strings.ReplaceAll(line, `\n`, "")
+	}
+
 	// collect burst
 	m.buffer = append(m.buffer, line)
+
+	// If there was "\n" → add empty line
+	if hasEscapedNewline {
+		//	m.buffer = append(m.buffer, "")
+	}
 
 	// detect state
 	switch {
@@ -112,7 +134,7 @@ func (m *GdbInputState) PushLine(line string) {
 		default:
 		}
 	}
-	m.Timer.Reset(10 * time.Millisecond)
+	m.Timer.Reset(100 * time.Millisecond)
 }
 
 //
@@ -120,7 +142,7 @@ func (m *GdbInputState) PushLine(line string) {
 //
 
 // Call this when timer fires
-func (m *GdbInputState) Flush() {
+func (m *GdbInputState) Flush1111() {
 
 	for _, line := range m.buffer {
 
@@ -133,7 +155,7 @@ func (m *GdbInputState) Flush() {
 		case '~': // console output
 			text := extractQuoted(line)
 			text = unescape(text)
-			m.appendConsole(text)
+		//	m.appendConsole(text)
 
 		case '&':
 			// optional: ignore (or handle as log)
@@ -153,7 +175,7 @@ func (m *GdbInputState) Flush() {
 // ---------- CONSOLE ----------
 //
 
-func (m *GdbInputState) appendConsole(text string) {
+func (m *GdbInputState) appendConsole11111(text string) {
 
 	parts := strings.Split(text, "\n")
 

@@ -36,9 +36,11 @@ func (app *TermApp) AddWidget(w Widget) {
 }
 
 func (app *TermApp) Draw() {
-	for _, w := range app.widgets {
-		w.Draw(app.screen)
-	}
+	//	for _, w := range app.widgets {
+	//
+	// w.Draw(app.screen)
+	//
+	//	}
 }
 
 func (app *TermApp) HandleUIEvent(ev tcell.Event) {

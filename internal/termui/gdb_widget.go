@@ -1,4 +1,4 @@
-package uitcell
+package termui
 
 import (
 	"log"
@@ -7,7 +7,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/core"
 	"github.com/yairgd/promptcore/internal/gdb"
-	"github.com/yairgd/promptcore/internal/termui"
 )
 
 //////////////////////////
@@ -15,7 +14,7 @@ import (
 //////////////////////////
 
 type GDBWidget struct {
-	termui.BaseWidget
+	BaseWidget
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
@@ -27,7 +26,7 @@ type GDBWidget struct {
 	gdbInputState gdb.GdbInputState
 }
 
-func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
+func NewGDBWidget(uiContext UIContext) *GDBWidget {
 	buf := core.NewBuffer()
 	client, outputChan, err := gdb.NewGDBClient()
 	if err != nil {
@@ -36,7 +35,7 @@ func NewGDBWidget(uiContext termui.UIContext) *GDBWidget {
 	//	defer client.Close()
 
 	widget := &GDBWidget{
-		BaseWidget:    termui.NewBaseWidget(uiContext.Emit),
+		BaseWidget:    NewBaseWidget(uiContext),
 		Buffer:        buf,
 		Viewport:      core.Viewport{Height: 10},
 		Debugger:      client,
@@ -228,9 +227,9 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 // DRAW
 // ////////////////////////
-func (m *GDBWidget) Draw(screen tcell.Screen) {
-	screen.Clear()
-	w, h := m.Size()
+func (m *GDBWidget) Draw(x, y, w, h int) {
+	m.uiContext.Screen().Clear()
+	//w, h := m.Size()
 
 	// --- OUTPUT ---
 	lines := m.Viewport.VisibleLines(m.Buffer)
@@ -248,7 +247,7 @@ func (m *GDBWidget) Draw(screen tcell.Screen) {
 
 		// We call DrawANSIText ONCE per line.
 		// No need for the 'for x := range line' loop here.
-		core.DrawANSIText(screen, 0, y, line, lineStyle, w)
+		core.DrawANSIText(m.uiContext.Screen(), 0, y, line, lineStyle, w)
 	}
 
 	// --- INPUT LINE ---
@@ -264,14 +263,14 @@ func (m *GDBWidget) Draw(screen tcell.Screen) {
 		if x+promptLen >= w {
 			break
 		}
-		screen.SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)
+		m.uiContext.Screen().SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)
 	}
 
 	// --- CURSOR ---
 	// Match the cursor position to the prompt offset
-	screen.ShowCursor(m.Cursor+promptLen, inputY)
+	m.uiContext.Screen().ShowCursor(m.Cursor+promptLen, inputY)
 
-	screen.Show()
+	m.uiContext.Screen().Show()
 }
 func (w *GDBWidget) HandleEvent1(ev tcell.Event) {
 	w.App().RequestRedraw()
