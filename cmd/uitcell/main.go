@@ -38,14 +38,16 @@ func main() {
 	}
 
 	gdbWidget := termui.NewGDBWidget(app)
+	codeWidget := termui.NewCodeWidget(app)
 
 	w, h := screen.Size()
 	gdbWidget.SetSize(w, h)
 	//	gdbWidget.Draw(screen)
 
-	tab := termui.NewTabTwoHozSplitWins(app, "basic debuger", gdbWidget, gdbWidget)
+	tab := termui.NewTabTwoHozSplitWins(app, "basic debuger", gdbWidget, codeWidget)
+	rect := termui.NewRect(0, 0, w, h)
 
-	tab.Draw(1, 1, w, h)
+	tab.Draw(rect)
 
 	for {
 		ev := screen.PollEvent()
@@ -64,12 +66,14 @@ func main() {
 
 		case *tcell.EventResize:
 			screen.Sync()
-			gdbWidget.HandleEvent(e)
+			tab.HandleEvent(e)
+			//		gdbWidget.HandleEvent(e)
 
 		case *tcell.EventInterrupt:
-			gdbWidget.HandleEvent(e)
+			tab.HandleEvent(e)
+			//gdbWidget.HandleEvent(e)
 		}
-		tab.Draw(1, 1, w, h)
+		tab.Draw(rect)
 
 		//	gdbWidget.Draw(screen)
 	}

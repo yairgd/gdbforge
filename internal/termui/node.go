@@ -57,28 +57,28 @@ func (n *Node) HandleEvent(ev tcell.Event) {
 func (n *Node) SetSize(w, h int) {
 }
 
-func (n *Node) Draw(x, y, w, h int) {
+func (n *Node) Draw(r Rect) {
 	if n.Type == NodeLeaf {
-		n.Widget.Draw(x, y, w, h)
+		n.Widget.Draw(r)
 		return
 	}
 
 	if n.Dir == Vertical {
 		total := Units(n, Vertical)
 
-		w1 := w * Units(n.First, Vertical) / total
-		w2 := w - w1
+		w1 := r.w * Units(n.First, Vertical) / total
+		w2 := r.w - w1
 
-		n.First.Draw(x, y, w1, h)
-		n.Second.Draw(x+w1, y, w2, h)
+		n.First.Draw(Rect{r.x, r.y, w1, r.h})
+		n.Second.Draw(Rect{r.x + w1, r.y, w2, r.h})
 
 	} else {
 		total := Units(n, Horizontal)
 
-		h1 := h * Units(n.First, Horizontal) / total
-		h2 := h - h1
+		h1 := r.h * Units(n.First, Horizontal) / total
+		h2 := r.h - h1
 
-		n.First.Draw(x, y, w, h1)
-		n.Second.Draw(x, y+h1, w, h2)
+		n.First.Draw(Rect{r.x, r.y, r.w, h1})
+		n.Second.Draw(Rect{r.x, r.y + h1, r.w, h2})
 	}
 }

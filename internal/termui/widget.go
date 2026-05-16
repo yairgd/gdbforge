@@ -7,5 +7,5 @@ import (
 type Widget interface {
 	HandleEvent(ev tcell.Event)
 	SetSize(w int, h int)
-	Draw(x, y, w, h int)
+	Draw(r Rect)
 }

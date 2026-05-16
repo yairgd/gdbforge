@@ -7,6 +7,7 @@ import (
 type BaseWidget struct {
 	app       AppAPI
 	uiContext UIContext
+	rect      Rect
 	width     int
 	height    int
 	Test      int
