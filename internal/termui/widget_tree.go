@@ -1,0 +1,125 @@
+package termui
+
+import (
+	"github.com/gdamore/tcell/v2"
+)
+
+type WidgetTree struct {
+	root        *Node
+	focusWidget Widget
+}
+
+func NewWidgetTree(newWidget Widget) WidgetTree {
+	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1}
+	newWidget.SetParent(node)
+
+	return WidgetTree{
+		root:        node,
+		focusWidget: newWidget,
+	}
+}
+
+func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
+
+	node := w.focusWidget.Parent()
+
+	node.Type = NodeSplit
+	node.Dir = dir
+	node.Ratio = 0.5
+
+	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 0}
+	w.focusWidget.SetParent(node.First)
+
+	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 0}
+	newWidget.SetParent((node.Second))
+
+	node.Widget = nil
+}
+
+func (l *WidgetTree) HandleEvent(ev tcell.Event) {
+	l.focusWidget.HandleEvent(ev)
+}
+
+func (l *WidgetTree) Draw() {
+	l.draw(l.root)
+}
+
+func (l *WidgetTree) draw(node *Node) {
+	if node.Type == NodeLeaf {
+		node.Widget.Draw()
+		return
+	}
+	l.draw(node.First)
+	l.draw(node.Second)
+
+}
+
+func (l *WidgetTree) BuildLayout(
+	rect Rect,
+	grid *Grid) {
+	l.buildLayout(l.root, rect, grid)
+
+}
+
+func (l *WidgetTree) buildLayout(
+	node *Node,
+	rect Rect,
+	grid *Grid,
+) {
+
+	if node == nil {
+		return
+	}
+
+	if node.Type == NodeLeaf {
+		node.Widget.SetRect(rect)
+		return
+	}
+
+	switch node.Dir {
+
+	case Vertical:
+
+		leftW := int(float64(rect.w) * node.Ratio)
+
+		splitX := rect.x + leftW
+
+		/*
+			Draw separator line.
+		*/
+		grid.DrawVertical(
+			splitX,
+			rect.y,
+			rect.y+rect.h,
+		)
+
+		r1 := NewRect(rect.x, rect.y, rect.w, rect.h)
+		l.buildLayout(node.First, r1, grid)
+		node.First.Widget.SetRect(r1)
+
+		r2 := NewRect(splitX+1, rect.y, rect.w-leftW-1, rect.h)
+		l.buildLayout(node.Second, r2, grid)
+		node.Second.Widget.SetRect(r2)
+
+	case Horizontal:
+
+		topH := int(float64(rect.h) * node.Ratio)
+
+		splitY := rect.y + topH
+
+		grid.DrawHorizontal(
+			splitY,
+			rect.x,
+			rect.x+rect.w,
+		)
+
+		r1 := NewRect(rect.x, rect.y, rect.w, topH)
+		l.buildLayout(node.First, r1, grid)
+		node.First.Widget.SetRect(r1)
+
+		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-topH-1)
+		l.buildLayout(node.Second, r2, grid)
+		node.Second.Widget.SetRect(r2)
+
+	}
+}
