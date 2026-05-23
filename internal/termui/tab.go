@@ -102,7 +102,7 @@ func (t *TabWidget) SetSize(w, h int) {
 
 // Draw forwards the draw call to the active tab widget.
 // The screen is owned by the application and passed in.
-func (t *TabWidget) Draw(r Rect) {
+func (t *TabWidget) Draw() {
 	if len(t.tabs) == 0 {
 		return
 	}
@@ -110,7 +110,7 @@ func (t *TabWidget) Draw(r Rect) {
 	layout := t.tabs[t.active].Layout
 
 	if layout != nil {
-		layout.Draw(r)
+		layout.Draw()
 	}
 }
 
@@ -132,14 +132,15 @@ func (t *TabWidget) ActiveLayout() *Layout {
 // The layout contains two widgets: top and bottom.
 func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom Widget) *TabWidget {
 
-	node := &Node{
-		Type:   NodeLeaf,
-		Widget: top,
-	}
+	w, h := uiContext.Screen().Size()
+	rect := Rect{0, 0, w, h}
 	// place the node insde layout
-	layout := NewLayout(node, uiContext)
+	layout := NewLayout(top, rect, uiContext)
+	layout.SetSize(w, h)
 	// split it to another node with bottom widget
 	layout.NewSplit(Horizontal, bottom)
+
+	layout.BuildLayout(rect)
 
 	return &TabWidget{
 		tabs: []Tab{

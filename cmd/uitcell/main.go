@@ -45,9 +45,9 @@ func main() {
 	//	gdbWidget.Draw(screen)
 
 	tab := termui.NewTabTwoHozSplitWins(app, "basic debuger", gdbWidget, codeWidget)
-	rect := termui.NewRect(0, 0, w, h)
+	//	rect := termui.NewRect(0, 0, w, h)
 
-	tab.Draw(rect)
+	tab.Draw()
 
 	for {
 		ev := screen.PollEvent()
@@ -73,7 +73,7 @@ func main() {
 			tab.HandleEvent(e)
 			//gdbWidget.HandleEvent(e)
 		}
-		tab.Draw(rect)
+		tab.Draw()
 
 		//	gdbWidget.Draw(screen)
 	}

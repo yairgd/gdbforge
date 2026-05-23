@@ -227,7 +227,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 // DRAW
 // ////////////////////////
-func (m *GDBWidget) Draw(r Rect) {
+func (m *GDBWidget) Draw() {
 	m.uiContext.Screen().Clear()
 	//w, h := m.Size()
 
@@ -247,11 +247,11 @@ func (m *GDBWidget) Draw(r Rect) {
 
 		// We call DrawANSIText ONCE per line.
 		// No need for the 'for x := range line' loop here.
-		DrawANSIText(m.uiContext.Screen(), r.x+0, r.y+y, line, lineStyle, r)
+		DrawANSIText(m.uiContext.Screen(), m.rect.x+0, m.rect.y+y, line, lineStyle, m.rect)
 	}
 
 	// --- INPUT LINE ---
-	inputY := r.h - 2
+	inputY := m.rect.h - 2
 	prompt := "(gdb) "
 	promptLen := len(prompt)
 
@@ -260,7 +260,7 @@ func (m *GDBWidget) Draw(r Rect) {
 
 	// Draw the user's current input
 	for x, ch := range m.InputBuf {
-		if x+promptLen >= r.w {
+		if x+promptLen >= m.rect.w {
 			break
 		}
 		m.uiContext.Screen().SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)

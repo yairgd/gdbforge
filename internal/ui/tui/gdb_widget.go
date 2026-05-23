@@ -136,3 +136,6 @@ func (m GDBWidget) View() string {
 
 	return output + left + cursor + right
 }
+
+func (m GDBWidget) Draw() {
+}

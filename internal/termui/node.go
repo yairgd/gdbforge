@@ -59,7 +59,7 @@ func (n *Node) SetSize(w, h int) {
 
 func (n *Node) Draw(r Rect) {
 	if n.Type == NodeLeaf {
-		n.Widget.Draw(r)
+		n.Widget.Draw()
 		return
 	}
 

@@ -8,13 +8,24 @@ type BaseWidget struct {
 	app       AppAPI
 	uiContext UIContext
 	rect      Rect
+	parent    *Node
 	width     int
 	height    int
 	Test      int
 }
 
+func (b *BaseWidget) SetParent(p *Node) {
+	b.parent = p
+}
+func (b *BaseWidget) Parent() *Node {
+	return b.parent
+}
 func (b *BaseWidget) Size() (int, int) {
 	return b.width, b.height
+}
+
+func (b *BaseWidget) SetRect(r Rect) {
+	b.rect = r
 }
 
 func (b *BaseWidget) SetSize(w, h int) {
