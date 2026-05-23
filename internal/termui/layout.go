@@ -28,7 +28,7 @@ func (l *Layout) SetRect(r Rect) {
 func (l *Layout) Draw() {
 	// draw outer frane
 	l.grid.DrawHorizontal(0, 0, l.rect.w-0)
-	l.grid.DrawHorizontal(l.rect.h-1, 1, l.rect.w-0)
+	l.grid.DrawHorizontal(l.rect.h-1, 0, l.rect.w-0)
 	l.grid.DrawVertical(0, 0, l.rect.h-0)
 	l.grid.DrawVertical(l.rect.w-1, 0, l.rect.h-0)
 
