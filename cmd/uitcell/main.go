@@ -37,16 +37,14 @@ func main() {
 		screen: screen,
 	}
 
-	gdbWidget := termui.NewGDBWidget(app)
+	//gdbWidget := termui.NewGDBWidget(app)
 	codeWidget := termui.NewCodeWidget(app)
 	codeWidget1 := termui.NewCodeWidget(app)
 
-	w, h := screen.Size()
-	gdbWidget.SetSize(w, h)
-	//	gdbWidget.Draw(screen)
+	//w, h := screen.Size()
+	//gdbWidget.SetSize(w, h)
 
 	tab := termui.NewTabTwoHozSplitWins(app, "basic debuger", codeWidget1, codeWidget)
-	//	rect := termui.NewRect(0, 0, w, h)
 
 	tab.Draw()
 

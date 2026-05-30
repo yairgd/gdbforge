@@ -49,11 +49,11 @@ func (app *TermApp) HandleUIEvent(ev tcell.Event) {
 	}
 }
 
-func (app *TermApp) SetSize(w int, h int) {
-	for _, widget := range app.widgets {
-		widget.SetSize(w, h)
-	}
-}
+//func (app *TermApp) SetSize(w int, h int) {
+//	for _, widget := range app.widgets {
+//		widget.SetSize(w, h)
+//	}
+//}
 
 func (app *TermApp) Screen() tcell.Screen {
 	return app.screen
@@ -61,8 +61,8 @@ func (app *TermApp) Screen() tcell.Screen {
 
 func (app *TermApp) EventLoop() {
 
-	w, h := app.screen.Size()
-	app.SetSize(w, h)
+	//w, h := app.screen.Size()
+	//	app.SetSize(w, h)
 
 	for {
 		app.Draw()
@@ -85,8 +85,8 @@ func (app *TermApp) EventLoop() {
 			}
 
 		case *tcell.EventResize:
-			w, h := e.Size()
-			app.SetSize(w, h)
+			//w, h := e.Size()
+			//app.SetSize(w, h)
 
 		case *tcell.EventKey:
 			if e.Key() == tcell.KeyCtrlE {

@@ -12,7 +12,6 @@ type WidgetTree struct {
 
 func NewWidgetTree(newWidget Widget) WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1}
-	//newWidget.SetParent(node)
 
 	return WidgetTree{
 		root:        node,
@@ -23,7 +22,6 @@ func NewWidgetTree(newWidget Widget) WidgetTree {
 
 func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 
-	//node := w.focusWidget.Parent()
 	node := w.focus
 
 	node.Type = NodeSplit
@@ -32,10 +30,8 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 
 	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 0}
 	w.focus = node.First
-	//w.focusWidget.SetParent(node.First)
 
 	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 0}
-	//newWidget.SetParent(node.Second)
 
 	node.Widget = nil
 }

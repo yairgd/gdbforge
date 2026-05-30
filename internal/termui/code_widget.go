@@ -40,11 +40,11 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
 	case *tcell.EventResize:
-		w, h := e.Size()
+	//	w, h := e.Size()
 
-		m.SetSize(w, h)
+	//	m.SetSize(w, h)
 
-		m.Viewport.Height = h - 1
+	//	m.Viewport.Height = h - 1
 
 	case *tcell.EventKey:
 

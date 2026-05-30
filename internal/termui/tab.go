@@ -82,19 +82,19 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 
 // SetSize updates the container size
 // and forwards the size to the active widget.
-func (t *TabWidget) SetSize(w, h int) {
-	t.BaseWidget.SetSize(w, h)
+//func (t *TabWidget) SetSize(w, h int) {
+//	t.BaseWidget.SetSize(w, h)
 
-	if len(t.tabs) == 0 {
-		return
-	}
+//	if len(t.tabs) == 0 {
+//		return
+//	}
 
-	active := t.tabs[t.active].Layout
-
-	if active != nil {
-		active.SetSize(w, h)
-	}
-}
+//	active := t.tabs[t.active].Layout
+//
+//	if active != nil {
+//		active.SetSize(w, h)
+//	}
+//}
 
 //
 // Drawing
@@ -133,7 +133,7 @@ func (t *TabWidget) ActiveLayout() *Layout {
 func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom Widget) *TabWidget {
 
 	w, h := uiContext.Screen().Size()
-	rect := Rect{0, 0, w, h}
+	rect := Rect{0, 0, w, h - 2}
 	// place the node insde layout
 	layout := NewLayout(top, rect, uiContext)
 	layout.SetRect(rect)
