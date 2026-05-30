@@ -1,6 +1,8 @@
 package termui
 
 import (
+	"math/rand"
+
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/core"
 )
@@ -72,53 +74,23 @@ func (m *CodeWidget) Draw(rect Rect) {
 
 	style := tcell.StyleDefault
 
-	if false {
-		// Fill background
-		for row := 1; row < rect.h-1; row++ {
-			for col := 1; col < rect.w-1; col++ {
-				screen.SetContent(
-					rect.x+col,
-					rect.y+row,
-					' ',
-					nil,
-					style,
-				)
-			}
+	// Fill background
+	bg := tcell.PaletteColor(rand.Intn(256))
+
+	for row := 0; row < rect.h; row++ {
+		for col := 0; col < rect.w; col++ {
+
+			screen.SetContent(
+				rect.x+col,
+				rect.y+row,
+				' ',
+				nil,
+				style.Background(bg),
+			)
 		}
 	}
-	// Draw title
-	title := "Code Widget"
 
-	screen.SetContent(
-		rect.x,
-		rect.y,
-		'*',
-		nil,
-		style,
-	)
-
-	screen.SetContent(
-		rect.x+rect.w-1,
-		rect.y,
-		'*',
-		nil,
-		style,
-	)
-	screen.SetContent(
-		rect.x,
-		rect.y+rect.h-1,
-		'*',
-		nil,
-		style,
-	)
-	screen.SetContent(
-		rect.x+rect.w-1,
-		rect.y+rect.h-1,
-		'*',
-		nil,
-		style,
-	)
-
+	title := "Status Line"
 	for i, rr := range title {
 
 		if i >= rect.w {
@@ -126,11 +98,61 @@ func (m *CodeWidget) Draw(rect Rect) {
 		}
 
 		screen.SetContent(
-			rect.x+i+5,
-			rect.y,
+			rect.x+i,
+			rect.y+rect.h,
 			rr,
 			nil,
 			style,
 		)
+	}
+
+	if false {
+
+		screen.SetContent(
+			rect.x,
+			rect.y,
+			'*',
+			nil,
+			style,
+		)
+
+		screen.SetContent(
+			rect.x+rect.w,
+			rect.y,
+			'*',
+			nil,
+			style,
+		)
+		screen.SetContent(
+			rect.x,
+			rect.y+rect.h,
+			'*',
+			nil,
+			style,
+		)
+		screen.SetContent(
+			rect.x+rect.w,
+			rect.y+rect.h,
+			'*',
+			nil,
+			style,
+		)
+
+		// Draw title
+		title := "Code Widget"
+		for i, rr := range title {
+
+			if i >= rect.w {
+				break
+			}
+
+			screen.SetContent(
+				rect.x+i,
+				rect.y,
+				rr,
+				nil,
+				style,
+			)
+		}
 	}
 }

@@ -28,13 +28,13 @@ func (l *Layout) SetRect(r Rect) {
 func (l *Layout) Draw() {
 	// draw outer frane
 	//l.grid.DrawHorizontal(0, 0, l.rect.w-0, false)
-	l.grid.DrawHorizontal(l.rect.h-1, 0, l.rect.w, false)
+	//	l.grid.DrawHorizontal(l.rect.h-1, 0, l.rect.w, false)
 	//	l.grid.DrawVertical(0, 0, l.rect.h-0, false)
-	l.grid.DrawVertical(l.rect.w-1, 0, l.rect.h-0, false)
+	//	l.grid.DrawVertical(l.rect.w-1, 0, l.rect.h-0, false)
 
 	// draw inner frame
-	l.grid.Draw(l.uiContext.Screen(), tcell.StyleDefault)
 
+	l.grid.Draw(l.uiContext.Screen(), tcell.StyleDefault)
 	l.tree.Draw()
 
 	l.uiContext.Screen().Show()

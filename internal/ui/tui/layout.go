@@ -22,6 +22,6 @@ var cmdInputBoxStyle = lipgloss.NewStyle().
 	Bold(true)
 
 var topStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("0")).
+	Foreground(lipplaygloss.Color("0")).
 	Background(lipgloss.Color("0")).
 	Bold(true)

@@ -6,32 +6,36 @@ import (
 
 type WidgetTree struct {
 	root        *Node
+	focus       *Node
 	focusWidget Widget
 }
 
 func NewWidgetTree(newWidget Widget) WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1}
-	newWidget.SetParent(node)
+	//newWidget.SetParent(node)
 
 	return WidgetTree{
 		root:        node,
+		focus:       node,
 		focusWidget: newWidget,
 	}
 }
 
 func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 
-	node := w.focusWidget.Parent()
+	//node := w.focusWidget.Parent()
+	node := w.focus
 
 	node.Type = NodeSplit
 	node.Dir = dir
 	node.Ratio = 0.5
 
 	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 0}
-	w.focusWidget.SetParent(node.First)
+	w.focus = node.First
+	//w.focusWidget.SetParent(node.First)
 
 	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 0}
-	newWidget.SetParent(node.Second)
+	//newWidget.SetParent(node.Second)
 
 	node.Widget = nil
 }
@@ -90,8 +94,8 @@ func (l *WidgetTree) buildLayout(
 		*/
 		grid.DrawVertical(
 			splitX,
-			rect.y,
-			rect.y+rect.h,
+			rect.y-1,
+			rect.y+rect.h+1,
 			false,
 		)
 
@@ -115,18 +119,18 @@ func (l *WidgetTree) buildLayout(
 
 		grid.DrawHorizontal(
 			splitY,
-			rect.x,
-			rect.x+rect.w,
+			rect.x-1,
+			rect.x+rect.w+1,
 			false,
 		)
 
-		r1 := NewRect(rect.x, rect.y, rect.w, topH)
+		r1 := NewRect(rect.x, rect.y, rect.w, splitY)
 		l.buildLayout(node.First, r1, grid)
 		//		if node.First.Type == NodeLeaf {
 		//			node.First.SetRect(r1)
 		//		}
 
-		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-topH-1)
+		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-splitY-1)
 		l.buildLayout(node.Second, r2, grid)
 		//		if node.Second.Type == NodeLeaf {
 		//			node.Second.SetRect(r2)

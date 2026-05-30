@@ -143,7 +143,7 @@ func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom
 	layout.NewSplit(Vertical, top)
 	layout.NewSplit(Horizontal, top)
 
-	//layout.NewSplit(Horizontal, bottom)
+	layout.NewSplit(Vertical, bottom)
 	//	layout.NewSplit(Horizontal, bottom)
 	//layout.NewSplit(Vertical, bottom)
 

@@ -32,16 +32,17 @@ Add vertical separator.
 func (g *Grid) DrawVertical(x, y1, y2 int, bold bool) {
 
 	for y := y1; y < y2; y++ {
-
-		cell := &g.Cells[x][y]
-		cell.Bold = bold
-		if y == y1 {
-			cell.Down = true
-		} else if y == y2-1 {
-			cell.Up = true
-		} else {
-			cell.Up = true
-			cell.Down = true
+		if y >= 0 && y < len(g.Cells) {
+			cell := &g.Cells[x][y]
+			cell.Bold = bold
+			if y == y1 {
+				cell.Down = true
+			} else if y == y2-1 {
+				cell.Up = true
+			} else {
+				cell.Up = true
+				cell.Down = true
+			}
 		}
 	}
 }
@@ -57,19 +58,19 @@ func (g *Grid) DrawHorizontal(
 ) {
 
 	for x := x1; x < x2; x++ {
+		if x >= 0 && x < len(g.Cells) {
+			cell := &g.Cells[x][y]
+			cell.Bold = bold
 
-		cell := &g.Cells[x][y]
-		cell.Bold = bold
-
-		if x == x1 {
-			cell.Right = true
-		} else if x == x2-1 {
-			cell.Left = true
-		} else {
-			cell.Left = true
-			cell.Right = true
+			if x == x1 {
+				cell.Right = true
+			} else if x == x2-1 {
+				cell.Left = true
+			} else {
+				cell.Left = true
+				cell.Right = true
+			}
 		}
-
 	}
 }
 
@@ -84,14 +85,15 @@ func (g *Grid) Draw(
 			g.Cells[x][y].EdgesToRune()
 
 			r := g.Cells[x][y].Rune
-
-			screen.SetContent(
-				x,
-				y,
-				r,
-				nil,
-				style,
-			)
+			if r != ' ' {
+				screen.SetContent(
+					x,
+					y,
+					r,
+					nil,
+					style,
+				)
+			}
 		}
 	}
 
