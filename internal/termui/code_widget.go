@@ -68,7 +68,7 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 // DRAW
 // ////////////////////////
-func (m *CodeWidget) Draw(rect Rect) {
+func (m *CodeWidget) Draw(c Canvas) {
 
 	screen := m.uiContext.Screen()
 
@@ -77,12 +77,12 @@ func (m *CodeWidget) Draw(rect Rect) {
 	// Fill background
 	bg := tcell.PaletteColor(rand.Intn(256))
 
-	for row := 0; row < rect.h; row++ {
-		for col := 0; col < rect.w; col++ {
+	for row := 0; row < c.rect.h; row++ {
+		for col := 0; col < c.rect.w; col++ {
 
 			screen.SetContent(
-				rect.x+col,
-				rect.y+row,
+				c.rect.x+col,
+				c.rect.y+row,
 				' ',
 				nil,
 				style.Background(bg),
@@ -93,13 +93,13 @@ func (m *CodeWidget) Draw(rect Rect) {
 	title := "Status Line"
 	for i, rr := range title {
 
-		if i >= rect.w {
+		if i >= c.rect.w {
 			break
 		}
 
 		screen.SetContent(
-			rect.x+i,
-			rect.y+rect.h,
+			c.rect.x+i,
+			c.rect.y+c.rect.h,
 			rr,
 			nil,
 			style,
@@ -109,30 +109,30 @@ func (m *CodeWidget) Draw(rect Rect) {
 	if false {
 
 		screen.SetContent(
-			rect.x,
-			rect.y,
+			c.rect.x,
+			c.rect.y,
 			'*',
 			nil,
 			style,
 		)
 
 		screen.SetContent(
-			rect.x+rect.w,
-			rect.y,
+			c.rect.x+c.rect.w,
+			c.rect.y,
 			'*',
 			nil,
 			style,
 		)
 		screen.SetContent(
-			rect.x,
-			rect.y+rect.h,
+			c.rect.x,
+			c.rect.y+c.rect.h,
 			'*',
 			nil,
 			style,
 		)
 		screen.SetContent(
-			rect.x+rect.w,
-			rect.y+rect.h,
+			c.rect.x+c.rect.w,
+			c.rect.y+c.rect.h,
 			'*',
 			nil,
 			style,
@@ -142,13 +142,13 @@ func (m *CodeWidget) Draw(rect Rect) {
 		title := "Code Widget"
 		for i, rr := range title {
 
-			if i >= rect.w {
+			if i >= c.rect.w {
 				break
 			}
 
 			screen.SetContent(
-				rect.x+i,
-				rect.y,
+				c.rect.x+i,
+				c.rect.y,
 				rr,
 				nil,
 				style,

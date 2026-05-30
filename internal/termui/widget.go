@@ -10,5 +10,5 @@ type Widget interface {
 	//SetRect(r Rect)
 	Parent() *Node
 	SetParent(*Node)
-	Draw(r Rect)
+	Draw(c Canvas)
 }

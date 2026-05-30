@@ -50,7 +50,7 @@ func (l *WidgetTree) Draw() {
 
 func (l *WidgetTree) draw(node *Node) {
 	if node.Type == NodeLeaf {
-		node.Widget.Draw(node.Rect)
+		node.Widget.Draw(node.canvas)
 		return
 	}
 	l.draw(node.First)
@@ -76,6 +76,7 @@ func (l *WidgetTree) buildLayout(
 	}
 
 	if node.Type == NodeLeaf {
+		node.canvas = Canvas{rect, grid}
 		node.SetRect(rect)
 
 		return
@@ -101,15 +102,9 @@ func (l *WidgetTree) buildLayout(
 
 		r1 := NewRect(rect.x, rect.y, splitX-0, rect.h)
 		l.buildLayout(node.First, r1, grid)
-		//		if node.First.Type == NodeLeaf {
-		//			node.First.SetRect(r1)
-		//		}
 
 		r2 := NewRect(splitX+1, rect.y, rect.w-splitX-1, rect.h)
 		l.buildLayout(node.Second, r2, grid)
-	//	if node.Second.Type == NodeLeaf {
-	//		node.Second.SetRect(r2)
-	//	}
 
 	case Horizontal:
 
@@ -126,15 +121,9 @@ func (l *WidgetTree) buildLayout(
 
 		r1 := NewRect(rect.x, rect.y, rect.w, splitY)
 		l.buildLayout(node.First, r1, grid)
-		//		if node.First.Type == NodeLeaf {
-		//			node.First.SetRect(r1)
-		//		}
 
 		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-splitY-1)
 		l.buildLayout(node.Second, r2, grid)
-		//		if node.Second.Type == NodeLeaf {
-		//			node.Second.SetRect(r2)
-		//		}
 
 	}
 }

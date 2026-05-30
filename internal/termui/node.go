@@ -37,6 +37,8 @@ type Node struct {
 	Widget Widget // The UI component stored in this node (only valid if Type == Leaf)
 	Rect   Rect
 
+	canvas Canvas
+
 	// --- Split node fields ---
 	Dir   SplitDir // Direction of the split (Horizontal or Vertical)
 	Ratio float64  // Portion of space given to the First child (range: 0.0–1.0)
@@ -59,18 +61,27 @@ func (n *Node) SetRect(r Rect) {
 	n.Rect = r
 }
 
-func (n *Node) Draw(r Rect) {
+//func (n *Node) Draw(r Rect) {
+//	if n.Type == NodeLeaf {
+//		n.Widget.Draw(r)
+//		return
+//	}
+//	n.First.Draw(n.First.Rect)
+//	n.Second.Draw(n.Second.Rect)
+//}
+
+func (n *Node) Draw(c Canvas) {
 	if n.Type == NodeLeaf {
-		n.Widget.Draw(r)
+		n.Widget.Draw(c)
 		return
 	}
-	n.First.Draw(n.First.Rect)
-	n.Second.Draw(n.Second.Rect)
+	n.First.Draw(n.First.canvas)
+	n.Second.Draw(n.Second.canvas)
 }
 
 func (n *Node) Draw_org(r Rect) {
 	if n.Type == NodeLeaf {
-		n.Widget.Draw(r)
+		//n.Widget.Draw(r)
 		return
 	}
 
@@ -80,8 +91,8 @@ func (n *Node) Draw_org(r Rect) {
 		w1 := r.w * Units(n.First, Vertical) / total
 		w2 := r.w - w1
 
-		n.First.Draw(Rect{r.x, r.y, w1, r.h})
-		n.Second.Draw(Rect{r.x + w1, r.y, w2, r.h})
+		n.First.Draw_org(Rect{r.x, r.y, w1, r.h})
+		n.Second.Draw_org(Rect{r.x + w1, r.y, w2, r.h})
 
 	} else {
 		total := Units(n, Horizontal)
@@ -89,7 +100,7 @@ func (n *Node) Draw_org(r Rect) {
 		h1 := r.h * Units(n.First, Horizontal) / total
 		h2 := r.h - h1
 
-		n.First.Draw(Rect{r.x, r.y, r.w, h1})
-		n.Second.Draw(Rect{r.x, r.y + h1, r.w, h2})
+		n.First.Draw_org(Rect{r.x, r.y, r.w, h1})
+		n.Second.Draw_org(Rect{r.x, r.y + h1, r.w, h2})
 	}
 }
