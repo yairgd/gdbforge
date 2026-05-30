@@ -2,7 +2,7 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/core"
+	//	"github.com/yairgd/promptcore/internal/core"
 	"github.com/yairgd/promptcore/internal/gdb"
 	"github.com/yairgd/promptcore/internal/ui/tui"
 
@@ -10,9 +10,9 @@ import (
 )
 
 func main() {
-	outputChan := make(chan core.GdbOutputMsg) // ✅ שינוי
+	//	outputChan := make(chan core.GdbOutputMsg) // ✅ שינוי
 
-	client, err := gdb.NewGDBClient()
+	client, outputChan, err := gdb.NewGDBClient()
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -17,9 +17,9 @@ func NewGrid(w, h int) *Grid {
 		H: h,
 	}
 
-	g.Cells = make([][]Cell, w)
+	g.Cells = make([][]Cell, w+0)
 
-	for x := 0; x < w; x++ {
+	for x := 0; x < w+0; x++ {
 		g.Cells[x] = make([]Cell, h)
 	}
 
@@ -29,12 +29,12 @@ func NewGrid(w, h int) *Grid {
 /*
 Add vertical separator.
 */
-func (g *Grid) DrawVertical(x, y1, y2 int) {
+func (g *Grid) DrawVertical(x, y1, y2 int, bold bool) {
 
 	for y := y1; y < y2; y++ {
 
 		cell := &g.Cells[x][y]
-
+		cell.Bold = bold
 		if y == y1 {
 			cell.Down = true
 		} else if y == y2-1 {
@@ -53,11 +53,13 @@ func (g *Grid) DrawHorizontal(
 	y int,
 	x1 int,
 	x2 int,
+	bold bool,
 ) {
 
 	for x := x1; x < x2; x++ {
 
 		cell := &g.Cells[x][y]
+		cell.Bold = bold
 
 		if x == x1 {
 			cell.Right = true
@@ -93,5 +95,4 @@ func (g *Grid) Draw(
 		}
 	}
 
-	screen.Show()
 }

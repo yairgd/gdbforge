@@ -7,8 +7,8 @@ import (
 type Widget interface {
 	HandleEvent(ev tcell.Event)
 	SetSize(w int, h int)
-	SetRect(r Rect)
+	//SetRect(r Rect)
 	Parent() *Node
 	SetParent(*Node)
-	Draw()
+	Draw(r Rect)
 }

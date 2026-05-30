@@ -31,7 +31,7 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 	w.focusWidget.SetParent(node.First)
 
 	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 0}
-	newWidget.SetParent((node.Second))
+	newWidget.SetParent(node.Second)
 
 	node.Widget = nil
 }
@@ -46,7 +46,7 @@ func (l *WidgetTree) Draw() {
 
 func (l *WidgetTree) draw(node *Node) {
 	if node.Type == NodeLeaf {
-		node.Widget.Draw()
+		node.Widget.Draw(node.Rect)
 		return
 	}
 	l.draw(node.First)
@@ -72,7 +72,8 @@ func (l *WidgetTree) buildLayout(
 	}
 
 	if node.Type == NodeLeaf {
-		node.Widget.SetRect(rect)
+		node.SetRect(rect)
+
 		return
 	}
 
@@ -91,15 +92,20 @@ func (l *WidgetTree) buildLayout(
 			splitX,
 			rect.y,
 			rect.y+rect.h,
+			false,
 		)
 
-		r1 := NewRect(rect.x, rect.y, rect.w, rect.h)
+		r1 := NewRect(rect.x, rect.y, splitX-0, rect.h)
 		l.buildLayout(node.First, r1, grid)
-		node.First.Widget.SetRect(r1)
+		//		if node.First.Type == NodeLeaf {
+		//			node.First.SetRect(r1)
+		//		}
 
-		r2 := NewRect(splitX+1, rect.y, rect.w-leftW-1, rect.h)
+		r2 := NewRect(splitX+1, rect.y, rect.w-splitX-1, rect.h)
 		l.buildLayout(node.Second, r2, grid)
-		node.Second.Widget.SetRect(r2)
+	//	if node.Second.Type == NodeLeaf {
+	//		node.Second.SetRect(r2)
+	//	}
 
 	case Horizontal:
 
@@ -111,15 +117,20 @@ func (l *WidgetTree) buildLayout(
 			splitY,
 			rect.x,
 			rect.x+rect.w,
+			false,
 		)
 
 		r1 := NewRect(rect.x, rect.y, rect.w, topH)
 		l.buildLayout(node.First, r1, grid)
-		node.First.Widget.SetRect(r1)
+		//		if node.First.Type == NodeLeaf {
+		//			node.First.SetRect(r1)
+		//		}
 
 		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-topH-1)
 		l.buildLayout(node.Second, r2, grid)
-		node.Second.Widget.SetRect(r2)
+		//		if node.Second.Type == NodeLeaf {
+		//			node.Second.SetRect(r2)
+		//		}
 
 	}
 }

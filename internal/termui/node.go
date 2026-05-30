@@ -35,6 +35,7 @@ type Node struct {
 
 	// --- Leaf node fields ---
 	Widget Widget // The UI component stored in this node (only valid if Type == Leaf)
+	Rect   Rect
 
 	// --- Split node fields ---
 	Dir   SplitDir // Direction of the split (Horizontal or Vertical)
@@ -54,12 +55,22 @@ func (n *Node) HandleEvent(ev tcell.Event) {
 
 }
 
-func (n *Node) SetSize(w, h int) {
+func (n *Node) SetRect(r Rect) {
+	n.Rect = r
 }
 
 func (n *Node) Draw(r Rect) {
 	if n.Type == NodeLeaf {
-		n.Widget.Draw()
+		n.Widget.Draw(r)
+		return
+	}
+	n.First.Draw(n.First.Rect)
+	n.Second.Draw(n.Second.Rect)
+}
+
+func (n *Node) Draw_org(r Rect) {
+	if n.Type == NodeLeaf {
+		n.Widget.Draw(r)
 		return
 	}
 

@@ -6,6 +6,7 @@ type Cell struct {
 	Left  bool
 	Right bool
 	Rune  rune
+	Bold  bool
 }
 
 func NewCell() Cell {
@@ -17,49 +18,106 @@ func NewCell() Cell {
 	}
 }
 
-/*
-Convert edge combination to Unicode rune.
-*/
+// The ideal solution is to use mixed-weight corner/separator glyphs,
+// but this becomes significantly more complex at this stage.
+//
+// For example, we would need to know whether the bold window
+// is connected from the top, bottom, left, or right side.
 func (c *Cell) EdgesToRune() {
 
 	switch {
 
 	// Cross
 	case c.Up && c.Down && c.Left && c.Right:
-		c.Rune = '┼'
+
+		if c.Bold {
+			c.Rune = '╋'
+		} else {
+			c.Rune = '┼'
+		}
 
 	// T junctions
 	case c.Up && c.Down && c.Right && !c.Left:
-		c.Rune = '├'
+
+		if c.Bold {
+			c.Rune = '┣'
+		} else {
+			c.Rune = '├'
+		}
 
 	case c.Up && c.Down && c.Left && !c.Right:
-		c.Rune = '┤'
+
+		if c.Bold {
+			c.Rune = '┫'
+		} else {
+			c.Rune = '┤'
+		}
 
 	case c.Left && c.Right && c.Down && !c.Up:
-		c.Rune = '┬'
+
+		if c.Bold {
+			c.Rune = '┳'
+		} else {
+			c.Rune = '┬'
+		}
 
 	case c.Left && c.Right && c.Up && !c.Down:
-		c.Rune = '┴'
+
+		if c.Bold {
+			c.Rune = '┻'
+		} else {
+			c.Rune = '┴'
+		}
 
 	// Corners
 	case c.Left && c.Down && !c.Up && !c.Right:
-		c.Rune = '┐'
+
+		if c.Bold {
+			c.Rune = '┓'
+		} else {
+			c.Rune = '┐'
+		}
 
 	case c.Right && c.Down && !c.Up && !c.Left:
-		c.Rune = '┌'
+
+		if c.Bold {
+			c.Rune = '┏'
+		} else {
+			c.Rune = '┌'
+		}
 
 	case c.Right && c.Up && !c.Down && !c.Left:
-		c.Rune = '└'
+
+		if c.Bold {
+			c.Rune = '┗'
+		} else {
+			c.Rune = '└'
+		}
 
 	case c.Left && c.Up && !c.Down && !c.Right:
-		c.Rune = '┘'
+
+		if c.Bold {
+			c.Rune = '┛'
+		} else {
+			c.Rune = '┘'
+		}
 
 	// Simple lines
 	case c.Up && c.Down && !c.Left && !c.Right:
-		c.Rune = '│'
+
+		if c.Bold {
+			c.Rune = '┃'
+		} else {
+			c.Rune = '│'
+		}
 
 	case c.Left && c.Right && !c.Up && !c.Down:
-		c.Rune = '─'
+
+		if c.Bold {
+			c.Rune = '━'
+		} else {
+			c.Rune = '─'
+		}
 
 	default:
 		c.Rune = ' '

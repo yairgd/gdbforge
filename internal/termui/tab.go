@@ -136,9 +136,23 @@ func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom
 	rect := Rect{0, 0, w, h}
 	// place the node insde layout
 	layout := NewLayout(top, rect, uiContext)
-	layout.SetSize(w, h)
+	layout.SetRect(rect)
 	// split it to another node with bottom widget
-	layout.NewSplit(Horizontal, bottom)
+	layout.NewSplit(Horizontal, top)
+	layout.NewSplit(Vertical, top)
+	layout.NewSplit(Vertical, top)
+	layout.NewSplit(Horizontal, top)
+
+	//layout.NewSplit(Horizontal, bottom)
+	//	layout.NewSplit(Horizontal, bottom)
+	//layout.NewSplit(Vertical, bottom)
+
+	//layout.NewSplit(Vertical, bottom)
+	//layout.NewSplit(Horizontal, bottom)
+	//layout.NewSplit(Vertical, bottom)
+	//	layout.NewSplit(Horizontal, bottom)
+	//	layout.NewSplit(Vertical, top)
+	//	layout.NewSplit(Horizontal, bottom)
 
 	layout.BuildLayout(rect)
 

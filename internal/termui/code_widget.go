@@ -66,37 +66,68 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 // DRAW
 // ////////////////////////
-func (m *CodeWidget) Draw() {
+func (m *CodeWidget) Draw(rect Rect) {
 
 	screen := m.uiContext.Screen()
 
 	style := tcell.StyleDefault
 
-	// Fill background
-	for row := 0; row < m.rect.h; row++ {
-		for col := 0; col < m.rect.w; col++ {
-			screen.SetContent(
-				m.rect.x+col,
-				m.rect.y+row,
-				' ',
-				nil,
-				style,
-			)
+	if false {
+		// Fill background
+		for row := 1; row < rect.h-1; row++ {
+			for col := 1; col < rect.w-1; col++ {
+				screen.SetContent(
+					rect.x+col,
+					rect.y+row,
+					' ',
+					nil,
+					style,
+				)
+			}
 		}
 	}
-
 	// Draw title
 	title := "Code Widget"
 
+	screen.SetContent(
+		rect.x,
+		rect.y,
+		'*',
+		nil,
+		style,
+	)
+
+	screen.SetContent(
+		rect.x+rect.w-1,
+		rect.y,
+		'*',
+		nil,
+		style,
+	)
+	screen.SetContent(
+		rect.x,
+		rect.y+rect.h-1,
+		'*',
+		nil,
+		style,
+	)
+	screen.SetContent(
+		rect.x+rect.w-1,
+		rect.y+rect.h-1,
+		'*',
+		nil,
+		style,
+	)
+
 	for i, rr := range title {
 
-		if i >= m.rect.w {
+		if i >= rect.w {
 			break
 		}
 
 		screen.SetContent(
-			m.rect.x+i,
-			m.rect.y,
+			rect.x+i+5,
+			rect.y,
 			rr,
 			nil,
 			style,
