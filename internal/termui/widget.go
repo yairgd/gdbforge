@@ -6,8 +6,5 @@ import (
 
 type Widget interface {
 	HandleEvent(ev tcell.Event)
-	//	SetSize(w int, h int)
-	//SetRect(r Rect)
-	Parent() *Node
 	Draw(c Canvas)
 }

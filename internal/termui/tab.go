@@ -30,7 +30,7 @@ type Tab struct {
 // This keeps the architecture ready for future
 // multi-tab support without adding complexity now.
 type TabWidget struct {
-	BaseWidget
+	Widget
 
 	tabs   []Tab
 	active int
@@ -45,10 +45,8 @@ type TabWidget struct {
 func NewTabWidget(
 	title string,
 	layout *Layout,
-	uiContext UIContext,
 ) *TabWidget {
 	return &TabWidget{
-		BaseWidget: NewBaseWidget(uiContext),
 		tabs: []Tab{
 			{
 				Title:  title,
@@ -102,7 +100,7 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 
 // Draw forwards the draw call to the active tab widget.
 // The screen is owned by the application and passed in.
-func (t *TabWidget) Draw() {
+func (t *TabWidget) Draw(c Canvas) {
 	if len(t.tabs) == 0 {
 		return
 	}
@@ -110,7 +108,7 @@ func (t *TabWidget) Draw() {
 	layout := t.tabs[t.active].Layout
 
 	if layout != nil {
-		layout.Draw()
+		layout.Draw(c)
 	}
 }
 
@@ -130,13 +128,13 @@ func (t *TabWidget) ActiveLayout() *Layout {
 
 // NewTab creates a new tab with an initial horizontal split layout.
 // The layout contains two widgets: top and bottom.
-func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom Widget) *TabWidget {
+func NewTabTwoHozSplitWins(canvas Canvas, title string, top Widget, bottom Widget) *TabWidget {
 
-	w, h := uiContext.Screen().Size()
-	rect := Rect{0, 0, w, h - 2}
+	//w, h := canvas.grid.W, canvas.grid.H
+	//	rect := Rect{0, 0, w, h - 2}
 	// place the node insde layout
-	layout := NewLayout(top, rect, uiContext)
-	layout.SetRect(rect)
+	layout := NewLayout(top) //, rect, canvas)
+	//	layout.SetRect(rect)
 	// split it to another node with bottom widget
 	layout.NewSplit(Horizontal, top)
 	layout.NewSplit(Vertical, top)
@@ -154,7 +152,7 @@ func NewTabTwoHozSplitWins(uiContext UIContext, title string, top Widget, bottom
 	//	layout.NewSplit(Vertical, top)
 	//	layout.NewSplit(Horizontal, bottom)
 
-	layout.BuildLayout(rect)
+	layout.BuildLayout(canvas)
 
 	return &TabWidget{
 		tabs: []Tab{

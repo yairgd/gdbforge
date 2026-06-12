@@ -40,31 +40,28 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 	l.focusWidget.HandleEvent(ev)
 }
 
-func (l *WidgetTree) Draw() {
-	l.draw(l.root)
+func (l *WidgetTree) Draw(c Canvas) {
+	l.draw(c, l.root)
 }
 
-func (l *WidgetTree) draw(node *Node) {
+func (l *WidgetTree) draw(c Canvas, node *Node) {
 	if node.Type == NodeLeaf {
 		node.Widget.Draw(node.canvas)
 		return
 	}
-	l.draw(node.First)
-	l.draw(node.Second)
+	l.draw(c, node.First)
+	l.draw(c, node.Second)
 
 }
 
-func (l *WidgetTree) BuildLayout(
-	rect Rect,
-	grid *Grid) {
-	l.buildLayout(l.root, rect, grid)
+func (l *WidgetTree) BuildLayout(c Canvas) {
+	l.buildLayout(l.root, c)
 
 }
 
 func (l *WidgetTree) buildLayout(
 	node *Node,
-	rect Rect,
-	grid *Grid,
+	c Canvas,
 ) {
 
 	if node == nil {
@@ -72,9 +69,7 @@ func (l *WidgetTree) buildLayout(
 	}
 
 	if node.Type == NodeLeaf {
-		node.canvas = Canvas{rect, grid}
-		node.SetRect(rect)
-
+		node.canvas = c
 		return
 	}
 
@@ -82,44 +77,44 @@ func (l *WidgetTree) buildLayout(
 
 	case Vertical:
 
-		leftW := int(float64(rect.w) * node.Ratio)
+		leftW := int(float64(c.rect.w) * node.Ratio)
 
-		splitX := rect.x + leftW
+		splitX := c.rect.x + leftW
 
 		/*
 			Draw separator line.
 		*/
-		grid.DrawVertical(
+		c.grid.DrawVertical(
 			splitX,
-			rect.y-1,
-			rect.y+rect.h+1,
+			c.rect.y-1,
+			c.rect.y+c.rect.h+1,
 			false,
 		)
 
-		r1 := NewRect(rect.x, rect.y, splitX-0, rect.h)
-		l.buildLayout(node.First, r1, grid)
+		r1 := NewRect(c.rect.x, c.rect.y, splitX-0, c.rect.h)
+		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
 
-		r2 := NewRect(splitX+1, rect.y, rect.w-splitX-1, rect.h)
-		l.buildLayout(node.Second, r2, grid)
+		r2 := NewRect(splitX+1, c.rect.y, c.rect.w-splitX-1, c.rect.h)
+		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
 
 	case Horizontal:
 
-		topH := int(float64(rect.h) * node.Ratio)
+		topH := int(float64(c.rect.h) * node.Ratio)
 
-		splitY := rect.y + topH
+		splitY := c.rect.y + topH
 
-		grid.DrawHorizontal(
+		c.grid.DrawHorizontal(
 			splitY,
-			rect.x-1,
-			rect.x+rect.w+1,
+			c.rect.x-1,
+			c.rect.x+c.rect.w+1,
 			false,
 		)
 
-		r1 := NewRect(rect.x, rect.y, rect.w, splitY)
-		l.buildLayout(node.First, r1, grid)
+		r1 := NewRect(c.rect.x, c.rect.y, c.rect.w, splitY)
+		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
 
-		r2 := NewRect(rect.x, splitY+1, rect.w, rect.h-splitY-1)
-		l.buildLayout(node.Second, r2, grid)
+		r2 := NewRect(c.rect.x, splitY+1, c.rect.w, c.rect.h-splitY-1)
+		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
 
 	}
 }

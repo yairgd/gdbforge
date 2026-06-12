@@ -14,7 +14,6 @@ import (
 //////////////////////////
 
 type GDBWidget struct {
-	BaseWidget
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
@@ -26,7 +25,7 @@ type GDBWidget struct {
 	gdbInputState gdb.GdbInputState
 }
 
-func NewGDBWidget(uiContext UIContext) *GDBWidget {
+func NewGDBWidget() *GDBWidget {
 	buf := core.NewBuffer()
 	client, outputChan, err := gdb.NewGDBClient()
 	if err != nil {
@@ -35,14 +34,13 @@ func NewGDBWidget(uiContext UIContext) *GDBWidget {
 	//	defer client.Close()
 
 	widget := &GDBWidget{
-		BaseWidget:    NewBaseWidget(uiContext),
 		Buffer:        buf,
 		Viewport:      core.Viewport{Height: 10},
 		Debugger:      client,
 		Cursor:        0,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
-	widget.StartGdbUIBridge(uiContext.Screen(), outputChan)
+	widget.StartGdbUIBridge(nil /*uiContext.Screen()*/, outputChan)
 	return widget
 }
 
@@ -228,7 +226,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 // DRAW
 // ////////////////////////
 func (m *GDBWidget) Draw(c Canvas) {
-	m.uiContext.Screen().Clear()
+	c.Screen().Clear()
 	//w, h := m.Size()
 
 	// --- OUTPUT ---
@@ -247,7 +245,7 @@ func (m *GDBWidget) Draw(c Canvas) {
 
 		// We call DrawANSIText ONCE per line.
 		// No need for the 'for x := range line' loop here.
-		DrawANSIText(m.uiContext.Screen(), c.rect.x+0, c.rect.y+y, line, lineStyle, c.rect)
+		DrawANSIText(c.Screen(), c.rect.x+0, c.rect.y+y, line, lineStyle, c.rect)
 	}
 
 	// --- INPUT LINE ---
@@ -263,18 +261,12 @@ func (m *GDBWidget) Draw(c Canvas) {
 		if x+promptLen >= c.rect.w {
 			break
 		}
-		m.uiContext.Screen().SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)
+		c.Screen().SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)
 	}
 
 	// --- CURSOR ---
 	// Match the cursor position to the prompt offset
-	m.uiContext.Screen().ShowCursor(m.Cursor+promptLen, inputY)
+	c.Screen().ShowCursor(m.Cursor+promptLen, inputY)
 
-	m.uiContext.Screen().Show()
-}
-func (w *GDBWidget) HandleEvent1(ev tcell.Event) {
-	w.App().RequestRedraw()
-
-	w.Emit(core.GdbOutputMsg{Data: "test"})
-
+	c.Screen().Show()
 }

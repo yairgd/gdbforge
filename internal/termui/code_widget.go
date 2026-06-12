@@ -12,7 +12,6 @@ import (
 //////////////////////////
 
 type CodeWidget struct {
-	BaseWidget
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
@@ -21,14 +20,13 @@ type CodeWidget struct {
 	Cursor      int
 }
 
-func NewCodeWidget(uiContext UIContext) *CodeWidget {
+func NewCodeWidget() *CodeWidget {
 	buf := core.NewBuffer()
 	//	defer client.Close()
 
 	widget := &CodeWidget{
-		BaseWidget: NewBaseWidget(uiContext),
-		Buffer:     buf,
-		Viewport:   core.Viewport{Height: 10},
+		Buffer:   buf,
+		Viewport: core.Viewport{Height: 10},
 	}
 	return widget
 }
@@ -70,7 +68,7 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 func (m *CodeWidget) Draw(c Canvas) {
 
-	screen := m.uiContext.Screen()
+	//	screen := m.uiContext.Screen()
 
 	style := tcell.StyleDefault
 
@@ -80,7 +78,7 @@ func (m *CodeWidget) Draw(c Canvas) {
 	for row := 0; row < c.rect.h; row++ {
 		for col := 0; col < c.rect.w; col++ {
 
-			screen.SetContent(
+			c.Screen().SetContent(
 				c.rect.x+col,
 				c.rect.y+row,
 				' ',
@@ -97,7 +95,7 @@ func (m *CodeWidget) Draw(c Canvas) {
 			break
 		}
 
-		screen.SetContent(
+		c.Screen().SetContent(
 			c.rect.x+i,
 			c.rect.y+c.rect.h,
 			rr,
@@ -108,7 +106,7 @@ func (m *CodeWidget) Draw(c Canvas) {
 
 	if false {
 
-		screen.SetContent(
+		c.Screen().SetContent(
 			c.rect.x,
 			c.rect.y,
 			'*',
@@ -116,21 +114,21 @@ func (m *CodeWidget) Draw(c Canvas) {
 			style,
 		)
 
-		screen.SetContent(
+		c.Screen().SetContent(
 			c.rect.x+c.rect.w,
 			c.rect.y,
 			'*',
 			nil,
 			style,
 		)
-		screen.SetContent(
+		c.Screen().SetContent(
 			c.rect.x,
 			c.rect.y+c.rect.h,
 			'*',
 			nil,
 			style,
 		)
-		screen.SetContent(
+		c.Screen().SetContent(
 			c.rect.x+c.rect.w,
 			c.rect.y+c.rect.h,
 			'*',
@@ -146,7 +144,7 @@ func (m *CodeWidget) Draw(c Canvas) {
 				break
 			}
 
-			screen.SetContent(
+			c.Screen().SetContent(
 				c.rect.x+i,
 				c.rect.y,
 				rr,

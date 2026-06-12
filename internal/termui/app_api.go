@@ -14,5 +14,5 @@ type AppAPI interface {
 
 type UIContext interface {
 	Emit(core.Event)
-	Screen() tcell.Screen
+	// Screen() tcell.Screen
 }

@@ -5,9 +5,6 @@ import (
 )
 
 type Layout struct {
-	BaseWidget
-	grid *Grid
-	rect Rect
 	tree WidgetTree
 }
 
@@ -19,13 +16,7 @@ func (l *Layout) HandleEvent(ev tcell.Event) {
 	l.tree.HandleEvent(ev)
 }
 
-func (l *Layout) SetRect(r Rect) {
-	l.rect = r
-	l.grid = NewGrid(r.w, r.h)
-
-}
-
-func (l *Layout) Draw() {
+func (l *Layout) Draw(c Canvas) {
 	// draw outer frane
 	//l.grid.DrawHorizontal(0, 0, l.rect.w-0, false)
 	//	l.grid.DrawHorizontal(l.rect.h-1, 0, l.rect.w, false)
@@ -33,24 +24,23 @@ func (l *Layout) Draw() {
 	//	l.grid.DrawVertical(l.rect.w-1, 0, l.rect.h-0, false)
 
 	// draw inner frame
+	//	l.grid.Draw(c.screen, tcell.StyleDefault)
+	l.tree.Draw(c)
 
-	l.grid.Draw(l.uiContext.Screen(), tcell.StyleDefault)
-	l.tree.Draw()
-
-	l.uiContext.Screen().Show()
+	//l.uiContext.Screen().Show()
 }
 
-func (l *Layout) BuildLayout(rect Rect) {
-	l.tree.BuildLayout(rect, l.grid)
+func (l *Layout) BuildLayout(c Canvas) {
+
+	l.tree.BuildLayout(c)
 }
 
-func NewLayout(widget Widget, rect Rect, uiContext UIContext) *Layout {
+func NewLayout(widget Widget) *Layout {
 	layout := &Layout{
-		BaseWidget: NewBaseWidget(uiContext),
-		tree:       NewWidgetTree(widget),
+		tree: NewWidgetTree(widget),
 	}
-	layout.SetRect(rect)
-	layout.grid = NewGrid(rect.w, rect.h)
+	//	layout.SetRect(rect)
+	//	layout.grid = NewGrid(rect.w, rect.h)
 
 	return layout
 
