@@ -56,5 +56,5 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 }
 
 func (m *CmdWidget) Draw(c Canvas) {
-
+	c.Printf(0, 0, tcell.StyleDefault, "test cmd line")
 }

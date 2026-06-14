@@ -1,11 +1,26 @@
 package termui
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
 	tcell "github.com/gdamore/tcell/v2"
 )
+
+func (c Canvas) Print(localX, localY int, style tcell.Style, text string) {
+	for row, line := range strings.Split(text, "\n") {
+		y := localY + row
+		if y >= c.H() {
+			break
+		}
+		c.DrawANSIText(localX, y, line, style)
+	}
+}
+
+func (c Canvas) Printf(localX, localY int, style tcell.Style, format string, args ...any) {
+	c.Print(localX, localY, style, fmt.Sprintf(format, args...))
+}
 
 func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.Style) {
 	style := baseStyle

@@ -2,13 +2,27 @@ package termui
 
 import (
 	"log"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/core"
 )
 
+type AppApi interface {
+	HandleUIEvent(ev tcell.Event)
+}
+type WidgetNode struct {
+	widget Widget
+	rect   Rect
+}
+
+func (w *WidgetNode) SetRect(r Rect) {
+	w.rect = r
+}
+
 type TermApp struct {
-	widgets []Widget
+	Api     AppApi
+	widgets []WidgetNode
 	screen  tcell.Screen
 	events  chan core.Event
 	exit    bool
@@ -29,6 +43,7 @@ func NewTermApp() *TermApp {
 	if err := screen.Init(); err != nil {
 		log.Fatal(err)
 	}
+
 	screen.EnableMouse()
 
 	return &TermApp{
@@ -37,23 +52,34 @@ func NewTermApp() *TermApp {
 		events: make(chan core.Event, 100),
 	}
 }
-
+func (app *TermApp) Widgets() []WidgetNode { return app.widgets }
 func (app *TermApp) Close() {
 	app.screen.Fini()
 }
 
-func (app *TermApp) AddWidget(w Widget) {
-	app.widgets = append(app.widgets, w)
+func (app *TermApp) AddWidget(w Widget, r Rect) {
+	app.widgets = append(app.widgets, WidgetNode{
+		widget: w,
+		rect:   r,
+	})
 }
 
 func (app *TermApp) Run() {
+	defer func() {
+		// Give terminal enough time to disable mouse reporting.
+		// Without this delay, pending mouse escape sequences may
+		// leak to the shell after Fini().
+		time.Sleep(100 * time.Millisecond)
+		app.screen.DisableMouse()
+		app.screen.Fini()
+	}()
 	for !app.exit {
 
 		ev := app.screen.PollEvent()
 		app.HandleEvent(ev)
 
 		for _, w := range app.widgets {
-			w.HandleEvent(ev)
+			w.widget.HandleEvent(ev)
 		}
 		//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
 
@@ -64,7 +90,7 @@ func (app *TermApp) Run() {
 		app.screen.Show()
 
 	}
-	app.screen.Fini()
+
 }
 func (app *TermApp) UpdateCanvas() Canvas {
 	app.screen.Sync()
@@ -78,15 +104,9 @@ func (app *TermApp) UpdateCanvas() Canvas {
 
 func (app *TermApp) Draw(c Canvas) {
 	for _, w := range app.widgets {
-		w.Draw(c)
+		w.widget.Draw(Canvas{c.Screen(), w.rect, c.grid})
 	}
 
-}
-
-func (app *TermApp) HandleUIEvent(ev tcell.Event) {
-	for _, w := range app.widgets {
-		w.HandleEvent(ev)
-	}
 }
 
 func (app *TermApp) Screen() tcell.Screen {
@@ -100,6 +120,8 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		switch e.Key() {
 		case tcell.KeyCtrlD:
 			a.exit = true
+
+			return
 
 		default:
 			//	tab.HandleEvent(e)
@@ -118,6 +140,9 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 				return
 			}
 		}
+	}
+	if a.Api != nil {
+		a.Api.HandleUIEvent(ev)
 	}
 
 }

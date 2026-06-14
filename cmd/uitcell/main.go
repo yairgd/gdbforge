@@ -1,40 +1,106 @@
 package main
 
 import (
+	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/promptcore/internal/termui"
 )
 
+// DebuggerApp extends TermApp with debugger-specific behavior.
 type DebuggerApp struct {
 	*termui.TermApp
 }
 
+// Create the debugger application.
 func NewDebuggerApp() *DebuggerApp {
-	a := &DebuggerApp{
-		TermApp: termui.NewTermApp(),
-	}
+	dbg := &DebuggerApp{}
 
-	a.InitB()
+	// Create the base TUI application.
+	dbg.TermApp = termui.NewTermApp()
 
-	return a
+	// Register ourselves as the UI event handler.
+	dbg.TermApp.Api = dbg
+
+	// Build the initial widget layout.
+	dbg.InitB()
+
+	return dbg
 }
 
+// Create all top-level widgets and their initial layout.
 func (a *DebuggerApp) InitB() {
-	a.AddWidget(termui.NewCmdWidget())
 
-	codeWidget := termui.NewCodeWidget()
-	codeWidget1 := termui.NewCodeWidget()
+	// Two source/code windows that will be displayed
+	// inside a tabbed split container.
+	codeWidgetLeft := termui.NewCodeWidget()
+	codeWidgetRight := termui.NewCodeWidget()
 
+	// Current full-screen canvas.
+	c := a.UpdateCanvas()
+
+	// Main debugger area.
+	// Occupies the entire screen initially.
 	a.AddWidget(
 		termui.NewTabTwoHozSplitWins(
-			a.UpdateCanvas(),
+			c,
 			"basic debugger",
-			codeWidget1,
-			codeWidget,
+			codeWidgetLeft,
+			codeWidgetRight,
+		),
+		c.ChildRect(0, 0, c.W(), c.H()),
+	)
+
+	// Command line widget at the bottom.
+	cmd := termui.NewCmdWidget()
+
+	a.AddWidget(
+		cmd,
+		c.ChildRect(0, c.H()-1, c.W(), 1),
+	)
+}
+
+// Called by TermApp when a UI event occurs.
+// We currently use it to recalculate widget geometry
+// when the terminal size changes.
+func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
+
+	// Recalculate root canvas dimensions.
+	c := a.UpdateCanvas()
+
+	// Access top-level widgets.
+	w := a.Widgets()
+
+	if len(w) < 2 {
+		return
+	}
+
+	// Main debugger/tab area.
+	w[0].SetRect(
+		c.ChildRect(
+			0,
+			0,
+			c.W(),
+			c.H(), // reserve last line for command widget
+		),
+	)
+
+	// Bottom command line.
+	w[1].SetRect(
+		c.ChildRect(
+			0,
+			c.H()-1,
+			c.W(),
+			1,
 		),
 	)
 }
 
 func main() {
+
+	// Create debugger application.
 	app := NewDebuggerApp()
+
+	// Start TUI event loop.
 	app.Run()
+
+	// app.Screen().Fini()
 }
