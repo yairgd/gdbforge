@@ -70,7 +70,7 @@ func (app *TermApp) UpdateCanvas() Canvas {
 	w, h := app.screen.Size()
 	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
-	app.canvas = Canvas{app.screen, Rect{0, 1, w, h}, app.frontBuffer}
+	app.canvas = Canvas{app.screen, Rect{0, 0, w, h}, app.frontBuffer}
 	return app.canvas
 
 }
