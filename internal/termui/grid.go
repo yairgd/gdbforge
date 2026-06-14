@@ -32,7 +32,7 @@ Add vertical separator.
 func (g *Grid) DrawVertical(x, y1, y2 int, bold bool) {
 
 	for y := y1; y < y2; y++ {
-		if y >= 0 && y < len(g.Cells) {
+		if x >= 0 && x < g.W && y >= 0 && y < g.H {
 			cell := &g.Cells[x][y]
 			cell.Bold = bold
 			if y == y1 {
@@ -58,7 +58,7 @@ func (g *Grid) DrawHorizontal(
 ) {
 
 	for x := x1; x < x2; x++ {
-		if x >= 0 && x < len(g.Cells) {
+		if x >= 0 && x < g.W && y >= 0 && y < g.H {
 			cell := &g.Cells[x][y]
 			cell.Bold = bold
 
@@ -94,6 +94,21 @@ func (g *Grid) Draw(
 					style,
 				)
 			}
+		}
+	}
+
+}
+
+func (g *Grid) Clear(
+	screen tcell.Screen,
+	style tcell.Style,
+) {
+
+	for y := 0; y < g.H; y++ {
+
+		for x := 0; x < g.W; x++ {
+			g.Cells[x][y].EdgesToRune()
+			g.Cells[x][y].Rune = ' '
 		}
 	}
 

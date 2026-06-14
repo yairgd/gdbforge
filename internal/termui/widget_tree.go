@@ -77,43 +77,28 @@ func (l *WidgetTree) buildLayout(
 
 	case Vertical:
 
-		leftW := int(float64(c.rect.w) * node.Ratio)
+		leftW := int(float64(c.W()) * node.Ratio)
+		rightW := c.W() - leftW - 1
 
-		splitX := c.rect.x + leftW
+		c.DrawVerticalLocal(leftW, 0, c.H(), false)
 
-		/*
-			Draw separator line.
-		*/
-		c.grid.DrawVertical(
-			splitX,
-			c.rect.y-1,
-			c.rect.y+c.rect.h+1,
-			false,
-		)
-
-		r1 := NewRect(c.rect.x, c.rect.y, splitX-0, c.rect.h)
+		r1 := c.ChildRect(0, 0, leftW, c.H())
 		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
 
-		r2 := NewRect(splitX+1, c.rect.y, c.rect.w-splitX-1, c.rect.h)
+		r2 := c.ChildRect(leftW+1, 0, rightW, c.H())
 		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
 
 	case Horizontal:
 
-		topH := int(float64(c.rect.h) * node.Ratio)
+		topH := int(float64(c.H()) * node.Ratio)
+		bottomH := c.H() - topH - 1
 
-		splitY := c.rect.y + topH
+		c.DrawHorizontalLocal(topH, 0, c.W(), false)
 
-		c.grid.DrawHorizontal(
-			splitY,
-			c.rect.x-1,
-			c.rect.x+c.rect.w+1,
-			false,
-		)
-
-		r1 := NewRect(c.rect.x, c.rect.y, c.rect.w, splitY)
+		r1 := c.ChildRect(0, 0, c.W(), topH)
 		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
 
-		r2 := NewRect(c.rect.x, splitY+1, c.rect.w, c.rect.h-splitY-1)
+		r2 := c.ChildRect(0, topH+1, c.W(), bottomH)
 		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
 
 	}

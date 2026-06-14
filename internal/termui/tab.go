@@ -57,10 +57,6 @@ func NewTabWidget(
 	}
 }
 
-//
-// Event handling
-//
-
 // HandleEvent forwards the event to the active tab widget.
 func (t *TabWidget) HandleEvent(ev tcell.Event) {
 	if len(t.tabs) == 0 {
@@ -74,30 +70,6 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 	}
 }
 
-//
-// Size management
-//
-
-// SetSize updates the container size
-// and forwards the size to the active widget.
-//func (t *TabWidget) SetSize(w, h int) {
-//	t.BaseWidget.SetSize(w, h)
-
-//	if len(t.tabs) == 0 {
-//		return
-//	}
-
-//	active := t.tabs[t.active].Layout
-//
-//	if active != nil {
-//		active.SetSize(w, h)
-//	}
-//}
-
-//
-// Drawing
-//
-
 // Draw forwards the draw call to the active tab widget.
 // The screen is owned by the application and passed in.
 func (t *TabWidget) Draw(c Canvas) {
@@ -108,7 +80,8 @@ func (t *TabWidget) Draw(c Canvas) {
 	layout := t.tabs[t.active].Layout
 
 	if layout != nil {
-		layout.Draw(c)
+		r := c.Rect()
+		layout.Draw(Canvas{c.Screen(), NewRect(r.X(), r.Y(), r.W(), r.H()-2), c.grid})
 	}
 }
 
@@ -152,7 +125,7 @@ func NewTabTwoHozSplitWins(canvas Canvas, title string, top Widget, bottom Widge
 	//	layout.NewSplit(Vertical, top)
 	//	layout.NewSplit(Horizontal, bottom)
 
-	layout.BuildLayout(canvas)
+	//layout.BuildLayout(canvas)
 
 	return &TabWidget{
 		tabs: []Tab{

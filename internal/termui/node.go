@@ -91,8 +91,8 @@ func (n *Node) Draw_org(r Rect) {
 		w1 := r.w * Units(n.First, Vertical) / total
 		w2 := r.w - w1
 
-		n.First.Draw_org(Rect{r.x, r.y, w1, r.h})
-		n.Second.Draw_org(Rect{r.x + w1, r.y, w2, r.h})
+		n.First.Draw_org(NewRect(r.X(), r.Y(), w1, r.H()))
+		n.Second.Draw_org(NewRect(r.X()+w1, r.Y(), w2, r.H()))
 
 	} else {
 		total := Units(n, Horizontal)
@@ -100,7 +100,7 @@ func (n *Node) Draw_org(r Rect) {
 		h1 := r.h * Units(n.First, Horizontal) / total
 		h2 := r.h - h1
 
-		n.First.Draw_org(Rect{r.x, r.y, r.w, h1})
-		n.Second.Draw_org(Rect{r.x, r.y + h1, r.w, h2})
+		n.First.Draw_org(NewRect(r.X(), r.Y(), r.W(), h1))
+		n.Second.Draw_org(NewRect(r.X(), r.Y()+h1, r.W(), h2))
 	}
 }

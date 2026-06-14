@@ -22,7 +22,6 @@ type CodeWidget struct {
 
 func NewCodeWidget() *CodeWidget {
 	buf := core.NewBuffer()
-	//	defer client.Close()
 
 	widget := &CodeWidget{
 		Buffer:   buf,
@@ -38,25 +37,13 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
 	case *tcell.EventResize:
-	//	w, h := e.Size()
-
-	//	m.SetSize(w, h)
-
-	//	m.Viewport.Height = h - 1
 
 	case *tcell.EventKey:
 
 		switch e.Key() {
 
 		case tcell.KeyCtrlC:
-		//	if m.Debugger.SendRaw != nil {
-		//		m.Debugger.SendRaw("\x03") // SIGINT
-		//	}
-		//	return
 		case tcell.KeyCtrlD:
-			//	if m.Debugger.Send != nil {
-			//		m.Debugger.Send("q\n") // SIGINT
-			//	}
 		}
 		return
 
@@ -68,89 +55,32 @@ func (m *CodeWidget) HandleEvent(ev tcell.Event) {
 // ////////////////////////
 func (m *CodeWidget) Draw(c Canvas) {
 
-	//	screen := m.uiContext.Screen()
-
 	style := tcell.StyleDefault
 
-	// Fill background
 	bg := tcell.PaletteColor(rand.Intn(256))
-
-	for row := 0; row < c.rect.h; row++ {
-		for col := 0; col < c.rect.w; col++ {
-
-			c.Screen().SetContent(
-				c.rect.x+col,
-				c.rect.y+row,
-				' ',
-				nil,
-				style.Background(bg),
-			)
-		}
-	}
+	c.Fill(' ', style.Background(bg))
 
 	title := "Status Line"
 	for i, rr := range title {
-
-		if i >= c.rect.w {
+		if i >= c.W() {
 			break
 		}
-
-		c.Screen().SetContent(
-			c.rect.x+i,
-			c.rect.y+c.rect.h,
-			rr,
-			nil,
-			style,
-		)
+		c.SetContent(i, c.H(), rr, style)
 	}
 
 	if false {
 
-		c.Screen().SetContent(
-			c.rect.x,
-			c.rect.y,
-			'*',
-			nil,
-			style,
-		)
+		c.SetContent(0, 0, '*', style)
+		c.SetContent(c.W(), 0, '*', style)
+		c.SetContent(0, c.H(), '*', style)
+		c.SetContent(c.W(), c.H(), '*', style)
 
-		c.Screen().SetContent(
-			c.rect.x+c.rect.w,
-			c.rect.y,
-			'*',
-			nil,
-			style,
-		)
-		c.Screen().SetContent(
-			c.rect.x,
-			c.rect.y+c.rect.h,
-			'*',
-			nil,
-			style,
-		)
-		c.Screen().SetContent(
-			c.rect.x+c.rect.w,
-			c.rect.y+c.rect.h,
-			'*',
-			nil,
-			style,
-		)
-
-		// Draw title
 		title := "Code Widget"
 		for i, rr := range title {
-
-			if i >= c.rect.w {
+			if i >= c.W() {
 				break
 			}
-
-			c.Screen().SetContent(
-				c.rect.x+i,
-				c.rect.y,
-				rr,
-				nil,
-				style,
-			)
+			c.SetContent(i, 0, rr, style)
 		}
 	}
 }

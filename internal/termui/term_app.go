@@ -11,13 +11,17 @@ type TermApp struct {
 	widgets []Widget
 	screen  tcell.Screen
 	events  chan core.Event
+	exit    bool
 	// widgets draw here all the time
 	backBuffer *Grid
 	// last frame that was actually displayed
 	frontBuffer *Grid
+
+	canvas Canvas
 }
 
 func NewTermApp() *TermApp {
+
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		log.Fatal(err)
@@ -28,6 +32,7 @@ func NewTermApp() *TermApp {
 
 	return &TermApp{
 		screen: screen,
+		exit:   false,
 		events: make(chan core.Event, 100),
 	}
 }
@@ -41,11 +46,7 @@ func (app *TermApp) AddWidget(w Widget) {
 }
 
 func (app *TermApp) Run() {
-	for {
-		app.Draw(Canvas{app.screen, Rect{0, 0, app.frontBuffer.W, app.frontBuffer.H}, app.frontBuffer})
-		app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
-
-		app.screen.Show()
+	for !app.exit {
 
 		ev := app.screen.PollEvent()
 		app.HandleEvent(ev)
@@ -53,14 +54,24 @@ func (app *TermApp) Run() {
 		for _, w := range app.widgets {
 			w.HandleEvent(ev)
 		}
+		//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
+
+		app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})
+
+		// move grid to sceen
+		app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
+		app.screen.Show()
 
 	}
+	app.screen.Fini()
 }
 func (app *TermApp) UpdateCanvas() Canvas {
+	app.screen.Sync()
 	w, h := app.screen.Size()
 	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
-	return Canvas{app.screen, Rect{0, 0, w, h}, app.frontBuffer}
+	app.canvas = Canvas{app.screen, Rect{0, 1, w, h}, app.frontBuffer}
+	return app.canvas
 
 }
 
@@ -87,13 +98,12 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 	case *tcell.EventKey:
 		switch e.Key() {
 		case tcell.KeyCtrlD:
-			return
+			a.exit = true
 
 		default:
 			//	tab.HandleEvent(e)
 		}
 	case *tcell.EventResize:
-		a.screen.Sync()
 		_ = a.UpdateCanvas()
 
 	case *tcell.EventInterrupt:
@@ -111,44 +121,6 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 }
 
-func (app *TermApp) EventLoop() {
-	for {
-
-		ev := app.screen.PollEvent()
-
-		switch e := ev.(type) {
-
-		case *tcell.EventInterrupt:
-
-			switch data := e.Data().(type) {
-			//	case core.Event:
-			//		for _, w := range app.widgets {
-			//			w.HandleEvent(data)
-			//		}
-			case string:
-				if data == "gdb-exit" {
-					return
-				}
-			}
-
-		case *tcell.EventResize:
-			app.screen.Sync()
-			_ = app.UpdateCanvas()
-
-		case *tcell.EventKey:
-			if e.Key() == tcell.KeyCtrlE {
-				return
-			}
-		}
-
-		// 👇 All events (UI + core) are funneled through the same dispatch path
-		for _, w := range app.widgets {
-			w.HandleEvent(ev)
-		}
-		app.screen.Show()
-
-	}
-}
 func (app *TermApp) Emit(e core.Event) {
 	app.events <- e
 }

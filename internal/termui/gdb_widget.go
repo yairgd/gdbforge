@@ -226,47 +226,29 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 // DRAW
 // ////////////////////////
 func (m *GDBWidget) Draw(c Canvas) {
-	c.Screen().Clear()
-	//w, h := m.Size()
-
-	// --- OUTPUT ---
 	lines := m.Viewport.VisibleLines(m.Buffer)
 	for y, line := range lines {
-		// IMPORTANT: Reset to default style at the start of every line
 		lineStyle := tcell.StyleDefault
 
 		if strings.HasPrefix(line, ">>>") {
-			// Apply special hardware status style
 			lineStyle = lineStyle.Foreground(tcell.ColorTeal).Bold(true)
 		} else if strings.HasPrefix(line, "(gdb)") {
-			// Optional: Make the prompt stand out in a different color
 			lineStyle = lineStyle.Foreground(tcell.ColorYellow)
 		}
 
-		// We call DrawANSIText ONCE per line.
-		// No need for the 'for x := range line' loop here.
-		DrawANSIText(c.Screen(), c.rect.x+0, c.rect.y+y, line, lineStyle, c.rect)
+		c.DrawANSIText(0, y, line, lineStyle)
 	}
 
-	// --- INPUT LINE ---
-	inputY := c.rect.h - 2
+	inputY := c.H() - 2
 	prompt := "(gdb) "
 	promptLen := len(prompt)
 
-	// Draw the static prompt
-	//	DrawANSIText(screen, 0, inputY, prompt, tcell.StyleDefault.Foreground(tcell.ColorYellow), w)
-
-	// Draw the user's current input
 	for x, ch := range m.InputBuf {
-		if x+promptLen >= c.rect.w {
+		if x+promptLen >= c.W() {
 			break
 		}
-		c.Screen().SetContent(x+promptLen, inputY, ch, nil, tcell.StyleDefault)
+		c.SetContent(x+promptLen, inputY, ch, tcell.StyleDefault)
 	}
 
-	// --- CURSOR ---
-	// Match the cursor position to the prompt offset
-	c.Screen().ShowCursor(m.Cursor+promptLen, inputY)
-
-	c.Screen().Show()
+	c.ShowCursor(m.Cursor+promptLen, inputY)
 }
