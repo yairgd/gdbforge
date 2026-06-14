@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Input as Keyboard / Mouse
+    participant App as TermApp
+    participant Focus as Focused Widget
+    participant Action as Widget Action
+    participant Render as Redraw
+
+    Input ->> App: PollEvent
+    App ->> Focus: HandleEvent(ev)
+    Focus ->> Action: process key / click
+    Action ->> Render: request redraw
+    Render ->> App: Draw → Grid → Screen

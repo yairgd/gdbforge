@@ -1,0 +1,15 @@
+sequenceDiagram
+    participant UI as GDBWidget / CmdWidget
+    participant Core as core.Debugger
+    participant Client as gdb.GDBClient
+    participant PTY as GDB PTY
+    participant GDB as GDB MI2
+
+    UI->>Core: Send("break main")
+    Core->>Client: Write PTY
+    Client->>GDB: MI command
+    GDB-->>PTY: ~console / ^done / *stopped
+    PTY-->>Client: Read chunk
+    Client-->>UI: GdbOutputMsg via channel
+    UI->>UI: GdbInputState burst + MiMsg parse
+    UI->>UI: Buffer.AppendBuffer → redraw

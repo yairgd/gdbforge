@@ -1,0 +1,20 @@
+flowchart TB
+    subgraph DataFlow["End-to-end data flow"]
+        User["User input"]
+        TermApp["TermApp event loop"]
+        Widget["Focused widget"]
+        CoreEvt["core.Event channel"]
+        Debugger["Debugger backend"]
+        Model["Buffer / Viewport / MI state"]
+        Draw["Draw pipeline"]
+        Screen["Terminal screen"]
+    end
+
+    User --> TermApp
+    TermApp --> Widget
+    Widget --> Debugger
+    Debugger --> Model
+    Model --> Draw
+    Draw --> Screen
+    Widget --> CoreEvt
+    CoreEvt --> Widget

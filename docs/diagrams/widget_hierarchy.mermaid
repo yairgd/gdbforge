@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph Root["Root Layout"]
+        TB["TabBar"]
+        WS["Workspace"]
+        CL["CmdLine"]
+    end
+
+    subgraph SplitTree["Split Tree (inside Workspace)"]
+        N1["Node: Split / Leaf"]
+        N2["Node: Split / Leaf"]
+        N3["Leaf: CodeWidget"]
+        N4["Leaf: GDBWidget"]
+        N5["Leaf: CmdWidget pane"]
+    end
+
+    WS --> SplitTree
+    N1 --> N2
+    N2 --> N3
+    N2 --> N4

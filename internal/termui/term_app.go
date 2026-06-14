@@ -29,6 +29,7 @@ func NewTermApp() *TermApp {
 	if err := screen.Init(); err != nil {
 		log.Fatal(err)
 	}
+	screen.EnableMouse()
 
 	return &TermApp{
 		screen: screen,

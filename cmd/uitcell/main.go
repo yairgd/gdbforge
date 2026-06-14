@@ -5,23 +5,36 @@ import (
 )
 
 type DebuggerApp struct {
+	*termui.TermApp
 }
 
-func (a *DebuggerApp) Init() {
+func NewDebuggerApp() *DebuggerApp {
+	a := &DebuggerApp{
+		TermApp: termui.NewTermApp(),
+	}
 
-	// a.A
+	a.InitB()
+
+	return a
 }
 
-func main() {
-	app := termui.NewTermApp()
-	//	app.AddWidget(termui.NewCmdWidget())
+func (a *DebuggerApp) InitB() {
+	a.AddWidget(termui.NewCmdWidget())
 
 	codeWidget := termui.NewCodeWidget()
 	codeWidget1 := termui.NewCodeWidget()
-	app.AddWidget(termui.NewTabTwoHozSplitWins(app.UpdateCanvas(), "basic debuger", codeWidget1, codeWidget))
 
-	app.Run()
-
+	a.AddWidget(
+		termui.NewTabTwoHozSplitWins(
+			a.UpdateCanvas(),
+			"basic debugger",
+			codeWidget1,
+			codeWidget,
+		),
+	)
 }
 
-const debug = false
+func main() {
+	app := NewDebuggerApp()
+	app.Run()
+}
