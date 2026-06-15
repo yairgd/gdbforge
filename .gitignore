@@ -26,6 +26,7 @@ build/*
 junk
 bin
 game-controller/*build*
+_site/
 
 game-controller/lua.junk/
 game/effects/lua.junk/

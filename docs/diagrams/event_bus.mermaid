@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph Producers["Event producers (any subsystem)"]
+        CmdW["CmdWidget"]
+        GDB["GDB backend / goroutines"]
+        Widgets["Other widgets"]
+        Future["Plugins / timers · planned"]
+    end
+
+    subgraph Bus["core event bus"]
+        Chan["TermApp.events chan core.Event"]
+    end
+
+    subgraph Loop["TermApp.Run main loop"]
+        Select["select: channel vs PollEvent"]
+        CoreDispatch["AppApi.HandleCoreEvents(ev)"]
+        TcellDispatch["HandleUIEvent + widget HandleEvent"]
+        Draw["Draw → Grid → Screen"]
+    end
+
+    subgraph App["Application · cmd/uitcell or internal/app"]
+        Handler["HandleCoreEvents — single dispatch hub"]
+        CmdSwitch["switch CommandID / event type"]
+        Actions["Exit, debugger, layout, …"]
+    end
+
+    CmdW -->|"Events <- SubmitMsg"| Chan
+    GDB -.->|"planned: Publish(GdbOutputMsg)"| Chan
+    Widgets -.->|"planned"| Chan
+    Future -.-> Chan
+
+    Chan --> Select
+    Select --> CoreDispatch
+    CoreDispatch --> Handler --> CmdSwitch --> Actions
+
+    Select --> TcellDispatch --> Draw

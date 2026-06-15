@@ -45,7 +45,7 @@ Requires a terminal with UTF-8 support. The prototype registers a split workspac
 # or: go run ./cmd/docserve
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedded Mermaid. Other pages:
+Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedded Mermaid. **GitHub Pages:** see [HOSTING.md](HOSTING.md#github-pages).
 
 | Page | URL |
 |------|-----|

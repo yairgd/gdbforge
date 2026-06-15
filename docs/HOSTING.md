@@ -11,7 +11,10 @@ Commit the whole `docs/` tree:
 | `docs/diagrams/*.mermaid` | Standalone diagram sources |
 | `docs/www/` | CSS + client-side Markdown/Mermaid renderer |
 | `docs/serve.sh` | Convenience launcher |
-| `cmd/docserve/` | Go HTTP documentation server |
+| `cmd/docserve/` | Go HTTP server + static export |
+| `.github/workflows/docs.yml` | GitHub Pages deploy |
+
+Markdown sources stay in `docs/` — unchanged. GitHub Pages serves a **generated static copy** built by `docserve --export`.
 
 After clone:
 
@@ -33,6 +36,8 @@ Open the URL printed in the terminal (default `http://127.0.0.1:8765/`).
 ./docs/serve.sh
 # equivalent:
 go run ./cmd/docserve
+# or:
+task docs
 ```
 
 ### Options
@@ -86,30 +91,108 @@ flowchart LR
 3. **marked** renders Markdown to HTML.
 4. **mermaid** renders fenced ` ```mermaid ` blocks client-side.
 
-No build step or Node.js required. Network access needed for CDN scripts on first load.
+No build step or Node.js required for local use. Network access needed for CDN scripts on first load.
+
+---
+
+## Static export (GitHub Pages)
+
+The same viewer works as a static site — no Go runtime on GitHub Pages.
+
+### Export locally
+
+```bash
+go run ./cmd/docserve --export _site --base /promptcore/
+# or:
+task docs:export
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--export DIR` | Write static site to `DIR` and exit |
+| `--base PATH` | URL prefix for project Pages (e.g. `/promptcore/`) |
+| `--serve-static DIR` | Preview a previously exported directory |
+
+Output layout:
+
+```text
+_site/
+  .nojekyll
+  index.html
+  doc/*.md              # HTML shells
+  raw/*.md              # markdown sources
+  raw/diagrams/*
+  www/site.css, docs.js
+  diagrams/index.html
+  diagrams/*.mermaid    # HTML shells
+```
+
+### Preview exported site
+
+```bash
+task docs:preview
+# equivalent:
+go run ./cmd/docserve --export _site --base /promptcore/
+go run ./cmd/docserve --serve-static _site --port 8766
+```
+
+Open `http://127.0.0.1:8766/promptcore/` when previewing with the default project base path.
+
+---
+
+## GitHub Pages
+
+### One-time setup
+
+1. Push this repository to GitHub.
+2. Open **Settings → Pages → Build and deployment**.
+3. Set **Source** to **GitHub Actions**.
+
+### Automatic deploy
+
+Workflow: `.github/workflows/docs.yml`
+
+- Triggers on push to `main` when `docs/**` or `cmd/docserve/**` changes.
+- Runs `go run ./cmd/docserve --export _site --base /<repo-name>/`.
+- Publishes `_site/` to GitHub Pages.
+
+Project site URL:
+
+```text
+https://<github-user>.github.io/promptcore/
+```
+
+Replace `promptcore` with your repository name.
+
+Manual deploy:
+
+```bash
+go run ./cmd/docserve --export _site --base /promptcore/
+# upload _site/ contents to gh-pages branch or Pages artifact
+```
 
 ---
 
 ## Task runner integration
 
-```bash
-task docs
-```
-
-Defined in `Taskfile.yml` — runs the documentation server.
+| Task | Command |
+|------|---------|
+| Local server | `task docs` |
+| Export static site | `task docs:export` |
+| Export + preview | `task docs:preview` |
 
 ---
 
 ## CI and artifacts
 
-Suggested CI steps (not yet in pipeline):
+GitHub Actions deploys docs automatically (see above).
+
+Manual artifact:
 
 ```bash
-go build -o bin/docserve ./cmd/docserve
-tar czf newcgdb-docs.tar.gz docs/ cmd/docserve/
+go run ./cmd/docserve --export _site --base /promptcore/
+tar czf newcgdb-docs.tar.gz _site/
 ```
-
-For static hosting without Go at runtime, pre-render HTML in CI (custom pipeline — not included by default).
 
 ---
 
@@ -123,15 +206,7 @@ go run ./cmd/docserve --host 0.0.0.0 --port 8765
 
 Use only on trusted networks or behind a firewall / reverse proxy with authentication.
 
-The server serves files only from `docs/` with path traversal checks. It does not execute server-side Markdown rendering.
-
----
-
-## Comparison to Python alternative
-
-Some projects use a Python docs server (e.g. `serve.py`). NewCGDB uses **Go** (`cmd/docserve`) to stay consistent with the project's primary language and avoid a Python dependency.
-
-Behavior matches the Autonomia docs viewer pattern: HTML shell + client-side marked + mermaid.
+The server serves files only from `docs/` (or the exported static dir) with path traversal checks. It does not execute server-side Markdown rendering.
 
 ---
 

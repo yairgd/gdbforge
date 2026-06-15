@@ -3,6 +3,30 @@
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js";
 const MARKED_CDN = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";
 
+function getBase() {
+  const meta = document.querySelector('meta[name="docs-base"]');
+  if (!meta || !meta.content || meta.content === "/") {
+    return "/";
+  }
+  let base = meta.content;
+  if (!base.startsWith("/")) {
+    base = "/" + base;
+  }
+  if (!base.endsWith("/")) {
+    base += "/";
+  }
+  return base;
+}
+
+function siteUrl(path) {
+  const pathPart = path.startsWith("/") ? path.slice(1) : path;
+  const base = getBase();
+  if (base === "/") {
+    return "/" + pathPart;
+  }
+  return base + pathPart;
+}
+
 function formatError(err) {
   if (err instanceof Error) {
     return err.message + (err.stack ? `\n${err.stack}` : "");
@@ -103,31 +127,34 @@ async function renderMermaidInPage() {
 }
 
 function fixInternalDocLinks(html) {
+  const base = getBase();
+  const basePrefix = base === "/" ? "/" : base;
+
   return html.replace(/href="([^"#?]+)(#[^"]*)?"/g, (match, href, hash) => {
     const fragment = hash || "";
     if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("mailto:")) {
       return match;
     }
-    if (href.startsWith("/doc/") || href === "/" || href.startsWith("/diagrams")) {
+    if (href.startsWith(basePrefix)) {
       return match;
     }
     if (href.endsWith(".md")) {
       const name = href.split("/").pop();
       if (name === "README.md") {
-        return `href="/${fragment}"`;
+        return `href="${siteUrl("")}${fragment}"`;
       }
-      return `href="/doc/${encodeURIComponent(name)}${fragment}"`;
+      return `href="${siteUrl(`doc/${encodeURIComponent(name)}`)}${fragment}"`;
     }
     if (href.startsWith("diagrams/") && href.endsWith(".mermaid")) {
       const name = href.split("/").pop();
-      return `href="/diagrams/${encodeURIComponent(name)}${fragment}"`;
+      return `href="${siteUrl(`diagrams/${encodeURIComponent(name)}`)}${fragment}"`;
     }
     return match;
   });
 }
 
 async function renderMarkdownPage(container, mdFile) {
-  const md = await fetchText(`/raw/${encodeURIComponent(mdFile)}`);
+  const md = await fetchText(siteUrl(`raw/${encodeURIComponent(mdFile)}`));
   window.__mermaidBlocks = extractMermaidBlocks(md);
   const html = fixInternalDocLinks(marked.parse(replaceMermaidWithPlaceholders(md)));
   container.innerHTML = `<article class="markdown-body">${html}</article>`;
@@ -148,10 +175,10 @@ async function renderReadme(container) {
 
 async function renderDiagram(container, name) {
   const safe = name.replace(/[^a-zA-Z0-9_.-]/g, "");
-  const src = await fetchText(`/raw/diagrams/${encodeURIComponent(safe)}`);
+  const src = await fetchText(siteUrl(`raw/diagrams/${encodeURIComponent(safe)}`));
   container.innerHTML = `
     <h2>${escapeHtml(safe)}</h2>
-    <p><a href="/">← Documentation index</a> · <a href="/diagrams">All diagrams</a></p>
+    <p><a href="${siteUrl("")}">← Documentation index</a> · <a href="${siteUrl("diagrams/")}">All diagrams</a></p>
     <div class="mermaid-wrap mermaid-standalone">
       <div class="mermaid"></div>
     </div>
@@ -191,7 +218,7 @@ function parseDiagramList() {
 
 async function renderDiagramIndex(container, names) {
   const items = names
-    .map((n) => `<li><a href="/diagrams/${encodeURIComponent(n)}">${escapeHtml(n)}</a></li>`)
+    .map((n) => `<li><a href="${siteUrl(`diagrams/${encodeURIComponent(n)}`)}">${escapeHtml(n)}</a></li>`)
     .join("");
   container.innerHTML = `
     <h2>Mermaid diagrams</h2>
