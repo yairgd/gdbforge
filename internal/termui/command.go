@@ -1,4 +1,4 @@
-package core
+package termui
 
 type CommandID int
 
@@ -23,12 +23,7 @@ func NewCommands() *Commands {
 }
 
 func (c *Commands) AddCommand(id CommandID, name string) {
-
-	cmd := Command{
-		ID:   id,
-		Name: name,
-	}
-
+	cmd := Command{ID: id, Name: name}
 	c.list = append(c.list, cmd)
 	c.byName[name] = cmd
 	c.byID[id] = cmd

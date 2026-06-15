@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/yairgd/promptcore/internal/core"
 )
 
 type AppApi interface {
 	HandleUIEvent(ev tcell.Event)
-	HandleCoreEvents(ev core.Event)
+	HandleCoreEvents(ev Event)
 }
 
 type WidgetNode struct {
@@ -26,7 +25,7 @@ type TermApp struct {
 	Api     AppApi
 	widgets []WidgetNode
 	screen  tcell.Screen
-	events  chan core.Event
+	events  chan Event
 	exit    bool
 	// widgets draw here all the time
 	backBuffer *Grid
@@ -51,7 +50,7 @@ func NewTermApp() *TermApp {
 	return &TermApp{
 		screen: screen,
 		exit:   false,
-		events: make(chan core.Event, 100),
+		events: make(chan Event, 100),
 	}
 }
 func (app *TermApp) Widgets() []WidgetNode { return app.widgets }
@@ -159,6 +158,6 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 }
 
-func (app *TermApp) Events() chan core.Event {
+func (app *TermApp) Events() chan Event {
 	return app.events
 }

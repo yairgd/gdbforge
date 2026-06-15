@@ -55,7 +55,7 @@ func (i *InputBox) Update(msg tea.KeyMsg) tea.Cmd {
 		i.ta.Reset()
 
 		return func() tea.Msg {
-			return core.SubmitMsg{Text: text}
+			return core.SubmitMessage{Text: text}
 		}
 	}
 	var cmd tea.Cmd

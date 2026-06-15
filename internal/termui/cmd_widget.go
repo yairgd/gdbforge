@@ -5,35 +5,34 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/promptcore/internal/core"
 )
 
 type CmdWidget struct {
-	history     core.History
-	completer   core.AutoCompleter
+	history     History
+	completer   AutoCompleter
 	active      bool
 	completions []string
 	compIndex   int
 	text        string
 	cursor      int
 
-	Events chan core.Event
+	Events chan Event
 }
 
-func NewCmdWidget(completer core.AutoCompleter) *CmdWidget {
+func NewCmdWidget(completer AutoCompleter) *CmdWidget {
 
 	if completer == nil {
-		completer = core.NewSimpleCompleter(nil)
+		completer = NewSimpleCompleter(nil)
 	}
 
 	return &CmdWidget{
-		history:   core.NewMemoryHistory(),
+		history:   NewMemoryHistory(),
 		completer: completer,
 		active:    false,
 	}
 }
 
-func (c *CmdWidget) emit(ev core.Event) {
+func (c *CmdWidget) emit(ev Event) {
 	if c.Events != nil {
 		c.Events <- ev
 	}
@@ -47,7 +46,7 @@ func (c *CmdWidget) submitCommand() {
 
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
-		c.emit(core.SubmitMsg{Text: c.text, CmdID: core.CmdUnknown})
+		c.emit(SubmitMsg{Text: c.text, CmdID: CmdUnknown})
 		return
 	}
 
@@ -58,15 +57,15 @@ func (c *CmdWidget) submitCommand() {
 
 	matches := c.completer.Complete(parts[0])
 	if len(matches) == 0 {
-		c.emit(core.SubmitMsg{
+		c.emit(SubmitMsg{
 			Text:  c.text,
-			CmdID: core.CmdUnknown,
+			CmdID: CmdUnknown,
 			Args:  args,
 		})
 		return
 	}
 
-	c.emit(core.SubmitMsg{
+	c.emit(SubmitMsg{
 		Text:  c.text,
 		CmdID: matches[0].ID,
 		Args:  args,

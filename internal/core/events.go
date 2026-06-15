@@ -2,22 +2,12 @@ package core
 
 import "time"
 
-//////////////////////////////
-// Event (Domain Layer)
-//////////////////////////////
-
+// Event is the domain event interface for the legacy chat app and debugger backends.
+// NewCGDB's terminal UI bus uses termui.Event instead.
 type Event interface {
 	Type() string
 }
 
-type CommandEvent interface {
-	Event
-	CommandID() CommandID
-}
-
-type Emitter func(Event)
-
-// user typed message
 type SubmitMessage struct {
 	Text string
 	when time.Time
@@ -25,7 +15,6 @@ type SubmitMessage struct {
 
 func (SubmitMessage) Type() string { return "SubmitMessage" }
 
-// command like :hello
 type RunCommand struct {
 	Command string
 	when    time.Time
@@ -33,7 +22,6 @@ type RunCommand struct {
 
 func (RunCommand) Type() string { return "RunCommand" }
 
-// internal event (result)
 type MessageSent struct {
 	Text string
 	when time.Time
@@ -41,23 +29,12 @@ type MessageSent struct {
 
 func (MessageSent) Type() string { return "MessageSent" }
 
-type SubmitMsg struct {
-	Text  string
-	CmdID CommandID
-	Args  string
-}
-
-func (m SubmitMsg) Type() string            { return "SubmitMsg" }
-func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
-
-// internal event (result)
 type Quit struct {
 	Text string
 }
 
 func (Quit) Type() string { return "Quit" }
 
-// OutputMsg is sent to the UI layer
 type GdbOutputMsg struct {
 	Data string
 	Err  error

@@ -72,11 +72,13 @@ task build
 
 ## internal/termui
 
-**NewCGDB presentation layer.** Depends on `tcell` and `internal/core`. Must not contain GDB spawn logic (that stays in `internal/gdb`).
+**NewCGDB TUI framework.** Depends on `tcell` only. App-specific widgets: `internal/newcgdb/widgets`.
 
 | File | Responsibility |
 |------|----------------|
-| `term_app.go` | Event loop, `AppApi`, event bus channel, widget list, grid buffers |
+| `term_app.go` | Event loop, `AppApi`, `termui.Event` bus, widget list, grid buffers |
+| `event.go`, `command.go` | UI event bus, `SubmitMsg`, `CommandID`, `CmdUnknown` |
+| `history.go`, `autocomplete.go` | CmdLine helpers |
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types |
 | `widget_tree.go` | Split/focus/layout recursion |
@@ -87,11 +89,18 @@ task build
 | `rect.go` | Rectangle primitive |
 | `utf.go` | UTF-8 / ANSI text drawing |
 | `tab.go` | Tab container (single-tab stub) |
-| `cmd_widget.go` | Command line widget stub |
-| `code_widget.go` | Source view prototype |
-| `gdb_widget.go` | GDB console widget |
+| `cmd_widget.go` | Global `:` command line |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Placeholder for shared widget helpers |
+
+## internal/newcgdb
+
+**NewCGDB application layer** — debugger-specific widgets.
+
+| Path | Responsibility |
+|------|----------------|
+| `widgets/code_widget.go` | Source view pane |
+| `widgets/gdb_widget.go` | GDB console pane |
 
 ```mermaid
 flowchart TB
@@ -109,8 +118,8 @@ flowchart TB
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | `Event`, `CommandEvent`, `SubmitMsg`, `GdbOutputMsg`, … |
-| `command.go` | `CommandID`, `CmdUnknown`, `Command` struct, `Commands` registry |
+| `events.go` | Legacy chat `Event`, debugger events (`GdbOutputMsg`, …) |
+| `command.go` | — (moved to `termui`) |
 | `debugger.go` | `Debugger` interface |
 | `buffer.go` | Line-oriented text buffer (GDB output, source) |
 | `viewport.go` | Scroll window over buffer |

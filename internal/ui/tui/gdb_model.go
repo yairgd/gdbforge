@@ -210,7 +210,7 @@ func (m GdbModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CancelCmdMode:
 		m.state.Mode = app.NormalMode
 
-	case core.SubmitMsg:
+	case core.SubmitMessage:
 		m.state.SubmitText(msg.Text)
 		//	m.refreshViewport()
 		return m, nil

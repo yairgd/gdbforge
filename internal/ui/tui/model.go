@@ -69,7 +69,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, func() tea.Msg {
 			m.input.Reset()
-			return core.SubmitMsg{Text: text}
+			return core.SubmitMessage{Text: text}
 		}
 
 	// Transition from normal mode to command mode.
@@ -118,7 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CancelCmdMode:
 		m.state.Mode = app.NormalMode
 
-	case core.SubmitMsg:
+	case core.SubmitMessage:
 		m.state.SubmitText(msg.Text)
 		m.refreshViewport()
 		return m, nil
