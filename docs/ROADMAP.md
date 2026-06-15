@@ -1,6 +1,6 @@
 # Roadmap
 
-This document tracks **current implementation state**, **planned features**, and the **long-term vision** for NewCGDB.
+This document tracks **current implementation state**, **planned features**, and the **long-term vision** for cgdb-go.
 
 **Companion docs:** [OVERVIEW.md](OVERVIEW.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -19,7 +19,7 @@ This document tracks **current implementation state**, **planned features**, and
 
 ## Current state
 
-NewCGDB is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
+cgdb-go is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
 
 ### Component status
 
@@ -47,7 +47,7 @@ NewCGDB is an **architecture prototype**, not a production debugger. The split-t
 ### Runnable today
 
 ```bash
-go run ./cmd/uitcell     # split-pane UI prototype
+go run ./cmd/cgdb     # split-pane UI prototype
 go run ./cmd/docserve    # documentation browser
 ```
 
@@ -57,7 +57,7 @@ go run ./cmd/docserve    # documentation browser
 
 ```mermaid
 gantt
-    title NewCGDB roadmap (indicative)
+    title cgdb-go roadmap (indicative)
     dateFormat YYYY-MM
     section Foundation
         Split tree + Grid           :done, m1, 2025-01, 2025-06
@@ -141,7 +141,7 @@ Dates are indicative — adjust as development progresses.
 
 ## Long-term vision
 
-NewCGDB should become a **terminal debugger platform**:
+cgdb-go should become a **terminal debugger platform**:
 
 1. **Primary choice** for developers who want cgdb ergonomics with modern extensibility.
 2. **Embedded-first** — OpenOCD/JTAG workflows alongside GDB.

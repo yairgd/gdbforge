@@ -1,6 +1,37 @@
-# Chatbot project
+# cgdb-go
 
-PromptCore is a lightweight AI context engine designed to manage long-lived conversational state.
+**cgdb-go** is a terminal debugger UI in Go, inspired by [cgdb](https://github.com/cgdb/cgdb). It provides a composable split-pane workspace, a `termui` framework (tcell), GDB MI2 integration, and a Vim-style `:` command line.
+
+```bash
+go run ./cmd/cgdb
+```
+
+Module: `github.com/yairgd/cgdb-go`
+
+Documentation: [docs/README.md](docs/README.md) · local server: `./docs/serve.sh`
+
+---
+
+## Repository layout
+
+```text
+cgdb-go/
+├── cmd/cgdb/           # Debugger application entry point
+├── cmd/docserve/       # Documentation server
+├── internal/termui/    # TUI framework (standalone-ready)
+├── internal/cgdb/      # App-specific debugger widgets
+├── internal/core/      # Domain: buffers, debugger interface
+├── internal/gdb/       # GDB MI2 backend
+└── docs/               # Architecture and developer guides
+```
+
+Legacy Bubble Tea chat code lives under `cmd/tui` and `internal/ui/tui` — separate from cgdb-go.
+
+---
+
+# Legacy: PromptCore chatbot
+
+PromptCore is a lightweight AI context engine (chat TUI). See below for the original chat project structure.
 
 It is built with a clean architecture that separates:
 
@@ -33,80 +64,57 @@ It manages:
 
 ---
 
-
-
 # Project Structure
 
 ```bash
-promptcore/  
-├── go.mod  
-├── go.sum  
-│  
-├── cmd/  
-│   └── tui/  
-│       └── main.go          # Entry point → tea.NewProgram(...)  
-│  
-├── internal/  
-│  
-│   ├── core/                # 🧠 Business logic (no UI dependencies)  
-│   │   ├── session.go       # Session management  
-│   │   ├── message.go       # Message model  
-│   │   ├── context.go       # Context manager  
-│   │   ├── ai.go            # AI integration  
-│   │   └── commands.go      # Command registry  
-│   │  
-│   ├── app/                 # Orchestration layer  
-│   │   ├── app.go           # Connects UI ↔ core  
-│   │   ├── state.go         # AppState  
-│   │   └── events.go        # SubmitMessage, etc.  
-│   │  
-│   └── tui/                 # UI adapter layer  
-│       ├── model.go         # Main tea.Model implementation  
-│       ├── input.go  
-│       ├── chat.go  
-│       ├── command.go  
-│       └── layout.go  
-│  
-├── playground/              # 🧪 Experiments and prototypes  
-│   ├── bubbletea-ex1/  
-│   │   └── main.go  
-│   └── streaming-test/  
-│       └── main.go  
-│  
-└── tests/  
-    └── core_test.go  
-
+cgdb-go/
+├── go.mod
+├── go.sum
+│
+├── cmd/
+│   ├── cgdb/              # cgdb-go debugger
+│   ├── docserve/          # docs server
+│   └── tui/               # legacy chat TUI
+│
+├── internal/
+│   ├── termui/            # TUI framework
+│   ├── cgdb/widgets/      # debugger panes
+│   ├── core/
+│   ├── gdb/
+│   └── ui/tui/            # legacy Bubble Tea
+│
+└── docs/
 ```
 
+---
 
 # Debugging with Delve (dlv)
 
-This project can be debugged using Delve in headless mode.
+The debugger app can be debugged using Delve in headless mode.
 
 ## 1. Start Delve in Headless Mode
 
 Open a terminal in the project root directory and run:
 
-dlv debug ./cmd/tui --headless --listen=:2346 --api-version=2
+```bash
+dlv debug ./cmd/cgdb --headless --listen=:2346 --api-version=2
+```
 
-This will:
-- Compile the project
-- Start the debugger
-- Listen for remote connections on port 2346
-- Wait for a client to connect
+This will compile the project, start the debugger, listen on port 2346, and wait for a client.
 
 ## 2. Connect to the Debugger
 
 Open a second terminal and run:
 
+```bash
 dlv connect :2346
-
-Now you are connected to the running debug session.
+```
 
 ## 3. Useful Delve Commands
 
 Inside the Delve prompt you can use:
 
+```
 b main.main        # set breakpoint
 c                  # continue execution
 n                  # next line
@@ -114,11 +122,11 @@ s                  # step into
 bt                 # backtrace
 p variableName     # print variable
 q                  # quit debugger
+```
 
 ## 4. Notes
 
 - Make sure the port number matches in both commands.
-- Always run the headless debugger from the project root (where go.mod is located).
-- If you want to debug another command under cmd/, change the path accordingly.
-
+- Always run the headless debugger from the project root (where `go.mod` is located).
+- To debug another command under `cmd/`, change the path accordingly (e.g. `./cmd/tui` for the legacy chat TUI).
 

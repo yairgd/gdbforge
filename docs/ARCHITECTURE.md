@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document describes the high-level architecture of **NewCGDB**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
+This document describes the high-level architecture of **cgdb-go**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -21,19 +21,19 @@ This document describes the high-level architecture of **NewCGDB**: subsystems, 
 
 ## System context
 
-NewCGDB runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
+cgdb-go runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
 
 ```mermaid
 flowchart LR
     User["Developer"]
     Term["Terminal"]
-    NewCGDB["NewCGDB · TermApp"]
+    cgdb-go["cgdb-go · TermApp"]
     GDB["GDB MI2"]
     Target["Debug target"]
 
     User --> Term
-    Term <--> NewCGDB
-    NewCGDB <--> GDB
+    Term <--> cgdb-go
+    cgdb-go <--> GDB
     GDB <--> Target
 ```
 
@@ -91,7 +91,7 @@ flowchart TB
 | **Domain events** | `core.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model** | `core.Buffer`, `core.Viewport` | Scrollable line storage for console/source views |
 | **Debugger backend** | `gdb.GDBClient`, `core.Debugger` | PTY I/O, MI2 parsing |
-| **Legacy chat TUI** | `internal/ui/tui` | Separate Bubble Tea stack — not part of NewCGDB |
+| **Legacy chat TUI** | `internal/ui/tui` | Separate Bubble Tea stack — not part of cgdb-go |
 
 ---
 
@@ -99,7 +99,7 @@ flowchart TB
 
 ### Input → action → redraw
 
-NewCGDB uses **two parallel event planes**:
+cgdb-go uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
@@ -192,13 +192,13 @@ flowchart TB
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `core.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/uitcell/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+**Design decision:** domain events do **not** fan out to widgets directly. Every `core.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
 
 ---
 
 ## Design principles
 
-These principles are **non-negotiable** for NewCGDB. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
+These principles are **non-negotiable** for cgdb-go. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
 
 | # | Principle | Rationale |
 |---|-----------|-----------|
@@ -223,9 +223,9 @@ These principles are **non-negotiable** for NewCGDB. They explain many seemingly
 - Runs the poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to widgets that use `internal/gdb`.
 
-### Application (`cmd/uitcell`, `internal/app`)
+### Application (`cmd/cgdb`, `internal/app`)
 
-- **NewCGDB:** `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for all `core.Event` traffic.
+- **cgdb-go:** `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for all `core.Event` traffic.
 - **Legacy chat TUI:** `internal/app` connects Bubble Tea models to core via `HandleEvent`.
 - Defines interaction modes (`NormalMode`, `InsertMode`, `CommandMode`) — constants in `app/modes.go`; wiring into `TermApp` is in progress.
 
@@ -333,7 +333,7 @@ classDiagram
 | Layer | Owns |
 |-------|------|
 | **`core`** | `CommandID` type, **`CmdUnknown`** (value `0`) |
-| **Application** (`cmd/uitcell`) | Private constants: `cmdBreak`, `cmdQuit`, … starting at `iota + 1` |
+| **Application** (`cmd/cgdb`) | Private constants: `cmdBreak`, `cmdQuit`, … starting at `iota + 1` |
 
 `CmdWidget` never references app command names. It resolves user input through `core.AutoCompleter` and emits `SubmitMsg{CmdID: …}`. Unknown commands emit `core.CmdUnknown`.
 
@@ -346,7 +346,7 @@ type AppApi interface {
     HandleCoreEvents(ev core.Event)    // all domain events land here
 }
 
-// cmd/uitcell/main.go
+// cmd/cgdb/main.go
 cmd.Events = a.Events()   // CmdWidget publishes to TermApp channel
 
 func (app *DebuggerApp) HandleCoreEvents(ev core.Event) {
@@ -376,7 +376,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Focus | Mode-aware routing | `WidgetTree.focus` — partial |
 | Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |
 
-Entry point: `cmd/uitcell/main.go`.
+Entry point: `cmd/cgdb/main.go`.
 
 Detailed tracker: [ROADMAP.md](ROADMAP.md).
 

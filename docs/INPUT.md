@@ -1,6 +1,6 @@
 # Input System
 
-NewCGDB handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
+cgdb-go handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -200,7 +200,7 @@ Flow:
 | Layer | Constants | Visibility |
 |-------|-----------|------------|
 | `core` | `CmdUnknown` | Infra — shared sentinel for unrecognized commands |
-| `cmd/uitcell` | `cmdBreak`, `cmdQuit`, … | **Private to app** — `iota + 1` so `0` stays `CmdUnknown` |
+| `cmd/cgdb` | `cmdBreak`, `cmdQuit`, … | **Private to app** — `iota + 1` so `0` stays `CmdUnknown` |
 
 The completer is built in the application with app command IDs:
 

@@ -1,6 +1,6 @@
 # Developer Guide
 
-**Audience:** engineers onboarding to NewCGDB, code reviewers, and contributors implementing UI or debugger features.
+**Audience:** engineers onboarding to cgdb-go, code reviewers, and contributors implementing UI or debugger features.
 
 **Companion docs:** [README.md](README.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -30,7 +30,7 @@
 
 | Order | File | Why |
 |-------|------|-----|
-| 1 | `cmd/uitcell/main.go` | Entry point — how the app is wired |
+| 1 | `cmd/cgdb/main.go` | Entry point — how the app is wired |
 | 2 | `internal/termui/term_app.go` | Event loop, grids, draw flush |
 | 3 | `internal/termui/widget.go` | Widget contract |
 | 4 | `internal/termui/widget_tree.go` | Split layout algorithm |
@@ -125,10 +125,10 @@ go test ./...       # run tests
 
 See [HOSTING.md](HOSTING.md).
 
-### Run NewCGDB prototype
+### Run cgdb-go prototype
 
 ```bash
-go run ./cmd/uitcell
+go run ./cmd/cgdb
 ```
 
 ---
@@ -282,10 +282,10 @@ Timer debounce: 100ms (`mi_state.go`). Adjust carefully — too short causes fli
 
 ## Debugging with Delve
 
-Debug the NewCGDB prototype:
+Debug the cgdb-go prototype:
 
 ```bash
-dlv debug ./cmd/uitcell --headless --listen=:2346 --api-version=2
+dlv debug ./cmd/cgdb --headless --listen=:2346 --api-version=2
 # separate terminal:
 dlv connect :2346
 ```
@@ -334,7 +334,7 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/uitcell/main.go` (`HandleCoreEvents`) |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`HandleCoreEvents`) |
 | Widget interface | `widget.go` |
 | Split tree | `node.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
@@ -345,7 +345,7 @@ Always update docs when changing architecture-visible behavior.
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | Events / commands | `core/events.go`, `core/command.go` |
 | Modes | `app/modes.go` |
-| Entry point | `cmd/uitcell/main.go` |
+| Entry point | `cmd/cgdb/main.go` |
 | Docs server | `cmd/docserve/main.go` |
 
 ---

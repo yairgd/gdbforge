@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/cgdb-go/internal/core"
 )
 
 type GDBWidget struct {

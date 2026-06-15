@@ -3,7 +3,7 @@ package core
 import "time"
 
 // Event is the domain event interface for the legacy chat app and debugger backends.
-// NewCGDB's terminal UI bus uses termui.Event instead.
+// cgdb-go's terminal UI bus uses termui.Event instead.
 type Event interface {
 	Type() string
 }

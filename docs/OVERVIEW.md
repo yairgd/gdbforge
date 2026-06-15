@@ -1,6 +1,6 @@
 # Project Overview
 
-**NewCGDB** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI with a modular architecture that supports multiple debugger backends and long-term extensibility.
+**cgdb-go** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI with a modular architecture that supports multiple debugger backends and long-term extensibility.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
@@ -19,7 +19,7 @@
 
 ## Vision
 
-NewCGDB should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — but implemented as a **composable widget system** rather than a monolithic ncurses application.
+cgdb-go should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — but implemented as a **composable widget system** rather than a monolithic ncurses application.
 
 The long-term vision:
 
@@ -28,7 +28,7 @@ The long-term vision:
 - **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
 - **Efficient rendering** through an off-screen grid and future diff-based terminal updates.
 
-NewCGDB is developed inside the **PromptCore** repository. PromptCore itself is a broader context-engine project; NewCGDB reuses its event, buffer, and history primitives while keeping debugger UI concerns isolated in `internal/termui`.
+cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.com/cgdb/cgdb). The module path is `github.com/yairgd/cgdb-go`. Legacy Bubble Tea chat code (`cmd/tui`, `internal/ui/tui`) remains in the repository but is separate from the debugger.
 
 ---
 
@@ -55,17 +55,17 @@ NewCGDB is developed inside the **PromptCore** repository. PromptCore itself is 
 - Extending cgdb (custom panes, alternate backends) requires deep familiarity with its internals.
 - Rendering is tied to ncurses; swapping backends or optimizing redraw is difficult.
 
-NewCGDB treats these as **architectural constraints to avoid from day one**, not as bugs to patch later.
+cgdb-go treats these as **architectural constraints to avoid from day one**, not as bugs to patch later.
 
 ### Why not Bubble Tea / Lip Gloss only?
 
-The repository already contains a **Bubble Tea** chat TUI (`cmd/tui`, `internal/ui/tui`). Bubble Tea excels at application-level TUI with declarative models, but NewCGDB needs:
+The repository already contains a **Bubble Tea** chat TUI (`cmd/tui`, `internal/ui/tui`). Bubble Tea excels at application-level TUI with declarative models, but cgdb-go needs:
 
 - Fine-grained **split-tree layout** with resizable panes and shared border drawing.
 - A **replaceable framebuffer** (`Grid`) for diff rendering.
 - Direct **tcell** access for mouse, focus, and low-level drawing control.
 
-The NewCGDB stack (`internal/termui`) is intentionally lower-level than Bubble Tea. The two UI stacks coexist; NewCGDB is the debugger direction.
+The cgdb-go stack (`internal/termui`) is intentionally lower-level than Bubble Tea. The two UI stacks coexist; cgdb-go is the debugger direction.
 
 ### Why Go?
 
@@ -77,7 +77,7 @@ The NewCGDB stack (`internal/termui`) is intentionally lower-level than Bubble T
 
 ## Comparison to cgdb and gdb TUI
 
-| Aspect | **cgdb** | **gdb TUI** (`layout src`) | **NewCGDB** (target) |
+| Aspect | **cgdb** | **gdb TUI** (`layout src`) | **cgdb-go** (target) |
 |--------|----------|----------------------------|----------------------|
 | **UI toolkit** | ncurses | readline + ANSI (limited layout) | tcell + custom Grid |
 | **Layout** | Fixed panes, configurable | Single source + status; no splits | Recursive split tree in Workspace |
@@ -88,13 +88,13 @@ The NewCGDB stack (`internal/termui`) is intentionally lower-level than Bubble T
 | **Language** | C | C (GDB internals) | Go |
 | **Maturity** | Production | Production (inside GDB) | Early prototype |
 
-### What NewCGDB preserves from cgdb
+### What cgdb-go preserves from cgdb
 
 - Terminal-native workflow — no GUI dependency.
 - Source + console + auxiliary views in one screen.
 - Keyboard-first interaction with optional mouse support.
 
-### What NewCGDB changes
+### What cgdb-go changes
 
 - **Explicit widget tree** instead of implicit window list.
 - **Layout engine** assigns geometry; widgets never set global coordinates.
@@ -107,7 +107,7 @@ flowchart LR
         Monolith["Monolithic UI + GDB"]
     end
 
-    subgraph NewCGDB["NewCGDB"]
+    subgraph cgdb-go["cgdb-go"]
         UI["termui"]
         Core["core"]
         GDB["gdb"]

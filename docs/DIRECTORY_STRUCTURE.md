@@ -1,6 +1,6 @@
 # Directory Structure
 
-This document maps the **promptcore** repository packages to their responsibilities, with emphasis on NewCGDB components.
+This document maps the **cgdb-go** repository packages to their responsibilities, with emphasis on cgdb-go components.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
@@ -24,30 +24,31 @@ This document maps the **promptcore** repository packages to their responsibilit
 ## Repository tree
 
 ```text
-promptcore/
+cgdb-go/
 ├── cmd/
-│   ├── uitcell/              # NewCGDB prototype
+│   ├── cgdb/              # cgdb-go prototype
 │   ├── docserve/             # Documentation HTTP server
 │   ├── tui/                  # Legacy Bubble Tea chat TUI
 │   ├── dbug/                 # Debug utilities
 │   └── server/               # HTTP orchestrator (PromptCore API)
 ├── internal/
-│   ├── termui/               # NewCGDB terminal UI ★
+│   ├── termui/               # TUI framework (tcell) ★
+│   ├── cgdb/                 # App-specific debugger widgets ★
+│   │   └── widgets/
 │   ├── core/                 # UI-agnostic domain logic ★
 │   ├── gdb/                  # GDB MI2 backend ★
-│   ├── app/                  # Application orchestration
+│   ├── app/                  # Legacy chat orchestration
 │   ├── api/                  # HTTP handlers
 │   └── ui/
-│       ├── tui/              # Legacy Bubble Tea adapter
-│       └── uitcell/          # Helpers
-├── docs/                     # NewCGDB documentation ★
+│       └── tui/              # Legacy Bubble Tea adapter
+├── docs/                     # cgdb-go documentation ★
 ├── internal/playground/      # Experiments (not production)
 ├── go.mod
 ├── Taskfile.yml
 └── CONTRIBUTING.md
 ```
 
-★ = primary NewCGDB packages
+★ = primary cgdb-go packages
 
 ---
 
@@ -55,7 +56,7 @@ promptcore/
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/uitcell/main.go` | `uitcell` | **NewCGDB prototype** — split workspace demo |
+| `cmd/cgdb/main.go` | `cgdb` | **cgdb-go prototype** — split workspace demo |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 | `cmd/tui/main.go` | `tui` | PromptCore chat TUI (Bubble Tea) |
 | `cmd/dbug/main.go` | `dbug` | Development/debug helper |
@@ -72,7 +73,7 @@ task build
 
 ## internal/termui
 
-**NewCGDB TUI framework.** Depends on `tcell` only. App-specific widgets: `internal/newcgdb/widgets`.
+**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets: `internal/cgdb/widgets`.
 
 | File | Responsibility |
 |------|----------------|
@@ -93,9 +94,9 @@ task build
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Placeholder for shared widget helpers |
 
-## internal/newcgdb
+## internal/cgdb
 
-**NewCGDB application layer** — debugger-specific widgets.
+**cgdb-go application layer** — debugger-specific widgets.
 
 | Path | Responsibility |
 |------|----------------|
@@ -161,13 +162,13 @@ flowchart TB
 | `handler.go` | Event handlers |
 | `modes.go` | Interaction mode constants |
 
-NewCGDB will increasingly use this layer for mode routing and session lifecycle as `TermApp` grows beyond a flat widget list.
+cgdb-go will increasingly use this layer for mode routing and session lifecycle as `TermApp` grows beyond a flat widget list.
 
 ---
 
 ## internal/ui/tui
 
-**Legacy Bubble Tea UI adapter** for the PromptCore chat application. Separate from NewCGDB.
+**Legacy Bubble Tea UI adapter** for the PromptCore chat application. Separate from cgdb-go.
 
 | File | Responsibility |
 |------|----------------|
@@ -179,7 +180,7 @@ NewCGDB will increasingly use this layer for mode routing and session lifecycle 
 | `gdb_model.go` | GDB model for Bubble Tea |
 | `cmd_input_box.go` | Command input component |
 
-**Note:** do not add NewCGDB features here. Use `internal/termui`.
+**Note:** do not add cgdb-go features here. Use `internal/termui`.
 
 ---
 

@@ -3,7 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/cgdb-go/internal/core"
 )
 
 //

@@ -2,9 +2,9 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	//	"github.com/yairgd/promptcore/internal/core"
-	"github.com/yairgd/promptcore/internal/gdb"
-	"github.com/yairgd/promptcore/internal/ui/tui"
+	//	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/cgdb-go/internal/gdb"
+	"github.com/yairgd/cgdb-go/internal/ui/tui"
 
 	"log"
 )

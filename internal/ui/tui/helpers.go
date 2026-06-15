@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/cgdb-go/internal/core"
 )
 
 // emit event as tea.Cmd

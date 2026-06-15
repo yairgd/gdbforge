@@ -16,7 +16,7 @@ What actually happens?
 
 - OS:
 - Go version:
-- PromptCore version:
+- cgdb-go version:
 
 ## Additional Context
 

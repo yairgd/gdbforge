@@ -1,6 +1,6 @@
 # UI Architecture
 
-This document covers the NewCGDB presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
+This document covers the cgdb-go presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
 
 **Companion docs:** [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [RENDERING.md](RENDERING.md) · [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -330,7 +330,7 @@ Current behavior:
 
 ## Event handling
 
-NewCGDB separates **terminal events** from **domain events**.
+cgdb-go separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|
@@ -428,7 +428,7 @@ sequenceDiagram
     Main->>App: Close / Fini
 ```
 
-`AppApi` is implemented by the application (`DebuggerApp` in `cmd/uitcell/main.go`):
+`AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/main.go`):
 
 - `HandleUIEvent` — terminal-level hooks (resize layout today).
 - `HandleCoreEvents` — **all** domain events from the bus.

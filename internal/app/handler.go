@@ -2,7 +2,7 @@
 package app
 
 import (
-	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/cgdb-go/internal/core"
 )
 
 // HandleEvent

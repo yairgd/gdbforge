@@ -1,4 +1,4 @@
-/* NewCGDB docs viewer — Markdown + Mermaid (CDN, classic scripts). */
+/* cgdb-go docs viewer — Markdown + Mermaid (CDN, classic scripts). */
 
 const MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js";
 const MARKED_CDN = "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js";

@@ -1,6 +1,6 @@
-# NewCGDB Documentation
+# cgdb-go Documentation
 
-**NewCGDB** is a modern terminal debugger UI built in Go on [tcell](https://github.com/gdamore/tcell). It lives in the `promptcore` repository under `internal/termui` and is driven from `cmd/uitcell`.
+**cgdb-go** is a modern terminal debugger UI built in Go on [tcell](https://github.com/gdamore/tcell). It lives in the `cgdb-go` repository under `internal/termui` and is driven from `cmd/cgdb`.
 
 The project targets a **cgdb-like experience** with a cleaner architecture: composable widgets, a recursive split-tree workspace, a replaceable rendering pipeline, and debugger backends that do not depend on the UI layer.
 
@@ -33,7 +33,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 ### Run the debugger prototype
 
 ```bash
-go run ./cmd/uitcell
+go run ./cmd/cgdb
 ```
 
 Requires a terminal with UTF-8 support. The prototype registers a split workspace, a functional `:` command line, and an event bus that dispatches domain events through `HandleCoreEvents`.
@@ -112,14 +112,14 @@ Full rationale: [ARCHITECTURE.md](ARCHITECTURE.md#design-principles).
 ## Repository layout (summary)
 
 ```text
-promptcore/
+cgdb-go/
 ├── cmd/
-│   ├── uitcell/          # NewCGDB prototype entry point
+│   ├── cgdb/          # cgdb-go prototype entry point
 │   ├── docserve/         # Documentation HTTP server
 │   ├── tui/              # Legacy Bubble Tea chat TUI
 │   └── dbug/             # Debug utilities
 ├── internal/
-│   ├── termui/           # NewCGDB terminal UI (primary)
+│   ├── termui/           # cgdb-go terminal UI (primary)
 │   ├── core/             # UI-agnostic logic (events, buffers, history)
 │   ├── gdb/              # GDB MI2 client and parsing
 │   ├── app/              # Application orchestration
@@ -150,4 +150,4 @@ Full tracker: [ROADMAP.md](ROADMAP.md).
 ## Related links
 
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [README.md (project root)](../README.md) — PromptCore context engine overview
+- [README.md (project root)](../README.md) — cgdb-go overview (legacy PromptCore chat code in repo)

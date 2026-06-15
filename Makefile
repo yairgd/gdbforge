@@ -22,11 +22,11 @@ build:
 # -------- Run TUI --------
 .PHONY: run
 run:
-	go run ./cmd/uitcell
+	go run ./cmd/cgdb
 
 .PHONY: dbug
 dbug:
-	go run ./cmd/dbug
+	go run ./cmd/cgdb
 
 
 

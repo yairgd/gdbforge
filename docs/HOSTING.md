@@ -1,4 +1,4 @@
-# Hosting NewCGDB Documentation
+# Hosting cgdb-go Documentation
 
 ## What lives in the repository
 
@@ -20,7 +20,7 @@ After clone:
 
 ```bash
 git clone <repo-url>
-cd promptcore
+cd cgdb-go
 ./docs/serve.sh
 ```
 
@@ -52,7 +52,7 @@ Environment variable:
 
 | Variable | Effect |
 |----------|--------|
-| `NEWCGDB_DOCS_ROOT` | Override path to docs directory |
+| `CGDB_GO_DOCS_ROOT` | Override path to docs directory |
 
 ### URLs
 
@@ -102,7 +102,7 @@ The same viewer works as a static site — no Go runtime on GitHub Pages.
 ### Export locally
 
 ```bash
-go run ./cmd/docserve --export _site --base /promptcore/
+go run ./cmd/docserve --export _site --base /cgdb-go/
 # or:
 task docs:export
 ```
@@ -110,7 +110,7 @@ task docs:export
 | Flag | Purpose |
 |------|---------|
 | `--export DIR` | Write static site to `DIR` and exit |
-| `--base PATH` | URL prefix for project Pages (e.g. `/promptcore/`) |
+| `--base PATH` | URL prefix for project Pages (e.g. `/cgdb-go/`) |
 | `--serve-static DIR` | Preview a previously exported directory |
 
 Output layout:
@@ -132,11 +132,11 @@ _site/
 ```bash
 task docs:preview
 # equivalent:
-go run ./cmd/docserve --export _site --base /promptcore/
+go run ./cmd/docserve --export _site --base /cgdb-go/
 go run ./cmd/docserve --serve-static _site --port 8766
 ```
 
-Open `http://127.0.0.1:8766/promptcore/` when previewing with the default project base path.
+Open `http://127.0.0.1:8766/cgdb-go/` when previewing with the default project base path.
 
 ---
 
@@ -159,15 +159,15 @@ Workflow: `.github/workflows/docs.yml`
 Project site URL:
 
 ```text
-https://<github-user>.github.io/promptcore/
+https://<github-user>.github.io/cgdb-go/
 ```
 
-Replace `promptcore` with your repository name.
+Replace `cgdb-go` with your repository name.
 
 Manual deploy:
 
 ```bash
-go run ./cmd/docserve --export _site --base /promptcore/
+go run ./cmd/docserve --export _site --base /cgdb-go/
 # upload _site/ contents to gh-pages branch or Pages artifact
 ```
 
@@ -190,8 +190,8 @@ GitHub Actions deploys docs automatically (see above).
 Manual artifact:
 
 ```bash
-go run ./cmd/docserve --export _site --base /promptcore/
-tar czf newcgdb-docs.tar.gz _site/
+go run ./cmd/docserve --export _site --base /cgdb-go/
+tar czf cgdb-go-docs.tar.gz _site/
 ```
 
 ---

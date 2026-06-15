@@ -1,4 +1,4 @@
-NewCGDB documentation — docserve modes
+cgdb-go documentation — docserve modes
 ======================================
 
 Mode            Command                                              Purpose
@@ -7,10 +7,10 @@ Local server    go run ./cmd/docserve                                Serve docs/
                 ./docs/serve.sh
                 task docs
 
-Static export   go run ./cmd/docserve --export _site --base /promptcore/   Write a static site to _site/ for GitHub Pages
+Static export   go run ./cmd/docserve --export _site --base /cgdb-go/   Write a static site to _site/ for GitHub Pages
                 task docs:export
 
-Preview export  go run ./cmd/docserve --serve-static _site --base /promptcore/ --port 8766
+Preview export  go run ./cmd/docserve --serve-static _site --base /cgdb-go/ --port 8766
                 task docs:preview                                    Serve the exported _site/ locally (test before deploy)
 
 Notes
@@ -18,6 +18,6 @@ Notes
 - Markdown sources stay in docs/ — export copies them; it does not replace them.
 - Rendering is still client-side (marked + mermaid in the browser).
 - GitHub Pages deploys _site/ automatically via .github/workflows/docs.yml on push to main.
-- Project site URL: https://<user>.github.io/promptcore/
+- Project site URL: https://<user>.github.io/cgdb-go/
 
 See docs/HOSTING.md for full details.

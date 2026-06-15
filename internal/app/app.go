@@ -1,7 +1,7 @@
 package app
 
 import (
-// "github.com/yairgd/promptcore/internal/events"
+// "github.com/yairgd/cgdb-go/internal/events"
 )
 
 type App struct{}

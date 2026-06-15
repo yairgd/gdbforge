@@ -1,6 +1,6 @@
 # Plugin Architecture
 
-NewCGDB is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
+cgdb-go is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
 **Status:** design phase — no Lua runtime is embedded yet.
 
@@ -43,7 +43,7 @@ NewCGDB is designed for **extensibility**: custom debugger panes, scripted autom
 | Sandboxing | Well-understood coroutine model | Python sandbox harder |
 | cgdb precedent | cgdb uses Tcl — Lua is lighter modern equivalent | Tcl declining in new projects |
 
-**Design decision:** Lua scripts extend **NewCGDB UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Debugger` instead.
+**Design decision:** Lua scripts extend **cgdb-go UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Debugger` instead.
 
 ---
 
@@ -81,8 +81,8 @@ Plugins load from:
 
 | Location | Purpose |
 |----------|---------|
-| `~/.config/newcgdb/plugins/` | User plugins |
-| `./.newcgdb/plugins/` | Project-local plugins |
+| `~/.config/cgdb-go/plugins/` | User plugins |
+| `./.cgdb-go/plugins/` | Project-local plugins |
 | Built-in `embed` | Shipping default panes |
 
 ---

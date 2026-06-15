@@ -1,6 +1,6 @@
 # Debugger Integration
 
-NewCGDB connects to debug targets through **backend adapters** that implement `core.Debugger`. The first adapter is **GDB MI2 over a PTY**. Future adapters will cover **OpenOCD**, **JTAG**, and **kernel debugging** workflows.
+cgdb-go connects to debug targets through **backend adapters** that implement `core.Debugger`. The first adapter is **GDB MI2 over a PTY**. Future adapters will cover **OpenOCD**, **JTAG**, and **kernel debugging** workflows.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -257,7 +257,7 @@ JTAG debugging may arrive through:
 1. **OpenOCD** as transport (preferred — reuse OpenOCD adapter).
 2. Direct **JTAG library** (e.g., libftdi) for specialized hardware bring-up.
 
-NewCGDB UI would expose:
+cgdb-go UI would expose:
 
 - Chain scan / device selection pane.
 - TAP state indicator.

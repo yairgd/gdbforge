@@ -1,4 +1,4 @@
-# Contributing to PromptCore
+# Contributing to cgdb-go
 
 Thank you for your interest in contributing.
 

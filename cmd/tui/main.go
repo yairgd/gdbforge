@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/yairgd/promptcore/internal/ui/tui"
+	"github.com/yairgd/cgdb-go/internal/ui/tui"
 )
 
 func main() {

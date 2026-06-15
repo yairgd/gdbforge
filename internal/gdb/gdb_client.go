@@ -8,7 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/creack/pty"
-	"github.com/yairgd/promptcore/internal/core"
+	"github.com/yairgd/cgdb-go/internal/core"
 	"golang.org/x/sys/unix"
 )
 
