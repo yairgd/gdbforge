@@ -22,6 +22,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 | **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, future JTAG / OpenOCD |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua plans, feature panes, automation |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
+| **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
 | **[ROADMAP.md](ROADMAP.md)** | Planners | Current state, planned work, vision |
 | **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** | Contributors | Onboarding, file walk order, pitfalls |
 | **[HOSTING.md](HOSTING.md)** | DevOps | Local docs server, CI artifacts |
@@ -115,16 +116,13 @@ Full rationale: [ARCHITECTURE.md](ARCHITECTURE.md#design-principles).
 cgdb-go/
 ├── cmd/
 │   ├── cgdb/          # cgdb-go prototype entry point
-│   ├── docserve/         # Documentation HTTP server
-│   ├── tui/              # Legacy Bubble Tea chat TUI
-│   └── dbug/             # Debug utilities
+│   └── docserve/      # Documentation HTTP server
 ├── internal/
-│   ├── termui/           # cgdb-go terminal UI (primary)
-│   ├── core/             # UI-agnostic logic (events, buffers, history)
-│   ├── gdb/              # GDB MI2 client and parsing
-│   ├── app/              # Application orchestration
-│   └── ui/tui/           # Legacy Bubble Tea UI adapter
-└── docs/                 # This documentation tree
+│   ├── termui/        # cgdb-go terminal UI (primary)
+│   ├── core/          # UI-agnostic logic (events, buffers)
+│   ├── gdb/           # GDB MI2 client and parsing
+│   └── cgdb/widgets/  # Debugger panes
+└── docs/              # This documentation tree
 ```
 
 Details: [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md).
@@ -150,4 +148,4 @@ Full tracker: [ROADMAP.md](ROADMAP.md).
 ## Related links
 
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [README.md (project root)](../README.md) — cgdb-go overview (legacy PromptCore chat code in repo)
+- [README.md (project root)](../README.md) — cgdb-go overview

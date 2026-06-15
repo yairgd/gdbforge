@@ -146,12 +146,12 @@ stateDiagram-v2
 | **Focus** | Focused Workspace widget | Pane-specific editing (source scroll, GDB input) |
 | **Command** | CmdLine | `:` UI commands |
 
-Mode constants exist in `internal/app/modes.go`:
+Mode constants are planned for `cmd/cgdb` / `termui`:
 
 ```go
 const (
-    InsertMode Mode = iota  // legacy chat TUI
-    NormalMode
+    NormalMode Mode = iota
+    FocusMode
     CommandMode
 )
 ```

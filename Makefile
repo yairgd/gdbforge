@@ -1,5 +1,5 @@
 # -------- Config --------
-APP_NAME := chat
+APP_NAME := cgdb
 BIN_DIR  := bin
 
 # Detect all commands inside cmd/
@@ -19,24 +19,15 @@ build:
 	done
 	@echo "Done."
 
-# -------- Run TUI --------
+# -------- Run --------
 .PHONY: run
 run:
 	go run ./cmd/cgdb
 
-.PHONY: dbug
-dbug:
-	go run ./cmd/cgdb
-
-
-
-
-
-
 # -------- Debug Dlv --------
 .PHONY: debug
 debug:
-	 dlv debug ./cmd/uitcell --headless --listen=:2345 --api-version=2
+	dlv debug ./cmd/cgdb --headless --listen=:2345 --api-version=2
 
 # -------- Test --------
 .PHONY: test
@@ -62,9 +53,9 @@ clean:
 .PHONY: build-linux
 build-linux:
 	@mkdir -p $(BIN_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/tui-linux ./cmd/tui
+	GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/cgdb-linux ./cmd/cgdb
 
 .PHONY: build-mac
 build-mac:
 	@mkdir -p $(BIN_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/tui-mac ./cmd/tui
+	GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/cgdb-mac ./cmd/cgdb

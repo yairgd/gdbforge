@@ -1,8 +1,8 @@
 # Directory Structure
 
-This document maps the **cgdb-go** repository packages to their responsibilities, with emphasis on cgdb-go components.
+This document maps the **cgdb-go** repository packages to their responsibilities.
 
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
+**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEPENDENCIES.md](DEPENDENCIES.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
 ---
 
@@ -13,8 +13,7 @@ This document maps the **cgdb-go** repository packages to their responsibilities
 - [internal/termui](#internaltermui)
 - [internal/core](#internalcore)
 - [internal/gdb](#internalgdb)
-- [internal/app](#internalapp)
-- [internal/ui/tui](#internaluitui)
+- [internal/cgdb](#internalcgdb)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
 - [What belongs where](#what-belongs-where)
@@ -26,23 +25,18 @@ This document maps the **cgdb-go** repository packages to their responsibilities
 ```text
 cgdb-go/
 ├── cmd/
-│   ├── cgdb/              # cgdb-go prototype
-│   ├── docserve/             # Documentation HTTP server
-│   ├── tui/                  # Legacy Bubble Tea chat TUI
-│   ├── dbug/                 # Debug utilities
-│   └── server/               # HTTP orchestrator (PromptCore API)
+│   ├── cgdb/              # cgdb-go debugger prototype
+│   ├── docserve/          # Documentation HTTP server
+│   └── dbug/              # (removed — was a dev helper)
 ├── internal/
-│   ├── termui/               # TUI framework (tcell) ★
-│   ├── cgdb/                 # App-specific debugger widgets ★
+│   ├── termui/            # TUI framework (tcell) ★
+│   ├── cgdb/              # App-specific debugger widgets ★
 │   │   └── widgets/
-│   ├── core/                 # UI-agnostic domain logic ★
-│   ├── gdb/                  # GDB MI2 backend ★
-│   ├── app/                  # Legacy chat orchestration
-│   ├── api/                  # HTTP handlers
-│   └── ui/
-│       └── tui/              # Legacy Bubble Tea adapter
-├── docs/                     # cgdb-go documentation ★
-├── internal/playground/      # Experiments (not production)
+│   ├── core/              # UI-agnostic domain logic ★
+│   ├── gdb/               # GDB MI2 backend ★
+│   ├── playground/        # Experiments (not production)
+│   └── tests/
+├── docs/                  # cgdb-go documentation ★
 ├── go.mod
 ├── Taskfile.yml
 └── CONTRIBUTING.md
@@ -58,9 +52,6 @@ cgdb-go/
 |------|--------|---------|
 | `cmd/cgdb/main.go` | `cgdb` | **cgdb-go prototype** — split workspace demo |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
-| `cmd/tui/main.go` | `tui` | PromptCore chat TUI (Bubble Tea) |
-| `cmd/dbug/main.go` | `dbug` | Development/debug helper |
-| `cmd/server/orchestrator.go` | `server` | HTTP API server |
 
 Build all commands:
 
@@ -73,7 +64,7 @@ task build
 
 ## internal/termui
 
-**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets: `internal/cgdb/widgets`.
+**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/cgdb/widgets`.
 
 | File | Responsibility |
 |------|----------------|
@@ -115,24 +106,18 @@ flowchart TB
 
 ## internal/core
 
-**UI-agnostic domain logic.** No imports of `tcell`, `bubbletea`, or terminal packages.
+**UI-agnostic domain logic.** No imports of `tcell` or other terminal packages.
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Legacy chat `Event`, debugger events (`GdbOutputMsg`, …) |
-| `command.go` | — (moved to `termui`) |
+| `events.go` | Debugger events (`GdbOutputMsg`, …) |
 | `debugger.go` | `Debugger` interface |
 | `buffer.go` | Line-oriented text buffer (GDB output, source) |
 | `viewport.go` | Scroll window over buffer |
-| `history.go` | Command history navigation |
-| `autocomplete.go` | Tab completion for CmdLine |
-| `commands.go` | Reserved (legacy chat registry stub) |
-| `session.go` | Session management |
-| `message.go` | Message model (chat) |
-| `context.go` | AI context (PromptCore) |
-| `ai.go` | AI integration (PromptCore) |
 
 **Rule:** if it can be tested without a terminal, it belongs here.
+
+CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`.
 
 ---
 
@@ -149,38 +134,7 @@ flowchart TB
 
 **Rule:** no imports from `termui`. Output reaches UI via `core.GdbOutputMsg` channel + `EventInterrupt`.
 
----
-
-## internal/app
-
-**Application orchestration** between UI adapters and core.
-
-| File | Responsibility |
-|------|----------------|
-| `app.go` | Connects UI ↔ core (chat application) |
-| `state.go` | `AppState` |
-| `handler.go` | Event handlers |
-| `modes.go` | Interaction mode constants |
-
-cgdb-go will increasingly use this layer for mode routing and session lifecycle as `TermApp` grows beyond a flat widget list.
-
----
-
-## internal/ui/tui
-
-**Legacy Bubble Tea UI adapter** for the PromptCore chat application. Separate from cgdb-go.
-
-| File | Responsibility |
-|------|----------------|
-| `model.go` | Main `tea.Model` |
-| `chat.go` | Chat display |
-| `input.go` | Input handling |
-| `layout.go` | Lip Gloss layout |
-| `gdb_widget.go` | Earlier GDB experiment in Bubble Tea |
-| `gdb_model.go` | GDB model for Bubble Tea |
-| `cmd_input_box.go` | Command input component |
-
-**Note:** do not add cgdb-go features here. Use `internal/termui`.
+Application orchestration for cgdb-go lives in **`cmd/cgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 
 ---
 
@@ -198,6 +152,7 @@ cgdb-go will increasingly use this layer for mode routing and session lifecycle 
 | `DEBUGGER_INTEGRATION.md` | GDB and future backends |
 | `PLUGINS.md` | Lua extensibility plans |
 | `DIRECTORY_STRUCTURE.md` | This file |
+| `DEPENDENCIES.md` | Go module + internal package rules |
 | `ROADMAP.md` | Status and plans |
 | `DEVELOPER_GUIDE.md` | Contributor onboarding |
 | `HOSTING.md` | Docs server |
@@ -209,25 +164,30 @@ cgdb-go will increasingly use this layer for mode routing and session lifecycle 
 
 ## Dependency graph
 
+Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
+
 ```mermaid
 flowchart BT
     tcell["gdamore/tcell"]
     termui["internal/termui"]
-    app["internal/app"]
+    widgets["internal/cgdb/widgets"]
     core["internal/core"]
     gdb["internal/gdb"]
-    bubble["bubbletea · ui/tui"]
+    cgdb_cmd["cmd/cgdb"]
 
     termui --> tcell
-    termui --> core
-    termui --> app
-    app --> core
+    widgets --> termui
+    widgets --> core
     gdb --> core
-    bubble --> core
-    bubble --> app
+
+    cgdb_cmd --> termui
+    cgdb_cmd --> widgets
+    cgdb_cmd --> core
+    cgdb_cmd --> gdb
 
     gdb -.->|"must NOT import"| termui
     core -.->|"must NOT import"| termui
+    termui -.->|"must NOT import"| core
 ```
 
 ---
@@ -241,10 +201,9 @@ flowchart BT
 | Scrollable text buffer? | `core` |
 | Key binding in focus mode? | `termui` widget |
 | Spawn/debug external process? | `gdb` (or future backend) |
-| Vim `:` command registry? | `core` + `app` dispatch |
+| Vim `:` command registry? | `termui` + `cmd/cgdb` dispatch |
 | Draw box borders? | `termui` Grid/Cell |
-| HTTP API? | `internal/api` |
-| Chat AI context? | `core` / `app` (PromptCore) |
+| Compose UI + GDB + dispatch? | `cmd/cgdb` |
 
 When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core`.
 

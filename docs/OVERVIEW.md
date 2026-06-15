@@ -28,7 +28,7 @@ The long-term vision:
 - **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
 - **Efficient rendering** through an off-screen grid and future diff-based terminal updates.
 
-cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.com/cgdb/cgdb). The module path is `github.com/yairgd/cgdb-go`. Legacy Bubble Tea chat code (`cmd/tui`, `internal/ui/tui`) remains in the repository but is separate from the debugger.
+cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.com/cgdb/cgdb). The module path is `github.com/yairgd/cgdb-go`.
 
 ---
 
@@ -57,21 +57,21 @@ cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.c
 
 cgdb-go treats these as **architectural constraints to avoid from day one**, not as bugs to patch later.
 
-### Why not Bubble Tea / Lip Gloss only?
+### Why not Bubble Tea / Lip Gloss?
 
-The repository already contains a **Bubble Tea** chat TUI (`cmd/tui`, `internal/ui/tui`). Bubble Tea excels at application-level TUI with declarative models, but cgdb-go needs:
+Bubble Tea excels at application-level TUI with declarative models, but cgdb-go needs:
 
 - Fine-grained **split-tree layout** with resizable panes and shared border drawing.
 - A **replaceable framebuffer** (`Grid`) for diff rendering.
 - Direct **tcell** access for mouse, focus, and low-level drawing control.
 
-The cgdb-go stack (`internal/termui`) is intentionally lower-level than Bubble Tea. The two UI stacks coexist; cgdb-go is the debugger direction.
+The cgdb-go stack (`internal/termui`) is intentionally lower-level than Bubble Tea.
 
 ### Why Go?
 
 - Strong concurrency model for debugger I/O (PTY readers, async MI records).
 - Single static binary deployment.
-- Growing ecosystem for terminal UIs (`tcell`, `bubbletea`) and tooling.
+- Growing ecosystem for terminal UIs (`tcell`) and tooling.
 
 ---
 

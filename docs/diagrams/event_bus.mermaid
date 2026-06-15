@@ -17,7 +17,7 @@ flowchart TB
         Draw["Draw → Grid → Screen"]
     end
 
-    subgraph App["Application · cmd/cgdb or internal/app"]
+    subgraph App["Application · cmd/cgdb"]
         Handler["HandleCoreEvents — single dispatch hub"]
         CmdSwitch["switch CommandID / event type"]
         Actions["Exit, debugger, layout, …"]

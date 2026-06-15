@@ -167,7 +167,6 @@ Success criteria (future 1.0):
 | `GDBWidget` imports `gdb` state types | `gdb_widget.go` | Medium |
 | Hardcoded GDB target | `gdb_client.go` | Medium |
 | Experimental splits in `NewTabTwoHozSplitWins` | `tab.go` | Medium |
-| Duplicate Bubble Tea GDB experiment | `ui/tui/gdb_*` | Low |
 | Empty `base_widget.go` | `termui` | Low |
 | Global MI state variable | `mi.go` `var state` | Medium |
 

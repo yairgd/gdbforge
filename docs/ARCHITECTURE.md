@@ -51,10 +51,9 @@ flowchart TB
         Render["Canvas → Grid → tcell"]
     end
 
-    subgraph Application["Application · internal/app"]
-        State["AppState"]
-        Modes["Modes"]
-        Handlers["Event handlers"]
+    subgraph Application["Application · cmd/cgdb"]
+        DebuggerApp["DebuggerApp"]
+        HandleCore["HandleCoreEvents"]
     end
 
     subgraph Domain["Domain · internal/core"]
@@ -91,7 +90,7 @@ flowchart TB
 | **Domain events** | `core.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model** | `core.Buffer`, `core.Viewport` | Scrollable line storage for console/source views |
 | **Debugger backend** | `gdb.GDBClient`, `core.Debugger` | PTY I/O, MI2 parsing |
-| **Legacy chat TUI** | `internal/ui/tui` | Separate Bubble Tea stack — not part of cgdb-go |
+| **Application shell** | `cmd/cgdb` (`DebuggerApp`) | Composes UI, widgets, GDB; owns `HandleCoreEvents` |
 
 ---
 
@@ -223,11 +222,11 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 - Runs the poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to widgets that use `internal/gdb`.
 
-### Application (`cmd/cgdb`, `internal/app`)
+### Application (`cmd/cgdb`)
 
-- **cgdb-go:** `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for all `core.Event` traffic.
-- **Legacy chat TUI:** `internal/app` connects Bubble Tea models to core via `HandleEvent`.
-- Defines interaction modes (`NormalMode`, `InsertMode`, `CommandMode`) — constants in `app/modes.go`; wiring into `TermApp` is in progress.
+- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for domain events.
+- Defines app-specific `CommandID` values (break, continue, quit, …).
+- Interaction modes (`Normal`, `Focus`, `Command`) are planned; `CmdWidget.active` implements local command-mode when `:` is pressed.
 
 ### Domain (`internal/core`)
 
@@ -325,8 +324,6 @@ classDiagram
 | `CommandEvent` | Events carrying a resolved `CommandID` (e.g. after `:` command entry) |
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
 | `GdbOutputMsg` | Raw GDB output for UI consumption |
-| `Quit` | Application exit request |
-| `SubmitMessage`, `RunCommand` | Legacy chat TUI types — retained for `internal/ui/tui` |
 
 ### Command IDs
 
