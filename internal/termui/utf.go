@@ -21,6 +21,24 @@ func (c Canvas) Print(localX, localY int, style tcell.Style, text string) {
 func (c Canvas) Printf(localX, localY int, style tcell.Style, format string, args ...any) {
 	c.Print(localX, localY, style, fmt.Sprintf(format, args...))
 }
+func (c Canvas) ClearLine(localY int, style tcell.Style) {
+	for x := 0; x < c.W(); x++ {
+		c.SetContent(x, localY, ' ', style)
+	}
+}
+
+func (c Canvas) ClearLineRange(localY, x1, x2 int, style tcell.Style) {
+	if x1 < 0 {
+		x1 = 0
+	}
+	if x2 > c.W() {
+		x2 = c.W()
+	}
+
+	for x := x1; x < x2; x++ {
+		c.SetContent(x, localY, ' ', style)
+	}
+}
 
 func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.Style) {
 	style := baseStyle

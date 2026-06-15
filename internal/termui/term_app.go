@@ -57,10 +57,9 @@ func (app *TermApp) Close() {
 	app.screen.Fini()
 }
 
-func (app *TermApp) AddWidget(w Widget, r Rect) {
+func (app *TermApp) AddWidget(w Widget) {
 	app.widgets = append(app.widgets, WidgetNode{
 		widget: w,
-		rect:   r,
 	})
 }
 

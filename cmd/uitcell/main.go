@@ -46,16 +46,10 @@ func (a *DebuggerApp) InitB() {
 			codeWidgetLeft,
 			codeWidgetRight,
 		),
-		c.ChildRect(0, 0, c.W(), c.H()),
 	)
 
 	// Command line widget at the bottom.
-	cmd := termui.NewCmdWidget()
-
-	a.AddWidget(
-		cmd,
-		c.ChildRect(0, c.H()-1, c.W(), 1),
-	)
+	a.AddWidget(termui.NewCmdWidget())
 }
 
 // Called by TermApp when a UI event occurs.
@@ -63,35 +57,38 @@ func (a *DebuggerApp) InitB() {
 // when the terminal size changes.
 func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
 
-	// Recalculate root canvas dimensions.
-	c := a.UpdateCanvas()
+	switch ev.(type) {
+	case *tcell.EventResize:
+		// Recalculate root canvas dimensions.
+		c := a.UpdateCanvas()
 
-	// Access top-level widgets.
-	w := a.Widgets()
+		// Access top-level widgets.
+		w := a.Widgets()
 
-	if len(w) < 2 {
-		return
+		if len(w) < 2 {
+			return
+		}
+
+		// Main debugger/tab area.
+		w[0].SetRect(
+			c.ChildRect(
+				0,
+				0,
+				c.W(),
+				c.H(), // reserve last line for command widget
+			),
+		)
+
+		// Bottom command line.
+		w[1].SetRect(
+			c.ChildRect(
+				0,
+				c.H()-1,
+				c.W(),
+				1,
+			),
+		)
 	}
-
-	// Main debugger/tab area.
-	w[0].SetRect(
-		c.ChildRect(
-			0,
-			0,
-			c.W(),
-			c.H(), // reserve last line for command widget
-		),
-	)
-
-	// Bottom command line.
-	w[1].SetRect(
-		c.ChildRect(
-			0,
-			c.H()-1,
-			c.W(),
-			1,
-		),
-	)
 }
 
 func main() {

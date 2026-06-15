@@ -35,7 +35,7 @@ require (
 	github.com/josharian/impl v1.5.0 // indirect
 	github.com/jstemmer/gotags v1.4.1 // indirect
 	github.com/keegancsmith/rpc v1.3.0 // indirect
-	github.com/kisielk/errcheck v1.10.0 // indirect
+	github.com/kisielk/errcheck v1.20.0 // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/koron/iferr v0.0.0-20240122035601-9c3e2fbe4bd1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
@@ -55,13 +55,13 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/zmb3/gogetdoc v0.0.0-20190228002656-b37376c5da6a // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
-	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260213145524-e0ab670178e1 // indirect
+	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260611141451-d61e87d5f4a3 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
+	golang.org/x/tools v0.46.0 // indirect
 	golang.org/x/tools/cmd/gorename v0.1.0-deprecated // indirect
 	golang.org/x/tools/cmd/guru v0.1.1-deprecated // indirect
 	gopkg.in/alecthomas/kingpin.v3-unstable v3.0.0-20191105091915-95d230a53780 // indirect
