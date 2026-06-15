@@ -330,31 +330,77 @@ Current behavior:
 
 ## Event handling
 
-### Dispatch order (current)
+NewCGDB separates **terminal events** from **domain events**.
+
+| Plane | Type | Handler |
+|-------|------|---------|
+| Terminal | `tcell.Event` | `TermApp.HandleUIEvent` + each widget's `HandleEvent` |
+| Domain | `core.Event` | **`AppApi.HandleCoreEvents`** — single application dispatch hub |
+
+### Terminal dispatch (current)
 
 ```mermaid
 flowchart TB
-    Poll["screen.PollEvent()"]
-    App["TermApp.HandleEvent"]
-    Widgets["for each top-level widget: HandleEvent"]
+    Select["TermApp.Run select loop"]
+    Poll["PollEvent · tcell"]
+    Bus["<- events · core.Event"]
+    UI["HandleUIEvent"]
+    Widgets["widget HandleEvent"]
+    Core["HandleCoreEvents"]
     Draw["Draw all widgets"]
     Flush["Grid → Screen"]
 
-    Poll --> App --> Widgets --> Draw --> Flush
+    Select --> Poll
+    Select --> Bus
+    Poll --> UI --> Widgets --> Draw --> Flush
+    Bus --> Core
 ```
+
+The main loop uses `select` with a `default` branch: drain pending `core.Event` messages first, otherwise poll tcell. This keeps domain dispatch responsive without blocking keyboard input.
 
 Global keys handled by `TermApp`:
 
 | Key | Action |
 |-----|--------|
 | `Ctrl+D` | Exit application |
-| Resize | Reallocate grids via `UpdateCanvas()` |
+| Resize | Reallocate grids via `UpdateCanvas()`; app recalculates widget rects in `HandleUIEvent` |
 
-### Async events
+### Domain event bus
+
+Any subsystem can publish to `TermApp.events` (`Events() chan core.Event`). The bus is **not** broadcast to widgets — every event is delivered to the application:
+
+```go
+type AppApi interface {
+    HandleUIEvent(ev tcell.Event)
+    HandleCoreEvents(ev core.Event)   // single hub for all domain events
+}
+```
+
+**Current producers:**
+
+| Producer | Event | Example |
+|----------|-------|---------|
+| `CmdWidget` | `SubmitMsg` | User pressed Enter on `:quit` |
+| GDB backend | `GdbOutputMsg` | Planned — today uses `EventInterrupt` into widgets |
+| Other widgets | TBD | Publish via shared channel or injected `core.Emitter` |
+
+**Example flow (`CmdWidget` → app):**
+
+1. User types `:quit`, presses Enter.
+2. `CmdWidget.submitCommand()` parses input, resolves name via `AutoCompleter`.
+3. `CmdWidget` sends `SubmitMsg{CmdID: cmdQuit, Args: ""}` on `Events`.
+4. `TermApp.Run` receives from channel, calls `DebuggerApp.HandleCoreEvents`.
+5. App switches on `CommandID()`, calls `app.Exit()`.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer) for command ID ownership (`core.CmdUnknown` vs app-private IDs).
+
+### Async terminal events
 
 GDB output uses `tcell.NewEventInterrupt` to inject messages into the main loop from background goroutines. This avoids locking the screen from reader threads — a common tcell pattern.
 
-**Design decision:** prefer `EventInterrupt` over unsynchronized channel polling in the main loop, because tcell's event model is the single source of truth for wakeups.
+**Planned:** route GDB output through the domain bus (`GdbOutputMsg` → `HandleCoreEvents`) instead of widget-local `EventInterrupt` handling, so debugger reactions also centralize in the application layer.
+
+**Design decision:** prefer `EventInterrupt` for tcell wakeups today; domain bus for application-level reactions.
 
 ---
 
@@ -371,14 +417,23 @@ sequenceDiagram
     Main->>App: UpdateCanvas()
     Main->>App: AddWidget(...)
     loop until exit
-        App->>Screen: PollEvent
-        App->>App: HandleEvent + widget events
-        App->>App: Draw + frontBuffer.Draw + Show
+        App->>Screen: select: drain core.Event OR PollEvent
+        alt core.Event on bus
+            App->>App: HandleCoreEvents(ev)
+        else tcell event
+            App->>App: HandleUIEvent + widget HandleEvent
+            App->>App: Draw + frontBuffer.Draw + Show
+        end
     end
     Main->>App: Close / Fini
 ```
 
-`AppAPI` (`app_api.go`) defines the interface widgets may use to request redraws, open windows, and publish `core.Event` — not yet wired everywhere.
+`AppApi` is implemented by the application (`DebuggerApp` in `cmd/uitcell/main.go`):
+
+- `HandleUIEvent` — terminal-level hooks (resize layout today).
+- `HandleCoreEvents` — **all** domain events from the bus.
+
+`AppAPI` in `app_api.go` (`Publish`, `RequestRedraw`, …) is a separate planned surface for widgets; not yet wired everywhere.
 
 ---
 
@@ -388,7 +443,7 @@ sequenceDiagram
 |--------|------|--------|
 | `CodeWidget` | `code_widget.go` | Prototype — random background, title stub |
 | `GDBWidget` | `gdb_widget.go` | Functional prototype — MI input, buffer draw |
-| `CmdWidget` | `cmd_widget.go` | Stub — history keys, empty `Draw` |
+| `CmdWidget` | `cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
 | `TabWidget` | `tab.go` | Single-tab container forwarding to `Layout` |
 
 Widget hierarchy target:

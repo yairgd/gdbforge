@@ -23,35 +23,35 @@ NewCGDB handles keyboard and mouse input through **tcell**, routes events based 
 ```text
 Keyboard / Mouse
         ↓
-TermApp
-        ↓
-Mode router (planned)
-        ↓
-Focused Widget / CmdLine
-        ↓
-Widget Action / core.Event
-        ↓
-Redraw
+TermApp (select loop)
+        ├── tcell.Event  → HandleUIEvent + widget HandleEvent → redraw
+        └── core.Event   → HandleCoreEvents (application dispatch hub)
 ```
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
-    participant Focus as Focused Widget
-    participant Action as Widget Action
+    participant Widget as Widget · e.g. CmdWidget
+    participant Bus as core.Event channel
+    participant Core as HandleCoreEvents
     participant Render as Redraw
 
-    Input ->> App: PollEvent
-    App ->> Focus: HandleEvent(ev)
-    Focus ->> Action: process key / click
-    Action ->> Render: request redraw
-    Render ->> App: Draw → Grid → Screen
+    Input ->> App: PollEvent · tcell.Event
+    App ->> Widget: HandleEvent(ev)
+    Widget ->> Bus: Events <- SubmitMsg
+    App ->> Bus: drain channel
+    Bus ->> Core: HandleCoreEvents(ev)
+    App ->> Render: Draw → Grid → Screen
 ```
 
-*Source: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid)*
+*Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
 
-**Design principle:** one thread owns input and rendering. Async sources (GDB PTY) inject events via `PostEvent`, never by calling widget methods directly.
+**Design principles:**
+
+1. One thread owns input and rendering.
+2. Async sources (GDB PTY) inject **tcell** events via `PostEvent`, never by calling widget methods directly.
+3. Domain actions (commands, quit, debugger routing) publish **`core.Event`** to the bus; the application handles them in **`HandleCoreEvents`**, not in individual widgets.
 
 ---
 
@@ -91,8 +91,14 @@ Example: `CmdWidget` (`cmd_widget.go`):
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Add to history (no command dispatch yet) |
+| `:` (when inactive) | Enter command mode |
+| `Enter` | Parse command, emit `SubmitMsg` on event bus |
+| `Esc` | Cancel command mode |
 | `Up` / `Down` | History navigation |
+| `Tab` | Complete command name |
+| `Backspace` on lone `:` | Exit command mode |
+
+On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `core.CmdUnknown`), and publishes to `TermApp.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
 
 ---
 
@@ -156,55 +162,68 @@ const (
 - Focus mode is pane-local (like Vim insert, but per-widget semantics).
 - Command mode is for UI operations, not debugger commands.
 
-**Gap:** modes are not wired into `TermApp` yet. `CmdWidget.active` is a local stub.
+**Gap:** modes are not wired into `TermApp` yet. `CmdWidget.active` implements local command-mode activation when `:` is pressed.
 
 ---
 
 ## Vim-like command system
 
-The CmdLine accepts `:` prefixed commands (leading `:` may be implicit when entering command mode).
+The CmdLine accepts `:` prefixed commands. Press `:` to activate `CmdWidget`; type a command and press Enter.
 
-### Planned architecture
+### Architecture
 
 ```mermaid
 flowchart LR
     CmdLine["CmdWidget"]
-    Parser["Command parser"]
-    Registry["core.Commands registry"]
-    Handler["UI / debugger actions"]
-    Event["core.RunCommand event"]
+    Parse["Parse :cmd args"]
+    Completer["core.AutoCompleter"]
+    Bus["TermApp.events"]
+    Handler["HandleCoreEvents"]
+    Actions["App dispatch by CommandID"]
 
-    CmdLine --> Parser --> Registry --> Handler
-    Parser --> Event
+    CmdLine --> Parse --> Completer
+    Parse -->|"SubmitMsg"| Bus --> Handler --> Actions
 ```
 
 Flow:
 
-1. User presses `:` in Normal or Focus mode → enter Command mode, focus CmdLine.
-2. User types command, presses Enter.
-3. Parser tokenizes input (command + args).
-4. Registry dispatches to handler.
-5. Handler mutates layout, focus, or emits debugger action.
-6. Return to previous mode.
+1. User presses `:` → `CmdWidget` enters command mode.
+2. User types `:break main`, presses Enter.
+3. `CmdWidget` tokenizes input (`break`, args `main`).
+4. `AutoCompleter` resolves `break` → app-private `cmdBreak` ID.
+5. `SubmitMsg{Text, CmdID, Args}` published on event bus.
+6. **`HandleCoreEvents`** switches on `CommandID()` — exit, forward to GDB, layout change, etc.
+7. Unknown commands arrive with `core.CmdUnknown`.
+
+### Command ID ownership
+
+| Layer | Constants | Visibility |
+|-------|-----------|------------|
+| `core` | `CmdUnknown` | Infra — shared sentinel for unrecognized commands |
+| `cmd/uitcell` | `cmdBreak`, `cmdQuit`, … | **Private to app** — `iota + 1` so `0` stays `CmdUnknown` |
+
+The completer is built in the application with app command IDs:
+
+```go
+completer := core.NewSimpleCompleter([]core.Command{
+    {ID: cmdBreak, Name: "break"},
+    {ID: cmdQuit, Name: "quit"},
+})
+cmd.Events = app.Events()
+```
+
+`termui` never imports app command constants — it only emits resolved IDs from the completer.
 
 ### Command categories
 
-| Category | Examples |
-|----------|----------|
-| Window | `:vsplit`, `:hsplit`, `:close`, `:focus left` |
-| Tab | `:tabnew`, `:tabclose`, `:tabn`, `:tabp` |
-| Debugger | `:break`, `:continue`, `:step` (may delegate to backend) |
-| UI | `:quit`, `:redraw`, `:set option` |
+| Category | Examples | Dispatch |
+|----------|----------|----------|
+| Window | `:vsplit`, `:close`, `:focus left` | `HandleCoreEvents` → layout (planned) |
+| Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
+| Debugger | `:break`, `:continue`, `:step` | `HandleCoreEvents` → `core.Debugger` (planned) |
+| UI | `:quit` | `HandleCoreEvents` → `app.Exit()` (implemented) |
 
-`core.AutoCompleter` in `CmdWidget` already seeds debugger vocabulary:
-
-```go
-"break", "continue", "next", "step", "print", "bt", "info", "run", "quit"
-```
-
-**Design decision:** UI commands and GDB CLI commands share syntax where familiar (`:break main`) but route differently — UI commands handled locally; debugger commands forwarded through `core.Debugger`.
-
-`core.RunCommand` event type exists for this dispatch path.
+**Design decision:** UI commands and GDB CLI commands share familiar syntax (`:break main`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to GDB, or exit.
 
 ---
 

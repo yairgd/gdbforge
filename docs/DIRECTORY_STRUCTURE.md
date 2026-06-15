@@ -76,7 +76,7 @@ task build
 
 | File | Responsibility |
 |------|----------------|
-| `term_app.go` | Event loop, screen init, widget list, grid buffers |
+| `term_app.go` | Event loop, `AppApi`, event bus channel, widget list, grid buffers |
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types |
 | `widget_tree.go` | Split/focus/layout recursion |
@@ -109,13 +109,14 @@ flowchart TB
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | `Event` interface and concrete event types |
+| `events.go` | `Event`, `CommandEvent`, `SubmitMsg`, `GdbOutputMsg`, … |
+| `command.go` | `CommandID`, `CmdUnknown`, `Command` struct, `Commands` registry |
 | `debugger.go` | `Debugger` interface |
 | `buffer.go` | Line-oriented text buffer (GDB output, source) |
 | `viewport.go` | Scroll window over buffer |
 | `history.go` | Command history navigation |
-| `autocomplete.go` | Tab completion stub |
-| `commands.go` | Command registry (chat legacy) |
+| `autocomplete.go` | Tab completion for CmdLine |
+| `commands.go` | Reserved (legacy chat registry stub) |
 | `session.go` | Session management |
 | `message.go` | Message model (chat) |
 | `context.go` | AI context (PromptCore) |

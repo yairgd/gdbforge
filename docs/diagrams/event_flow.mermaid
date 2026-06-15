@@ -1,12 +1,15 @@
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
-    participant Focus as Focused Widget
-    participant Action as Widget Action
+    participant Widget as Widget · e.g. CmdWidget
+    participant Bus as core.Event channel
+    participant Core as HandleCoreEvents
     participant Render as Redraw
 
-    Input ->> App: PollEvent
-    App ->> Focus: HandleEvent(ev)
-    Focus ->> Action: process key / click
-    Action ->> Render: request redraw
-    Render ->> App: Draw → Grid → Screen
+    Input ->> App: PollEvent · tcell.Event
+    App ->> Widget: HandleEvent(ev)
+    Widget ->> Bus: Events <- SubmitMsg / other core.Event
+    App ->> Bus: drain channel
+    Bus ->> Core: AppApi.HandleCoreEvents(ev)
+    Core ->> Core: dispatch by CommandID / type
+    App ->> Render: Draw → Grid → Screen

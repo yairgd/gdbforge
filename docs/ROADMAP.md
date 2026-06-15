@@ -32,7 +32,8 @@ NewCGDB is an **architecture prototype**, not a production debugger. The split-t
 | `TermApp` event loop | Done | Poll, draw, flush |
 | Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list on `TermApp` |
 | `TabWidget` | Stub | Single tab, no header |
-| `CmdWidget` | Stub | History keys, no draw/dispatch |
+| `CmdWidget` | Partial | Draw, history, tab complete; emits `SubmitMsg` on event bus |
+| Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | `CodeWidget` | Prototype | Placeholder draw |
 | `GDBWidget` | Prototype | MI input/output, buffer display |
 | `GDBClient` MI2 PTY | Prototype | Hardcoded target `hello` |
@@ -87,7 +88,7 @@ Dates are indicative — adjust as development progresses.
 |---------|-------------|
 | `RootWidget` | Structured TabBar + Workspace + CmdLine |
 | Tab header rendering | Visible tab bar with switch keys |
-| CmdLine draw + dispatch | `:` commands via `RunCommand` |
+| CmdLine dispatch | `SubmitMsg` on event bus → `HandleCoreEvents` by `CommandID` |
 | Focus indicators | Bold border on focused pane |
 | Focus movement | `Ctrl+W` + arrow keys |
 

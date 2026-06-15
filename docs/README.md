@@ -36,7 +36,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 go run ./cmd/uitcell
 ```
 
-Requires a terminal with UTF-8 support. The prototype currently registers a split workspace and command-line widget stub.
+Requires a terminal with UTF-8 support. The prototype registers a split workspace, a functional `:` command line, and an event bus that dispatches domain events through `HandleCoreEvents`.
 
 ### View documentation in a browser
 

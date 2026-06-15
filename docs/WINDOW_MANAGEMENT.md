@@ -241,9 +241,10 @@ The **CmdLine** is a top-level band for **Vim-style `:` commands**, distinct fro
 
 `CmdWidget` (`cmd_widget.go`) provides:
 
+- Vim-style `:` activation and drawing on the bottom line.
 - Command history (`core.History`) — Up/Down navigation.
-- Tab completion stub (`core.AutoCompleter`) — debugger command vocabulary.
-- `active` flag for focus state (not fully wired).
+- Tab completion (`core.AutoCompleter`) — command name only.
+- **`SubmitMsg` on the event bus** — resolved `CommandID` + args; app dispatches in `HandleCoreEvents`.
 
 **Design decision:** separate CmdLine from GDB console because:
 
@@ -251,9 +252,9 @@ The **CmdLine** is a top-level band for **Vim-style `:` commands**, distinct fro
 - Users can run UI operations without sending spurious input to GDB.
 - Completion vocabularies differ (UI vs debugger).
 
-**Current gap:** `Draw` is empty; no integration with Root layout; Enter does not dispatch `RunCommand` events yet.
+**Current state:** `:quit` exits via `HandleCoreEvents`. Other debugger commands registered but not yet dispatched. Unknown commands emit `core.CmdUnknown`.
 
-Planned flow: see [INPUT.md](INPUT.md#vim-like-command-system).
+Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer).
 
 ---
 

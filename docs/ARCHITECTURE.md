@@ -88,7 +88,7 @@ flowchart TB
 | **Split tree** | `termui.Layout`, `WidgetTree`, `Node` | Recursive pane division inside Workspace |
 | **Widget layer** | `termui.Widget` implementations | Per-pane UI and input handling |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
-| **Domain events** | `core.Event` | Decouple UI from business actions |
+| **Domain events** | `core.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model** | `core.Buffer`, `core.Viewport` | Scrollable line storage for console/source views |
 | **Debugger backend** | `gdb.GDBClient`, `core.Debugger` | PTY I/O, MI2 parsing |
 | **Legacy chat TUI** | `internal/ui/tui` | Separate Bubble Tea stack — not part of NewCGDB |
@@ -99,22 +99,34 @@ flowchart TB
 
 ### Input → action → redraw
 
+NewCGDB uses **two parallel event planes**:
+
+| Plane | Type | Path |
+|-------|------|------|
+| **Terminal** | `tcell.Event` | `PollEvent` → `HandleUIEvent` + widget `HandleEvent` |
+| **Domain** | `core.Event` | Any producer → `TermApp.events` channel → **`HandleCoreEvents`** |
+
+Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `core.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
+
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
-    participant Focus as Focused Widget
-    participant Action as Widget Action
+    participant Widget as Widget · e.g. CmdWidget
+    participant Bus as core.Event channel
+    participant Core as HandleCoreEvents
     participant Render as Redraw
 
-    Input ->> App: PollEvent
-    App ->> Focus: HandleEvent(ev)
-    Focus ->> Action: process key / click
-    Action ->> Render: request redraw
-    Render ->> App: Draw → Grid → Screen
+    Input ->> App: PollEvent · tcell.Event
+    App ->> Widget: HandleEvent(ev)
+    Widget ->> Bus: Events <- SubmitMsg / other core.Event
+    App ->> Bus: drain channel
+    Bus ->> Core: AppApi.HandleCoreEvents(ev)
+    Core ->> Core: dispatch by CommandID / type
+    App ->> Render: Draw → Grid → Screen
 ```
 
-*Source: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid)*
+*Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
 
 ### Debugger output → UI
 
@@ -143,28 +155,44 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    subgraph DataFlow["End-to-end data flow"]
-        User["User input"]
-        TermApp["TermApp event loop"]
-        Widget["Focused widget"]
-        CoreEvt["core.Event channel"]
-        Debugger["Debugger backend"]
-        Model["Buffer / Viewport / MI state"]
+    subgraph Input["Input paths"]
+        User["User keyboard / mouse"]
+        Async["Async sources · GDB PTY, timers"]
+    end
+
+    subgraph TermApp["TermApp event loop"]
+        Poll["PollEvent · tcell.Event"]
+        Bus["events chan · core.Event"]
+        UIHandler["HandleUIEvent"]
+        Widgets["widget HandleEvent"]
+        CoreHub["HandleCoreEvents"]
         Draw["Draw pipeline"]
         Screen["Terminal screen"]
     end
 
-    User --> TermApp
-    TermApp --> Widget
-    Widget --> Debugger
+    subgraph App["Application layer"]
+        Dispatch["Command / event dispatch"]
+        Debugger["Debugger backend"]
+        Model["Buffer / Viewport / state"]
+    end
+
+    User --> Poll
+    Async --> Poll
+    Poll --> UIHandler
+    Poll --> Widgets
+    Widgets -->|"publish domain events"| Bus
+    Async -.->|"planned: publish"| Bus
+    Bus --> CoreHub --> Dispatch
+    Dispatch --> Debugger
     Debugger --> Model
-    Model --> Draw
+    Dispatch --> Model
+    Widgets --> Draw
     Draw --> Screen
-    Widget --> CoreEvt
-    CoreEvt --> Widget
 ```
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
+
+**Design decision:** domain events do **not** fan out to widgets directly. Every `core.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/uitcell/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
 
 ---
 
@@ -195,15 +223,16 @@ These principles are **non-negotiable** for NewCGDB. They explain many seemingly
 - Runs the poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to widgets that use `internal/gdb`.
 
-### Application (`internal/app`)
+### Application (`cmd/uitcell`, `internal/app`)
 
-- Connects UI events to domain actions (used heavily by the legacy chat TUI).
-- Defines interaction modes (`NormalMode`, `InsertMode`, `CommandMode`).
-- NewCGDB will expand this layer as Root layout and command routing mature.
+- **NewCGDB:** `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for all `core.Event` traffic.
+- **Legacy chat TUI:** `internal/app` connects Bubble Tea models to core via `HandleEvent`.
+- Defines interaction modes (`NormalMode`, `InsertMode`, `CommandMode`) — constants in `app/modes.go`; wiring into `TermApp` is in progress.
 
 ### Domain (`internal/core`)
 
-- `Event` types for cross-layer messaging.
+- **`Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg`, `GdbOutputMsg`, etc.
+- **`CommandID`** — infra constant `CmdUnknown` only; app-specific command IDs live in the application package.
 - `Buffer`, `Viewport` for text panes.
 - `History`, `AutoCompleter` for command-line UX.
 - `Debugger` interface — minimal send API.
@@ -220,7 +249,40 @@ These principles are **non-negotiable** for NewCGDB. They explain many seemingly
 
 ## Core events layer
 
-The event system decouples UI actions from business logic. It originated in the PromptCore chat application and is reused for debugger events.
+The **event bus** decouples UI widgets from application logic. Any subsystem may publish a `core.Event`; the main loop delivers every event to **`HandleCoreEvents`** on the application object. Widgets stay thin — they parse local input and emit domain events; the app owns side effects.
+
+```mermaid
+flowchart TB
+    subgraph Producers["Event producers (any subsystem)"]
+        CmdW["CmdWidget"]
+        GDB["GDB backend / goroutines"]
+        Widgets["Other widgets"]
+        Future["Plugins / timers · planned"]
+    end
+
+    subgraph Bus["core event bus"]
+        Chan["TermApp.events chan core.Event"]
+    end
+
+    subgraph Loop["TermApp.Run main loop"]
+        Select["select: channel vs PollEvent"]
+        CoreDispatch["AppApi.HandleCoreEvents(ev)"]
+    end
+
+    subgraph App["Application · DebuggerApp"]
+        Handler["HandleCoreEvents — single dispatch hub"]
+        CmdSwitch["switch CommandID / event type"]
+    end
+
+    CmdW -->|"Events <- SubmitMsg"| Chan
+    GDB -.->|"planned"| Chan
+    Widgets -.-> Chan
+    Chan --> Select --> CoreDispatch --> Handler --> CmdSwitch
+```
+
+*Source: [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
+
+### Interfaces and types
 
 ```mermaid
 classDiagram
@@ -231,12 +293,15 @@ classDiagram
         +Type() string
     }
 
-    class SubmitMessage {
-        +Text string
+    class CommandEvent {
+        <<interface>>
+        +CommandID() CommandID
     }
 
-    class RunCommand {
-        +Command string
+    class SubmitMsg {
+        +Text string
+        +CmdID CommandID
+        +Args string
     }
 
     class GdbOutputMsg {
@@ -248,20 +313,51 @@ classDiagram
         +Text string
     }
 
-    Event <|.. SubmitMessage
-    Event <|.. RunCommand
+    Event <|.. SubmitMsg
     Event <|.. GdbOutputMsg
     Event <|.. Quit
+    CommandEvent <|.. SubmitMsg
 ```
 
-| Event | Purpose |
-|-------|---------|
-| `SubmitMessage` | User submitted text (chat legacy) |
-| `RunCommand` | Vim-style `:` command |
+| Type | Purpose |
+|------|---------|
+| `Event` | Base domain event — identified by `Type() string` |
+| `CommandEvent` | Events carrying a resolved `CommandID` (e.g. after `:` command entry) |
+| `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
 | `GdbOutputMsg` | Raw GDB output for UI consumption |
 | `Quit` | Application exit request |
+| `SubmitMessage`, `RunCommand` | Legacy chat TUI types — retained for `internal/ui/tui` |
 
-Implementation: `internal/core/events.go`. `TermApp` holds an event channel (`Emit`) for future async integration.
+### Command IDs
+
+| Layer | Owns |
+|-------|------|
+| **`core`** | `CommandID` type, **`CmdUnknown`** (value `0`) |
+| **Application** (`cmd/uitcell`) | Private constants: `cmdBreak`, `cmdQuit`, … starting at `iota + 1` |
+
+`CmdWidget` never references app command names. It resolves user input through `core.AutoCompleter` and emits `SubmitMsg{CmdID: …}`. Unknown commands emit `core.CmdUnknown`.
+
+### Wiring
+
+```go
+// termui/term_app.go
+type AppApi interface {
+    HandleUIEvent(ev tcell.Event)      // terminal-level hooks · resize layout
+    HandleCoreEvents(ev core.Event)    // all domain events land here
+}
+
+// cmd/uitcell/main.go
+cmd.Events = a.Events()   // CmdWidget publishes to TermApp channel
+
+func (app *DebuggerApp) HandleCoreEvents(ev core.Event) {
+    switch msg.CommandID() {
+    case core.CmdUnknown: /* feedback */
+    case cmdQuit:         app.Exit()
+    }
+}
+```
+
+Implementation: `internal/core/events.go`, `internal/core/command.go`, `internal/termui/term_app.go`, `internal/termui/cmd_widget.go`.
 
 ---
 
@@ -274,7 +370,8 @@ The **target** architecture is documented across this tree. The **current** code
 | Root layout | TabBar + Workspace + CmdLine | Widgets registered flat on `TermApp` |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `Layout` / `WidgetTree` implemented |
-| CmdLine | Global `:` command input | `CmdWidget` — history keys, no draw |
+| CmdLine | Global `:` command input | `CmdWidget` — draw, history, emits `SubmitMsg` on event bus |
+| Event bus | `core.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired; GDB publish planned |
 | Rendering | Diff-based grid flush | Full grid draw every frame |
 | Focus | Mode-aware routing | `WidgetTree.focus` — partial |
 | Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |

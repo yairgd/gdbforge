@@ -48,22 +48,33 @@ Add: `internal/termui/layout.go`, `node.go`, `tab.go`, `cmd_widget.go`, `interna
 
 ```text
 TermApp
-  ├── top-level widgets (target: RootWidget)
-  │     ├── TabBar
-  │     ├── Workspace → Layout → WidgetTree → Node*
-  │     └── CmdLine
+  ├── AppApi (implemented by DebuggerApp)
+  │     ├── HandleUIEvent(tcell.Event)     — resize layout, terminal hooks
+  │     └── HandleCoreEvents(core.Event)   — ALL domain events land here
+  ├── events chan core.Event               — bus; any subsystem may publish
+  ├── top-level widgets
+  │     ├── TabBar / Workspace / CmdLine
+  │     └── CmdWidget.Events → events channel
   ├── backBuffer / frontBuffer (Grid)
-  └── tcell.Screen event loop
+  └── select loop: drain bus OR PollEvent → draw
 
 Widget
-  ├── HandleEvent(tcell.Event)
-  └── Draw(Canvas)
+  ├── HandleEvent(tcell.Event)   — local keys / mouse
+  ├── Draw(Canvas)
+  └── publish core.Event         — when app-level action needed
 
-GDB path:
-  GDBClient (goroutine) → GdbOutputMsg → EventInterrupt → GDBWidget
+GDB path (today):
+  GDBClient (goroutine) → EventInterrupt → GDBWidget
+GDB path (target):
+  GDBClient → GdbOutputMsg on bus → HandleCoreEvents
 ```
 
-**Rule:** high-rate GDB output → buffer + viewport. UI commands → `core.RunCommand`. Never spawn GDB from widget code — use `core.Debugger`.
+**Rules:**
+
+- High-rate GDB output → buffer + viewport.
+- Domain actions → publish `core.Event`, handle in **`HandleCoreEvents`** — not in widget code.
+- App command IDs are **private** to the application package; only `core.CmdUnknown` lives in infra.
+- Never spawn GDB from widget code — use `core.Debugger` from the app layer.
 
 ---
 
@@ -79,6 +90,9 @@ GDB path:
 | **Layout** | Facade over `WidgetTree` |
 | **Workspace** | Middle band containing the split tree only |
 | **CmdLine** | Top-level `:` command input band |
+| **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
+| **CommandID** | Int token; `core.CmdUnknown` in infra; app IDs private |
+| **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |
 | **MiMsg** | Parsed batch of MI lines |
 | **GdbInputState** | Debounced line collector for MI bursts |
@@ -132,10 +146,13 @@ sequenceDiagram
     Main->>App: UpdateCanvas()
     Main->>App: AddWidget(...)
     loop until Ctrl+D
-        App->>Screen: PollEvent
-        App->>App: HandleEvent (global)
-        App->>App: widget HandleEvent
-        App->>App: Draw + grid flush + Show
+        App->>Screen: select: core.Event OR PollEvent
+        alt core.Event
+            App->>App: HandleCoreEvents
+        else tcell
+            App->>App: HandleUIEvent + widget HandleEvent
+            App->>App: Draw + grid flush + Show
+        end
     end
     App->>Screen: Fini
 ```
@@ -168,7 +185,22 @@ layout := NewLayout(NewMyWidget())
 layout.NewSplit(Vertical, NewOtherWidget())
 ```
 
-3. Wrap in `TabWidget` or future `RootWidget`.
+3. To publish domain events, wire the widget to the bus:
+
+```go
+cmd := termui.NewCmdWidget(completer)
+cmd.Events = app.Events()
+```
+
+4. Handle events in the application — not in the widget:
+
+```go
+func (app *MyApp) HandleCoreEvents(ev core.Event) {
+    msg, ok := ev.(core.CommandEvent)
+    if !ok { return }
+    switch msg.CommandID() { /* ... */ }
+}
+```
 
 **Rules:**
 
@@ -288,7 +320,7 @@ dlv debug ./cmd/docserve -- --port 8765
 |------|------------|
 | New debugger pane | Copy `code_widget.go`, register in layout |
 | New backend | Implement `core.Debugger`, new `internal/<backend>/` |
-| New `:` command | Extend `core/commands.go`, wire in `CmdWidget` |
+| New `:` command | Add private `CommandID` in app, register in completer, handle in `HandleCoreEvents` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Route `Canvas.SetContent` through `Grid`, compare buffers |
 | Focus movement | Add methods on `WidgetTree`, wire in `TermApp` |
@@ -301,7 +333,8 @@ Always update docs when changing architecture-visible behavior.
 
 | Feature | Files |
 |---------|-------|
-| Event loop | `term_app.go` |
+| Event loop + bus | `term_app.go` |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/uitcell/main.go` (`HandleCoreEvents`) |
 | Widget interface | `widget.go` |
 | Split tree | `node.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
@@ -310,7 +343,7 @@ Always update docs when changing architecture-visible behavior.
 | GDB UI | `gdb_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
-| Events | `core/events.go` |
+| Events / commands | `core/events.go`, `core/command.go` |
 | Modes | `app/modes.go` |
 | Entry point | `cmd/uitcell/main.go` |
 | Docs server | `cmd/docserve/main.go` |
