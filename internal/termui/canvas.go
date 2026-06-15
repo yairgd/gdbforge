@@ -22,8 +22,8 @@ func NewCanvas(s tcell.Screen, g *Grid) *Canvas {
 }
 
 func (c Canvas) Rect() Rect { return c.rect }
-func (c Canvas) W() int    { return c.rect.w }
-func (c Canvas) H() int    { return c.rect.h }
+func (c Canvas) W() int     { return c.rect.w }
+func (c Canvas) H() int     { return c.rect.h }
 
 func (c Canvas) ScreenX(localX int) int { return c.rect.x + localX }
 func (c Canvas) ScreenY(localY int) int { return c.rect.y + localY }
@@ -40,6 +40,9 @@ func (c Canvas) ShowCursor(localX, localY int) {
 	c.screen.ShowCursor(c.ScreenX(localX), c.ScreenY(localY))
 }
 
+func (c Canvas) HideCursor() {
+	c.screen.HideCursor()
+}
 func (c Canvas) Fill(ch rune, style tcell.Style) {
 	for row := 0; row < c.H(); row++ {
 		for col := 0; col < c.W(); col++ {

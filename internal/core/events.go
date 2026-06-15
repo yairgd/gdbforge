@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 //////////////////////////////
 // Event (Domain Layer)
 //////////////////////////////
@@ -7,11 +9,18 @@ package core
 type Event interface {
 	Type() string
 }
+
+type CommandEvent interface {
+	Event
+	CommandID() CommandID
+}
+
 type Emitter func(Event)
 
 // user typed message
 type SubmitMessage struct {
 	Text string
+	when time.Time
 }
 
 func (SubmitMessage) Type() string { return "SubmitMessage" }
@@ -19,6 +28,7 @@ func (SubmitMessage) Type() string { return "SubmitMessage" }
 // command like :hello
 type RunCommand struct {
 	Command string
+	when    time.Time
 }
 
 func (RunCommand) Type() string { return "RunCommand" }
@@ -26,16 +36,19 @@ func (RunCommand) Type() string { return "RunCommand" }
 // internal event (result)
 type MessageSent struct {
 	Text string
+	when time.Time
 }
 
 func (MessageSent) Type() string { return "MessageSent" }
 
-// internal event (result)
 type SubmitMsg struct {
-	Text string
+	Text  string
+	CmdID CommandID
+	Args  string
 }
 
-func (SubmitMsg) Type() string { return "SubmitMsg" }
+func (m SubmitMsg) Type() string            { return "SubmitMsg" }
+func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
 
 // internal event (result)
 type Quit struct {
@@ -56,7 +69,3 @@ type ConsoleOutput struct{ Text string }
 type TargetOutput struct{ Text string }
 type LogOutput struct{ Text string }
 type BreakpointHit struct{ Line int }
-
-//////////////////////////////
-// Helpers
-//////////////////////////////

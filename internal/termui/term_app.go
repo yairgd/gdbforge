@@ -10,7 +10,9 @@ import (
 
 type AppApi interface {
 	HandleUIEvent(ev tcell.Event)
+	HandleCoreEvents(ev core.Event)
 }
+
 type WidgetNode struct {
 	widget Widget
 	rect   Rect
@@ -53,6 +55,8 @@ func NewTermApp() *TermApp {
 	}
 }
 func (app *TermApp) Widgets() []WidgetNode { return app.widgets }
+func (app *TermApp) Exit()                 { app.exit = true }
+
 func (app *TermApp) Close() {
 	app.screen.Fini()
 }
@@ -73,24 +77,33 @@ func (app *TermApp) Run() {
 		app.screen.Fini()
 	}()
 	for !app.exit {
+		select {
 
-		ev := app.screen.PollEvent()
-		app.HandleEvent(ev)
+		case ev := <-app.events:
+			if app.Api != nil {
+				app.Api.HandleCoreEvents(ev)
+			}
 
-		for _, w := range app.widgets {
-			w.widget.HandleEvent(ev)
+		default:
+			ev := app.screen.PollEvent()
+			app.HandleEvent(ev)
+
+			for _, w := range app.widgets {
+				w.widget.HandleEvent(ev)
+			}
+			//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
+
+			app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})
+
+			// move grid to sceen
+			app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
+			app.screen.Show()
+
 		}
-		//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
-
-		app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})
-
-		// move grid to sceen
-		app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
-		app.screen.Show()
-
 	}
 
 }
+
 func (app *TermApp) UpdateCanvas() Canvas {
 	app.screen.Sync()
 	w, h := app.screen.Size()
@@ -146,6 +159,6 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 }
 
-func (app *TermApp) Emit(e core.Event) {
-	app.events <- e
+func (app *TermApp) Events() chan core.Event {
+	return app.events
 }

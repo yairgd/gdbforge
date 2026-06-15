@@ -2,7 +2,20 @@ package main
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/promptcore/internal/core"
 	"github.com/yairgd/promptcore/internal/termui"
+)
+
+const (
+	cmdBreak core.CommandID = iota + 1
+	cmdContinue
+	cmdNext
+	cmdStep
+	cmdPrint
+	cmdBacktrace
+	cmdInfo
+	cmdRun
+	cmdQuit
 )
 
 // DebuggerApp extends TermApp with debugger-specific behavior.
@@ -48,8 +61,20 @@ func (a *DebuggerApp) InitB() {
 		),
 	)
 
-	// Command line widget at the bottom.
-	a.AddWidget(termui.NewCmdWidget())
+	completer := core.NewSimpleCompleter([]core.Command{
+		{ID: cmdBreak, Name: "break"},
+		{ID: cmdContinue, Name: "continue"},
+		{ID: cmdNext, Name: "next"},
+		{ID: cmdStep, Name: "step"},
+		{ID: cmdPrint, Name: "print"},
+		{ID: cmdBacktrace, Name: "bt"},
+		{ID: cmdInfo, Name: "info"},
+		{ID: cmdRun, Name: "run"},
+		{ID: cmdQuit, Name: "quit"},
+	})
+	cmd := termui.NewCmdWidget(completer)
+	cmd.Events = a.Events()
+	a.AddWidget(cmd)
 }
 
 // Called by TermApp when a UI event occurs.
@@ -91,6 +116,20 @@ func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
 	}
 }
 
+func (app *DebuggerApp) HandleCoreEvents(ev core.Event) {
+	msg, ok := ev.(core.CommandEvent)
+	if !ok {
+		return
+	}
+
+	switch msg.CommandID() {
+	case core.CmdUnknown:
+		// TODO: show unknown command feedback in the UI
+	case cmdQuit:
+		app.Exit()
+	}
+}
+
 func main() {
 
 	// Create debugger application.
@@ -98,6 +137,4 @@ func main() {
 
 	// Start TUI event loop.
 	app.Run()
-
-	// app.Screen().Fini()
 }
