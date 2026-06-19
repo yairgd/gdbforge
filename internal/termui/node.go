@@ -72,15 +72,24 @@ func (n *Node) Rebalance(dir SplitDir) int {
 }
 
 func Units(n *Node, dir SplitDir) int {
+	if n == nil {
+		return 0
+	}
+
 	if n.Type == NodeLeaf {
 		return 1
 	}
 
 	if n.Dir == dir {
-		return Units(n.First, dir) + Units(n.Second, dir)
+		return Units(n.First, dir) +
+			Units(n.Second, dir)
 	}
 
-	return 1
+	// continue through opposite split
+	return max(
+		Units(n.First, dir),
+		Units(n.Second, dir),
+	)
 }
 
 type Node struct {
