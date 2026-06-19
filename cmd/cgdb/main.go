@@ -16,6 +16,8 @@ const (
 	cmdInfo
 	cmdRun
 	cmdQuit
+	cmdVerticalSplit
+	cmdHorizontalSplit
 )
 
 type DebuggerApp struct {
@@ -34,11 +36,8 @@ func (a *DebuggerApp) InitB() {
 	codeWidgetLeft := widgets.NewCodeWidget()
 	codeWidgetRight := widgets.NewCodeWidget()
 
-	c := a.UpdateCanvas()
-
 	a.AddWidget(
 		termui.NewTabTwoHozSplitWins(
-			c,
 			"basic debugger",
 			codeWidgetLeft,
 			codeWidgetRight,
@@ -55,6 +54,8 @@ func (a *DebuggerApp) InitB() {
 		{ID: cmdInfo, Name: "info"},
 		{ID: cmdRun, Name: "run"},
 		{ID: cmdQuit, Name: "quit"},
+		{ID: cmdVerticalSplit, Name: "vs"},
+		{ID: cmdHorizontalSplit, Name: "split"},
 	})
 	cmd := termui.NewCmdWidget(completer)
 	cmd.Events = a.Events()
@@ -85,7 +86,25 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 		// TODO: show unknown command feedback in the UI
 	case cmdQuit:
 		app.Exit()
+	case cmdVerticalSplit:
+		w := app.Widgets()[0].Widget()
+		tab, ok := (*w).(*termui.TabWidget)
+		if !ok {
+			return
+		}
+		tab.VerticalSplit(widgets.NewCodeWidget())
+		app.RequestRedraw()
+
+	case cmdHorizontalSplit:
+		w := app.Widgets()[0].Widget()
+		tab, ok := (*w).(*termui.TabWidget)
+		if !ok {
+			return
+		}
+		tab.HorizontalSplit(widgets.NewCodeWidget())
+		app.RequestRedraw()
 	}
+
 }
 
 func main() {

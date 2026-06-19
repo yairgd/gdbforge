@@ -12,7 +12,7 @@ import (
 // For now, we always have exactly one tab.
 type Tab struct {
 	Title  string
-	Layout *Layout
+	layout *Layout
 }
 
 //
@@ -50,7 +50,7 @@ func NewTabWidget(
 		tabs: []Tab{
 			{
 				Title:  title,
-				Layout: layout,
+				layout: layout,
 			},
 		},
 		active: 0,
@@ -63,7 +63,7 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 		return
 	}
 
-	active := t.tabs[t.active].Layout
+	active := t.tabs[t.active].layout
 
 	if active != nil {
 		active.HandleEvent(ev)
@@ -77,7 +77,7 @@ func (t *TabWidget) Draw(c Canvas) {
 		return
 	}
 
-	layout := t.tabs[t.active].Layout
+	layout := t.tabs[t.active].layout
 
 	if layout != nil {
 		r := c.Rect()
@@ -96,12 +96,22 @@ func (t *TabWidget) ActiveLayout() *Layout {
 		return nil
 	}
 
-	return t.tabs[t.active].Layout
+	return t.tabs[t.active].layout
+}
+
+func (t *TabWidget) VerticalSplit(w Widget) {
+	t.tabs[t.active].layout.NewSplit(Vertical, w)
+
+}
+
+func (t *TabWidget) HorizontalSplit(w Widget) {
+	t.tabs[t.active].layout.NewSplit(Horizontal, w)
+
 }
 
 // NewTab creates a new tab with an initial horizontal split layout.
 // The layout contains two widgets: top and bottom.
-func NewTabTwoHozSplitWins(canvas Canvas, title string, top Widget, bottom Widget) *TabWidget {
+func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 
 	//w, h := canvas.grid.W, canvas.grid.H
 	//	rect := Rect{0, 0, w, h - 2}
@@ -109,12 +119,13 @@ func NewTabTwoHozSplitWins(canvas Canvas, title string, top Widget, bottom Widge
 	layout := NewLayout(top) //, rect, canvas)
 	//	layout.SetRect(rect)
 	// split it to another node with bottom widget
-	layout.NewSplit(Horizontal, top)
-	layout.NewSplit(Vertical, top)
-	layout.NewSplit(Vertical, top)
-	layout.NewSplit(Horizontal, top)
 
-	layout.NewSplit(Vertical, bottom)
+	//	layout.NewSplit(Horizontal, top)
+	//	layout.NewSplit(Vertical, top)
+	//	layout.NewSplit(Vertical, top)
+	//	layout.NewSplit(Horizontal, top)
+	//	layout.NewSplit(Vertical, bottom)
+
 	//	layout.NewSplit(Horizontal, bottom)
 	//layout.NewSplit(Vertical, bottom)
 
@@ -131,7 +142,7 @@ func NewTabTwoHozSplitWins(canvas Canvas, title string, top Widget, bottom Widge
 		tabs: []Tab{
 			{
 				Title:  title,
-				Layout: layout,
+				layout: layout,
 			},
 		},
 		active: 0,

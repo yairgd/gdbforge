@@ -9,6 +9,8 @@ import (
 )
 
 type CodeWidget struct {
+	termui.Widget
+
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 

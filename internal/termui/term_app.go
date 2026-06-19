@@ -20,6 +20,7 @@ type WidgetNode struct {
 func (w *WidgetNode) SetRect(r Rect) {
 	w.rect = r
 }
+func (w *WidgetNode) Widget() *Widget { return &w.widget }
 
 type TermApp struct {
 	Api     AppApi
@@ -124,6 +125,12 @@ func (app *TermApp) Screen() tcell.Screen {
 	return app.screen
 }
 
+const redrawInterrupt = "termui-redraw"
+
+func (app *TermApp) RequestRedraw() {
+	app.screen.PostEvent(tcell.NewEventInterrupt(redrawInterrupt))
+}
+
 func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
@@ -142,11 +149,14 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventInterrupt:
 		switch data := e.Data().(type) {
-		//	case core.Event:
-		//		for _, w := range app.widgets {
-		//			w.HandleEvent(data)
-		//		}
 		case string:
+			if data == redrawInterrupt {
+				_ = a.UpdateCanvas()
+				if a.Api != nil {
+					a.Api.HandleUIEvent(ev) // so cmd/cgdb can redo SetRect on widgets
+				}
+				return
+			}
 			if data == "gdb-exit" {
 				return
 			}
