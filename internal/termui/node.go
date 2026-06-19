@@ -18,6 +18,59 @@ const (
 	Vertical                   // Split left/right (side by side)
 )
 
+func (n *Node) ComputeLeaves() int {
+	if n == nil {
+		return 0
+	}
+
+	if n.Type == NodeLeaf {
+		n.Leaves = 1
+		return 1
+	}
+
+	left := n.First.ComputeLeaves()
+	right := n.Second.ComputeLeaves()
+
+	n.Leaves = left + right
+
+	return n.Leaves
+}
+
+func (n *Node) ComputeRatios() {
+	if n == nil || n.Type == NodeLeaf {
+		return
+	}
+
+	total := n.First.Leaves + n.Second.Leaves
+
+	n.Ratio = float64(n.First.Leaves) / float64(total)
+
+	n.First.ComputeRatios()
+	n.Second.ComputeRatios()
+}
+
+func (n *Node) Rebalance(dir SplitDir) int {
+	if n == nil {
+		return 0
+	}
+
+	if n.Type == NodeLeaf {
+		return 1
+	}
+
+	// Different split direction -> treat subtree as one unit
+	if n.Dir != dir {
+		return 1
+	}
+
+	left := n.First.Rebalance(dir)
+	right := n.Second.Rebalance(dir)
+
+	n.Ratio = float64(left) / float64(left+right)
+
+	return left + right
+}
+
 func Units(n *Node, dir SplitDir) int {
 	if n.Type == NodeLeaf {
 		return 1
@@ -45,6 +98,7 @@ type Node struct {
 
 	First  *Node // First child node (top or left depending on Dir)
 	Second *Node // Second child node (bottom or right depending on Dir)
+	Leaves int
 }
 
 func (n *Node) HandleEvent(ev tcell.Event) {

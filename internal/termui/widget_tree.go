@@ -28,10 +28,10 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 	node.Dir = dir
 	node.Ratio = 0.5
 
-	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 0}
+	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 1}
 	w.focus = node.First
 
-	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 0}
+	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1}
 
 	node.Widget = nil
 }
@@ -76,8 +76,15 @@ func (l *WidgetTree) buildLayout(
 	switch node.Dir {
 
 	case Vertical:
+		total := Units(node, Vertical)
 
-		leftW := int(float64(c.W()) * node.Ratio)
+		leftW := int(
+			float64(c.W()) *
+				float64(Units(node.First, Vertical)) /
+				float64(total),
+		)
+
+		//leftW := int(float64(c.W()) * node.Ratio)
 		rightW := c.W() - leftW - 1
 
 		c.DrawVerticalLocal(leftW, 0, c.H(), false)
@@ -90,7 +97,15 @@ func (l *WidgetTree) buildLayout(
 
 	case Horizontal:
 
-		topH := int(float64(c.H()) * node.Ratio)
+		total := Units(node, Horizontal)
+
+		topH := int(
+			float64(c.H()) *
+				float64(Units(node.First, Horizontal)) /
+				float64(total),
+		)
+
+		//topH := int(float64(c.H()) * node.Ratio)
 		bottomH := c.H() - topH - 1
 
 		c.DrawHorizontalLocal(topH, 0, c.W(), false)
