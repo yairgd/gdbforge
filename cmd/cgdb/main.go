@@ -108,6 +108,9 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 }
 
 func main() {
+	trie := termui.Trie{}
+	trie.Bind("<C-w>l")
+
 	app := NewDebuggerApp()
 	app.Run()
 }
