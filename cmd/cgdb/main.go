@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -31,6 +33,12 @@ func NewDebuggerApp() *DebuggerApp {
 	dbg.InitB()
 	return dbg
 }
+func (a *DebuggerApp) OnCtrlW(args ...any) {
+	x := args[0].(string)
+	log.Print(x)
+}
+
+type KeySeqFunc func(seq string)
 
 func (a *DebuggerApp) InitB() {
 	codeWidgetLeft := widgets.NewCodeWidget()
@@ -60,6 +68,11 @@ func (a *DebuggerApp) InitB() {
 	cmd := termui.NewCmdWidget(completer)
 	cmd.Events = a.Events()
 	a.AddWidget(cmd)
+
+	a.BindKeySeq("<C-w>l", a.OnCtrlW)
+	a.BindKeySeq("<C-w>h", a.OnCtrlW)
+	a.BindKeySeq("<C-w>k", a.OnCtrlW)
+
 }
 
 func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
@@ -107,10 +120,14 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 
 }
 
-func main() {
-	trie := termui.Trie{}
-	trie.Bind("<C-w>l")
+func f1(args ...any) {
+	x := args[0].(int)
+	y := args[1].(int)
 
+	log.Print(x * y)
+}
+
+func main() {
 	app := NewDebuggerApp()
 	app.Run()
 }

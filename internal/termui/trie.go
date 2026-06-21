@@ -22,7 +22,7 @@ import (
 
 */
 
-type Callback func()
+type Callback func(args ...any)
 
 type Key struct {
 	Key  tcell.Key
@@ -33,11 +33,13 @@ type TrieNode struct {
 	Children     map[Key]*TrieNode
 	IsTerminal   bool
 	OnEnter      func()
-	OnExactMatch func()
+	OnExactMatch Callback
 }
 
 type Trie struct {
-	root TrieNode
+	root    TrieNode
+	current *TrieNode
+	seq     string
 }
 
 func NewTrie() *Trie {
@@ -107,7 +109,7 @@ var keyMap = map[string]tcell.Key{
 	"F12": tcell.KeyF12,
 }
 
-var keyToString = map[tcell.Key]string{
+var keyToStringMap = map[tcell.Key]string{
 	tcell.KeyCtrlA: "C-a",
 	tcell.KeyCtrlB: "C-b",
 	tcell.KeyCtrlC: "C-c",
@@ -165,9 +167,29 @@ var keyToString = map[tcell.Key]string{
 	tcell.KeyF12: "F12",
 }
 
+func (t *Trie) EventToKey(ev tcell.Event) (Key, bool) {
+	kev, ok := ev.(*tcell.EventKey)
+	if !ok {
+		return Key{}, false
+	}
+
+	return Key{
+		Key:  kev.Key(),
+		Rune: kev.Rune(),
+	}, true
+}
+
+func (t *Trie) normalize(k Key) Key {
+	if k.Key != tcell.KeyRune {
+		k.Rune = 0
+	}
+	return k
+}
+
 func (t *Trie) parseToken(str string) Key {
 	return Key{
-		Key: keyMap[str],
+		Key:  keyMap[str],
+		Rune: 0,
 	}
 }
 
@@ -177,7 +199,7 @@ func (t *Trie) keyToString(k Key) string {
 		return string(k.Rune)
 	}
 
-	return "<" + keyToString[k.Key] + ">"
+	return "<" + keyToStringMap[k.Key] + ">"
 }
 
 func (t *Trie) ParseSequence(str string) ([]Key, bool) {
@@ -222,6 +244,10 @@ func (t *Trie) insert(pending []Key, onExactMatch Callback) {
 	root := &t.root
 
 	for _, key := range pending {
+		if root.Children == nil {
+			root.Children = make(map[Key]*TrieNode)
+		}
+
 		if _, ok := root.Children[key]; !ok {
 			root.Children[key] = &TrieNode{
 				IsTerminal: false,
@@ -233,7 +259,7 @@ func (t *Trie) insert(pending []Key, onExactMatch Callback) {
 	root.OnExactMatch = onExactMatch
 }
 
-func (t *Trie) Search(str string) bool {
+func (t *Trie) SearchFull(str string) bool {
 	root := &t.root
 
 	if pending, ok := t.ParseSequence(str); ok {
@@ -257,4 +283,50 @@ func (t *Trie) Search(str string) bool {
 		return true
 	}
 	return false
+}
+
+func (t *Trie) SearchPartial(ev tcell.Event) bool {
+
+	var key Key
+	if k, ok := ev.(*tcell.EventKey); ok {
+		key = Key{
+			Key:  k.Key(),
+			Rune: k.Rune(),
+		}
+
+		if k.Key() != tcell.KeyRune {
+			key.Key = k.Key()
+			key.Rune = 0
+		}
+	} else {
+		t.current = nil
+		t.seq = ""
+		return false
+	}
+
+	if t.current == nil {
+		t.current = &t.root
+	}
+
+	if child, ok := t.current.Children[key]; ok {
+		t.current = child
+		t.seq += t.keyToString(key)
+	} else {
+		t.current = nil
+		t.seq = ""
+		return false
+	}
+
+	if !t.current.IsTerminal {
+		return false
+	}
+
+	if t.current.OnExactMatch != nil {
+		t.current.OnExactMatch(t.seq)
+		t.current = nil
+		t.seq = ""
+	}
+
+	return true
+
 }

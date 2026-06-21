@@ -34,6 +34,8 @@ type TermApp struct {
 	frontBuffer *Grid
 
 	canvas Canvas
+
+	trie Trie
 }
 
 func NewTermApp() *TermApp {
@@ -54,6 +56,10 @@ func NewTermApp() *TermApp {
 		events: make(chan Event, 100),
 	}
 }
+func (app *TermApp) BindKeySeq(seq string, fn Callback) {
+	app.trie.Bind(seq, fn)
+}
+
 func (app *TermApp) Widgets() []WidgetNode { return app.widgets }
 func (app *TermApp) Exit()                 { app.exit = true }
 
@@ -135,6 +141,8 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
 	case *tcell.EventKey:
+		a.trie.SearchPartial(ev)
+
 		switch e.Key() {
 		case tcell.KeyCtrlD:
 			a.exit = true
