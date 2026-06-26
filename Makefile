@@ -9,13 +9,22 @@ CMDS := $(notdir $(wildcard cmd/*))
 .PHONY: all
 all: build
 
+
+GOFILES := $(shell find . -name '*.go')
+
+$(BIN_DIR)/cgdb: $(GOFILES)
+	@mkdir -p $(BIN_DIR)
+	go build -gcflags="all=-N -l" -o $@ ./cmd/cgdb
+
+build: $(BIN_DIR)/cgdb
+	
 # -------- Build --------
-.PHONY: build
-build:
+.PHONY: build1
+build1: 
 	@mkdir -p $(BIN_DIR)
 	@for cmd in $(CMDS); do \
 		echo "Building $$cmd..."; \
-		go build -o $(BIN_DIR)/$$cmd ./cmd/$$cmd; \
+		go build -o $(BIN_DIR)/$$cmd -gcflags="all=-N -l"  ./cmd/$$cmd; \
 	done
 	@echo "Done."
 

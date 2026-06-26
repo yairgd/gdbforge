@@ -109,6 +109,26 @@ func (t *TabWidget) HorizontalSplit(w Widget) {
 
 }
 
+func (t *TabWidget) FocusLeft() {
+	t.tabs[t.active].layout.FocusLeft()
+
+}
+
+func (t *TabWidget) FocusRight() {
+	t.tabs[t.active].layout.FocusRight()
+
+}
+
+func (t *TabWidget) FocusUp() {
+	t.tabs[t.active].layout.FocusUp()
+
+}
+
+func (t *TabWidget) FocusDown() {
+	t.tabs[t.active].layout.FocusDown()
+
+}
+
 // NewTab creates a new tab with an initial horizontal split layout.
 // The layout contains two widgets: top and bottom.
 func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {

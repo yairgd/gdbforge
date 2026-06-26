@@ -4,24 +4,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 )
 
-/*
-
-ל־Trie קלאסי יש בדרך כלל 3 פעולות מרכזיות:
-
-    Insert
-
-        הכנסת מילה/רצף לעץ.
-
-    Search (Exact Match)
-
-        בדיקה האם מילה/רצף קיים במלואו.
-
-    Prefix Search (StartsWith)
-
-        בדיקה האם קיים לפחות איבר אחד שמתחיל בפרפיקס נתון.
-
-*/
-
 type Callback func(args ...any)
 
 type Key struct {
@@ -40,6 +22,7 @@ type Trie struct {
 	root    TrieNode
 	current *TrieNode
 	seq     string
+	keySeq  []Key
 }
 
 func NewTrie() *Trie {
@@ -301,6 +284,7 @@ func (t *Trie) SearchPartial(ev tcell.Event) bool {
 	} else {
 		t.current = nil
 		t.seq = ""
+		t.keySeq = t.keySeq[:0]
 		return false
 	}
 
@@ -311,9 +295,11 @@ func (t *Trie) SearchPartial(ev tcell.Event) bool {
 	if child, ok := t.current.Children[key]; ok {
 		t.current = child
 		t.seq += t.keyToString(key)
+		t.keySeq = append(t.keySeq, key)
 	} else {
 		t.current = nil
 		t.seq = ""
+		t.keySeq = t.keySeq[:0]
 		return false
 	}
 
@@ -322,9 +308,10 @@ func (t *Trie) SearchPartial(ev tcell.Event) bool {
 	}
 
 	if t.current.OnExactMatch != nil {
-		t.current.OnExactMatch(t.seq)
+		t.current.OnExactMatch(t.seq, t.keySeq)
 		t.current = nil
 		t.seq = ""
+		t.keySeq = t.keySeq[:0]
 	}
 
 	return true

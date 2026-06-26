@@ -16,6 +16,20 @@ func (l *Layout) HandleEvent(ev tcell.Event) {
 	l.tree.HandleEvent(ev)
 }
 
+func (l *Layout) FocusLeft() {
+	l.tree.FocusLeft()
+}
+func (l *Layout) FocusRight() {
+	l.tree.FocusRight()
+}
+
+func (l *Layout) FocusUp() {
+	l.tree.FocusUp()
+}
+func (l *Layout) FocusDown() {
+	l.tree.FocusDown()
+}
+
 func (l *Layout) Draw(c Canvas) {
 	l.tree.BuildLayout(c)
 	l.tree.Draw(c)

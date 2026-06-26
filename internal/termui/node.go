@@ -108,6 +108,8 @@ type Node struct {
 	First  *Node // First child node (top or left depending on Dir)
 	Second *Node // Second child node (bottom or right depending on Dir)
 	Leaves int
+
+	parent *Node
 }
 
 func (n *Node) HandleEvent(ev tcell.Event) {

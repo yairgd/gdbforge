@@ -24,6 +24,13 @@ const (
 
 type DebuggerApp struct {
 	*termui.TermApp
+	trie termui.Trie
+}
+
+func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
+	for _, seq := range seqs {
+		app.trie.Bind(seq, fn)
+	}
 }
 
 func NewDebuggerApp() *DebuggerApp {
@@ -34,8 +41,39 @@ func NewDebuggerApp() *DebuggerApp {
 	return dbg
 }
 func (a *DebuggerApp) OnCtrlW(args ...any) {
-	x := args[0].(string)
-	log.Print(x)
+	seq := args[0].(string)
+	keySeq := args[1].([]termui.Key)
+	log.Print(keySeq[0].Key)
+
+	log.Print(seq + "AAA")
+}
+
+func (app *DebuggerApp) OnFocusLeft(args ...any) {
+	w := app.Widgets()[0].Widget()
+	tab, _ := (*w).(*termui.TabWidget)
+	tab.FocusLeft()
+
+}
+
+func (app *DebuggerApp) OnFocusRight(args ...any) {
+	w := app.Widgets()[0].Widget()
+	tab, _ := (*w).(*termui.TabWidget)
+	tab.FocusRight()
+
+}
+
+func (app *DebuggerApp) OnFocusUp(args ...any) {
+	w := app.Widgets()[0].Widget()
+	tab, _ := (*w).(*termui.TabWidget)
+	tab.FocusUp()
+
+}
+
+func (app *DebuggerApp) OnFocusDown(args ...any) {
+	w := app.Widgets()[0].Widget()
+	tab, _ := (*w).(*termui.TabWidget)
+	tab.FocusDown()
+
 }
 
 type KeySeqFunc func(seq string)
@@ -69,14 +107,18 @@ func (a *DebuggerApp) InitB() {
 	cmd.Events = a.Events()
 	a.AddWidget(cmd)
 
-	a.BindKeySeq("<C-w>l", a.OnCtrlW)
-	a.BindKeySeq("<C-w>h", a.OnCtrlW)
-	a.BindKeySeq("<C-w>k", a.OnCtrlW)
+	a.BindKeySeq(a.OnFocusLeft, "<C-w>l", "<C-w><Left>")
+	a.BindKeySeq(a.OnFocusRight, "<C-w>h", "<C-w><Right>")
+	a.BindKeySeq(a.OnFocusUp, "<C-w>k", "<C-w><Up>")
+	a.BindKeySeq(a.OnFocusDown, "<C-w>j", "<C-w><Down>")
 
 }
 
 func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
 	switch ev.(type) {
+	case *tcell.EventKey:
+		a.trie.SearchPartial(ev)
+
 	case *tcell.EventResize:
 		c := a.UpdateCanvas()
 		w := a.Widgets()
