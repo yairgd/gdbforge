@@ -94,30 +94,8 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventKey:
 
-		// Vim-like behavior:
-		// command line is inactive until ':' is pressed.
-		//		if !c.active {
-		//
-		//			if e.Key() == tcell.KeyRune && e.Rune() == ':' {
-		//				c.active = true
-		//				c.text = ":"
-		//				c.cursor = 1
-		//			}
-		//
-		//			return
-		//		}
-
 		switch e.Key() {
 
-		//		case tcell.KeyEsc:
-		//
-		//			c.active = false
-		//			c.text = ""
-		//			c.cursor = 0
-		//			c.history.ResetNavigation()
-		//
-		//			return
-		//
 		case tcell.KeyTAB:
 
 			prefix := c.text
