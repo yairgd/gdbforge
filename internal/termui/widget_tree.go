@@ -1,8 +1,12 @@
 package termui
 
 import (
+	"math"
+
 	"github.com/gdamore/tcell/v2"
 )
+
+const DirectionWeight = 1000
 
 type WidgetTree struct {
 	root        *Node
@@ -40,124 +44,171 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 	l.focusWidget.HandleEvent(ev)
 }
 
-func (l *WidgetTree) FocusRight() {
-	if l.focus != nil {
-		l.focusRight(l.focus)
+func abs(x int) int {
+	if x < 0 {
+		return -x
 	}
+	return x
 }
 
-func (l *WidgetTree) focusRight(node *Node) {
-	if node == nil {
-		return
-	}
+func (t *WidgetTree) FocusRight() {
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
 
-	p := node.parent
-	if p == nil {
-		return
-	}
+	cur := t.focus
 
-	if p.Dir == Vertical && p.First == node {
-		n := p.Second
-		for n.Type != NodeLeaf {
-			n = n.First
+	var best *Node
+	bestScore := math.MaxInt
+
+	for _, n := range leaves {
+
+		if n == cur {
+			continue
 		}
-		l.focus = n
-		return
-	}
 
-	l.focusRight(p)
-}
+		// Must be to the right.
+		//	if n.canvas.rect.x < cur.canvas.rect.Right() {
+		//		continue
+		//	}
 
-func (l *WidgetTree) FocusLeft() {
-	if l.focus != nil {
-		l.focusLeft(l.focus)
-	}
-}
-
-func (l *WidgetTree) focusLeft(node *Node) {
-	if node == nil {
-		return
-	}
-
-	p := node.parent
-	if p == nil {
-		return
-	}
-
-	if p.Dir == Vertical && p.Second == node {
-		n := p.First
-		for n.Type != NodeLeaf {
-			n = n.Second
+		dx := n.canvas.rect.x - cur.canvas.rect.Right()
+		if dx < 0 {
+			continue
 		}
-		l.focus = n
-		return
-	}
 
-	l.focusLeft(p)
-}
+		dy := abs(n.canvas.rect.CenterY() - cur.canvas.rect.CenterY())
 
-func (l *WidgetTree) FocusUp() {
-	if l.focus != nil {
-		l.focusUp(l.focus)
-	}
-}
+		score := dx*DirectionWeight + dy
 
-func (l *WidgetTree) focusUp(node *Node) {
-	if node == nil {
-		return
-	}
-
-	p := node.parent
-	if p == nil {
-		return
-	}
-
-	if p.Dir == Horizontal && p.Second == node {
-		n := p.First
-		for n.Type != NodeLeaf {
-			n = n.Second
+		if score < bestScore {
+			bestScore = score
+			best = n
 		}
-		l.focus = n
-		return
 	}
 
-	l.focusUp(p)
-}
-
-func bottomMostLeaf(n *Node) *Node {
-	for n.Type != NodeLeaf {
-		n = n.Second
-	}
-	return n
-}
-
-func (l *WidgetTree) FocusDown() {
-	if l.focus != nil {
-		l.focusDown(l.focus)
+	if best != nil {
+		t.focus = best
 	}
 }
 
-func (l *WidgetTree) focusDown(node *Node) {
-	if node == nil {
-		return
-	}
+func (t *WidgetTree) FocusLeft() {
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
 
-	p := node.parent
-	if p == nil {
-		return
-	}
+	cur := t.focus
 
-	if p.Dir == Horizontal && p.First == node {
-		n := p.Second
-		for n.Type != NodeLeaf {
-			n = n.First
+	var best *Node
+	bestScore := math.MaxInt
+
+	for _, n := range leaves {
+
+		if n == cur {
+			continue
 		}
-		l.focus = n
-		return
+
+		// Must be to the left.
+		if n.canvas.rect.Right() > cur.canvas.rect.x {
+			continue
+		}
+
+		dx := cur.canvas.rect.x - n.canvas.rect.Right()
+		dy := abs(n.canvas.rect.CenterY() - cur.canvas.rect.CenterY())
+
+		score := dx*DirectionWeight + dy
+
+		if score < bestScore {
+			bestScore = score
+			best = n
+		}
 	}
 
-	l.focusDown(p)
+	if best != nil {
+		t.focus = best
+	}
 }
+
+func (t *WidgetTree) FocusDown() {
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
+
+	cur := t.focus
+
+	var best *Node
+	bestScore := math.MaxInt
+
+	for _, n := range leaves {
+
+		if n == cur {
+			continue
+		}
+
+		// Must be below.
+		if n.canvas.rect.y < cur.canvas.rect.Bottom() {
+			continue
+		}
+
+		dy := n.canvas.rect.y - cur.canvas.rect.Bottom()
+		dx := abs(n.canvas.rect.CenterX() - cur.canvas.rect.CenterX())
+
+		score := dy*DirectionWeight + dx
+
+		if score < bestScore {
+			bestScore = score
+			best = n
+		}
+	}
+
+	if best != nil {
+		t.focus = best
+	}
+}
+
+func (t *WidgetTree) FocusUp() {
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
+
+	cur := t.focus
+
+	var best *Node
+	bestScore := math.MaxInt
+
+	for _, n := range leaves {
+
+		if n == cur {
+			continue
+		}
+
+		// Must be above.
+		if n.canvas.rect.Bottom() > cur.canvas.rect.y {
+			continue
+		}
+
+		dy := cur.canvas.rect.y - n.canvas.rect.Bottom()
+		dx := abs(n.canvas.rect.CenterX() - cur.canvas.rect.CenterX())
+
+		score := dy*DirectionWeight + dx
+
+		if score < bestScore {
+			bestScore = score
+			best = n
+		}
+	}
+
+	if best != nil {
+		t.focus = best
+	}
+}
+
+func VerticalOverlap(a, b Rect) bool {
+	return a.Y() < b.Bottom() &&
+		b.Y() < a.Bottom()
+}
+
+func HorizontalOverlap(a, b Rect) bool {
+	return a.X() < b.Right() &&
+		b.X() < a.Right()
+}
+
 func (l *WidgetTree) Draw(c Canvas) {
 	l.draw(c, l.root)
 }

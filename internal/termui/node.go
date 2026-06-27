@@ -91,6 +91,19 @@ func Units(n *Node, dir SplitDir) int {
 		Units(n.Second, dir),
 	)
 }
+func (n *Node) TotLeaves(out *[]*Node) {
+	if n == nil {
+		return
+	}
+
+	if n.Type == NodeLeaf {
+		*out = append(*out, n)
+		return
+	}
+
+	n.First.TotLeaves(out)
+	n.Second.TotLeaves(out)
+}
 
 type Node struct {
 	Type NodeType // Defines whether this is a Leaf or Split node
