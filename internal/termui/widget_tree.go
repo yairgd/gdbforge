@@ -9,18 +9,16 @@ import (
 const DirectionWeight = 1000
 
 type WidgetTree struct {
-	root        *Node
-	focus       *Node
-	focusWidget Widget
+	root  *Node
+	focus *Node
 }
 
 func NewWidgetTree(newWidget Widget) WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: nil}
 
 	return WidgetTree{
-		root:        node,
-		focus:       node,
-		focusWidget: newWidget,
+		root:  node,
+		focus: node,
 	}
 }
 
@@ -32,7 +30,7 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 	node.Dir = dir
 	node.Ratio = 0.5
 
-	node.First = &Node{Type: NodeLeaf, Widget: w.focusWidget, Ratio: 1, parent: node}
+	node.First = &Node{Type: NodeLeaf, Widget: node.Widget, Ratio: 1, parent: node}
 	w.focus = node.First
 
 	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: node}
@@ -41,7 +39,9 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 }
 
 func (l *WidgetTree) HandleEvent(ev tcell.Event) {
-	l.focusWidget.HandleEvent(ev)
+	if l.focus != nil && l.focus.Type == NodeLeaf {
+		l.focus.Widget.HandleEvent(ev)
+	}
 }
 
 func abs(x int) int {
@@ -204,7 +204,12 @@ func (t *WidgetTree) DeleteFocus() bool {
 		return false
 	}
 
-	// Can't delete the last window.
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
+	if len(leaves) <= 1 {
+		return true
+	}
+
 	if t.focus.parent == nil {
 		return true
 	}
@@ -225,6 +230,9 @@ func (t *WidgetTree) DeleteFocus() bool {
 		t.root = sibling
 		sibling.parent = nil
 		t.focus = sibling
+		for t.focus.Type == NodeSplit {
+			t.focus = t.focus.First
+		}
 		return false
 	}
 
@@ -237,6 +245,9 @@ func (t *WidgetTree) DeleteFocus() bool {
 	sibling.parent = grand
 
 	t.focus = sibling
+	for t.focus.Type == NodeSplit {
+		t.focus = t.focus.First
+	}
 	return false
 }
 
