@@ -8,7 +8,8 @@ type Grid struct {
 	W int
 	H int
 
-	Cells [][]Cell
+	Cells     [][]Cell
+	BackCells [][]Cell
 }
 
 func NewGrid(w, h int) *Grid {
@@ -18,9 +19,12 @@ func NewGrid(w, h int) *Grid {
 	}
 
 	g.Cells = make([][]Cell, w+0)
+	g.BackCells = make([][]Cell, w+0)
 
 	for x := 0; x < w+0; x++ {
 		g.Cells[x] = make([]Cell, h)
+		g.BackCells[x] = make([]Cell, h)
+
 	}
 
 	return g
@@ -84,15 +88,21 @@ func (g *Grid) Draw(
 		for x := 0; x < g.W; x++ {
 			g.Cells[x][y].EdgesToRune()
 
-			r := g.Cells[x][y].Rune
-			if r != ' ' {
-				screen.SetContent(
-					x,
-					y,
-					r,
-					nil,
-					style,
-				)
+			if g.BackCells[x][y] != g.Cells[x][y] {
+				g.BackCells[x][y] = g.Cells[x][y]
+				r := g.Cells[x][y].Rune
+
+				if r != ' ' {
+					r := g.Cells[x][y].Rune
+					screen.SetContent(
+						x,
+						y,
+						r,
+						nil,
+						style,
+					)
+				}
+
 			}
 		}
 	}

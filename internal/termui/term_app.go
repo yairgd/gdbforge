@@ -29,7 +29,6 @@ type TermApp struct {
 	events  chan Event
 	exit    bool
 	// widgets draw here all the time
-	backBuffer *Grid
 	// last frame that was actually displayed
 	frontBuffer *Grid
 
@@ -108,7 +107,7 @@ func (app *TermApp) Run() {
 func (app *TermApp) UpdateCanvas() Canvas {
 	app.screen.Sync()
 	w, h := app.screen.Size()
-	app.backBuffer = NewGrid(w, h)
+	//	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
 	app.canvas = Canvas{app.screen, Rect{0, 0, w, h}, app.frontBuffer}
 	return app.canvas
