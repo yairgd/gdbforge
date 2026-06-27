@@ -206,7 +206,10 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 			// deleting ':' exits command mode
 			if len(r) == 1 && r[0] == ':' {
-
+				c.emit(SubmitMsg{
+					Text:  "exit from command mode",
+					CmdID: CmdExitMode,
+				})
 				c.active = false
 				c.text = ""
 				c.cursor = 0

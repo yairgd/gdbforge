@@ -3,6 +3,7 @@ package termui
 type CommandID int
 
 const CmdUnknown CommandID = 0
+const CmdExitMode CommandID = 1
 
 type Command struct {
 	ID   CommandID

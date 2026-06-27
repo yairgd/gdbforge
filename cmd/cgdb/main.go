@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	cmdBreak termui.CommandID = iota + 1
+	cmdBreak termui.CommandID = iota + 2
 	cmdContinue
 	cmdNext
 	cmdStep
@@ -160,6 +160,13 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 
 	switch msg.CommandID() {
 	case termui.CmdUnknown:
+		// TODO: show unknown command feedback in the UI
+
+	case termui.CmdExitMode:
+		if app.appState.Mode() == cgdb.ModeCommand {
+			app.appState.SetMode(cgdb.ModeNormal)
+			app.cmdWidget.Deativate()
+		}
 		// TODO: show unknown command feedback in the UI
 	case cmdQuit:
 		if app.tab.DeleteFocus() {
