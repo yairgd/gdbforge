@@ -8,8 +8,9 @@ import (
 )
 
 type AppApi interface {
-	HandleUIEvent(ev tcell.Event)
 	HandleCoreEvents(ev Event)
+	HandleKey(ev *tcell.EventKey)
+	HandleResize()
 }
 
 type WidgetNode struct {
@@ -134,7 +135,11 @@ func (app *TermApp) RequestRedraw() {
 func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
+
 	case *tcell.EventKey:
+		if a.Api != nil {
+			a.Api.HandleKey(e)
+		}
 
 		switch e.Key() {
 		case tcell.KeyCtrlD:
@@ -147,24 +152,22 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		}
 	case *tcell.EventResize:
 		_ = a.UpdateCanvas()
+		if a.Api != nil {
+			a.Api.HandleResize()
+		}
 
 	case *tcell.EventInterrupt:
 		switch data := e.Data().(type) {
 		case string:
 			if data == redrawInterrupt {
 				_ = a.UpdateCanvas()
-				if a.Api != nil {
-					a.Api.HandleUIEvent(ev) // so cmd/cgdb can redo SetRect on widgets
-				}
+
 				return
 			}
 			if data == "gdb-exit" {
 				return
 			}
 		}
-	}
-	if a.Api != nil {
-		a.Api.HandleUIEvent(ev)
 	}
 
 }

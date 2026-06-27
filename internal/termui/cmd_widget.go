@@ -96,6 +96,17 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 		switch e.Key() {
 
+		case tcell.KeyEscape:
+			c.emit(SubmitMsg{
+				Text:  "exit from command mode",
+				CmdID: CmdExitMode,
+			})
+			c.active = false
+			c.text = ""
+			c.cursor = 0
+
+			return
+
 		case tcell.KeyTAB:
 
 			prefix := c.text

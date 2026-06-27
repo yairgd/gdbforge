@@ -40,7 +40,7 @@ func NewDebuggerApp() *DebuggerApp {
 	dbg.TermApp = termui.NewTermApp()
 	dbg.TermApp.Api = dbg
 	dbg.InitB()
-	dbg.handleResize()
+	dbg.HandleResize()
 	return dbg
 }
 
@@ -97,7 +97,7 @@ func (a *DebuggerApp) InitB() {
 
 }
 
-func (a *DebuggerApp) handleKey(ev *tcell.EventKey) {
+func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 
 	switch a.appState.Mode() {
 
@@ -122,7 +122,7 @@ func (a *DebuggerApp) handleKey(ev *tcell.EventKey) {
 	}
 }
 
-func (a *DebuggerApp) handleResize() {
+func (a *DebuggerApp) HandleResize() {
 
 	c := a.UpdateCanvas()
 
@@ -132,24 +132,6 @@ func (a *DebuggerApp) handleResize() {
 	}
 	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
 	w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
-}
-
-func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
-	switch e := ev.(type) {
-
-	case *tcell.EventKey:
-
-		if e.Key() == tcell.KeyEscape {
-			a.cmdWidget.Deativate()
-			a.appState.SetMode(cgdb.ModeNormal)
-			return
-		}
-
-		a.handleKey(e)
-
-	case *tcell.EventResize:
-		a.handleResize()
-	}
 }
 
 func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
