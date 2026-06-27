@@ -129,6 +129,11 @@ func (t *TabWidget) FocusDown() {
 
 }
 
+func (t *TabWidget) DeleteFocus() bool {
+	return t.tabs[t.active].layout.DeleteFocus()
+
+}
+
 // NewTab creates a new tab with an initial horizontal split layout.
 // The layout contains two widgets: top and bottom.
 func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {

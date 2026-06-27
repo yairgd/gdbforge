@@ -1,7 +1,7 @@
 stateDiagram-v2
     [*] --> NormalMode
-    NormalMode --> FocusMode : focus widget
-    FocusMode --> NormalMode : unfocus / Esc
-    NormalMode --> CommandMode : press colon (planned)
-    CommandMode --> NormalMode : Enter / Esc
+    NormalMode --> FocusMode : focus widget (planned)
+    FocusMode --> NormalMode : unfocus / Esc (planned)
+    NormalMode --> CommandMode : press colon
+    CommandMode --> NormalMode : Esc
     FocusMode --> CommandMode : press colon (planned)

@@ -199,6 +199,47 @@ func (t *WidgetTree) FocusUp() {
 	}
 }
 
+func (t *WidgetTree) DeleteFocus() bool {
+	if t.focus == nil {
+		return false
+	}
+
+	// Can't delete the last window.
+	if t.focus.parent == nil {
+		return true
+	}
+
+	parent := t.focus.parent
+
+	var sibling *Node
+	if parent.First == t.focus {
+		sibling = parent.Second
+	} else {
+		sibling = parent.First
+	}
+
+	grand := parent.parent
+
+	// Parent is the root.
+	if grand == nil {
+		t.root = sibling
+		sibling.parent = nil
+		t.focus = sibling
+		return false
+	}
+
+	if grand.First == parent {
+		grand.First = sibling
+	} else {
+		grand.Second = sibling
+	}
+
+	sibling.parent = grand
+
+	t.focus = sibling
+	return false
+}
+
 func VerticalOverlap(a, b Rect) bool {
 	return a.Y() < b.Bottom() &&
 		b.Y() < a.Bottom()

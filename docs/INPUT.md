@@ -10,6 +10,7 @@ cgdb-go handles keyboard and mouse input through **tcell**, routes events based 
 
 - [Input overview](#input-overview)
 - [Keyboard handling](#keyboard-handling)
+- [Key-sequence trie](#key-sequence-trie)
 - [Mouse handling](#mouse-handling)
 - [Interaction modes](#interaction-modes)
 - [Vim-like command system](#vim-like-command-system)
@@ -24,34 +25,41 @@ cgdb-go handles keyboard and mouse input through **tcell**, routes events based 
 Keyboard / Mouse
         ↓
 TermApp (select loop)
-        ├── tcell.Event  → HandleUIEvent + widget HandleEvent → redraw
-        └── core.Event   → HandleCoreEvents (application dispatch hub)
+        ├── tcell.Event  → DebuggerApp.HandleUIEvent
+        │                    ├── mode router (AppState)
+        │                    ├── Trie (key sequences)
+        │                    └── TabWidget / CmdWidget HandleEvent → redraw
+        └── termui.Event → HandleCoreEvents (application dispatch hub)
 ```
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
-    participant Widget as Widget · e.g. CmdWidget
-    participant Bus as core.Event channel
+    participant Dbg as DebuggerApp
+    participant Widget as Widget · Tab / CmdWidget
+    participant Bus as termui.Event channel
     participant Core as HandleCoreEvents
     participant Render as Redraw
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> Widget: HandleEvent(ev)
+    App ->> Dbg: HandleUIEvent(ev)
+    Dbg ->> Dbg: handleKey · mode + trie routing
+    Dbg ->> Widget: HandleEvent(ev)
     Widget ->> Bus: Events <- SubmitMsg
     App ->> Bus: drain channel
     Bus ->> Core: HandleCoreEvents(ev)
     App ->> Render: Draw → Grid → Screen
 ```
 
-*Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
+*Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/input_routing.mermaid`](diagrams/input_routing.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
 
 **Design principles:**
 
 1. One thread owns input and rendering.
 2. Async sources (GDB PTY) inject **tcell** events via `PostEvent`, never by calling widget methods directly.
-3. Domain actions (commands, quit, debugger routing) publish **`core.Event`** to the bus; the application handles them in **`HandleCoreEvents`**, not in individual widgets.
+3. Domain actions (commands, quit, debugger routing) publish **`termui.Event`** to the bus; the application handles them in **`HandleCoreEvents`**, not in individual widgets.
+4. **Mode-aware routing** lives in the application layer (`DebuggerApp`), not in `TermApp` — the framework stays generic.
 
 ---
 
@@ -68,10 +76,36 @@ sequenceDiagram
 
 ### Dispatch (current)
 
-1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize).
-2. Each top-level widget's `HandleEvent` — receives **every** event today.
+1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize, redraw interrupt).
+2. `DebuggerApp.HandleUIEvent` — application-level routing:
+   - `Esc` — leave command mode, deactivate `CmdWidget`.
+   - `EventResize` — `handleResize()` assigns widget rects (tab = full height minus cmd line row; cmd line at row `H-1`).
+   - `EventKey` — `handleKey()` dispatches by `AppState.Mode()`.
+3. **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** (partial multi-key sequences) then to `TabWidget`.
+4. **`ModeCommand`** — all keys go to `CmdWidget`.
 
-**Gap:** no mode router; no focus-aware top-level dispatch. Target: Root layout sends events only to CmdLine, TabBar, or focused Workspace leaf based on mode.
+```mermaid
+flowchart TB
+    Poll["TermApp.PollEvent"]
+    UI["DebuggerApp.HandleUIEvent"]
+    Esc["Esc → Deactivate CmdWidget, ModeNormal"]
+    Router["handleKey · switch appState.Mode()"]
+    Trie["Trie.SearchPartial"]
+    Tab["TabWidget.HandleEvent"]
+    Cmd["CmdWidget.HandleEvent"]
+
+    Poll --> UI
+    UI -->|"EventKey Esc"| Esc
+    UI -->|"EventKey"| Router
+    Router -->|"ModeNormal"| Trie
+    Router -->|"ModeNormal"| Tab
+    Router -->|"ModeNormal · colon"| Cmd
+    Router -->|"ModeCommand"| Cmd
+```
+
+*Source: [`diagrams/input_routing.mermaid`](diagrams/input_routing.mermaid)*
+
+**Gap:** `ModeFocus` / `ModeInsert` are defined but not wired. Tab still receives keys in normal mode alongside the trie; focus-aware routing inside the workspace is partial (`WidgetTree.focus` exists, no global focus mode yet).
 
 ### Widget-level handling
 
@@ -91,14 +125,64 @@ Example: `CmdWidget` (`cmd_widget.go`):
 
 | Key | Action |
 |-----|--------|
-| `:` (when inactive) | Enter command mode |
 | `Enter` | Parse command, emit `SubmitMsg` on event bus |
-| `Esc` | Cancel command mode |
 | `Up` / `Down` | History navigation |
 | `Tab` | Complete command name |
-| `Backspace` on lone `:` | Exit command mode |
+| `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
+| Rune / editing keys | Insert, move cursor |
 
-On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `core.CmdUnknown`), and publishes to `TermApp.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
+Command mode entry and exit are handled by **`DebuggerApp`**, not inside `CmdWidget`:
+
+| Key | Handler | Action |
+|-----|---------|--------|
+| `:` | `handleKey` in normal mode | `SetMode(ModeCommand)`, `CmdWidget.Activate()` |
+| `Esc` | `HandleUIEvent` | `CmdWidget.Deativate()`, `SetMode(ModeNormal)` |
+
+On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termui.CmdUnknown`), and publishes to `TermApp.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
+
+---
+
+## Key-sequence trie
+
+Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`termui.Trie`** owned by `DebuggerApp`.
+
+```go
+type DebuggerApp struct {
+    *termui.TermApp
+    trie      termui.Trie
+    appState  cgdb.AppState
+    // ...
+}
+
+func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
+    for _, seq := range seqs {
+        app.trie.Bind(seq, fn)
+    }
+}
+```
+
+Sequence syntax (parsed by `Trie.ParseSequence`):
+
+| Token | Example |
+|-------|---------|
+| Control | `<C-w>`, `<C-d>` |
+| Arrow keys | `<Up>`, `<Left>` |
+| Single rune | append after modifiers, e.g. `<C-w>h` |
+
+In **normal mode**, each key event calls `Trie.SearchPartial(ev)` before `TabWidget.HandleEvent`. The trie tracks partial matches across keystrokes; on an exact match it invokes the bound callback (e.g. `OnFocusLeft` → `tab.FocusLeft()`).
+
+**Current bindings** (`cmd/cgdb/main.go`):
+
+| Sequence | Action |
+|----------|--------|
+| `<C-w>h`, `<C-w><Right>` | Focus right pane |
+| `<C-w>l`, `<C-w><Left>` | Focus left pane |
+| `<C-w>k`, `<C-w><Up>` | Focus up pane |
+| `<C-w>j`, `<C-w><Down>` | Focus down pane |
+
+Implementation: `internal/termui/trie.go`.
+
+**Design decision:** the trie lives on the application object, not in `TermApp`, so key bindings remain app-specific while `termui` provides the generic prefix-tree machinery.
 
 ---
 
@@ -131,38 +215,52 @@ screen.EnableMouse()
 ```mermaid
 stateDiagram-v2
     [*] --> NormalMode
-    NormalMode --> FocusMode : focus widget
-    FocusMode --> NormalMode : unfocus / Esc
-    NormalMode --> CommandMode : press colon (planned)
-    CommandMode --> NormalMode : Enter / Esc
+    NormalMode --> FocusMode : focus widget (planned)
+    FocusMode --> NormalMode : unfocus / Esc (planned)
+    NormalMode --> CommandMode : press colon
+    CommandMode --> NormalMode : Esc
     FocusMode --> CommandMode : press colon (planned)
 ```
 
 *Source: [`diagrams/input_modes.mermaid`](diagrams/input_modes.mermaid)*
 
-| Mode | Keys go to | Purpose |
-|------|------------|---------|
-| **Normal** | Global handler | Navigation, tab switch, quit, enter focus |
-| **Focus** | Focused Workspace widget | Pane-specific editing (source scroll, GDB input) |
-| **Command** | CmdLine | `:` UI commands |
+| Mode | Keys go to | Purpose | Status |
+|------|------------|---------|--------|
+| **Normal** | Trie + `TabWidget` | Navigation, key sequences, workspace input | **Implemented** |
+| **Focus** | Focused Workspace widget | Pane-specific editing (source scroll, GDB input) | Planned |
+| **Command** | `CmdWidget` | `:` UI commands | **Implemented** |
+| **Search** | TBD | Search prompt (e.g. `/` in source) | Reserved |
 
-Mode constants are planned for `cmd/cgdb` / `termui`:
+Mode state lives in **`internal/cgdb`** (`AppState`), not in `termui`:
 
 ```go
+// internal/cgdb/mode_manager.go
+type Mode int
+
 const (
-    NormalMode Mode = iota
-    FocusMode
-    CommandMode
+    ModeNormal Mode = iota
+    ModeCommand
+    ModeSearch
+    ModeInsert
 )
+
+type AppState struct {
+    mode Mode
+}
 ```
 
-**Design decision:** three modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
+`DebuggerApp` owns `appState cgdb.AppState` and switches modes in `handleKey` / `HandleUIEvent`. `TermApp` has no knowledge of modes.
 
-- Normal mode avoids accidentally typing into GDB when navigating.
-- Focus mode is pane-local (like Vim insert, but per-widget semantics).
+**Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
+
+- Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
+- Focus mode will be pane-local (like Vim insert, but per-widget semantics).
 - Command mode is for UI operations, not debugger commands.
 
-**Gap:** modes are not wired into `TermApp` yet. `CmdWidget.active` implements local command-mode activation when `:` is pressed.
+**Gaps:**
+
+- `ModeFocus` / `ModeInsert` / `ModeSearch` are defined but not routed yet.
+- After Enter on a command, `CmdWidget` deactivates but `AppState` may still be `ModeCommand` until `Esc` — reset on submit is planned.
 
 ---
 
@@ -176,7 +274,7 @@ The CmdLine accepts `:` prefixed commands. Press `:` to activate `CmdWidget`; ty
 flowchart LR
     CmdLine["CmdWidget"]
     Parse["Parse :cmd args"]
-    Completer["core.AutoCompleter"]
+    Completer["termui.AutoCompleter"]
     Bus["TermApp.events"]
     Handler["HandleCoreEvents"]
     Actions["App dispatch by CommandID"]
@@ -187,29 +285,30 @@ flowchart LR
 
 Flow:
 
-1. User presses `:` → `CmdWidget` enters command mode.
+1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()`.
 2. User types `:break main`, presses Enter.
 3. `CmdWidget` tokenizes input (`break`, args `main`).
 4. `AutoCompleter` resolves `break` → app-private `cmdBreak` ID.
 5. `SubmitMsg{Text, CmdID, Args}` published on event bus.
 6. **`HandleCoreEvents`** switches on `CommandID()` — exit, forward to GDB, layout change, etc.
-7. Unknown commands arrive with `core.CmdUnknown`.
+7. Unknown commands arrive with `termui.CmdUnknown`.
 
 ### Command ID ownership
 
 | Layer | Constants | Visibility |
 |-------|-----------|------------|
-| `core` | `CmdUnknown` | Infra — shared sentinel for unrecognized commands |
+| `termui` | `CmdUnknown` | Infra — shared sentinel for unrecognized commands |
 | `cmd/cgdb` | `cmdBreak`, `cmdQuit`, … | **Private to app** — `iota + 1` so `0` stays `CmdUnknown` |
 
 The completer is built in the application with app command IDs:
 
 ```go
-completer := core.NewSimpleCompleter([]core.Command{
+completer := termui.NewSimpleCompleter([]termui.Command{
     {ID: cmdBreak, Name: "break"},
     {ID: cmdQuit, Name: "quit"},
 })
-cmd.Events = app.Events()
+a.cmdWidget = termui.NewCmdWidget(completer)
+a.cmdWidget.Events = a.Events()
 ```
 
 `termui` never imports app command constants — it only emits resolved IDs from the completer.
@@ -243,17 +342,17 @@ screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 
 ---
 
-## Planned keybindings
+## Keybindings
 
-### Normal mode (planned)
+### Normal mode
 
-| Key | Action |
-|-----|--------|
-| `:` | Enter command mode |
-| `Tab` / `Shift-Tab` | Cycle focus |
-| `Ctrl+W h/j/k/l` | Focus direction |
-| `Ctrl+D` | Quit |
-| `1-9` | Switch tab |
+| Key | Action | Status |
+|-----|--------|--------|
+| `:` | Enter command mode | Implemented |
+| `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
+| `Ctrl+D` | Quit | Implemented (`TermApp`) |
+| `Tab` / `Shift-Tab` | Cycle focus | Planned |
+| `1-9` | Switch tab | Planned |
 
 ### Focus mode (planned)
 
@@ -263,14 +362,14 @@ screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 | `:` | Enter command mode |
 | Pane-specific | Widget handles (scroll, GDB input, etc.) |
 
-### Command mode (planned)
+### Command mode
 
-| Key | Action |
-|-----|--------|
-| `Enter` | Execute command |
-| `Esc` | Cancel, return to previous mode |
-| `Up` / `Down` | Command history |
-| `Tab` | Completion |
+| Key | Action | Status |
+|-----|--------|--------|
+| `Enter` | Execute command | Implemented |
+| `Esc` | Cancel, return to normal mode | Implemented |
+| `Up` / `Down` | Command history | Implemented |
+| `Tab` | Completion | Implemented |
 
 ---
 

@@ -49,11 +49,15 @@ Add: `internal/termui/layout.go`, `node.go`, `tab.go`, `cmd_widget.go`, `interna
 ```text
 TermApp
   ├── AppApi (implemented by DebuggerApp)
-  │     ├── HandleUIEvent(tcell.Event)     — resize layout, terminal hooks
-  │     └── HandleCoreEvents(core.Event)   — ALL domain events land here
-  ├── events chan core.Event               — bus; any subsystem may publish
-  ├── top-level widgets
-  │     ├── TabBar / Workspace / CmdLine
+  │     ├── HandleUIEvent(tcell.Event)     — resize, mode router, trie
+  │     └── HandleCoreEvents(termui.Event) — ALL domain events land here
+  ├── events chan termui.Event             — bus; any subsystem may publish
+  ├── DebuggerApp fields
+  │     ├── appState cgdb.AppState         — ModeNormal / ModeCommand / …
+  │     ├── trie termui.Trie               — multi-key bindings
+  │     ├── tab *TabWidget
+  │     └── cmdWidget *CmdWidget
+  ├── top-level widgets (tab + cmd line)
   │     └── CmdWidget.Events → events channel
   ├── backBuffer / frontBuffer (Grid)
   └── select loop: drain bus OR PollEvent → draw
@@ -61,7 +65,7 @@ TermApp
 Widget
   ├── HandleEvent(tcell.Event)   — local keys / mouse
   ├── Draw(Canvas)
-  └── publish core.Event         — when app-level action needed
+  └── publish termui.Event       — when app-level action needed
 
 GDB path (today):
   GDBClient (goroutine) → EventInterrupt → GDBWidget
@@ -72,8 +76,9 @@ GDB path (target):
 **Rules:**
 
 - High-rate GDB output → buffer + viewport.
-- Domain actions → publish `core.Event`, handle in **`HandleCoreEvents`** — not in widget code.
-- App command IDs are **private** to the application package; only `core.CmdUnknown` lives in infra.
+- Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget code.
+- App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
+- Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
 - Never spawn GDB from widget code — use `core.Debugger` from the app layer.
 
 ---
@@ -91,7 +96,9 @@ GDB path (target):
 | **Workspace** | Middle band containing the split tree only |
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
-| **CommandID** | Int token; `core.CmdUnknown` in infra; app IDs private |
+| **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
+| **AppState** | `cgdb.AppState` — current interaction mode |
+| **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |
 | **MiMsg** | Parsed batch of MI lines |
@@ -143,14 +150,13 @@ sequenceDiagram
 
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
-    Main->>App: UpdateCanvas()
-    Main->>App: AddWidget(...)
+    Main->>App: InitB · AddWidget · handleResize()
     loop until Ctrl+D
-        App->>Screen: select: core.Event OR PollEvent
-        alt core.Event
+        App->>Screen: select: termui.Event OR PollEvent
+        alt termui.Event
             App->>App: HandleCoreEvents
         else tcell
-            App->>App: HandleUIEvent + widget HandleEvent
+            App->>App: HandleUIEvent · modes / trie / widgets
             App->>App: Draw + grid flush + Show
         end
     end
@@ -162,6 +168,7 @@ sequenceDiagram
 | **Init** | `NewTermApp` | Opens screen, enables mouse |
 | **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size |
 | **Register widgets** | `AddWidget` | Appends to widget slice |
+| **Initial layout** | `handleResize()` in `NewDebuggerApp` | Tab rect + cmd line at row `H-1` |
 | **Run** | `Run` | Blocks until `Ctrl+D` |
 | **Close** | `Close` / defer | Restores terminal |
 
@@ -195,11 +202,17 @@ cmd.Events = app.Events()
 4. Handle events in the application — not in the widget:
 
 ```go
-func (app *MyApp) HandleCoreEvents(ev core.Event) {
-    msg, ok := ev.(core.CommandEvent)
+func (app *MyApp) HandleCoreEvents(ev termui.Event) {
+    msg, ok := ev.(termui.CommandEvent)
     if !ok { return }
     switch msg.CommandID() { /* ... */ }
 }
+```
+
+4. Bind multi-key sequences on the app trie:
+
+```go
+app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
 ```
 
 **Rules:**
@@ -308,7 +321,8 @@ dlv debug ./cmd/docserve -- --port 8765
 | Garbled borders | Nested splits without grid | Check `BuildLayout` before `Draw` |
 | GDB hangs | Target binary missing | Build `hello` or fix `gdb_client.go` target |
 | No GDB output | Reader goroutine exited | Check channel close / PTY errors |
-| Keys affect all widgets | Flat event dispatch | Expected until Root layout routes by focus |
+| Keys affect all widgets | Normal mode forwards to tab after trie | Expected until focus mode is wired |
+| Cmd line invisible | Wrong rect (`y = H` instead of `H-1`) | Fix in `handleResize()` |
 | Mermaid not rendering in docs | CDN blocked | Check network; view raw `.md` |
 | Port 8765 in use | Previous docserve running | `fuser -k 8765/tcp` or `--port 8766` |
 
@@ -321,9 +335,10 @@ dlv debug ./cmd/docserve -- --port 8765
 | New debugger pane | Copy `code_widget.go`, register in layout |
 | New backend | Implement `core.Debugger`, new `internal/<backend>/` |
 | New `:` command | Add private `CommandID` in app, register in completer, handle in `HandleCoreEvents` |
+| New key chord | `app.BindKeySeq(callback, "<C-x>…")` in `InitB` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Route `Canvas.SetContent` through `Grid`, compare buffers |
-| Focus movement | Add methods on `WidgetTree`, wire in `TermApp` |
+| Focus mode | Wire `ModeFocus` in `handleKey`, suppress tab dispatch |
 
 Always update docs when changing architecture-visible behavior.
 
@@ -334,17 +349,19 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`HandleCoreEvents`) |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`DebuggerApp`, `handleKey`) |
+| Interaction modes | `internal/cgdb/mode_manager.go` |
+| Key-sequence trie | `trie.go`, bindings in `cmd/cgdb/main.go` |
 | Widget interface | `widget.go` |
 | Split tree | `node.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
-| Command line | `cmd_widget.go`, `core/history.go`, `core/autocomplete.go` |
-| GDB UI | `gdb_widget.go` |
+| Command line | `cmd_widget.go`, `history.go`, `autocomplete.go` |
+| GDB UI | `widgets/gdb_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
-| Events / commands | `core/events.go`, `core/command.go` |
-| Modes | `app/modes.go` |
+| UI events / commands | `termui/event.go`, `termui/command.go` |
+| Debugger events | `core/events.go` |
 | Entry point | `cmd/cgdb/main.go` |
 | Docs server | `cmd/docserve/main.go` |
 

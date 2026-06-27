@@ -63,7 +63,14 @@ graph TB
 - The command line is a stable anchor (like Vim's `:` line).
 - Workspace resize math is isolated — only the middle band changes height on terminal resize.
 
-**Current gap:** `TermApp` registers widgets in a flat slice rather than a structured `RootLayout`. Migration path: introduce `RootWidget` that owns the three bands internally.
+**Current gap:** `TermApp` registers widgets in a flat slice rather than a structured `RootLayout`. **`DebuggerApp.handleResize`** assigns rects today:
+
+```go
+w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))       // TabWidget (workspace)
+w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))     // CmdWidget (bottom row)
+```
+
+Called on startup (`NewDebuggerApp`) and on every `EventResize`. Migration path: introduce `RootWidget` that owns the three bands internally.
 
 ---
 
@@ -241,18 +248,20 @@ The **CmdLine** is a top-level band for **Vim-style `:` commands**, distinct fro
 
 `CmdWidget` (`cmd_widget.go`) provides:
 
-- Vim-style `:` activation and drawing on the bottom line.
-- Command history (`core.History`) — Up/Down navigation.
-- Tab completion (`core.AutoCompleter`) — command name only.
+- Vim-style `:` activation and drawing on the bottom line (row `H-1` of the terminal).
+- Command history (`termui.History`) — Up/Down navigation.
+- Tab completion (`termui.AutoCompleter`) — command name only.
 - **`SubmitMsg` on the event bus** — resolved `CommandID` + args; app dispatches in `HandleCoreEvents`.
+
+Command mode is entered by **`DebuggerApp`** (`:` → `ModeCommand`, `CmdWidget.Activate()`), not by `CmdWidget` alone. `Esc` returns to normal mode at the app layer.
+
+**Current state:** `:quit` closes focused pane or exits via `HandleCoreEvents`. Split commands (`:vs`, `:split`) partially wired. Unknown commands emit `termui.CmdUnknown`.
 
 **Design decision:** separate CmdLine from GDB console because:
 
 - GDB console speaks MI/cli dialect; CmdLine speaks **UI commands** (`:split`, `:focus`, `:tabnew`, `:quit`).
 - Users can run UI operations without sending spurious input to GDB.
 - Completion vocabularies differ (UI vs debugger).
-
-**Current state:** `:quit` exits via `HandleCoreEvents`. Other debugger commands registered but not yet dispatched. Unknown commands emit `core.CmdUnknown`.
 
 Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer).
 

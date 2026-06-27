@@ -30,7 +30,8 @@ cgdb-go/
 │   └── dbug/              # (removed — was a dev helper)
 ├── internal/
 │   ├── termui/            # TUI framework (tcell) ★
-│   ├── cgdb/              # App-specific debugger widgets ★
+│   ├── cgdb/              # App layer: modes, app state ★
+│   │   ├── mode_manager.go
 │   │   └── widgets/
 │   ├── core/              # UI-agnostic domain logic ★
 │   ├── gdb/               # GDB MI2 backend ★
@@ -70,6 +71,8 @@ task build
 |------|----------------|
 | `term_app.go` | Event loop, `AppApi`, `termui.Event` bus, widget list, grid buffers |
 | `event.go`, `command.go` | UI event bus, `SubmitMsg`, `CommandID`, `CmdUnknown` |
+| `cmd_widget.go` | Global `:` command line |
+| `trie.go` | Multi-key sequence prefix tree |
 | `history.go`, `autocomplete.go` | CmdLine helpers |
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types |
@@ -81,18 +84,20 @@ task build
 | `rect.go` | Rectangle primitive |
 | `utf.go` | UTF-8 / ANSI text drawing |
 | `tab.go` | Tab container (single-tab stub) |
-| `cmd_widget.go` | Global `:` command line |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Placeholder for shared widget helpers |
 
 ## internal/cgdb
 
-**cgdb-go application layer** — debugger-specific widgets.
+**cgdb-go application layer** — app state and debugger-specific widgets.
 
 | Path | Responsibility |
 |------|----------------|
+| `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
 | `widgets/gdb_widget.go` | GDB console pane |
+
+`cmd/cgdb` imports this package for `cgdb.AppState`. Key routing, trie bindings, and widget composition remain in `cmd/cgdb/main.go` (`DebuggerApp`).
 
 ```mermaid
 flowchart TB
@@ -117,7 +122,7 @@ flowchart TB
 
 **Rule:** if it can be tested without a terminal, it belongs here.
 
-CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`.
+CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`. UI domain events (`SubmitMsg`, `CommandID`) also live in **`termui`**; `core/events.go` holds debugger-backend event types (`GdbOutputMsg`, …).
 
 ---
 
@@ -170,6 +175,7 @@ Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
 flowchart BT
     tcell["gdamore/tcell"]
     termui["internal/termui"]
+    cgdb_pkg["internal/cgdb"]
     widgets["internal/cgdb/widgets"]
     core["internal/core"]
     gdb["internal/gdb"]
@@ -181,6 +187,7 @@ flowchart BT
     gdb --> core
 
     cgdb_cmd --> termui
+    cgdb_cmd --> cgdb_pkg
     cgdb_cmd --> widgets
     cgdb_cmd --> core
     cgdb_cmd --> gdb
@@ -199,9 +206,10 @@ flowchart BT
 | Split pane layout? | `termui` |
 | GDB MI parsing? | `gdb` |
 | Scrollable text buffer? | `core` |
-| Key binding in focus mode? | `termui` widget |
+| Key binding in normal mode? | `cmd/cgdb` (`Trie`, `BindKeySeq`) |
+| Interaction mode state? | `internal/cgdb` (`AppState`) |
 | Spawn/debug external process? | `gdb` (or future backend) |
-| Vim `:` command registry? | `termui` + `cmd/cgdb` dispatch |
+| Vim `:` command registry? | `termui` completer + `cmd/cgdb` dispatch |
 | Draw box borders? | `termui` Grid/Cell |
 | Compose UI + GDB + dispatch? | `cmd/cgdb` |
 

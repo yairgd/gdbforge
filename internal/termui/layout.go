@@ -30,6 +30,10 @@ func (l *Layout) FocusDown() {
 	l.tree.FocusDown()
 }
 
+func (l *Layout) DeleteFocus() bool {
+	return l.tree.DeleteFocus()
+}
+
 func (l *Layout) Draw(c Canvas) {
 	l.tree.BuildLayout(c)
 	l.tree.Draw(c)

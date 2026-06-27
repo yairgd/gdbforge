@@ -16,6 +16,7 @@ This document covers the cgdb-go presentation layer: the widget system, split-tr
 - [Grid abstraction](#grid-abstraction)
 - [Rendering pipeline](#rendering-pipeline)
 - [Focus management](#focus-management)
+- [Key-sequence trie](#key-sequence-trie)
 - [Event handling](#event-handling)
 - [TermApp lifecycle](#termapp-lifecycle)
 - [Existing widgets](#existing-widgets)
@@ -68,8 +69,9 @@ classDiagram
     }
 
     class CmdWidget {
-        +history core.History
-        +completer core.AutoCompleter
+        +history History
+        +completer AutoCompleter
+        +active bool
     }
 
     class TabWidget {
@@ -317,14 +319,43 @@ Current behavior:
 - `WidgetTree.HandleEvent` forwards to `focusWidget` only.
 - New tree starts with focus on the root leaf.
 - `Split` moves focus to the **first** (original) child.
+- **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
+
+**Mode-aware routing** (implemented in `cmd/cgdb/main.go`):
+
+| Mode | Terminal keys routed to |
+|------|-------------------------|
+| `ModeNormal` | Trie (partial match) + `TabWidget` → focused leaf |
+| `ModeCommand` | `CmdWidget` only |
 
 **Planned behavior** (see [INPUT.md](INPUT.md)):
 
-- Normal mode: global shortcuts; `Tab` / `hjkl` to move focus between leaves.
-- Focus mode: all keys routed to focused widget.
-- Command mode: keys routed to CmdLine.
+- Focus mode: all keys routed to focused widget; normal-mode navigation keys suppressed.
+- Visual focus indicator (border highlight).
 
-**Gap:** no focus movement API yet; no visual focus indicator (border highlight).
+**Gap:** no dedicated focus mode; tab still receives keys in normal mode after trie processing.
+
+---
+
+## Key-sequence trie
+
+`termui.Trie` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns the trie and binds callbacks:
+
+```go
+app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
+```
+
+| API | Purpose |
+|-----|---------|
+| `Bind(str, fn)` | Register a sequence string → callback |
+| `SearchPartial(ev)` | Feed one key; invoke callback on exact terminal match |
+| `ParseSequence(str)` | Parse `"<C-w>h"` into `[]Key` |
+
+Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) defined in `trie.go`.
+
+**Design decision:** trie state (`current`, `keySeq`) is per-application, not global — multiple apps or test harnesses can bind independently.
+
+Implementation: `internal/termui/trie.go`. Wiring: `cmd/cgdb/main.go` (`BindKeySeq`, called from `handleKey` in normal mode).
 
 ---
 
@@ -334,8 +365,8 @@ cgdb-go separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|
-| Terminal | `tcell.Event` | `TermApp.HandleUIEvent` + each widget's `HandleEvent` |
-| Domain | `core.Event` | **`AppApi.HandleCoreEvents`** — single application dispatch hub |
+| Terminal | `tcell.Event` | `TermApp.HandleEvent` → **`DebuggerApp.HandleUIEvent`** → mode / trie / widgets |
+| Domain | `termui.Event` | **`AppApi.HandleCoreEvents`** — single application dispatch hub |
 
 ### Terminal dispatch (current)
 
@@ -343,36 +374,51 @@ cgdb-go separates **terminal events** from **domain events**.
 flowchart TB
     Select["TermApp.Run select loop"]
     Poll["PollEvent · tcell"]
-    Bus["<- events · core.Event"]
-    UI["HandleUIEvent"]
-    Widgets["widget HandleEvent"]
+    Bus["<- events · termui.Event"]
+    TermHandler["TermApp.HandleEvent"]
+    UI["DebuggerApp.HandleUIEvent"]
+    Router["handleKey · AppState.Mode()"]
+    Trie["Trie.SearchPartial"]
+    Widgets["TabWidget / CmdWidget"]
     Core["HandleCoreEvents"]
     Draw["Draw all widgets"]
     Flush["Grid → Screen"]
 
     Select --> Poll
     Select --> Bus
-    Poll --> UI --> Widgets --> Draw --> Flush
+    Poll --> TermHandler --> UI --> Router
+    Router --> Trie
+    Router --> Widgets --> Draw --> Flush
     Bus --> Core
 ```
 
-The main loop uses `select` with a `default` branch: drain pending `core.Event` messages first, otherwise poll tcell. This keeps domain dispatch responsive without blocking keyboard input.
+*Source: [`diagrams/input_routing.mermaid`](diagrams/input_routing.mermaid)*
+
+The main loop uses `select` with a `default` branch: drain pending `termui.Event` messages first, otherwise poll tcell. This keeps domain dispatch responsive without blocking keyboard input.
 
 Global keys handled by `TermApp`:
 
 | Key | Action |
 |-----|--------|
 | `Ctrl+D` | Exit application |
-| Resize | Reallocate grids via `UpdateCanvas()`; app recalculates widget rects in `HandleUIEvent` |
+| Resize | Reallocate grids via `UpdateCanvas()`; `DebuggerApp.handleResize()` sets widget rects |
+
+Application keys handled by `DebuggerApp`:
+
+| Key / context | Action |
+|---------------|--------|
+| `Esc` | Leave command mode |
+| `:` (normal mode) | Enter command mode |
+| `<C-w>…` (normal mode) | Focus movement via trie |
 
 ### Domain event bus
 
-Any subsystem can publish to `TermApp.events` (`Events() chan core.Event`). The bus is **not** broadcast to widgets — every event is delivered to the application:
+Any subsystem can publish to `TermApp.events` (`Events() chan termui.Event`). The bus is **not** broadcast to widgets — every event is delivered to the application:
 
 ```go
 type AppApi interface {
     HandleUIEvent(ev tcell.Event)
-    HandleCoreEvents(ev core.Event)   // single hub for all domain events
+    HandleCoreEvents(ev Event)   // single hub for all domain events
 }
 ```
 
@@ -392,7 +438,7 @@ type AppApi interface {
 4. `TermApp.Run` receives from channel, calls `DebuggerApp.HandleCoreEvents`.
 5. App switches on `CommandID()`, calls `app.Exit()`.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer) for command ID ownership (`core.CmdUnknown` vs app-private IDs).
+See [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer) for command ID ownership (`termui.CmdUnknown` vs app-private IDs).
 
 ### Async terminal events
 
@@ -414,14 +460,14 @@ sequenceDiagram
 
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
-    Main->>App: UpdateCanvas()
-    Main->>App: AddWidget(...)
+    Main->>App: InitB · AddWidget tab + cmdWidget
+    Main->>App: handleResize() · initial layout
     loop until exit
-        App->>Screen: select: drain core.Event OR PollEvent
-        alt core.Event on bus
+        App->>Screen: select: drain termui.Event OR PollEvent
+        alt termui.Event on bus
             App->>App: HandleCoreEvents(ev)
         else tcell event
-            App->>App: HandleUIEvent + widget HandleEvent
+            App->>App: HandleUIEvent · modes / trie / widgets
             App->>App: Draw + frontBuffer.Draw + Show
         end
     end
@@ -430,7 +476,7 @@ sequenceDiagram
 
 `AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/main.go`):
 
-- `HandleUIEvent` — terminal-level hooks (resize layout today).
+- `HandleUIEvent` — terminal-level hooks (resize layout, **mode routing**, trie dispatch).
 - `HandleCoreEvents` — **all** domain events from the bus.
 
 `AppAPI` in `app_api.go` (`Publish`, `RequestRedraw`, …) is a separate planned surface for widgets; not yet wired everywhere.

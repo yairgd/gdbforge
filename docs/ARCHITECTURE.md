@@ -51,15 +51,17 @@ flowchart TB
         Render["Canvas → Grid → tcell"]
     end
 
-    subgraph Application["Application · cmd/cgdb"]
+    subgraph Application["Application · cmd/cgdb + internal/cgdb"]
         DebuggerApp["DebuggerApp"]
+        AppState["AppState · modes"]
+        Trie["Trie · key sequences"]
         HandleCore["HandleCoreEvents"]
     end
 
-    subgraph Domain["Domain · internal/core"]
-        Events["Event bus"]
+    subgraph Domain["Domain · internal/core + termui events"]
+        Events["termui.Event bus"]
         Buffer["Buffer / Viewport"]
-        History["History / Autocomplete"]
+        History["History / Autocomplete · termui"]
         DebuggerIF["Debugger interface"]
     end
 
@@ -87,10 +89,13 @@ flowchart TB
 | **Split tree** | `termui.Layout`, `WidgetTree`, `Node` | Recursive pane division inside Workspace |
 | **Widget layer** | `termui.Widget` implementations | Per-pane UI and input handling |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
-| **Domain events** | `core.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
+| **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model** | `core.Buffer`, `core.Viewport` | Scrollable line storage for console/source views |
+| **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
+| **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
+| **App modes** | `cgdb.AppState` | Normal / Command / Search / Insert mode state |
 | **Debugger backend** | `gdb.GDBClient`, `core.Debugger` | PTY I/O, MI2 parsing |
-| **Application shell** | `cmd/cgdb` (`DebuggerApp`) | Composes UI, widgets, GDB; owns `HandleCoreEvents` |
+| **Application shell** | `cmd/cgdb` (`DebuggerApp`) | Composes UI, widgets, GDB; owns modes, trie, `HandleCoreEvents` |
 
 ---
 
@@ -102,23 +107,26 @@ cgdb-go uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
-| **Terminal** | `tcell.Event` | `PollEvent` → `HandleUIEvent` + widget `HandleEvent` |
-| **Domain** | `core.Event` | Any producer → `TermApp.events` channel → **`HandleCoreEvents`** |
+| **Terminal** | `tcell.Event` | `PollEvent` → `DebuggerApp.HandleUIEvent` → mode router / trie / widgets |
+| **Domain** | `termui.Event` | Any producer → `TermApp.events` channel → **`HandleCoreEvents`** |
 
-Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `core.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
+Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `termui.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
-    participant Widget as Widget · e.g. CmdWidget
-    participant Bus as core.Event channel
+    participant Dbg as DebuggerApp
+    participant Widget as Widget · Tab / CmdWidget
+    participant Bus as termui.Event channel
     participant Core as HandleCoreEvents
     participant Render as Redraw
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> Widget: HandleEvent(ev)
-    Widget ->> Bus: Events <- SubmitMsg / other core.Event
+    App ->> Dbg: HandleUIEvent(ev)
+    Dbg ->> Dbg: handleKey · mode + trie routing
+    Dbg ->> Widget: HandleEvent(ev)
+    Widget ->> Bus: Events <- SubmitMsg / other termui.Event
     App ->> Bus: drain channel
     Bus ->> Core: AppApi.HandleCoreEvents(ev)
     Core ->> Core: dispatch by CommandID / type
@@ -161,9 +169,10 @@ flowchart TB
 
     subgraph TermApp["TermApp event loop"]
         Poll["PollEvent · tcell.Event"]
-        Bus["events chan · core.Event"]
-        UIHandler["HandleUIEvent"]
-        Widgets["widget HandleEvent"]
+        Bus["events chan · termui.Event"]
+        UIHandler["DebuggerApp.HandleUIEvent"]
+        ModeRouter["AppState + Trie + handleKey"]
+        Widgets["TabWidget / CmdWidget HandleEvent"]
         CoreHub["HandleCoreEvents"]
         Draw["Draw pipeline"]
         Screen["Terminal screen"]
@@ -178,7 +187,7 @@ flowchart TB
     User --> Poll
     Async --> Poll
     Poll --> UIHandler
-    Poll --> Widgets
+    UIHandler --> ModeRouter --> Widgets
     Widgets -->|"publish domain events"| Bus
     Async -.->|"planned: publish"| Bus
     Bus --> CoreHub --> Dispatch
@@ -191,7 +200,9 @@ flowchart TB
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `core.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+
+Terminal input routing (modes, trie, widget dispatch) is also centralized in **`DebuggerApp`**, keeping `TermApp` a generic event loop and draw orchestrator.
 
 ---
 
@@ -222,18 +233,23 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 - Runs the poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to widgets that use `internal/gdb`.
 
-### Application (`cmd/cgdb`)
+### Application (`cmd/cgdb` + `internal/cgdb`)
 
-- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns **`HandleCoreEvents`** — the single dispatch hub for domain events.
+- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns:
+  - **`HandleCoreEvents`** — single dispatch hub for domain events.
+  - **`AppState`** (`internal/cgdb/mode_manager.go`) — interaction mode (`ModeNormal`, `ModeCommand`, …).
+  - **`Trie`** — multi-key binding table (`BindKeySeq`, `SearchPartial` in normal mode).
+  - Direct references to **`TabWidget`** and **`CmdWidget`** for layout and command-line routing.
 - Defines app-specific `CommandID` values (break, continue, quit, …).
-- Interaction modes (`Normal`, `Focus`, `Command`) are planned; `CmdWidget.active` implements local command-mode when `:` is pressed.
+- **`ModeNormal` / `ModeCommand`** are wired; focus and search modes are reserved.
 
-### Domain (`internal/core`)
+### Domain (`internal/core` + `termui` event types)
 
-- **`Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg`, `GdbOutputMsg`, etc.
-- **`CommandID`** — infra constant `CmdUnknown` only; app-specific command IDs live in the application package.
+- **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
+- **`core` debugger events** — `GdbOutputMsg`, etc. (`internal/core/events.go`) — for backend → UI paths.
+- **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/cgdb`.
 - `Buffer`, `Viewport` for text panes.
-- `History`, `AutoCompleter` for command-line UX.
+- `History`, `AutoCompleter` for command-line UX (`termui`).
 - `Debugger` interface — minimal send API.
 
 ### Infrastructure (`internal/gdb`)
@@ -248,7 +264,7 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 
 ## Core events layer
 
-The **event bus** decouples UI widgets from application logic. Any subsystem may publish a `core.Event`; the main loop delivers every event to **`HandleCoreEvents`** on the application object. Widgets stay thin — they parse local input and emit domain events; the app owns side effects.
+The **event bus** decouples UI widgets from application logic. Any subsystem may publish a `termui.Event`; the main loop delivers every event to **`HandleCoreEvents`** on the application object. Widgets stay thin — they parse local input and emit domain events; the app owns side effects.
 
 ```mermaid
 flowchart TB
@@ -259,8 +275,8 @@ flowchart TB
         Future["Plugins / timers · planned"]
     end
 
-    subgraph Bus["core event bus"]
-        Chan["TermApp.events chan core.Event"]
+    subgraph Bus["termui event bus"]
+        Chan["TermApp.events chan termui.Event"]
     end
 
     subgraph Loop["TermApp.Run main loop"]
@@ -271,6 +287,8 @@ flowchart TB
     subgraph App["Application · DebuggerApp"]
         Handler["HandleCoreEvents — single dispatch hub"]
         CmdSwitch["switch CommandID / event type"]
+        Modes["AppState · mode router"]
+        TrieNode["Trie · key sequences"]
     end
 
     CmdW -->|"Events <- SubmitMsg"| Chan
@@ -280,6 +298,8 @@ flowchart TB
 ```
 
 *Source: [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
+
+Mode and key-sequence routing happen in **`DebuggerApp.HandleUIEvent`** / `handleKey` before widgets see terminal events — see [INPUT.md](INPUT.md#interaction-modes).
 
 ### Interfaces and types
 
@@ -329,32 +349,40 @@ classDiagram
 
 | Layer | Owns |
 |-------|------|
-| **`core`** | `CommandID` type, **`CmdUnknown`** (value `0`) |
+| **`termui`** | `CommandID` type, **`CmdUnknown`** (value `0`), `SubmitMsg`, event bus channel |
 | **Application** (`cmd/cgdb`) | Private constants: `cmdBreak`, `cmdQuit`, … starting at `iota + 1` |
 
-`CmdWidget` never references app command names. It resolves user input through `core.AutoCompleter` and emits `SubmitMsg{CmdID: …}`. Unknown commands emit `core.CmdUnknown`.
+`CmdWidget` never references app command names. It resolves user input through `termui.AutoCompleter` and emits `SubmitMsg{CmdID: …}`. Unknown commands emit `termui.CmdUnknown`.
 
 ### Wiring
 
 ```go
 // termui/term_app.go
 type AppApi interface {
-    HandleUIEvent(ev tcell.Event)      // terminal-level hooks · resize layout
-    HandleCoreEvents(ev core.Event)    // all domain events land here
+    HandleUIEvent(ev tcell.Event)       // terminal-level hooks · resize, mode routing
+    HandleCoreEvents(ev Event)          // all domain events land here
 }
 
 // cmd/cgdb/main.go
-cmd.Events = a.Events()   // CmdWidget publishes to TermApp channel
+type DebuggerApp struct {
+    *termui.TermApp
+    trie      termui.Trie
+    appState  cgdb.AppState
+    tab       *termui.TabWidget
+    cmdWidget *termui.CmdWidget
+}
 
-func (app *DebuggerApp) HandleCoreEvents(ev core.Event) {
+a.cmdWidget.Events = a.Events()
+
+func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
     switch msg.CommandID() {
-    case core.CmdUnknown: /* feedback */
-    case cmdQuit:         app.Exit()
+    case termui.CmdUnknown: /* feedback */
+    case cmdQuit:         /* close pane or exit */
     }
 }
 ```
 
-Implementation: `internal/core/events.go`, `internal/core/command.go`, `internal/termui/term_app.go`, `internal/termui/cmd_widget.go`.
+Implementation: `internal/termui/event.go`, `internal/termui/command.go`, `internal/cgdb/mode_manager.go`, `internal/termui/trie.go`, `internal/termui/term_app.go`, `internal/termui/cmd_widget.go`.
 
 ---
 
@@ -364,13 +392,15 @@ The **target** architecture is documented across this tree. The **current** code
 
 | Component | Target | Current state |
 |-----------|--------|---------------|
-| Root layout | TabBar + Workspace + CmdLine | Widgets registered flat on `TermApp` |
+| Root layout | TabBar + Workspace + CmdLine | Flat widget list; `handleResize` assigns tab + cmd line rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `Layout` / `WidgetTree` implemented |
-| CmdLine | Global `:` command input | `CmdWidget` — draw, history, emits `SubmitMsg` on event bus |
-| Event bus | `core.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired; GDB publish planned |
+| CmdLine | Global `:` command input | `CmdWidget` on bottom row (`H-1`); mode routing in `DebuggerApp` |
+| Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
+| Key bindings | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
+| Interaction modes | Normal / Focus / Command | **Normal + Command wired** via `cgdb.AppState` |
 | Rendering | Diff-based grid flush | Full grid draw every frame |
-| Focus | Mode-aware routing | `WidgetTree.focus` — partial |
+| Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
 | Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |
 
 Entry point: `cmd/cgdb/main.go`.

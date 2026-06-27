@@ -30,15 +30,17 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | `Canvas` / `Rect` | Done | Local coordinates |
 | `Grid` / `Cell` borders | Done | Unicode box drawing |
 | `TermApp` event loop | Done | Poll, draw, flush |
-| Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list on `TermApp` |
+| Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list; `handleResize` places cmd line at `H-1` |
 | `TabWidget` | Stub | Single tab, no header |
-| `CmdWidget` | Partial | Draw, history, tab complete; emits `SubmitMsg` on event bus |
+| `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
+| Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
+| Interaction modes | Partial | **Normal + Command** wired via `cgdb.AppState` |
 | `CodeWidget` | Prototype | Placeholder draw |
 | `GDBWidget` | Prototype | MI input/output, buffer display |
 | `GDBClient` MI2 PTY | Prototype | Hardcoded target `hello` |
 | Diff rendering | Not started | Full grid flush |
-| Interaction modes | Not wired | Constants exist in `app/modes.go` |
+| Focus mode | Not wired | `ModeInsert` / focus routing reserved |
 | Mouse support | Enabled | No handlers |
 | Lua plugins | Design only | See [PLUGINS.md](PLUGINS.md) |
 | OpenOCD / JTAG | Not started | Design in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
@@ -90,7 +92,8 @@ Dates are indicative — adjust as development progresses.
 | Tab header rendering | Visible tab bar with switch keys |
 | CmdLine dispatch | `SubmitMsg` on event bus → `HandleCoreEvents` by `CommandID` |
 | Focus indicators | Bold border on focused pane |
-| Focus movement | `Ctrl+W` + arrow keys |
+| Focus movement | `Ctrl+W` + arrow keys — **partial (trie wired)** |
+| Mode router | Normal / Command — **partial**; Focus / Search planned |
 
 ### M2 — Rendering efficiency
 
@@ -116,7 +119,7 @@ Dates are indicative — adjust as development progresses.
 
 | Feature | Description |
 |---------|-------------|
-| Normal / Focus / Command modes | Wired through `TermApp` |
+| Normal / Focus / Command modes | Focus mode remaining; Normal + Command wired in `DebuggerApp` |
 | Window commands | `:vsplit`, `:close`, `:focus` |
 | Tab commands | `:tabnew`, `:tabn` |
 | Command completion | UI + debugger vocab |

@@ -6,20 +6,22 @@ flowchart TB
         Future["Plugins / timers · planned"]
     end
 
-    subgraph Bus["core event bus"]
-        Chan["TermApp.events chan core.Event"]
+    subgraph Bus["termui event bus"]
+        Chan["TermApp.events chan termui.Event"]
     end
 
     subgraph Loop["TermApp.Run main loop"]
         Select["select: channel vs PollEvent"]
         CoreDispatch["AppApi.HandleCoreEvents(ev)"]
-        TcellDispatch["HandleUIEvent + widget HandleEvent"]
+        TcellDispatch["DebuggerApp.HandleUIEvent · modes / trie"]
         Draw["Draw → Grid → Screen"]
     end
 
-    subgraph App["Application · cmd/cgdb"]
+    subgraph App["Application · DebuggerApp"]
         Handler["HandleCoreEvents — single dispatch hub"]
         CmdSwitch["switch CommandID / event type"]
+        Modes["AppState · handleKey"]
+        Trie["Trie · SearchPartial"]
         Actions["Exit, debugger, layout, …"]
     end
 
@@ -32,4 +34,7 @@ flowchart TB
     Select --> CoreDispatch
     CoreDispatch --> Handler --> CmdSwitch --> Actions
 
-    Select --> TcellDispatch --> Draw
+    Select --> TcellDispatch
+    TcellDispatch --> Modes
+    TcellDispatch --> Trie
+    TcellDispatch --> Draw

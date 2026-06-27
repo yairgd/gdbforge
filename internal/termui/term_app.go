@@ -20,7 +20,7 @@ type WidgetNode struct {
 func (w *WidgetNode) SetRect(r Rect) {
 	w.rect = r
 }
-func (w *WidgetNode) Widget() *Widget { return &w.widget }
+func (w *WidgetNode) Widget() Widget { return w.widget }
 
 type TermApp struct {
 	Api     AppApi
@@ -89,9 +89,9 @@ func (app *TermApp) Run() {
 			ev := app.screen.PollEvent()
 			app.HandleEvent(ev)
 
-			for _, w := range app.widgets {
-				w.widget.HandleEvent(ev)
-			}
+			//for _, w := range app.widgets {
+			//	w.widget.HandleEvent(ev)
+			//}
 			//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
 
 			app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})

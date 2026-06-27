@@ -1,9 +1,8 @@
 package main
 
 import (
-	"log"
-
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/cgdb"
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -24,7 +23,10 @@ const (
 
 type DebuggerApp struct {
 	*termui.TermApp
-	trie termui.Trie
+	trie      termui.Trie
+	appState  cgdb.AppState
+	tab       *termui.TabWidget
+	cmdWidget *termui.CmdWidget
 }
 
 func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
@@ -38,42 +40,24 @@ func NewDebuggerApp() *DebuggerApp {
 	dbg.TermApp = termui.NewTermApp()
 	dbg.TermApp.Api = dbg
 	dbg.InitB()
+	dbg.handleResize()
 	return dbg
-}
-func (a *DebuggerApp) OnCtrlW(args ...any) {
-	seq := args[0].(string)
-	keySeq := args[1].([]termui.Key)
-	log.Print(keySeq[0].Key)
-
-	log.Print(seq + "AAA")
 }
 
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
-	w := app.Widgets()[0].Widget()
-	tab, _ := (*w).(*termui.TabWidget)
-	tab.FocusLeft()
-
+	app.tab.FocusLeft()
 }
 
 func (app *DebuggerApp) OnFocusRight(args ...any) {
-	w := app.Widgets()[0].Widget()
-	tab, _ := (*w).(*termui.TabWidget)
-	tab.FocusRight()
-
+	app.tab.FocusRight()
 }
 
 func (app *DebuggerApp) OnFocusUp(args ...any) {
-	w := app.Widgets()[0].Widget()
-	tab, _ := (*w).(*termui.TabWidget)
-	tab.FocusUp()
-
+	app.tab.FocusUp()
 }
 
 func (app *DebuggerApp) OnFocusDown(args ...any) {
-	w := app.Widgets()[0].Widget()
-	tab, _ := (*w).(*termui.TabWidget)
-	tab.FocusDown()
-
+	app.tab.FocusDown()
 }
 
 type KeySeqFunc func(seq string)
@@ -82,13 +66,12 @@ func (a *DebuggerApp) InitB() {
 	codeWidgetLeft := widgets.NewCodeWidget()
 	codeWidgetRight := widgets.NewCodeWidget()
 
-	a.AddWidget(
-		termui.NewTabTwoHozSplitWins(
-			"basic debugger",
-			codeWidgetLeft,
-			codeWidgetRight,
-		),
+	a.tab = termui.NewTabTwoHozSplitWins(
+		"basic debugger",
+		codeWidgetLeft,
+		codeWidgetRight,
 	)
+	a.AddWidget(a.tab)
 
 	completer := termui.NewSimpleCompleter([]termui.Command{
 		{ID: cmdBreak, Name: "break"},
@@ -103,9 +86,9 @@ func (a *DebuggerApp) InitB() {
 		{ID: cmdVerticalSplit, Name: "vs"},
 		{ID: cmdHorizontalSplit, Name: "split"},
 	})
-	cmd := termui.NewCmdWidget(completer)
-	cmd.Events = a.Events()
-	a.AddWidget(cmd)
+	a.cmdWidget = termui.NewCmdWidget(completer)
+	a.cmdWidget.Events = a.Events()
+	a.AddWidget(a.cmdWidget)
 
 	a.BindKeySeq(a.OnFocusLeft, "<C-w>l", "<C-w><Left>")
 	a.BindKeySeq(a.OnFocusRight, "<C-w>h", "<C-w><Right>")
@@ -114,19 +97,58 @@ func (a *DebuggerApp) InitB() {
 
 }
 
-func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
-	switch ev.(type) {
-	case *tcell.EventKey:
-		a.trie.SearchPartial(ev)
+func (a *DebuggerApp) handleKey(ev *tcell.EventKey) {
 
-	case *tcell.EventResize:
-		c := a.UpdateCanvas()
-		w := a.Widgets()
-		if len(w) < 2 {
+	switch a.appState.Mode() {
+
+	case cgdb.ModeNormal:
+
+		if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
+			a.appState.SetMode(cgdb.ModeCommand)
+			a.cmdWidget.Activate()
+			return
+		} else {
+			a.trie.SearchPartial(ev)
+			a.tab.HandleEvent(ev)
+		}
+
+	case cgdb.ModeCommand:
+		a.cmdWidget.HandleEvent(ev)
+		if ev.Key() == tcell.KeyEnter {
+			a.appState.SetMode(cgdb.ModeNormal)
+			a.cmdWidget.Deativate()
+		}
+
+	}
+}
+
+func (a *DebuggerApp) handleResize() {
+
+	c := a.UpdateCanvas()
+
+	w := a.Widgets()
+	if len(w) < 2 {
+		return
+	}
+	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
+	w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
+}
+
+func (a *DebuggerApp) HandleUIEvent(ev tcell.Event) {
+	switch e := ev.(type) {
+
+	case *tcell.EventKey:
+
+		if e.Key() == tcell.KeyEscape {
+			a.cmdWidget.Deativate()
+			a.appState.SetMode(cgdb.ModeNormal)
 			return
 		}
-		w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
-		w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
+
+		a.handleKey(e)
+
+	case *tcell.EventResize:
+		a.handleResize()
 	}
 }
 
@@ -140,19 +162,21 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 	case termui.CmdUnknown:
 		// TODO: show unknown command feedback in the UI
 	case cmdQuit:
-		app.Exit()
-	case cmdVerticalSplit:
-		w := app.Widgets()[0].Widget()
-		tab, ok := (*w).(*termui.TabWidget)
-		if !ok {
-			return
+		if app.tab.DeleteFocus() {
+			// close last window - exit app
+			app.Exit()
 		}
-		tab.VerticalSplit(widgets.NewCodeWidget())
+
+		app.RequestRedraw()
+
+	case cmdVerticalSplit:
+
+		app.tab.VerticalSplit(widgets.NewCodeWidget())
 		app.RequestRedraw()
 
 	case cmdHorizontalSplit:
 		w := app.Widgets()[0].Widget()
-		tab, ok := (*w).(*termui.TabWidget)
+		tab, ok := w.(*termui.TabWidget)
 		if !ok {
 			return
 		}
@@ -160,13 +184,6 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 		app.RequestRedraw()
 	}
 
-}
-
-func f1(args ...any) {
-	x := args[0].(int)
-	y := args[1].(int)
-
-	log.Print(x * y)
 }
 
 func main() {

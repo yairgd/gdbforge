@@ -110,7 +110,7 @@ type Node struct {
 
 	// --- Leaf node fields ---
 	Widget Widget // The UI component stored in this node (only valid if Type == Leaf)
-	Rect   Rect
+	//Rect   Rect
 
 	canvas Canvas
 
@@ -136,7 +136,7 @@ func (n *Node) HandleEvent(ev tcell.Event) {
 }
 
 func (n *Node) SetRect(r Rect) {
-	n.Rect = r
+	//n.Rect = r
 }
 
 //func (n *Node) Draw(r Rect) {

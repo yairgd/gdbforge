@@ -37,7 +37,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 go run ./cmd/cgdb
 ```
 
-Requires a terminal with UTF-8 support. The prototype registers a split workspace, a functional `:` command line, and an event bus that dispatches domain events through `HandleCoreEvents`.
+Requires a terminal with UTF-8 support. The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords** via a key trie, and an event bus that dispatches domain events through `HandleCoreEvents`.
 
 ### View documentation in a browser
 
@@ -121,7 +121,7 @@ cgdb-go/
 │   ├── termui/        # cgdb-go terminal UI (primary)
 │   ├── core/          # UI-agnostic logic (events, buffers)
 │   ├── gdb/           # GDB MI2 client and parsing
-│   └── cgdb/widgets/  # Debugger panes
+│   ├── cgdb/          # App state (modes) + debugger panes
 └── docs/              # This documentation tree
 ```
 
@@ -137,8 +137,10 @@ Details: [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md).
 | Canvas / Grid / Cell borders | Implemented |
 | GDB MI2 PTY client | Prototype |
 | Root layout (TabBar + Workspace + CmdLine) | Partial |
+| Interaction modes (Normal / Command) | Partial |
+| Key-sequence trie (`Ctrl+W` focus) | Partial |
 | Diff rendering | Planned |
-| Vim command mode | Planned |
+| Focus mode / search mode | Planned |
 | Lua plugins | Planned |
 
 Full tracker: [ROADMAP.md](ROADMAP.md).

@@ -71,6 +71,19 @@ func (c *CmdWidget) submitCommand() {
 		Args:  args,
 	})
 }
+func (c *CmdWidget) Activate() {
+	c.active = true
+	c.text = ":"
+	c.cursor = 1
+
+}
+func (c *CmdWidget) Deativate() {
+	c.active = false
+	c.text = ""
+	c.cursor = 0
+	c.history.ResetNavigation()
+
+}
 
 func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
@@ -83,28 +96,28 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 		// Vim-like behavior:
 		// command line is inactive until ':' is pressed.
-		if !c.active {
-
-			if e.Key() == tcell.KeyRune && e.Rune() == ':' {
-				c.active = true
-				c.text = ":"
-				c.cursor = 1
-			}
-
-			return
-		}
+		//		if !c.active {
+		//
+		//			if e.Key() == tcell.KeyRune && e.Rune() == ':' {
+		//				c.active = true
+		//				c.text = ":"
+		//				c.cursor = 1
+		//			}
+		//
+		//			return
+		//		}
 
 		switch e.Key() {
 
-		case tcell.KeyEsc:
-
-			c.active = false
-			c.text = ""
-			c.cursor = 0
-			c.history.ResetNavigation()
-
-			return
-
+		//		case tcell.KeyEsc:
+		//
+		//			c.active = false
+		//			c.text = ""
+		//			c.cursor = 0
+		//			c.history.ResetNavigation()
+		//
+		//			return
+		//
 		case tcell.KeyTAB:
 
 			prefix := c.text
