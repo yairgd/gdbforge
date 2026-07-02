@@ -107,7 +107,7 @@ cgdb-go uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
-| **Terminal** | `tcell.Event` | `PollEvent` → `DebuggerApp.HandleUIEvent` → mode router / trie / widgets |
+| **Terminal** | `tcell.Event` | `PollEvent` → `TermApp.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
 | **Domain** | `termui.Event` | Any producer → `TermApp.events` channel → **`HandleCoreEvents`** |
 
 Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `termui.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
@@ -123,8 +123,9 @@ sequenceDiagram
     participant Render as Redraw
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> Dbg: HandleUIEvent(ev)
-    Dbg ->> Dbg: handleKey · mode + trie routing
+    App ->> App: HandleEvent(ev)
+    App ->> Dbg: HandleKey(ev) · on EventKey
+    Dbg ->> Dbg: mode + trie routing
     Dbg ->> Widget: HandleEvent(ev)
     Widget ->> Bus: Events <- SubmitMsg / other termui.Event
     App ->> Bus: drain channel
@@ -170,8 +171,8 @@ flowchart TB
     subgraph TermApp["TermApp event loop"]
         Poll["PollEvent · tcell.Event"]
         Bus["events chan · termui.Event"]
-        UIHandler["DebuggerApp.HandleUIEvent"]
-        ModeRouter["AppState + Trie + handleKey"]
+        TermHandler["TermApp.HandleEvent"]
+        HandleKey["AppApi.HandleKey"]
         Widgets["TabWidget / CmdWidget HandleEvent"]
         CoreHub["HandleCoreEvents"]
         Draw["Draw pipeline"]
@@ -186,8 +187,8 @@ flowchart TB
 
     User --> Poll
     Async --> Poll
-    Poll --> UIHandler
-    UIHandler --> ModeRouter --> Widgets
+    Poll --> TermHandler
+    TermHandler --> HandleKey --> Widgets
     Widgets -->|"publish domain events"| Bus
     Async -.->|"planned: publish"| Bus
     Bus --> CoreHub --> Dispatch
@@ -299,7 +300,7 @@ flowchart TB
 
 *Source: [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
 
-Mode and key-sequence routing happen in **`DebuggerApp.HandleUIEvent`** / `handleKey` before widgets see terminal events — see [INPUT.md](INPUT.md#interaction-modes).
+Mode and key-sequence routing happen in **`DebuggerApp.HandleKey`** before widgets see terminal keys — see [INPUT.md](INPUT.md#interaction-modes).
 
 ### Interfaces and types
 
@@ -359,8 +360,9 @@ classDiagram
 ```go
 // termui/term_app.go
 type AppApi interface {
-    HandleUIEvent(ev tcell.Event)       // terminal-level hooks · resize, mode routing
     HandleCoreEvents(ev Event)          // all domain events land here
+    HandleKey(ev *tcell.EventKey)       // mode routing, trie, widget dispatch
+    HandleResize()                      // assign top-level widget rects
 }
 
 // cmd/cgdb/main.go
@@ -392,15 +394,16 @@ The **target** architecture is documented across this tree. The **current** code
 
 | Component | Target | Current state |
 |-----------|--------|---------------|
-| Root layout | TabBar + Workspace + CmdLine | Flat widget list; `handleResize` assigns tab + cmd line rects |
+| Root layout | TabBar + Workspace + CmdLine | Flat widget list; `HandleResize` assigns tab + cmd line rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `Layout` / `WidgetTree` implemented |
 | CmdLine | Global `:` command input | `CmdWidget` on bottom row (`H-1`); mode routing in `DebuggerApp` |
 | Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
-| Key bindings | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
+| Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
 | Interaction modes | Normal / Focus / Command | **Normal + Command wired** via `cgdb.AppState` |
-| Rendering | Diff-based grid flush | Full grid draw every frame |
+| Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw`; single `frontBuffer` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
+| Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
 | Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |
 
 Entry point: `cmd/cgdb/main.go`.

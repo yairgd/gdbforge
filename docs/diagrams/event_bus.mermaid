@@ -13,14 +13,14 @@ flowchart TB
     subgraph Loop["TermApp.Run main loop"]
         Select["select: channel vs PollEvent"]
         CoreDispatch["AppApi.HandleCoreEvents(ev)"]
-        TcellDispatch["DebuggerApp.HandleUIEvent · modes / trie"]
+        TcellDispatch["HandleEvent → HandleKey / HandleResize"]
         Draw["Draw → Grid → Screen"]
     end
 
     subgraph App["Application · DebuggerApp"]
         Handler["HandleCoreEvents — single dispatch hub"]
         CmdSwitch["switch CommandID / event type"]
-        Modes["AppState · handleKey"]
+        Modes["AppState · HandleKey"]
         Trie["Trie · SearchPartial"]
         Actions["Exit, debugger, layout, …"]
     end

@@ -30,16 +30,18 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | `Canvas` / `Rect` | Done | Local coordinates |
 | `Grid` / `Cell` borders | Done | Unicode box drawing |
 | `TermApp` event loop | Done | Poll, draw, flush |
-| Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list; `handleResize` places cmd line at `H-1` |
-| `TabWidget` | Stub | Single tab, no header |
+| Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list; `HandleResize` places cmd line at `H-1` |
+| `TabWidget` | Stub | Single tab, no header; `NewTabTwoHozSplitWins` does not yet wire second widget |
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Partial | **Normal + Command** wired via `cgdb.AppState` |
-| `CodeWidget` | Prototype | Placeholder draw |
+| `CodeWidget` | Prototype | Placeholder draw (random background) |
+| `LoggerWidget` | Prototype | Title stub |
 | `GDBWidget` | Prototype | MI input/output, buffer display |
 | `GDBClient` MI2 PTY | Prototype | Hardcoded target `hello` |
-| Diff rendering | Not started | Full grid flush |
+| Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
+| Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
 | Focus mode | Not wired | `ModeInsert` / focus routing reserved |
 | Mouse support | Enabled | No handlers |
 | Lua plugins | Design only | See [PLUGINS.md](PLUGINS.md) |
@@ -99,9 +101,9 @@ Dates are indicative — adjust as development progresses.
 
 | Feature | Description |
 |---------|-------------|
-| Unified grid drawing | All widget text through `Grid` |
-| Diff flush | Only changed cells to tcell |
-| Style in cells | Color-aware diff |
+| Separate `backBuffer` | Full double-buffered compositing |
+| Per-frame grid clear | Avoid stale cells when panes shrink |
+| Diff flush | **Partial** — `BackCells` incremental diff in `Grid.Draw` |
 | Damage regions | Per-widget dirty flags |
 
 ### M3 — Debugger UX
@@ -120,7 +122,7 @@ Dates are indicative — adjust as development progresses.
 | Feature | Description |
 |---------|-------------|
 | Normal / Focus / Command modes | Focus mode remaining; Normal + Command wired in `DebuggerApp` |
-| Window commands | `:vsplit`, `:close`, `:focus` |
+| Window commands | `:vs`, `:split`, `:close` — **partial (`:vs` / `:split` wired)** |
 | Tab commands | `:tabnew`, `:tabn` |
 | Command completion | UI + debugger vocab |
 
@@ -166,10 +168,9 @@ Success criteria (future 1.0):
 | Item | Location | Priority |
 |------|----------|----------|
 | Flat widget registration | `term_app.go` | High |
-| Widget text bypasses Grid | `canvas.go` SetContent | High |
-| `GDBWidget` imports `gdb` state types | `gdb_widget.go` | Medium |
-| Hardcoded GDB target | `gdb_client.go` | Medium |
-| Experimental splits in `NewTabTwoHozSplitWins` | `tab.go` | Medium |
+| Single `frontBuffer` (no `backBuffer`) | `term_app.go` | Medium |
+| `NewTabTwoHozSplitWins` ignores second widget | `tab.go` | Medium |
+| Grid cursor not flushed to tcell | `grid.go` | Low |
 | Empty `base_widget.go` | `termui` | Low |
 | Global MI state variable | `mi.go` `var state` | Medium |
 
@@ -186,7 +187,7 @@ Areas not yet fully documented in code or docs — track for future passes:
 | Plugin API reference (Lua bindings) | No runtime yet |
 | OpenOCD protocol mapping | No adapter yet |
 | Testing strategy / CI | Minimal tests today |
-| Performance profiling guide | Diff rendering not implemented |
+| Performance profiling guide | Full double-buffer diff not implemented |
 | Migration guide from cgdb | After feature parity assessment |
 | Config / theme system | Not designed |
 | Accessibility (screen reader) | Research needed for TUI a11y |

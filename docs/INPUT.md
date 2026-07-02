@@ -25,11 +25,13 @@ cgdb-go handles keyboard and mouse input through **tcell**, routes events based 
 Keyboard / Mouse
         ↓
 TermApp (select loop)
-        ├── tcell.Event  → DebuggerApp.HandleUIEvent
-        │                    ├── mode router (AppState)
-        │                    ├── Trie (key sequences)
-        │                    └── TabWidget / CmdWidget HandleEvent → redraw
-        └── termui.Event → HandleCoreEvents (application dispatch hub)
+        ├── termui.Event  → AppApi.HandleCoreEvents
+        └── tcell.Event   → TermApp.HandleEvent
+                                ├── EventResize → UpdateCanvas, AppApi.HandleResize
+                                └── EventKey    → AppApi.HandleKey
+                                      ├── mode router (AppState)
+                                      ├── Trie (key sequences)
+                                      └── TabWidget / CmdWidget HandleEvent → redraw
 ```
 
 ```mermaid
@@ -43,8 +45,9 @@ sequenceDiagram
     participant Render as Redraw
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> Dbg: HandleUIEvent(ev)
-    Dbg ->> Dbg: handleKey · mode + trie routing
+    App ->> App: HandleEvent(ev)
+    App ->> Dbg: HandleKey(ev) · on EventKey
+    Dbg ->> Dbg: mode + trie routing
     Dbg ->> Widget: HandleEvent(ev)
     Widget ->> Bus: Events <- SubmitMsg
     App ->> Bus: drain channel
@@ -76,27 +79,27 @@ sequenceDiagram
 
 ### Dispatch (current)
 
-1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize, redraw interrupt).
-2. `DebuggerApp.HandleUIEvent` — application-level routing:
-   - `Esc` — leave command mode, deactivate `CmdWidget`.
-   - `EventResize` — `handleResize()` assigns widget rects (tab = full height minus cmd line row; cmd line at row `H-1`).
-   - `EventKey` — `handleKey()` dispatches by `AppState.Mode()`.
-3. **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** (partial multi-key sequences) then to `TabWidget`.
-4. **`ModeCommand`** — all keys go to `CmdWidget`.
+1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
+2. `AppApi.HandleResize` — assign top-level widget rects (tab = full height; cmd line at row `H-1`).
+3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
+   - **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** then to `TabWidget`.
+   - **`ModeCommand`** — all keys go to `CmdWidget`.
 
 ```mermaid
 flowchart TB
-    Poll["TermApp.PollEvent"]
-    UI["DebuggerApp.HandleUIEvent"]
-    Esc["Esc → Deactivate CmdWidget, ModeNormal"]
-    Router["handleKey · switch appState.Mode()"]
+    Select["TermApp.Run select loop"]
+    Poll["PollEvent · tcell"]
+    TermHandler["TermApp.HandleEvent"]
+    HandleKey["AppApi.HandleKey"]
+    HandleResize["AppApi.HandleResize"]
+    Router["DebuggerApp · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
 
-    Poll --> UI
-    UI -->|"EventKey Esc"| Esc
-    UI -->|"EventKey"| Router
+    Poll --> TermHandler
+    TermHandler -->|"EventKey"| HandleKey --> Router
+    TermHandler -->|"EventResize"| HandleResize
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
     Router -->|"ModeNormal · colon"| Cmd
@@ -131,12 +134,13 @@ Example: `CmdWidget` (`cmd_widget.go`):
 | `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
 | Rune / editing keys | Insert, move cursor |
 
-Command mode entry and exit are handled by **`DebuggerApp`**, not inside `CmdWidget`:
+Command mode entry and exit:
 
 | Key | Handler | Action |
 |-----|---------|--------|
-| `:` | `handleKey` in normal mode | `SetMode(ModeCommand)`, `CmdWidget.Activate()` |
-| `Esc` | `HandleUIEvent` | `CmdWidget.Deativate()`, `SetMode(ModeNormal)` |
+| `:` | `HandleKey` in normal mode | `SetMode(ModeCommand)`, `CmdWidget.Activate()` |
+| `Esc` | `CmdWidget` → `SubmitMsg{CmdID: CmdExitMode}` | `HandleCoreEvents` resets mode, deactivates widget |
+| `Enter` | `HandleKey` after submit | `SetMode(ModeNormal)`, `CmdWidget.Deativate()` |
 
 On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termui.CmdUnknown`), and publishes to `TermApp.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
 
@@ -249,7 +253,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` owns `appState cgdb.AppState` and switches modes in `handleKey` / `HandleUIEvent`. `TermApp` has no knowledge of modes.
+`DebuggerApp` owns `appState cgdb.AppState` and switches modes in `HandleKey` and `HandleCoreEvents`. `TermApp` has no knowledge of modes.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -260,7 +264,7 @@ type AppState struct {
 **Gaps:**
 
 - `ModeFocus` / `ModeInsert` / `ModeSearch` are defined but not routed yet.
-- After Enter on a command, `CmdWidget` deactivates but `AppState` may still be `ModeCommand` until `Esc` — reset on submit is planned.
+- `NewTabTwoHozSplitWins` currently passes only the first widget to `NewLayout`; the second widget argument is not wired into a split yet.
 
 ---
 
@@ -317,7 +321,7 @@ a.cmdWidget.Events = a.Events()
 
 | Category | Examples | Dispatch |
 |----------|----------|----------|
-| Window | `:vsplit`, `:close`, `:focus left` | `HandleCoreEvents` → layout (planned) |
+| Window | `:vs`, `:split`, `:close` (via `:quit` on last pane) | **Partial** — `:vs` / `:split` wired in `HandleCoreEvents` |
 | Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
 | Debugger | `:break`, `:continue`, `:step` | `HandleCoreEvents` → `core.Debugger` (planned) |
 | UI | `:quit` | `HandleCoreEvents` → `app.Exit()` (implemented) |

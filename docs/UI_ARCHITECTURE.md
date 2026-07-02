@@ -102,7 +102,6 @@ classDiagram
     class Node {
         +Type NodeType
         +Widget Widget
-        +Rect Rect
         +canvas Canvas
         +First *Node
         +Second *Node
@@ -140,9 +139,8 @@ classDiagram
 
 ```go
 type WidgetTree struct {
-    root        *Node
-    focus       *Node
-    focusWidget Widget
+    root  *Node
+    focus *Node
 }
 ```
 
@@ -185,12 +183,12 @@ flowchart TB
 
 | Direction | First child | Second child | Gutter |
 |-----------|-------------|--------------|--------|
-| `Vertical` | Left (`Ratio × width`) | Right (remainder) | 1 column separator |
-| `Horizontal` | Top (`Ratio × height`) | Bottom (remainder) | 1 row separator |
+| `Vertical` | Left (proportional via `Units()`) | Right (remainder) | 1 column separator |
+| `Horizontal` | Top (proportional via `Units()`) | Bottom (remainder) | 1 row separator |
 
 The gutter column/row is where `DrawVerticalLocal` / `DrawHorizontalLocal` write border cells into the shared `Grid`.
 
-**Design decision:** ratio-based splits (not pixel drag yet) keep the first implementation simple. Interactive resize is planned — the `Ratio` field is the extension point.
+**Design decision:** `BuildLayout` sizes children using **`Units()`** (leaf-count weighting along the split axis). The `Ratio` field is set at split time (`0.5` default) and updated by `ComputeRatios` / `Rebalance`, but the current build path uses unit counts rather than `Ratio` directly.
 
 `Layout` is a thin facade over `WidgetTree`:
 
@@ -211,13 +209,12 @@ Implementation: `layout.go`, `widget_tree.go` (`buildLayout`).
 
 ## Canvas abstraction
 
-`Canvas` is a **drawing context** bound to a rectangular region of the screen (and optionally a shared `Grid` for borders).
+`Canvas` is a **drawing context** bound to a rectangular region of the shared `Grid`. Widgets draw in local coordinates; `Canvas` maps to absolute grid positions via `rect`.
 
 ```go
 type Canvas struct {
-    screen tcell.Screen
-    rect   Rect
-    grid   *Grid
+    rect Rect
+    grid *Grid
 }
 ```
 
@@ -226,14 +223,17 @@ Key methods:
 | Method | Purpose |
 |--------|---------|
 | `W()`, `H()` | Local width/height |
-| `ScreenX/Y(local)` | Translate local → absolute screen coords |
-| `ChildRect(localX, localY, w, h)` | Create sub-rect for layout children |
-| `SetContent(localX, localY, ch, style)` | Draw a rune (via tcell today) |
+| `ScreenX/Y(local)` | Translate local → absolute grid coords |
+| `ChildRect(localX, localY, w, h)` | Create sub-rect in screen space |
+| `WithRect(r)` | New canvas sharing the same grid |
+| `SetContent(localX, localY, ch, style)` | Draw a rune into the grid |
+| `Fill(ch, style)` | Fill rect with a character and style |
+| `Print` / `Printf` | Draw text into the grid |
 | `DrawVerticalLocal` / `DrawHorizontalLocal` | Write border segments into Grid |
 | `DrawANSIText` | UTF-8 text with optional ANSI styling |
-| `Fill` | Fill rect with a character |
+| `ClearLine` | Clear one local row |
 
-**Design decision:** border drawing goes through `Grid` (edge flags on cells), while widget content often goes **directly to tcell** via `SetContent`. This is a known inconsistency — see [RENDERING.md](RENDERING.md). The long-term plan is to route all drawing through the grid for diff rendering.
+**Design decision:** `Canvas` does not hold `tcell.Screen`. All widget drawing goes through the shared `Grid`; `TermApp` owns the screen and flushes after all widgets draw. Border drawing and widget content use the same grid path.
 
 Implementation: `canvas.go`, `rect.go`, `utf.go`.
 
@@ -246,20 +246,20 @@ Implementation: `canvas.go`, `rect.go`, `utf.go`.
 ```go
 type Grid struct {
     W, H int
-    Cells [][]Cell
+    Cells     [][]Cell
+    BackCells [][]Cell
 }
 ```
 
-Each `Cell` stores border edge flags and a composed rune. See [RENDERING.md](RENDERING.md) for the cell model.
+Each `Cell` stores border edge flags, a composed rune, and a `tcell.Style`. See [RENDERING.md](RENDERING.md) for the cell model.
 
-`TermApp` maintains two grids:
+`TermApp` maintains one screen-sized grid:
 
 | Buffer | Purpose |
 |--------|---------|
-| `backBuffer` | Target for widget/grid drawing (future primary) |
-| `frontBuffer` | Last displayed frame; flushed to screen each loop |
+| `frontBuffer` | Shared draw target; flushed to tcell each frame |
 
-**Design decision:** double-buffering enables future diff rendering — compare `frontBuffer` vs `backBuffer` and emit only changed cells to tcell.
+`BackCells` records the last flushed state so `Grid.Draw` can skip unchanged cells. A separate `backBuffer` for full double-buffered compositing is planned.
 
 Implementation: `grid.go`, `term_app.go`.
 
@@ -293,12 +293,13 @@ flowchart LR
 
 Current `TermApp.Run` loop:
 
-1. `PollEvent` → dispatch to widgets.
-2. `Draw(Canvas)` on each top-level widget.
-3. `frontBuffer.Draw(screen)` — full flush.
-4. `screen.Show()`.
+1. `select` — drain `termui.Event` channel, or poll tcell.
+2. `HandleEvent` — global shortcuts, resize, redraw interrupt; `EventKey` → `AppApi.HandleKey`.
+3. `Draw(Canvas)` on each top-level widget (into shared `frontBuffer`).
+4. `frontBuffer.Draw(screen)` — diff flush.
+5. `screen.Show()`.
 
-**Gap:** widget text often bypasses the grid. Documented in [RENDERING.md](RENDERING.md#known-gaps).
+Widget `HandleEvent` is **not** called from `TermApp` — the `AppApi` implementation (`DebuggerApp`) routes keys to widgets after mode and trie processing.
 
 ---
 
@@ -310,13 +311,13 @@ Focus determines which widget receives keyboard events inside the Workspace.
 flowchart LR
     Tree["WidgetTree"]
     FocusNode["focus *Node"]
-    FocusWidget["focusWidget Widget"]
-    Tree --> FocusNode --> FocusWidget
+    LeafWidget["focus.Widget"]
+    Tree --> FocusNode --> LeafWidget
 ```
 
 Current behavior:
 
-- `WidgetTree.HandleEvent` forwards to `focusWidget` only.
+- `WidgetTree.HandleEvent` forwards to the focused leaf's `Widget` only.
 - New tree starts with focus on the root leaf.
 - `Split` moves focus to the **first** (original) child.
 - **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
@@ -355,7 +356,7 @@ Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) defined in `trie.go`.
 
 **Design decision:** trie state (`current`, `keySeq`) is per-application, not global — multiple apps or test harnesses can bind independently.
 
-Implementation: `internal/termui/trie.go`. Wiring: `cmd/cgdb/main.go` (`BindKeySeq`, called from `handleKey` in normal mode).
+Implementation: `internal/termui/trie.go`. Wiring: `cmd/cgdb/main.go` (`BindKeySeq`, called from `HandleKey` in normal mode).
 
 ---
 
@@ -365,7 +366,7 @@ cgdb-go separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|
-| Terminal | `tcell.Event` | `TermApp.HandleEvent` → **`DebuggerApp.HandleUIEvent`** → mode / trie / widgets |
+| Terminal | `tcell.Event` | `TermApp.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
 | Domain | `termui.Event` | **`AppApi.HandleCoreEvents`** — single application dispatch hub |
 
 ### Terminal dispatch (current)
@@ -376,8 +377,9 @@ flowchart TB
     Poll["PollEvent · tcell"]
     Bus["<- events · termui.Event"]
     TermHandler["TermApp.HandleEvent"]
-    UI["DebuggerApp.HandleUIEvent"]
-    Router["handleKey · AppState.Mode()"]
+    HandleKey["AppApi.HandleKey"]
+    HandleResize["AppApi.HandleResize"]
+    Router["DebuggerApp · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Widgets["TabWidget / CmdWidget"]
     Core["HandleCoreEvents"]
@@ -386,7 +388,9 @@ flowchart TB
 
     Select --> Poll
     Select --> Bus
-    Poll --> TermHandler --> UI --> Router
+    Poll --> TermHandler
+    TermHandler -->|"EventKey"| HandleKey --> Router
+    TermHandler -->|"EventResize"| HandleResize
     Router --> Trie
     Router --> Widgets --> Draw --> Flush
     Bus --> Core
@@ -398,18 +402,20 @@ The main loop uses `select` with a `default` branch: drain pending `termui.Event
 
 Global keys handled by `TermApp`:
 
-| Key | Action |
-|-----|--------|
+| Key / event | Action |
+|-------------|--------|
 | `Ctrl+D` | Exit application |
-| Resize | Reallocate grids via `UpdateCanvas()`; `DebuggerApp.handleResize()` sets widget rects |
+| `EventResize` | `UpdateCanvas()`; `AppApi.HandleResize()` sets widget rects |
+| `EventInterrupt` | Redraw request (`termui-redraw`) |
 
-Application keys handled by `DebuggerApp`:
+Application keys handled by `DebuggerApp` (`HandleKey`):
 
 | Key / context | Action |
 |---------------|--------|
-| `Esc` | Leave command mode |
-| `:` (normal mode) | Enter command mode |
+| `:` (normal mode) | Enter command mode, activate `CmdWidget` |
 | `<C-w>…` (normal mode) | Focus movement via trie |
+| Other keys (normal mode) | Trie partial match, then `TabWidget.HandleEvent` |
+| All keys (command mode) | `CmdWidget.HandleEvent` |
 
 ### Domain event bus
 
@@ -417,8 +423,9 @@ Any subsystem can publish to `TermApp.events` (`Events() chan termui.Event`). Th
 
 ```go
 type AppApi interface {
-    HandleUIEvent(ev tcell.Event)
-    HandleCoreEvents(ev Event)   // single hub for all domain events
+    HandleCoreEvents(ev Event)          // all domain events land here
+    HandleKey(ev *tcell.EventKey)       // mode routing, trie, widget dispatch
+    HandleResize()                      // assign top-level widget rects
 }
 ```
 
@@ -461,13 +468,13 @@ sequenceDiagram
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
     Main->>App: InitB · AddWidget tab + cmdWidget
-    Main->>App: handleResize() · initial layout
+    Main->>App: HandleResize() · initial layout
     loop until exit
         App->>Screen: select: drain termui.Event OR PollEvent
         alt termui.Event on bus
             App->>App: HandleCoreEvents(ev)
         else tcell event
-            App->>App: HandleUIEvent · modes / trie / widgets
+            App->>App: HandleEvent · HandleKey / HandleResize
             App->>App: Draw + frontBuffer.Draw + Show
         end
     end
@@ -476,7 +483,8 @@ sequenceDiagram
 
 `AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/main.go`):
 
-- `HandleUIEvent` — terminal-level hooks (resize layout, **mode routing**, trie dispatch).
+- `HandleKey` — mode routing, trie dispatch, widget `HandleEvent`.
+- `HandleResize` — top-level widget rects after `UpdateCanvas`.
 - `HandleCoreEvents` — **all** domain events from the bus.
 
 `AppAPI` in `app_api.go` (`Publish`, `RequestRedraw`, …) is a separate planned surface for widgets; not yet wired everywhere.
@@ -487,10 +495,11 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `CodeWidget` | `code_widget.go` | Prototype — random background, title stub |
-| `GDBWidget` | `gdb_widget.go` | Functional prototype — MI input, buffer draw |
-| `CmdWidget` | `cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
-| `TabWidget` | `tab.go` | Single-tab container forwarding to `Layout` |
+| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
+| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Functional prototype — MI input, buffer draw |
+| `LoggerWidget` | `internal/cgdb/widgets/logger_widget.go` | Prototype — title stub |
+| `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
+| `TabWidget` | `internal/termui/tab.go` | Single-tab container forwarding to `Layout` |
 
 Widget hierarchy target:
 

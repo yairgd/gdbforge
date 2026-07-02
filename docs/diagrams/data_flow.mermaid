@@ -6,8 +6,9 @@ flowchart TB
 
     subgraph TermApp["TermApp event loop"]
         Poll["PollEvent · tcell.Event"]
-        Bus["events chan · core.Event"]
-        UIHandler["HandleUIEvent"]
+        Bus["events chan · termui.Event"]
+        TermHandler["TermApp.HandleEvent"]
+        HandleKey["AppApi.HandleKey"]
         Widgets["widget HandleEvent"]
         CoreHub["HandleCoreEvents"]
         Draw["Draw pipeline"]
@@ -22,8 +23,8 @@ flowchart TB
 
     User --> Poll
     Async --> Poll
-    Poll --> UIHandler
-    Poll --> Widgets
+    Poll --> TermHandler
+    TermHandler --> HandleKey --> Widgets
     Widgets -->|"publish domain events"| Bus
     Async -.->|"planned: publish"| Bus
     Bus --> CoreHub --> Dispatch

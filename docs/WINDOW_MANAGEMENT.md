@@ -63,7 +63,7 @@ graph TB
 - The command line is a stable anchor (like Vim's `:` line).
 - Workspace resize math is isolated — only the middle band changes height on terminal resize.
 
-**Current gap:** `TermApp` registers widgets in a flat slice rather than a structured `RootLayout`. **`DebuggerApp.handleResize`** assigns rects today:
+**Current gap:** `TermApp` registers widgets in a flat slice rather than a structured `RootLayout`. **`DebuggerApp.HandleResize`** assigns rects today:
 
 ```go
 w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))       // TabWidget (workspace)
@@ -160,12 +160,12 @@ Node
 
 Layout algorithm (`widget_tree.go`):
 
-1. Compute first-child size: `int(float64(dimension) * Ratio)`.
+1. Compute first-child size using **`Units()`** leaf weighting along the split axis.
 2. Reserve 1 cell for the separator.
 3. Assign remaining space to second child.
-4. Recurse into both children with child `Canvas` values.
+4. Recurse into both children with child `Canvas` values (`WithRect`).
 
-**Ratio default:** `0.5` (equal split) when created via `WidgetTree.Split`.
+**Ratio default:** `0.5` when a split is created via `WidgetTree.Split`. `BuildLayout` currently uses unit counts, not `Ratio` directly.
 
 **Border drawing:** separators are written into the shared `Grid` during `BuildLayout`, not by individual widgets. This ensures corners align when splits nest.
 
@@ -187,7 +187,7 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-**Current gap in `TabWidget`:** `NewTabTwoHozSplitWins` contains experimental repeated `NewSplit` calls used for layout testing — not a production default layout.
+**Current gap in `TabWidget`:** `NewTabTwoHozSplitWins` accepts two widgets but only passes the first to `NewLayout`; the second widget is not yet installed in a split. Use `:vs` / `:split` at runtime or call `layout.NewSplit` directly for a working two-pane layout.
 
 ---
 

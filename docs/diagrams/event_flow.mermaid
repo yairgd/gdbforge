@@ -8,8 +8,9 @@ sequenceDiagram
     participant Render as Redraw
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> Dbg: HandleUIEvent(ev)
-    Dbg ->> Dbg: handleKey · mode + trie routing
+    App ->> App: HandleEvent(ev)
+    App ->> Dbg: HandleKey(ev) · on EventKey
+    Dbg ->> Dbg: mode + trie routing
     Dbg ->> Widget: HandleEvent(ev)
     Widget ->> Bus: Events <- SubmitMsg
     App ->> Bus: drain channel

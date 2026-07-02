@@ -36,7 +36,7 @@
 | 4 | `internal/termui/widget_tree.go` | Split layout algorithm |
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
-| 7 | `internal/termui/gdb_widget.go` | Async GDB → UI example |
+| 7 | `internal/cgdb/widgets/gdb_widget.go` | Async GDB → UI example |
 | 8 | `internal/gdb/gdb_client.go` | PTY backend |
 | 9 | `docs/ARCHITECTURE.md` | Big picture |
 
@@ -49,9 +49,11 @@ Add: `internal/termui/layout.go`, `node.go`, `tab.go`, `cmd_widget.go`, `interna
 ```text
 TermApp
   ├── AppApi (implemented by DebuggerApp)
-  │     ├── HandleUIEvent(tcell.Event)     — resize, mode router, trie
+  │     ├── HandleKey(*tcell.EventKey)     — mode router, trie, widget dispatch
+  │     ├── HandleResize()               — top-level widget rects
   │     └── HandleCoreEvents(termui.Event) — ALL domain events land here
-  ├── events chan termui.Event             — bus; any subsystem may publish
+  ├── screen tcell.Screen                — poll, lifecycle, Show (owned by TermApp)
+  ├── events chan termui.Event           — bus; any subsystem may publish
   ├── DebuggerApp fields
   │     ├── appState cgdb.AppState         — ModeNormal / ModeCommand / …
   │     ├── trie termui.Trie               — multi-key bindings
@@ -59,8 +61,8 @@ TermApp
   │     └── cmdWidget *CmdWidget
   ├── top-level widgets (tab + cmd line)
   │     └── CmdWidget.Events → events channel
-  ├── backBuffer / frontBuffer (Grid)
-  └── select loop: drain bus OR PollEvent → draw
+  ├── frontBuffer (*Grid)                 — shared draw target + BackCells diff
+  └── select loop: drain bus OR PollEvent → draw → flush
 
 Widget
   ├── HandleEvent(tcell.Event)   — local keys / mouse
@@ -150,13 +152,13 @@ sequenceDiagram
 
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
-    Main->>App: InitB · AddWidget · handleResize()
+    Main->>App: InitB · AddWidget · HandleResize()
     loop until Ctrl+D
         App->>Screen: select: termui.Event OR PollEvent
         alt termui.Event
             App->>App: HandleCoreEvents
         else tcell
-            App->>App: HandleUIEvent · modes / trie / widgets
+            App->>App: HandleEvent · HandleKey / HandleResize
             App->>App: Draw + grid flush + Show
         end
     end
@@ -168,7 +170,7 @@ sequenceDiagram
 | **Init** | `NewTermApp` | Opens screen, enables mouse |
 | **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size |
 | **Register widgets** | `AddWidget` | Appends to widget slice |
-| **Initial layout** | `handleResize()` in `NewDebuggerApp` | Tab rect + cmd line at row `H-1` |
+| **Initial layout** | `HandleResize()` in `NewDebuggerApp` | Tab rect + cmd line at row `H-1` |
 | **Run** | `Run` | Blocks until `Ctrl+D` |
 | **Close** | `Close` / defer | Restores terminal |
 
@@ -176,7 +178,7 @@ sequenceDiagram
 
 ## Adding a widget
 
-1. Create `internal/termui/my_widget.go`:
+1. Create `internal/cgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
 
 ```go
 type MyWidget struct { /* state */ }
@@ -251,11 +253,11 @@ See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md).
 ## Rendering rules
 
 1. **Borders** — only layout engine draws split separators (into Grid).
-2. **Widget content** — draw inside local `(0,0)`..`(W-1,H-1)`.
+2. **Widget content** — draw inside local `(0,0)`..`(W-1,H-1)` via `Canvas` methods (all route through Grid).
 3. **Unicode** — use `DrawANSIText` for strings; `SetContent` for single runes.
 4. **Clipping** — check `col < c.W()` before drawing.
 
-Future: all content through Grid for diff rendering ([RENDERING.md](RENDERING.md)).
+Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](RENDERING.md).
 
 ---
 
@@ -322,7 +324,7 @@ dlv debug ./cmd/docserve -- --port 8765
 | GDB hangs | Target binary missing | Build `hello` or fix `gdb_client.go` target |
 | No GDB output | Reader goroutine exited | Check channel close / PTY errors |
 | Keys affect all widgets | Normal mode forwards to tab after trie | Expected until focus mode is wired |
-| Cmd line invisible | Wrong rect (`y = H` instead of `H-1`) | Fix in `handleResize()` |
+| Cmd line invisible | Wrong rect (`y = H` instead of `H-1`) | Fix in `HandleResize()` |
 | Mermaid not rendering in docs | CDN blocked | Check network; view raw `.md` |
 | Port 8765 in use | Previous docserve running | `fuser -k 8765/tcp` or `--port 8766` |
 
@@ -337,8 +339,8 @@ dlv debug ./cmd/docserve -- --port 8765
 | New `:` command | Add private `CommandID` in app, register in completer, handle in `HandleCoreEvents` |
 | New key chord | `app.BindKeySeq(callback, "<C-x>…")` in `InitB` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
-| Diff rendering | Route `Canvas.SetContent` through `Grid`, compare buffers |
-| Focus mode | Wire `ModeFocus` in `handleKey`, suppress tab dispatch |
+| Diff rendering | Add `backBuffer`, per-frame clear; extend `BackCells` diff |
+| Focus mode | Wire `ModeFocus` in `HandleKey`, suppress tab dispatch |
 
 Always update docs when changing architecture-visible behavior.
 
@@ -349,7 +351,7 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`DebuggerApp`, `handleKey`) |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`DebuggerApp`, `HandleKey`) |
 | Interaction modes | `internal/cgdb/mode_manager.go` |
 | Key-sequence trie | `trie.go`, bindings in `cmd/cgdb/main.go` |
 | Widget interface | `widget.go` |
@@ -357,7 +359,7 @@ Always update docs when changing architecture-visible behavior.
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
 | Command line | `cmd_widget.go`, `history.go`, `autocomplete.go` |
-| GDB UI | `widgets/gdb_widget.go` |
+| Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`, `logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |

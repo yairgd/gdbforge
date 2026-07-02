@@ -96,6 +96,7 @@ task build
 | `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
 | `widgets/gdb_widget.go` | GDB console pane |
+| `widgets/logger_widget.go` | Logger pane prototype |
 
 `cmd/cgdb` imports this package for `cgdb.AppState`. Key routing, trie bindings, and widget composition remain in `cmd/cgdb/main.go` (`DebuggerApp`).
 

@@ -9,11 +9,11 @@ flowchart TB
         N1["Node: Split / Leaf"]
         N2["Node: Split / Leaf"]
         N3["Leaf: CodeWidget"]
-        N4["Leaf: GDBWidget"]
-        N5["Leaf: CmdWidget pane"]
+        N4["Leaf: GDBWidget / LoggerWidget"]
     end
 
     WS --> SplitTree
+    CL --> CmdWidget["CmdWidget · top-level"]
     N1 --> N2
     N2 --> N3
     N2 --> N4

@@ -24,7 +24,7 @@ cgdb-go renders through an off-screen **Grid** of **Cells**, composed by widgets
 ```text
 Widgets
     ↓
-Canvas        (local Rect, optional Grid for borders)
+Canvas        (local Rect, shared Grid)
     ↓
 Grid          ([][]Cell framebuffer)
     ↓
@@ -54,26 +54,32 @@ flowchart LR
 ```go
 type Grid struct {
     W, H int
-    Cells [][]Cell
+    Cells     [][]Cell
+    BackCells [][]Cell
+    // cursor state (ShowCursor / HideCursor)
 }
 ```
 
 | Method | Purpose |
 |--------|---------|
 | `NewGrid(w, h)` | Allocate cell storage |
+| `SetContent(x, y, ch, style)` | Write rune and style to a cell |
+| `Print(x, y, style, text)` | Write a string through `SetContent` |
+| `Clear()` | Zero all cells |
 | `DrawVertical(x, y1, y2, bold)` | Mark vertical edge segments |
 | `DrawHorizontal(y, x1, x2, bold)` | Mark horizontal edge segments |
-| `Draw(screen, style)` | Compose runes and flush non-space cells to tcell |
-| `Clear(screen, style)` | Reset all cells to space |
+| `Draw(screen)` | Compose runes, diff against `BackCells`, flush changes to tcell |
+| `ClearLine(y, style)` | Clear one row |
 
 `TermApp` holds:
 
 | Buffer | Role |
 |--------|------|
-| `backBuffer` | Draw target (resize allocates both) |
-| `frontBuffer` | Displayed frame; currently the flush source |
+| `frontBuffer` | Shared draw target and flush source |
 
-On terminal resize, `UpdateCanvas()` calls `screen.Sync()`, reads new dimensions, and reallocates both grids.
+A separate `backBuffer` for full double-buffered diff is planned but not allocated yet. Today `BackCells` inside `frontBuffer` tracks the last flushed cell state for incremental updates.
+
+On terminal resize, `UpdateCanvas()` calls `screen.Sync()`, reads new dimensions, and reallocates `frontBuffer`.
 
 Implementation: `grid.go`, `term_app.go`.
 
@@ -83,9 +89,10 @@ Implementation: `grid.go`, `term_app.go`.
 
 ```go
 type Cell struct {
-    Up, Down, Left, Right bool  // edge flags
-    Rune                  rune  // composed output
-    Bold                  bool  // heavy vs light box drawing
+    Up, Down, Left, Right bool
+    Rune                  rune
+    Bold                  bool
+    Style                 tcell.Style
 }
 ```
 
@@ -182,24 +189,29 @@ Current frame loop (`TermApp.Run`):
 
 ```go
 for !app.exit {
-    ev := app.screen.PollEvent()
-    app.HandleEvent(ev)
-    for _, w := range app.widgets {
-        w.HandleEvent(ev)
+    select {
+    case ev := <-app.events:
+        app.Api.HandleCoreEvents(ev)
+    default:
+        ev := app.screen.PollEvent()
+        app.HandleEvent(ev)   // Ctrl+D, resize, redraw interrupt; keys → AppApi.HandleKey
+        app.Draw(Canvas{rect: app.canvas.Rect(), grid: app.frontBuffer})
+        app.frontBuffer.Draw(app.screen)
+        app.screen.Show()
     }
-    app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})
-    app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
-    app.screen.Show()
 }
 ```
 
 | Step | Purpose |
 |------|---------|
+| `select` | Drain pending `termui.Event` messages before polling tcell |
 | `PollEvent` | Block for input or resize |
-| `HandleEvent` | Global keys, resize → `UpdateCanvas` |
-| `Draw` | Widgets render |
-| `frontBuffer.Draw` | Grid cells → tcell |
+| `HandleEvent` | Global keys, resize → `UpdateCanvas`; `EventKey` → `AppApi.HandleKey` |
+| `Draw` | Widgets render into shared `frontBuffer` via `Canvas` |
+| `frontBuffer.Draw` | Diff changed cells → tcell |
 | `Show` | Batch update to terminal |
+
+**Ownership:** `TermApp` owns `tcell.Screen` (poll, lifecycle, `Show`). `Grid` receives the screen only at flush time.
 
 On resize (`EventResize`):
 
@@ -215,7 +227,9 @@ On resize (`EventResize`):
 
 **Goal:** send only **modified cells** to tcell each frame, reducing bandwidth for remote sessions and large terminals.
 
-Planned algorithm:
+**Current state:** `Grid.Draw` already compares each cell against `BackCells` and skips unchanged cells. Widget drawing routes through `Canvas` → `Grid.SetContent`, so rune and style changes are tracked.
+
+Remaining work for full double-buffered diff:
 
 ```mermaid
 flowchart LR
@@ -245,11 +259,10 @@ Additional optimizations:
 
 | Technique | Benefit |
 |-----------|---------|
+| Separate `backBuffer` draw target | Avoid drawing over previous frame in-place |
 | Per-widget dirty flags | Skip draw for unchanged panes |
 | Damage regions | Limit diff to affected rects |
 | Idle skip | No flush when no events and no dirty |
-
-**Prerequisite work:** route widget text through `Grid` instead of direct tcell writes. See [Known gaps](#known-gaps).
 
 ---
 
@@ -257,9 +270,9 @@ Additional optimizations:
 
 | Gap | Impact | Mitigation plan |
 |-----|--------|-----------------|
-| Widget text bypasses Grid | Diff rendering blocked | Add `Canvas.SetCell` writing to grid |
-| Full grid flush every frame | Wasted I/O on large terminals | Implement diff pass |
-| No style in Cell | Diff cannot track color changes | Extend Cell with style ID |
+| No per-frame grid clear | Stale cells if a pane shrinks | Clear or full redraw at frame start |
+| No separate `backBuffer` | In-place draw + diff only | Allocate second grid; swap after flush |
+| Grid cursor not applied to tcell | `ShowCursor` state unused at flush | Apply cursor in `Grid.Draw` or `TermApp` |
 | ANSI parsing disabled | GDB color output ignored | Enable ANSI path in DrawANSIText |
 | No wide-char width | Misaligned columns for CJK | Integrate runewidth |
 | Mixed bold/light corners | Visual glitches at focus borders | Corner weight resolver |
