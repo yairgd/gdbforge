@@ -1,5 +1,9 @@
 package termui
 
+import (
+	"github.com/gdamore/tcell/v2"
+)
+
 type Cell struct {
 	Up    bool
 	Down  bool
@@ -7,6 +11,7 @@ type Cell struct {
 	Right bool
 	Rune  rune
 	Bold  bool
+	Style tcell.Style
 }
 
 func NewCell() Cell {

@@ -94,10 +94,10 @@ func (app *TermApp) Run() {
 			//}
 			//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
 
-			app.Draw(Canvas{app.screen, app.canvas.Rect(), app.frontBuffer})
+			app.Draw(Canvas{rect: app.canvas.Rect(), grid: app.frontBuffer})
 
 			// move grid to sceen
-			app.frontBuffer.Draw(app.screen, tcell.StyleDefault)
+			app.frontBuffer.Draw(app.screen)
 			app.screen.Show()
 
 		}
@@ -110,14 +110,14 @@ func (app *TermApp) UpdateCanvas() Canvas {
 	w, h := app.screen.Size()
 	//	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
-	app.canvas = Canvas{app.screen, Rect{0, 0, w, h}, app.frontBuffer}
+	app.canvas = Canvas{rect: NewRect(0, 0, w, h), grid: app.frontBuffer}
 	return app.canvas
 
 }
 
 func (app *TermApp) Draw(c Canvas) {
 	for _, w := range app.widgets {
-		w.widget.Draw(Canvas{c.Screen(), w.rect, c.grid})
+		w.widget.Draw(Canvas{rect: w.rect, grid: c.grid})
 	}
 
 }
@@ -144,7 +144,6 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		switch e.Key() {
 		case tcell.KeyCtrlD:
 			a.exit = true
-
 			return
 
 		default:

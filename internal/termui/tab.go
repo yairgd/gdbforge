@@ -81,7 +81,7 @@ func (t *TabWidget) Draw(c Canvas) {
 
 	if layout != nil {
 		r := c.Rect()
-		layout.Draw(Canvas{c.Screen(), NewRect(r.X(), r.Y(), r.W(), r.H()-2), c.grid})
+		layout.Draw(c.WithRect(NewRect(r.X(), r.Y(), r.W(), r.H()-2)))
 	}
 }
 

@@ -270,6 +270,8 @@ func (l *WidgetTree) draw(c Canvas, node *Node) {
 		node.Widget.Draw(node.canvas)
 		if node == l.focus {
 			c.Printf(0, 0, tcell.StyleDefault, "active")
+		} else {
+			c.Printf(0, 0, tcell.StyleDefault, "      ")
 		}
 		return
 	}
@@ -314,10 +316,10 @@ func (l *WidgetTree) buildLayout(
 		c.DrawVerticalLocal(leftW, 0, c.H(), false)
 
 		r1 := c.ChildRect(0, 0, leftW, c.H())
-		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
+		l.buildLayout(node.First, c.WithRect(r1))
 
 		r2 := c.ChildRect(leftW+1, 0, rightW, c.H())
-		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
+		l.buildLayout(node.Second, c.WithRect(r2))
 
 	case Horizontal:
 
@@ -335,10 +337,10 @@ func (l *WidgetTree) buildLayout(
 		c.DrawHorizontalLocal(topH, 0, c.W(), false)
 
 		r1 := c.ChildRect(0, 0, c.W(), topH)
-		l.buildLayout(node.First, Canvas{c.screen, r1, c.grid})
+		l.buildLayout(node.First, c.WithRect(r1))
 
 		r2 := c.ChildRect(0, topH+1, c.W(), bottomH)
-		l.buildLayout(node.Second, Canvas{c.screen, r2, c.grid})
+		l.buildLayout(node.Second, c.WithRect(r2))
 
 	}
 }

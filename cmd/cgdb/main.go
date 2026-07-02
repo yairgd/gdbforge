@@ -169,7 +169,7 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 		if !ok {
 			return
 		}
-		tab.HorizontalSplit(widgets.NewCodeWidget())
+		tab.HorizontalSplit(widgets.NewLoggerWidget())
 		app.RequestRedraw()
 	}
 
