@@ -7,22 +7,27 @@ import (
 )
 
 type LoggerWidget struct {
-	termui.Widget
+	termui.BaseWidget
 
 	Buffer   *core.Buffer
 	Viewport core.Viewport
-
-	InputBuf    string
-	lastCommand string
-	Cursor      int
 }
 
 func NewLoggerWidget() *LoggerWidget {
 	buf := core.NewBuffer()
-	return &LoggerWidget{
-		Buffer:   buf,
-		Viewport: core.Viewport{Height: 10},
+	w := &LoggerWidget{
+		BaseWidget: termui.NewBaseWidget(),
+		Buffer:     buf,
+		Viewport:   core.Viewport{Height: 10},
 	}
+	w.Start(func(ev termui.Event) {
+		switch ev := ev.(type) {
+		case termui.BaseEvent:
+			w.Buffer.AppendText(ev.Cmd.Name)
+
+		}
+	})
+	return w
 }
 
 func (m *LoggerWidget) HandleEvent(ev tcell.Event) {

@@ -32,8 +32,8 @@ type TermApp struct {
 	// widgets draw here all the time
 	// last frame that was actually displayed
 	frontBuffer *Grid
-
-	canvas Canvas
+	uiEvents    chan tcell.Event
+	canvas      Canvas
 }
 
 func NewTermApp() *TermApp {
@@ -49,9 +49,10 @@ func NewTermApp() *TermApp {
 	screen.EnableMouse()
 
 	return &TermApp{
-		screen: screen,
-		exit:   false,
-		events: make(chan Event, 100),
+		screen:   screen,
+		exit:     false,
+		events:   make(chan Event, 100),
+		uiEvents: make(chan tcell.Event, 100),
 	}
 }
 
@@ -77,30 +78,31 @@ func (app *TermApp) Run() {
 		app.screen.DisableMouse()
 		app.screen.Fini()
 	}()
+	// UI event source — PollEvent blocks; run off the main loop goroutine.
+	go func() {
+		for {
+			app.uiEvents <- app.screen.PollEvent()
+		}
+	}()
 	for !app.exit {
 		select {
-
+		// events from termui events
 		case ev := <-app.events:
 			if app.Api != nil {
 				app.Api.HandleCoreEvents(ev)
 			}
-
-		default:
-			ev := app.screen.PollEvent()
+		// event from tcell
+		case ev := <-app.uiEvents:
 			app.HandleEvent(ev)
-
-			//for _, w := range app.widgets {
-			//	w.widget.HandleEvent(ev)
-			//}
-			//	app.frontBuffer.Clear(app.screen, tcell.StyleDefault)
-
-			app.Draw(Canvas{rect: app.canvas.Rect(), grid: app.frontBuffer})
-
-			// move grid to sceen
-			app.frontBuffer.Draw(app.screen)
-			app.screen.Show()
-
 		}
+
+		app.Draw(Canvas{
+			rect: app.canvas.Rect(),
+			grid: app.frontBuffer,
+		})
+
+		app.frontBuffer.Draw(app.screen)
+		app.screen.Show()
 	}
 
 }

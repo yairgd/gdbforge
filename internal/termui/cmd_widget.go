@@ -8,6 +8,8 @@ import (
 )
 
 type CmdWidget struct {
+	BaseWidget
+
 	history     History
 	completer   AutoCompleter
 	active      bool
@@ -15,8 +17,6 @@ type CmdWidget struct {
 	compIndex   int
 	text        string
 	cursor      int
-
-	Events chan Event
 }
 
 func NewCmdWidget(completer AutoCompleter) *CmdWidget {

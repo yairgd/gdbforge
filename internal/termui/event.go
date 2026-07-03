@@ -17,5 +17,13 @@ type SubmitMsg struct {
 	Args  string
 }
 
-func (m SubmitMsg) Type() string     { return "SubmitMsg" }
-func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
+func (m SubmitMsg) Type() string          { return "SubmitMsg" }
+func (m SubmitMsg) CommandID() CommandID  { return m.CmdID }
+
+type BaseEvent struct {
+	Cmd  Command
+	Args []string
+}
+
+func (m BaseEvent) Type() string         { return "BaseEvent" }
+func (m BaseEvent) CommandID() CommandID { return m.Cmd.ID }

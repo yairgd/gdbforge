@@ -13,10 +13,6 @@ type CodeWidget struct {
 
 	Buffer   *core.Buffer
 	Viewport core.Viewport
-
-	InputBuf    string
-	lastCommand string
-	Cursor      int
 }
 
 func NewCodeWidget() *CodeWidget {

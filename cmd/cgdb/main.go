@@ -60,8 +60,6 @@ func (app *DebuggerApp) OnFocusDown(args ...any) {
 	app.tab.FocusDown()
 }
 
-type KeySeqFunc func(seq string)
-
 func (a *DebuggerApp) InitB() {
 	codeWidgetLeft := widgets.NewCodeWidget()
 	codeWidgetRight := widgets.NewCodeWidget()
@@ -169,7 +167,10 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 		if !ok {
 			return
 		}
-		tab.HorizontalSplit(widgets.NewLoggerWidget())
+
+		l := widgets.NewLoggerWidget()
+		l.Events = app.Events()
+		tab.HorizontalSplit(l)
 		app.RequestRedraw()
 	}
 
