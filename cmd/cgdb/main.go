@@ -4,6 +4,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/cgdb"
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -27,6 +28,8 @@ type DebuggerApp struct {
 	appState  cgdb.AppState
 	tab       *termui.TabWidget
 	cmdWidget *termui.CmdWidget
+	logger    *platform.Logger
+	eventBus  *platform.EventBus
 }
 
 func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
@@ -45,6 +48,8 @@ func NewDebuggerApp() *DebuggerApp {
 }
 
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
+	log := app.logger.Named("MainApp")
+	log.Info("send command")
 	app.tab.FocusLeft()
 }
 
@@ -92,6 +97,18 @@ func (a *DebuggerApp) InitB() {
 	a.BindKeySeq(a.OnFocusRight, "<C-w>h", "<C-w><Right>")
 	a.BindKeySeq(a.OnFocusUp, "<C-w>k", "<C-w><Up>")
 	a.BindKeySeq(a.OnFocusDown, "<C-w>j", "<C-w><Down>")
+
+	a.logger = platform.NewLogger()
+
+	// exaplr how to use filesynk
+	fileSink, err := platform.NewFileSink("cgdb.log")
+	if err != nil {
+		panic(err)
+	}
+	defer fileSink.Close()
+	a.logger.AddSink(fileSink)
+
+	a.eventBus = platform.NewEventBus()
 
 }
 
@@ -168,7 +185,7 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 			return
 		}
 
-		l := widgets.NewLoggerWidget()
+		l := widgets.NewLoggerWidget(app.logger)
 		l.Events = app.Events()
 		tab.HorizontalSplit(l)
 		app.RequestRedraw()
@@ -177,6 +194,8 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 }
 
 func main() {
+
 	app := NewDebuggerApp()
 	app.Run()
+
 }
