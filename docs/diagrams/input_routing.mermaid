@@ -1,0 +1,23 @@
+flowchart TB
+    Select["TermApp.Run select loop"]
+    Poll["PollEvent · tcell"]
+    Bus["<- events · termui.Event"]
+    TermHandler["TermApp.HandleEvent"]
+    HandleKey["AppApi.HandleKey"]
+    HandleResize["AppApi.HandleResize"]
+    Router["DebuggerApp · AppState.Mode()"]
+    Trie["Trie.SearchPartial"]
+    Tab["TabWidget.HandleEvent"]
+    Cmd["CmdWidget.HandleEvent"]
+    Core["HandleCoreEvents"]
+
+    Select --> Poll
+    Select --> Bus
+    Poll --> TermHandler
+    TermHandler -->|"EventKey"| HandleKey --> Router
+    TermHandler -->|"EventResize"| HandleResize
+    Router -->|"ModeNormal"| Trie
+    Router -->|"ModeNormal"| Tab
+    Router -->|"ModeNormal · colon"| Cmd
+    Router -->|"ModeCommand"| Cmd
+    Bus --> Core
