@@ -1,6 +1,6 @@
 # cgdb-go
 
-**cgdb-go** is a terminal debugger UI in Go, inspired by [cgdb](https://github.com/cgdb/cgdb). It provides a composable split-pane workspace, a `termui` framework (tcell), GDB MI2 integration, and a Vim-style `:` command line.
+**cgdb-go** is a Vim-inspired terminal application framework in Go, with a **GDB debugger** as its first application. It provides a composable split-pane workspace, a `termui` framework (tcell), service-driven domain models, and a `:` command line where `:buffer` selects which model to display.
 
 ```bash
 go run ./cmd/cgdb

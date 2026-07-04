@@ -15,6 +15,7 @@ cgdb-go organizes debugger panes through a **Workspace** containing a recursive 
 - [Splitting at runtime](#splitting-at-runtime)
 - [Tab management](#tab-management)
 - [Command line](#command-line)
+- [Buffer command](#buffer-command)
 - [Future status bar](#future-status-bar)
 - [Planned window operations](#planned-window-operations)
 
@@ -78,29 +79,28 @@ Called on startup (`NewDebuggerApp`) and on every `EventResize`. Migration path:
 
 The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist.
 
-Typical debugger panes inside the Workspace:
+Workspace panes are **widgets** — views bound to application **models** that were created at startup. Typical GDB models and their views:
 
-| Pane | Purpose |
-|------|---------|
-| Source view | Current file, breakpoint markers, PC highlight |
-| Breakpoints | Breakpoint list, enable/disable |
-| Console | GDB / target output |
-| Registers | Register dump |
-| Memory | Hex memory view |
-| Locals / Watch | Variable inspection |
+| Model | Widget (view) | Purpose |
+|-------|---------------|---------|
+| `CodeModel` | Source view | Current file, breakpoint markers, PC highlight |
+| `BreakpointModel` | Breakpoints pane | Breakpoint list, enable/disable |
+| `ConsoleModel` | Console pane | GDB / target output |
+| `RegisterModel` | Registers pane | Register dump |
+| `MemoryModel` | Memory pane | Hex memory view |
+| `ThreadModel` | Threads pane | Thread list |
+| `LoggerModel` | Logger pane | Application log |
 
 ```text
 Workspace
 └── SplitTree
-    ├── Source View
-    ├── Breakpoints
-    ├── Console
-    ├── Registers
-    ├── Memory
-    └── Future Views
+    ├── CodeWidget        → CodeModel
+    ├── BreakpointWidget  → BreakpointModel
+    ├── ConsoleWidget     → ConsoleModel
+    └── …
 ```
 
-Each pane is a **leaf widget** in the split tree. The Workspace does not draw content itself — it delegates geometry to `WidgetTree.BuildLayout`.
+Each pane is a **leaf widget** in the split tree. The Workspace does not draw content itself — it delegates geometry to `WidgetTree.BuildLayout`. Models exist whether or not a widget is currently displaying them.
 
 ---
 
@@ -263,7 +263,37 @@ Command mode is entered by **`DebuggerApp`** (`:` → `ModeCommand`, `CmdWidget.
 - Users can run UI operations without sending spurious input to GDB.
 - Completion vocabularies differ (UI vs debugger).
 
-Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer).
+Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
+
+---
+
+## Buffer command
+
+The `:buffer` command selects which **application model** to display — it does not open a text file.
+
+```text
+:buffer code
+:buffer breakpoints
+:buffer threads
+:buffer registers
+:buffer memory
+:buffer console
+:buffer logger
+```
+
+Each name corresponds to a model declared at application startup. Running `:buffer` creates (or activates) a widget bound to that model in the focused window, or replaces the focused pane's view.
+
+**Related window commands** (same model-binding semantics):
+
+| Command | Action |
+|---------|--------|
+| `:buffer <name>` | Display model in focused pane |
+| `:split` / `:vsplit` | Split focused pane; new pane also bound via subsequent `:buffer` or default |
+| `:tab` | Open model in a new tab workspace |
+
+The architecture does **not** use `:attach <name>`. All models exist from startup; the user only chooses which to display. See [ARCHITECTURE.md](ARCHITECTURE.md#why-not-attach).
+
+**Current state:** `:buffer` dispatch is planned; the prototype creates widgets directly in layout at init. Model types per domain are not yet fully separated from widget state.
 
 ---
 

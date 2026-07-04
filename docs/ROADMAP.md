@@ -90,6 +90,8 @@ Dates are indicative — adjust as development progresses.
 
 | Feature | Description |
 |---------|-------------|
+| Application models | Explicit model types per domain; created at startup |
+| `:buffer` dispatch | Display model by name; bind widget to existing model |
 | `RootWidget` | Structured TabBar + Workspace + CmdLine |
 | Tab header rendering | Visible tab bar with switch keys |
 | CmdLine dispatch | `SubmitMsg` on event bus → `HandleCoreEvents` by `CommandID` |

@@ -25,19 +25,24 @@ This document covers the cgdb-go presentation layer: the widget system, split-tr
 
 ## Design goals
 
-The UI layer (`internal/termui`) exists to answer one question: **how do debugger panes compose, draw, and receive input in a terminal?**
+The UI layer (`internal/termui`) exists to answer one question: **how do application models compose, draw, and receive input in a terminal?**
 
 Design goals:
 
 1. **Local coordinates** — widgets never compute global screen positions.
 2. **Single draw path** — Widget → Canvas → Grid → tcell.
 3. **Composable layout** — binary split tree, not hard-coded pane IDs.
-4. **Thin widgets** — business state lives in `core`; widgets adapt and draw.
+4. **Thin widgets** — widgets are views; domain state lives in application models.
 5. **Replaceable backend** — tcell is an implementation detail below `Grid`.
+6. **On-demand views** — widgets are created when the user displays a model; model lifetime is independent of widget lifetime.
 
 ---
 
 ## Widget system
+
+Widgets are **views**. They display application models and handle local input; they do not own business logic and never communicate directly with services.
+
+A widget is created only when the user asks to display a model (for example via `:buffer code` or `:split`). Multiple widgets may display the same model simultaneously. Closing a pane destroys the widget, not the model.
 
 Every on-screen pane implements the `Widget` interface:
 
@@ -88,6 +93,8 @@ classDiagram
 **Why an interface, not a base struct?** Go embedding could provide defaults, but the interface keeps widgets independent. A shared `BaseWidget` file exists as a placeholder for future helpers — it is intentionally empty today.
 
 **Design decision:** widgets receive `Canvas`, not `tcell.Screen`. This prevents accidental full-screen draws and enforces layout boundaries.
+
+**Design decision:** widgets bind to models at creation time. The window manager (`Layout`, `WidgetTree`, `:buffer` dispatch) owns widget lifecycle; models are owned by the application and outlive any single pane.
 
 ---
 

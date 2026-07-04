@@ -47,41 +47,57 @@ Add: `internal/termui/layout.go`, `node.go`, `tab.go`, `cmd_widget.go`, `interna
 ### Mental model
 
 ```text
+Application startup
+  ├── Services          (GDBClient, …) — talk to external systems
+  ├── Event bus         (termui.Event channel)
+  ├── Models            (CodeModel, BreakpointModel, …) — created once, live until exit
+  ├── Logger
+  └── Runtime           (TermApp, window manager)
+
+User displays a model (:buffer, :split)
+  └── Window manager creates Widget → binds to existing Model
+
 TermApp
   ├── AppApi (implemented by DebuggerApp)
   │     ├── HandleKey(*tcell.EventKey)     — mode router, trie, widget dispatch
   │     ├── HandleResize()               — top-level widget rects
   │     └── HandleCoreEvents(termui.Event) — ALL domain events land here
   ├── screen tcell.Screen                — poll, lifecycle, Show (owned by TermApp)
-  ├── events chan termui.Event           — bus; any subsystem may publish
+  ├── events chan termui.Event           — bus; services and widgets may publish
   ├── DebuggerApp fields
   │     ├── appState cgdb.AppState         — ModeNormal / ModeCommand / …
   │     ├── trie termui.Trie               — multi-key bindings
-  │     ├── tab *TabWidget
+  │     ├── tab *TabWidget                 — window manager (split tree)
   │     └── cmdWidget *CmdWidget
   ├── top-level widgets (tab + cmd line)
   │     └── CmdWidget.Events → events channel
   ├── frontBuffer (*Grid)                 — shared draw target + BackCells diff
   └── select loop: drain bus OR PollEvent → draw → flush
 
-Widget
+Widget (view)
+  ├── displays Model state
   ├── HandleEvent(tcell.Event)   — local keys / mouse
   ├── Draw(Canvas)
-  └── publish termui.Event       — when app-level action needed
+  └── publish termui.Event       — when app-level action needed (not service calls)
+
+Data flow (target):
+  Service → Event Bus → Model → Widget
 
 GDB path (today):
   GDBClient (goroutine) → EventInterrupt → GDBWidget
 GDB path (target):
-  GDBClient → GdbOutputMsg on bus → HandleCoreEvents
+  GDBClient → GdbOutputMsg on bus → Model update → Widget redraw
 ```
 
 **Rules:**
 
-- High-rate GDB output → buffer + viewport.
-- Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget code.
+- Models are created at startup; widgets are created on demand.
+- Widgets never call services directly — services publish events; models subscribe.
+- High-rate service output → model state → widget reads model on draw.
+- Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget business logic.
 - App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
 - Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
-- Never spawn GDB from widget code — use `core.Debugger` from the app layer.
+- Never spawn GDB from widget code — use `core.Debugger` from the app/service layer.
 
 ---
 
@@ -89,7 +105,10 @@ GDB path (target):
 
 | Term | Meaning |
 |------|---------|
-| **Widget** | UI component implementing `HandleEvent` + `Draw` |
+| **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events |
+| **Widget** | View displaying a model; implements `HandleEvent` + `Draw`; no business logic |
+| **Service** | External-system adapter (e.g. `GDBClient`); produces events; never imports UI |
+| **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
 | **Grid** | Off-screen `[][]Cell` framebuffer |
 | **Node** | Split tree node (leaf or split) |
@@ -178,7 +197,11 @@ sequenceDiagram
 
 ## Adding a widget
 
-1. Create `internal/cgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
+Widgets are views. Before adding a widget, ensure the corresponding **model** exists and is updated by services via the event bus.
+
+1. Define or use an application model that holds the pane's state.
+
+2. Create `internal/cgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
 
 ```go
 type MyWidget struct { /* state */ }
@@ -187,21 +210,21 @@ func (w *MyWidget) HandleEvent(ev tcell.Event) { /* ... */ }
 func (w *MyWidget) Draw(c Canvas) { /* draw within c.W(), c.H() */ }
 ```
 
-2. Register in layout:
+3. Register via the window manager when the user displays the model:
 
 ```go
-layout := NewLayout(NewMyWidget())
-layout.NewSplit(Vertical, NewOtherWidget())
+// :buffer mymodel → window manager creates widget bound to existing MyModel
+layout.NewSplit(Vertical, NewMyWidget(myModel))
 ```
 
-3. To publish domain events, wire the widget to the bus:
+4. To publish domain events, wire the widget to the bus:
 
 ```go
 cmd := termui.NewCmdWidget(completer)
 cmd.Events = app.Events()
 ```
 
-4. Handle events in the application — not in the widget:
+5. Handle events in the application — not in the widget:
 
 ```go
 func (app *MyApp) HandleCoreEvents(ev termui.Event) {
@@ -211,7 +234,7 @@ func (app *MyApp) HandleCoreEvents(ev termui.Event) {
 }
 ```
 
-4. Bind multi-key sequences on the app trie:
+6. Bind multi-key sequences on the app trie:
 
 ```go
 app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
@@ -221,7 +244,8 @@ app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
 
 - Never call `screen.SetContent` with absolute coordinates — use `Canvas`.
 - Never set your own position — layout assigns `Canvas`.
-- Keep GDB/process logic out of the widget — use `core.Debugger`.
+- Keep service/process logic out of the widget — widgets read models; services update models via events.
+- Never call services from widget code.
 
 ---
 
@@ -334,9 +358,11 @@ dlv debug ./cmd/docserve -- --port 8765
 
 | Task | Start here |
 |------|------------|
-| New debugger pane | Copy `code_widget.go`, register in layout |
-| New backend | Implement `core.Debugger`, new `internal/<backend>/` |
+| New application model | App startup in `cmd/cgdb`; subscribe to event bus |
+| New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
+| New service / backend | Implement `core.Debugger`, new `internal/<backend>/` |
 | New `:` command | Add private `CommandID` in app, register in completer, handle in `HandleCoreEvents` |
+| New `:buffer` target | Register model name at startup; handle in `HandleCoreEvents` → window manager |
 | New key chord | `app.BindKeySeq(callback, "<C-x>…")` in `InitB` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Add `backBuffer`, per-frame clear; extend `BackCells` diff |

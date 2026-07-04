@@ -114,11 +114,13 @@ flowchart TB
 
 **UI-agnostic domain logic.** No imports of `tcell` or other terminal packages.
 
+Today this package holds shared primitives (`Buffer`, `Viewport`, `Debugger` interface, backend event types). The **target** is explicit application models per domain (e.g. `BreakpointModel`) living in the app layer, with `core` supplying reusable building blocks.
+
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Debugger events (`GdbOutputMsg`, …) |
-| `debugger.go` | `Debugger` interface |
-| `buffer.go` | Line-oriented text buffer (GDB output, source) |
+| `events.go` | Backend events (`GdbOutputMsg`, …) — consumed by models |
+| `debugger.go` | `Debugger` interface — service surface for sending commands |
+| `buffer.go` | Line-oriented text storage — building block for text-oriented models |
 | `viewport.go` | Scroll window over buffer |
 
 **Rule:** if it can be tested without a terminal, it belongs here.
@@ -204,17 +206,21 @@ flowchart BT
 
 | Question | Package |
 |----------|---------|
-| Split pane layout? | `termui` |
+| Application model (domain state)? | App layer (`cmd/cgdb`, future `internal/cgdb/models/`) |
+| Service (external I/O)? | `gdb` or future backend packages |
+| Split pane layout / window manager? | `termui` |
+| Widget (view of a model)? | `internal/cgdb/widgets` or `termui` |
 | GDB MI parsing? | `gdb` |
-| Scrollable text buffer? | `core` |
+| Scrollable text storage primitive? | `core` |
 | Key binding in normal mode? | `cmd/cgdb` (`Trie`, `BindKeySeq`) |
 | Interaction mode state? | `internal/cgdb` (`AppState`) |
-| Spawn/debug external process? | `gdb` (or future backend) |
+| Spawn/debug external process? | `gdb` (or future backend service) |
+| `:buffer` / model registry? | App startup + `HandleCoreEvents` dispatch |
 | Vim `:` command registry? | `termui` completer + `cmd/cgdb` dispatch |
 | Draw box borders? | `termui` Grid/Cell |
-| Compose UI + GDB + dispatch? | `cmd/cgdb` |
+| Compose services + models + UI? | `cmd/cgdb` |
 
-When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core`.
+When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core` or a dedicated model package over `termui`.
 
 ---
 

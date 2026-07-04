@@ -49,19 +49,28 @@ func NewDebuggerApp() *DebuggerApp {
 
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
 	log := app.logger.Named("MainApp")
-	log.Info("send command")
+	log.Info("send left command")
 	app.tab.FocusLeft()
 }
 
 func (app *DebuggerApp) OnFocusRight(args ...any) {
+	log := app.logger.Named("MainApp")
+	log.Info("send right command")
+
 	app.tab.FocusRight()
 }
 
 func (app *DebuggerApp) OnFocusUp(args ...any) {
+	log := app.logger.Named("MainApp")
+	log.Info("send up command")
+
 	app.tab.FocusUp()
 }
 
 func (app *DebuggerApp) OnFocusDown(args ...any) {
+	log := app.logger.Named("MainApp")
+	log.Info("send down command")
+
 	app.tab.FocusDown()
 }
 

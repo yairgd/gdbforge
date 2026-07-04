@@ -321,12 +321,14 @@ a.cmdWidget.Events = a.Events()
 
 | Category | Examples | Dispatch |
 |----------|----------|----------|
-| Window | `:vs`, `:split`, `:close` (via `:quit` on last pane) | **Partial** — `:vs` / `:split` wired in `HandleCoreEvents` |
+| Model / window | `:buffer code`, `:buffer breakpoints`, `:vs`, `:split`, `:close` | Window manager binds widget to existing model — **partial** (`:vs` / `:split` wired) |
 | Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
-| Debugger | `:break`, `:continue`, `:step` | `HandleCoreEvents` → `core.Debugger` (planned) |
+| Debugger | `:break`, `:continue`, `:step` | `HandleCoreEvents` → service layer (planned) |
 | UI | `:quit` | `HandleCoreEvents` → `app.Exit()` (implemented) |
 
-**Design decision:** UI commands and GDB CLI commands share familiar syntax (`:break main`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to GDB, or exit.
+The `:buffer <name>` command displays an application model, not a file. Each `<name>` must be declared at startup (e.g. `code`, `breakpoints`, `console`). There is no `:attach` command — all models exist from initialization. See [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
+
+**Design decision:** UI commands and GDB CLI commands share familiar syntax (`:break main`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to services, or exit.
 
 ---
 

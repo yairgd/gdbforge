@@ -22,20 +22,24 @@ cgdb-go connects to debug targets through **backend adapters** that implement `c
 
 ## Integration overview
 
+Application data flows **Service → Event Bus → Model → Widget**. The debugger backend is a service; UI panes are widgets bound to models.
+
 ```mermaid
 flowchart TB
     subgraph UI["UI · termui"]
-        GDBWidget["GDBWidget"]
-        Console["Console panes"]
+        Widgets["Pane widgets · views"]
+    end
+
+    subgraph App["Application · cmd/cgdb"]
+        Models["Domain models"]
     end
 
     subgraph Domain["Domain · core"]
         DebuggerIF["Debugger interface"]
-        Buffer["Buffer / Viewport"]
         Events["GdbOutputMsg"]
     end
 
-    subgraph Backend["Backend · gdb"]
+    subgraph Backend["Service · gdb"]
         Client["GDBClient"]
         MI["MiMsg / GdbInputState"]
         PTY["PTY I/O"]
@@ -46,17 +50,18 @@ flowchart TB
         Target["Debug target"]
     end
 
-    GDBWidget --> DebuggerIF
-    GDBWidget --> Buffer
+    Widgets --> Models
+    Models --> Events
+    Client --> Events
+    Events --> Models
     DebuggerIF --> Client
     Client --> PTY --> GDB --> Target
-    Client --> Events --> GDBWidget
     Client --> MI
 ```
 
 *Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
 
-**Dependency rule:** `internal/gdb` must not import `internal/termui`. UI widgets depend on `core.Debugger`, not on concrete GDB types (though `GDBWidget` currently also uses `gdb.GdbInputState` — a coupling to refactor behind an adapter).
+**Dependency rule:** `internal/gdb` must not import `internal/termui`. Widgets display models; services implement `core.Debugger` and publish events. Widgets never call `GDBClient` directly.
 
 ---
 

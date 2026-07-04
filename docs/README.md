@@ -1,8 +1,8 @@
 # cgdb-go Documentation
 
-**cgdb-go** is a modern terminal debugger UI built in Go on [tcell](https://github.com/gdamore/tcell). It lives in the `cgdb-go` repository under `internal/termui` and is driven from `cmd/cgdb`.
+**cgdb-go** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/cgdb`.
 
-The project targets a **cgdb-like experience** with a cleaner architecture: composable widgets, a recursive split-tree workspace, a replaceable rendering pipeline, and debugger backends that do not depend on the UI layer.
+The project targets a **cgdb-like experience** with a cleaner architecture: application models created at startup, widgets as on-demand views, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer.
 
 Standalone diagram sources live under [`diagrams/`](diagrams/).
 
@@ -101,10 +101,11 @@ See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) for split trees, tabs, and the 
 3. `Canvas` provides local drawing coordinates.
 4. The layout engine owns positioning.
 5. The rendering backend should be replaceable.
-6. Business logic is separated from rendering logic.
+6. Business logic lives in models; widgets display models and never talk to services directly.
 7. TabBar, CmdLine, and Workspace are top-level UI components.
 8. Only Workspace contains the recursive split tree.
-9. Future debugger backends must not depend on the UI implementation.
+9. Services and future debugger backends must not depend on the UI implementation.
+10. Models are created at application startup; widgets are created when the user displays a model.
 
 Full rationale: [ARCHITECTURE.md](ARCHITECTURE.md#design-principles).
 

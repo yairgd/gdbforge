@@ -19,12 +19,16 @@
 
 ## Vision
 
-cgdb-go should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — but implemented as a **composable widget system** rather than a monolithic ncurses application.
+cgdb-go is **not a clone of Vim**. It is a **generic application framework** inspired by Vim's interaction model, with the GDB debugger as its first application.
+
+Vim has a single data model (text buffers). This framework supports **multiple application-specific data models** — breakpoints, registers, and console output in a debugger; orders, portfolio, and charts in a trading app. The user still works with familiar concepts (`:buffer`, `:split`, `:vsplit`, `:tab`), but `:buffer` selects which **model** to display, not which file to open.
+
+cgdb-go should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — built as a **composable widget system over domain models**, not a monolithic ncurses application.
 
 The long-term vision:
 
-- A **single UI codebase** that adapts to GDB today, OpenOCD/JTAG tomorrow, and kernel-debugging workflows later.
-- **Vim-inspired interaction** — normal mode, focus mode, and a `:` command line — without sacrificing discoverability for new users.
+- A **Vim-inspired interaction framework** — normal mode, focus mode, and a `:` command line — applied to arbitrary application data, not only text files.
+- A **single UI codebase** that adapts to GDB today, OpenOCD/JTAG tomorrow, and other domains (trading, monitoring, …) via application-specific models and services.
 - **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
 - **Efficient rendering** through an off-screen grid and future diff-based terminal updates.
 
@@ -36,12 +40,13 @@ cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.c
 
 | Goal | Description |
 |------|-------------|
+| **Model-driven UI** | Services → event bus → models → widgets; widgets never talk to services |
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
-| **Backend agnostic** | `core.Debugger` interface; GDB is the first implementation |
+| **Backend agnostic** | `core.Debugger` interface; GDB is the first service implementation |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
 | **Low latency feel** | Off-screen grid; path to diff rendering to minimize I/O |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |
-| **Familiar UX** | Split panes, tabs, GDB console, future vim-style commands |
+| **Familiar UX** | `:buffer` for models, split panes, tabs, Vim-style window commands |
 
 ---
 
@@ -96,9 +101,11 @@ The cgdb-go stack (`internal/termui`) is intentionally lower-level than Bubble T
 
 ### What cgdb-go changes
 
+- **Application models** instead of text buffers as the primary data unit.
 - **Explicit widget tree** instead of implicit window list.
 - **Layout engine** assigns geometry; widgets never set global coordinates.
-- **Event bus** (`core.Event`) decouples UI actions from debugger logic.
+- **Service → model → widget** data flow; widgets display models and never call services directly.
+- **Event bus** decouples services from models and application dispatch.
 - **Pluggable rendering** at the Grid → terminal boundary.
 
 ```mermaid
