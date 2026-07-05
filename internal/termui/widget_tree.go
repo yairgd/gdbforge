@@ -10,14 +10,14 @@ const DirectionWeight = 1000
 
 const minPaneCells = 3
 
-const sepHitPad = 1
-
 type WidgetTree struct {
 	root  *Node
 	focus *Node
 
-	dragSplit *Node
-	onResize  func()
+	dragSplit        *Node
+	onResize         func()
+	grid             *Grid
+	mousePrimaryHeld bool
 }
 
 func (w *WidgetTree) SetOnResize(fn func()) {
@@ -63,26 +63,32 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 
 func (l *WidgetTree) handleMouse(me *tcell.EventMouse) bool {
 	mx, my := me.Position()
+	primary := me.Buttons()&tcell.ButtonPrimary != 0
 
 	if l.dragSplit != nil {
-		if me.Buttons()&tcell.ButtonPrimary != 0 {
+		if primary {
 			l.updateSplitDrag(mx, my)
 			return true
 		}
 		l.dragSplit = nil
+		l.mousePrimaryHeld = false
 		return true
 	}
 
-	if me.Buttons()&tcell.ButtonPrimary != 0 {
-		if split := l.findSeparator(mx, my); split != nil {
-			l.dragSplit = split
-			l.updateSplitDrag(mx, my)
-			return true
+	if primary {
+		if !l.mousePrimaryHeld {
+			l.mousePrimaryHeld = true
+			if split := l.findSeparator(mx, my); split != nil {
+				l.dragSplit = split
+				l.updateSplitDrag(mx, my)
+				return true
+			}
+			l.FocusAt(mx, my)
 		}
-		l.FocusAt(mx, my)
 		return false
 	}
 
+	l.mousePrimaryHeld = false
 	return false
 }
 
@@ -92,10 +98,13 @@ func (l *WidgetTree) findSeparator(x, y int) *Node {
 		if found != nil {
 			return
 		}
-		if n.sepRect.W() > 0 && n.sepRect.H() > 0 &&
-			n.sepRect.ContainsPadded(x, y, sepHitPad) {
-			found = n
+		if !n.sepRect.Contains(x, y) {
+			return
 		}
+		if l.grid != nil && !l.grid.isSplitSeparatorCell(x, y, n.Dir) {
+			return
+		}
+		found = n
 	})
 	return found
 }
@@ -407,6 +416,7 @@ func (l *WidgetTree) draw(c Canvas, node *Node) {
 }
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
+	l.grid = c.grid
 	l.buildLayout(l.root, c)
 
 }

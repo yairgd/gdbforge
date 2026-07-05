@@ -234,6 +234,21 @@ func (g *Grid) isBorderCell(x, y int) bool {
 	return g.Cells[x][y].IsBorder()
 }
 
+func (g *Grid) isSplitSeparatorCell(x, y int, dir SplitDir) bool {
+	if x < 0 || x >= g.W || y < 0 || y >= g.H {
+		return false
+	}
+	c := &g.Cells[x][y]
+	switch dir {
+	case Vertical:
+		return c.Up && c.Down
+	case Horizontal:
+		return c.Left && c.Right
+	default:
+		return false
+	}
+}
+
 func (g *Grid) HideCursor() {
 	g.cursorVisible = false
 	g.pointerShape = ""
