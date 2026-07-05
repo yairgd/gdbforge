@@ -8,9 +8,20 @@ import (
 
 const DirectionWeight = 1000
 
+const minPaneCells = 3
+
+const sepHitPad = 1
+
 type WidgetTree struct {
 	root  *Node
 	focus *Node
+
+	dragSplit *Node
+	onResize  func()
+}
+
+func (w *WidgetTree) SetOnResize(fn func()) {
+	w.onResize = fn
 }
 
 func NewWidgetTree(newWidget Widget) WidgetTree {
@@ -39,9 +50,124 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 }
 
 func (l *WidgetTree) HandleEvent(ev tcell.Event) {
+	if me, ok := ev.(*tcell.EventMouse); ok {
+		if l.handleMouse(me) {
+			return
+		}
+	}
+
 	if l.focus != nil && l.focus.Type == NodeLeaf {
 		l.focus.Widget.HandleEvent(ev)
 	}
+}
+
+func (l *WidgetTree) handleMouse(me *tcell.EventMouse) bool {
+	mx, my := me.Position()
+
+	if l.dragSplit != nil {
+		if me.Buttons()&tcell.ButtonPrimary != 0 {
+			l.updateSplitDrag(mx, my)
+			return true
+		}
+		l.dragSplit = nil
+		return true
+	}
+
+	if me.Buttons()&tcell.ButtonPrimary != 0 {
+		if split := l.findSeparator(mx, my); split != nil {
+			l.dragSplit = split
+			l.updateSplitDrag(mx, my)
+			return true
+		}
+		l.FocusAt(mx, my)
+		return false
+	}
+
+	return false
+}
+
+func (l *WidgetTree) findSeparator(x, y int) *Node {
+	var found *Node
+	l.walkSplits(l.root, func(n *Node) {
+		if found != nil {
+			return
+		}
+		if n.sepRect.W() > 0 && n.sepRect.H() > 0 &&
+			n.sepRect.ContainsPadded(x, y, sepHitPad) {
+			found = n
+		}
+	})
+	return found
+}
+
+func (l *WidgetTree) walkSplits(n *Node, fn func(*Node)) {
+	if n == nil {
+		return
+	}
+	if n.Type == NodeSplit {
+		fn(n)
+		l.walkSplits(n.First, fn)
+		l.walkSplits(n.Second, fn)
+	}
+}
+
+func (l *WidgetTree) updateSplitDrag(mx, my int) {
+	n := l.dragSplit
+	if n == nil || n.Type != NodeSplit {
+		return
+	}
+
+	r := n.layoutRect
+	switch n.Dir {
+	case Vertical:
+		avail := r.W() - 1
+		if avail < minPaneCells*2 {
+			return
+		}
+		localX := mx - r.X()
+		if localX < minPaneCells {
+			localX = minPaneCells
+		}
+		if localX > avail-minPaneCells {
+			localX = avail - minPaneCells
+		}
+		n.Ratio = float64(localX) / float64(avail)
+
+	case Horizontal:
+		avail := r.H() - 1
+		if avail < minPaneCells*2 {
+			return
+		}
+		localY := my - r.Y()
+		if localY < minPaneCells {
+			localY = minPaneCells
+		}
+		if localY > avail-minPaneCells {
+			localY = avail - minPaneCells
+		}
+		n.Ratio = float64(localY) / float64(avail)
+	}
+
+	if l.onResize != nil {
+		l.onResize()
+	}
+}
+
+func (l *WidgetTree) IsDraggingSeparator() bool {
+	return l.dragSplit != nil
+}
+
+func (t *WidgetTree) FocusAt(x, y int) bool {
+	var leaves []*Node
+	t.root.TotLeaves(&leaves)
+
+	for _, n := range leaves {
+		if n.canvas.Rect().Contains(x, y) {
+			t.focus = n
+			return true
+		}
+	}
+	return false
 }
 
 func abs(x int) int {
@@ -302,18 +428,26 @@ func (l *WidgetTree) buildLayout(
 	switch node.Dir {
 
 	case Vertical:
-		total := Units(node, Vertical)
+		avail := c.W() - 1
+		if avail < 1 {
+			return
+		}
 
-		leftW := int(
-			float64(c.W()) *
-				float64(Units(node.First, Vertical)) /
-				float64(total),
-		)
-
-		//leftW := int(float64(c.W()) * node.Ratio)
+		leftW := int(float64(avail) * node.Ratio)
+		if leftW < minPaneCells {
+			leftW = minPaneCells
+		}
+		if leftW > avail-minPaneCells {
+			leftW = avail - minPaneCells
+		}
+		node.Ratio = float64(leftW) / float64(avail)
 		rightW := c.W() - leftW - 1
 
 		c.DrawVerticalLocal(leftW, 0, c.H(), false)
+
+		cr := c.Rect()
+		node.layoutRect = cr
+		node.sepRect = NewRect(c.ScreenX(leftW), c.ScreenY(0), 1, c.H())
 
 		r1 := c.ChildRect(0, 0, leftW, c.H())
 		l.buildLayout(node.First, c.WithRect(r1))
@@ -322,19 +456,26 @@ func (l *WidgetTree) buildLayout(
 		l.buildLayout(node.Second, c.WithRect(r2))
 
 	case Horizontal:
+		avail := c.H() - 1
+		if avail < 1 {
+			return
+		}
 
-		total := Units(node, Horizontal)
-
-		topH := int(
-			float64(c.H()) *
-				float64(Units(node.First, Horizontal)) /
-				float64(total),
-		)
-
-		//topH := int(float64(c.H()) * node.Ratio)
+		topH := int(float64(avail) * node.Ratio)
+		if topH < minPaneCells {
+			topH = minPaneCells
+		}
+		if topH > avail-minPaneCells {
+			topH = avail - minPaneCells
+		}
+		node.Ratio = float64(topH) / float64(avail)
 		bottomH := c.H() - topH - 1
 
 		c.DrawHorizontalLocal(topH, 0, c.W(), false)
+
+		cr := c.Rect()
+		node.layoutRect = cr
+		node.sepRect = NewRect(c.ScreenX(0), c.ScreenY(topH), c.W(), 1)
 
 		r1 := c.ChildRect(0, 0, c.W(), topH)
 		l.buildLayout(node.First, c.WithRect(r1))

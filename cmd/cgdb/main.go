@@ -83,6 +83,7 @@ func (a *DebuggerApp) InitB() {
 		codeWidgetLeft,
 		codeWidgetRight,
 	)
+	a.tab.SetOnResize(a.RequestFrame)
 	a.AddWidget(a.tab)
 
 	completer := termui.NewSimpleCompleter([]termui.Command{
@@ -134,6 +135,10 @@ func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 
 	case cgdb.ModeNormal:
 
+		if isCopyKey(ev) {
+			a.tab.HandleEvent(ev)
+			return
+		}
 		if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
 			a.appState.SetMode(cgdb.ModeCommand)
 			a.cmdWidget.Activate()
@@ -155,6 +160,33 @@ func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 		return
 
 	}
+}
+
+func isCopyKey(ev *tcell.EventKey) bool {
+	return ev.Key() == tcell.KeyCtrlC ||
+		(ev.Key() == tcell.KeyRune && ev.Rune() == 'c' && ev.Modifiers()&tcell.ModCtrl != 0)
+}
+
+func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
+	if a.appState.Mode() == cgdb.ModeCommand {
+		return
+	}
+
+	if ev.Buttons()&tcell.ButtonPrimary != 0 {
+		x, y := ev.Position()
+		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
+			a.appState.SetMode(cgdb.ModeInsert)
+		}
+	}
+
+	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+		x, y := ev.Position()
+		if a.tab.FocusAt(x, y) {
+			a.appState.SetMode(cgdb.ModeInsert)
+		}
+	}
+
+	a.tab.HandleEvent(ev)
 }
 
 func (a *DebuggerApp) HandleResize() {
@@ -207,6 +239,7 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 
 		l := widgets.NewLoggerWidget(app.logger)
 		l.Events = app.Events()
+		l.SetCopyToClipboard(app.CopyToClipboard)
 		tab.HorizontalSplit(l)
 		app.RequestRedraw()
 	}

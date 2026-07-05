@@ -1,9 +1,16 @@
 package termui
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
+
+type bufferPos struct {
+	line int
+	col  int
+}
 
 type Viewport struct {
 	Buffer *platform.Buffer
@@ -19,12 +26,28 @@ type Viewport struct {
 	// Last canvas size seen during Draw (used for scrolling).
 	width  int
 	height int
+
+	// Screen origin of the widget rect (set during Draw).
+	screenX int
+	screenY int
+
+	// Text selection (buffer coordinates).
+	selAnchor bufferPos
+	selCursor bufferPos
+	selActive bool
+	hasSel    bool
+
+	copyToClipboard func(string)
 }
 
 func NewViewport(buf *platform.Buffer) *Viewport {
 	return &Viewport{
 		Buffer: buf,
 	}
+}
+
+func (v *Viewport) SetCopyToClipboard(fn func(string)) {
+	v.copyToClipboard = fn
 }
 
 // Draw renders the visible portion of the buffer.
@@ -35,8 +58,11 @@ func (v *Viewport) Draw(c Canvas) {
 
 	v.width = c.W()
 	v.height = c.H()
+	v.screenX = c.ScreenX(0)
+	v.screenY = c.ScreenY(0)
 
 	style := tcell.StyleDefault
+	selStyle := style.Reverse(true)
 	width := v.width
 	height := v.height
 
@@ -62,13 +88,25 @@ func (v *Viewport) Draw(c Canvas) {
 		if visibleLen < width {
 			c.ClearLineRange(row, visibleLen, width, style)
 		}
-		c.Print(0, row, style, text)
+
+		for col, ch := range text {
+			bufCol := v.Left + col
+			st := style
+			if v.containsSel(line, bufCol) {
+				st = selStyle
+			}
+			c.SetContent(col, row, ch, st)
+		}
 	}
 
 	v.drawCursor(c)
 }
 
 func (v *Viewport) drawCursor(c Canvas) {
+	if v.hasSel {
+		return
+	}
+
 	localX := v.CursorCol - v.Left
 	localY := v.CursorLine - v.Top
 
@@ -76,14 +114,83 @@ func (v *Viewport) drawCursor(c Canvas) {
 		return
 	}
 
-	c.ShowCursor(localX, localY)
+	c.ShowNativeCursor(localX, localY)
 }
 
 func (v *Viewport) HandleEvent(ev tcell.Event) {
+	switch e := ev.(type) {
+	case *tcell.EventMouse:
+		v.handleMouse(e)
+	case *tcell.EventKey:
+		v.handleKey(e)
+	}
+}
 
-	key, ok := ev.(*tcell.EventKey)
-	if !ok {
+func (v *Viewport) handleMouse(e *tcell.EventMouse) {
+	if v.Buffer == nil || v.width <= 0 || v.height <= 0 {
 		return
+	}
+
+	mx, my := e.Position()
+	lx := mx - v.screenX
+	ly := my - v.screenY
+
+	if e.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+			return
+		}
+		v.clearSelection()
+		if e.Buttons()&tcell.WheelUp != 0 {
+			v.Up()
+		}
+		if e.Buttons()&tcell.WheelDown != 0 {
+			v.Down()
+		}
+		v.EnsureVisible(v.width, v.height)
+		return
+	}
+
+	if e.Buttons() == tcell.ButtonNone && v.selActive {
+		v.selActive = false
+		if lx >= 0 && ly >= 0 && lx < v.width && ly < v.height {
+			v.selCursor = v.posFromLocal(lx, ly)
+		}
+		v.hasSel = v.selAnchor != v.selCursor
+		if v.hasSel {
+			v.copySelection()
+		}
+		return
+	}
+
+	if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+		return
+	}
+
+	pos := v.posFromLocal(lx, ly)
+
+	if e.Buttons()&tcell.ButtonPrimary != 0 {
+		if !v.selActive {
+			v.clearSelection()
+			v.selActive = true
+			v.selAnchor = pos
+			v.hasSel = false
+		}
+		v.selCursor = pos
+		v.hasSel = v.selAnchor != v.selCursor
+		v.CursorLine = pos.line
+		v.CursorCol = pos.col
+		v.clampCursorCol()
+		v.EnsureVisible(v.width, v.height)
+	}
+}
+
+func (v *Viewport) handleKey(key *tcell.EventKey) {
+	if key.Key() == tcell.KeyCtrlC ||
+		(key.Key() == tcell.KeyRune && key.Rune() == 'c' && key.Modifiers()&tcell.ModCtrl != 0) {
+		if v.hasSel {
+			v.copySelection()
+			return
+		}
 	}
 
 	switch key.Key() {
@@ -111,9 +218,107 @@ func (v *Viewport) HandleEvent(ev tcell.Event) {
 
 	case tcell.KeyEnd:
 		v.End()
+
+	default:
+		return
 	}
 
+	v.clearSelection()
 	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
+	line := v.Top + ly
+	if line < 0 {
+		line = 0
+	}
+	if v.Buffer != nil {
+		last := v.Buffer.NumLines() - 1
+		if line > last {
+			line = last
+		}
+	}
+
+	col := v.Left + lx
+	lineLen := 0
+	if v.Buffer != nil && line >= 0 && line < v.Buffer.NumLines() {
+		lineLen = len(v.Buffer.Line(line))
+	}
+	if col > lineLen {
+		col = lineLen
+	}
+
+	return bufferPos{line: line, col: col}
+}
+
+func (v *Viewport) normalizedSel() (start, end bufferPos) {
+	start = v.selAnchor
+	end = v.selCursor
+	if start.line > end.line || (start.line == end.line && start.col > end.col) {
+		start, end = end, start
+	}
+	return start, end
+}
+
+func (v *Viewport) containsSel(line, col int) bool {
+	if !v.hasSel {
+		return false
+	}
+	start, end := v.normalizedSel()
+	if line < start.line || line > end.line {
+		return false
+	}
+	if start.line == end.line {
+		return col >= start.col && col < end.col
+	}
+	if line == start.line {
+		return col >= start.col
+	}
+	if line == end.line {
+		return col < end.col
+	}
+	return true
+}
+
+func (v *Viewport) selectedText() string {
+	if !v.hasSel || v.Buffer == nil {
+		return ""
+	}
+
+	start, end := v.normalizedSel()
+	if start == end {
+		return ""
+	}
+
+	if start.line == end.line {
+		return v.Buffer.Line(start.line)[start.col:end.col]
+	}
+
+	var b strings.Builder
+	b.WriteString(v.Buffer.Line(start.line)[start.col:])
+	for line := start.line + 1; line < end.line; line++ {
+		b.WriteByte('\n')
+		b.WriteString(v.Buffer.Line(line))
+	}
+	b.WriteByte('\n')
+	b.WriteString(v.Buffer.Line(end.line)[:end.col])
+	return b.String()
+}
+
+func (v *Viewport) copySelection() {
+	if v.copyToClipboard == nil {
+		return
+	}
+	text := v.selectedText()
+	if text == "" {
+		return
+	}
+	v.copyToClipboard(text)
+}
+
+func (v *Viewport) clearSelection() {
+	v.selActive = false
+	v.hasSel = false
 }
 
 func (v *Viewport) Up() {

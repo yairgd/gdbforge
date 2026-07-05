@@ -11,9 +11,17 @@ type Grid struct {
 	Cells     [][]Cell
 	BackCells [][]Cell
 
+	// System text cursor (DECSCUSR + ShowCursor), not a drawn rune.
 	cursorVisible bool
 	cursorX       int
 	cursorY       int
+	cursorStyle   tcell.CursorStyle
+
+	// System mouse pointer shape (OSC 22), empty means reset stack.
+	pointerShape string
+
+	// Set when a widget requests the native text cursor this frame.
+	nativeCursorSet bool
 }
 
 func NewGrid(w, h int) *Grid {
@@ -184,12 +192,6 @@ func (g *Grid) Draw(
 			}
 		}
 	}
-
-	if g.cursorVisible {
-		screen.ShowCursor(g.cursorX, g.cursorY)
-	} else {
-		screen.HideCursor()
-	}
 }
 
 func (g *Grid) ClearLine(y int, style tcell.Style) {
@@ -203,11 +205,37 @@ func (g *Grid) ClearLine(y int, style tcell.Style) {
 }
 
 func (g *Grid) ShowCursor(x, y int) {
+	if g.isBorderCell(x, y) {
+		g.cursorVisible = false
+		g.pointerShape = PointerDefault
+		return
+	}
+
+	g.cursorVisible = false
+	g.cursorX = x
+	g.cursorY = y
+	g.cursorStyle = tcell.CursorStyleDefault
+	g.pointerShape = PointerText
+}
+
+func (g *Grid) ShowNativeCursor(x, y int) {
 	g.cursorVisible = true
 	g.cursorX = x
 	g.cursorY = y
+	g.cursorStyle = tcell.CursorStyleBlinkingBar
+	g.pointerShape = ""
+	g.nativeCursorSet = true
+}
+
+func (g *Grid) isBorderCell(x, y int) bool {
+	if x < 0 || x >= g.W || y < 0 || y >= g.H {
+		return false
+	}
+	return g.Cells[x][y].IsBorder()
 }
 
 func (g *Grid) HideCursor() {
 	g.cursorVisible = false
+	g.pointerShape = ""
+	g.nativeCursorSet = false
 }

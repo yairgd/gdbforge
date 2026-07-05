@@ -167,5 +167,5 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 		c.SetContent(x+promptLen, inputY, ch, tcell.StyleDefault)
 	}
 
-	c.ShowCursor(m.Cursor+promptLen, inputY)
+	c.ShowNativeCursor(m.Cursor+promptLen, inputY)
 }

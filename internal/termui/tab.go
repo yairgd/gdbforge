@@ -70,6 +70,30 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 	}
 }
 
+func (t *TabWidget) FocusAt(x, y int) bool {
+	if len(t.tabs) == 0 {
+		return false
+	}
+
+	layout := t.tabs[t.active].layout
+	if layout == nil {
+		return false
+	}
+
+	return layout.FocusAt(x, y)
+}
+
+func (t *TabWidget) IsSeparatorAt(x, y int) bool {
+	if len(t.tabs) == 0 {
+		return false
+	}
+	layout := t.tabs[t.active].layout
+	if layout == nil {
+		return false
+	}
+	return layout.IsSeparatorAt(x, y)
+}
+
 // Draw forwards the draw call to the active tab widget.
 // The screen is owned by the application and passed in.
 func (t *TabWidget) Draw(c Canvas) {
@@ -97,6 +121,12 @@ func (t *TabWidget) ActiveLayout() *Layout {
 	}
 
 	return t.tabs[t.active].layout
+}
+
+func (t *TabWidget) SetOnResize(fn func()) {
+	if layout := t.ActiveLayout(); layout != nil {
+		layout.SetOnResize(fn)
+	}
 }
 
 func (t *TabWidget) VerticalSplit(w Widget) {

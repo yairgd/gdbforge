@@ -130,6 +130,13 @@ func (c Canvas) ShowCursor(localX, localY int) {
 	)
 }
 
+func (c Canvas) ShowNativeCursor(localX, localY int) {
+	c.grid.ShowNativeCursor(
+		c.ScreenX(localX),
+		c.ScreenY(localY),
+	)
+}
+
 func (c Canvas) HideCursor() {
 	c.grid.HideCursor()
 }

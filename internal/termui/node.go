@@ -123,6 +123,10 @@ type Node struct {
 	Leaves int
 
 	parent *Node
+
+	// Separator geometry (screen coords, valid after BuildLayout on split nodes).
+	layoutRect Rect
+	sepRect    Rect
 }
 
 func (n *Node) HandleEvent(ev tcell.Event) {

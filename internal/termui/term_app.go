@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
 type AppApi interface {
 	HandleCoreEvents(ev Event)
 	HandleKey(ev *tcell.EventKey)
+	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
 }
 
@@ -34,6 +36,12 @@ type TermApp struct {
 	frontBuffer *Grid
 	uiEvents    chan tcell.Event
 	canvas      Canvas
+
+	mouseActive bool
+	mouseX      int
+	mouseY      int
+
+	layoutDirty bool
 }
 
 func NewTermApp() *TermApp {
@@ -46,7 +54,7 @@ func NewTermApp() *TermApp {
 		log.Fatal(err)
 	}
 
-	screen.EnableMouse()
+	screen.EnableMouse(tcell.MouseMotionEvents)
 
 	return &TermApp{
 		screen:   screen,
@@ -102,6 +110,7 @@ func (app *TermApp) Run() {
 		})
 
 		app.frontBuffer.Draw(app.screen)
+		app.frontBuffer.ApplySystemCursor(app.screen)
 		app.screen.Show()
 	}
 
@@ -117,11 +126,23 @@ func (app *TermApp) UpdateCanvas() Canvas {
 
 }
 
+func (app *TermApp) MarkLayoutDirty() {
+	app.layoutDirty = true
+}
+
 func (app *TermApp) Draw(c Canvas) {
+	if app.layoutDirty {
+		c.grid.Clear()
+		app.layoutDirty = false
+	}
 	c.grid.HideCursor()
 
 	for _, w := range app.widgets {
 		w.widget.Draw(Canvas{rect: w.rect, grid: c.grid})
+	}
+
+	if app.mouseActive && !c.grid.nativeCursorSet {
+		c.grid.ShowCursor(app.mouseX, app.mouseY)
 	}
 
 }
@@ -131,9 +152,15 @@ func (app *TermApp) Screen() tcell.Screen {
 }
 
 const redrawInterrupt = "termui-redraw"
+const frameInterrupt = "termui-frame"
 
 func (app *TermApp) RequestRedraw() {
 	app.screen.PostEvent(tcell.NewEventInterrupt(redrawInterrupt))
+}
+
+func (app *TermApp) RequestFrame() {
+	app.layoutDirty = true
+	app.screen.PostEvent(tcell.NewEventInterrupt(frameInterrupt))
 }
 
 func (a *TermApp) HandleEvent(ev tcell.Event) {
@@ -141,6 +168,7 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 
 	case *tcell.EventKey:
+		a.mouseActive = false
 		if a.Api != nil {
 			a.Api.HandleKey(e)
 		}
@@ -153,8 +181,23 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		default:
 			//	tab.HandleEvent(e)
 		}
+
+	case *tcell.EventMouse:
+		a.mouseX, a.mouseY = e.Position()
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			a.mouseActive = false
+		} else if e.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+			a.mouseActive = false
+		} else if e.Buttons() == tcell.ButtonNone {
+			a.mouseActive = true
+		}
+		if a.Api != nil {
+			a.Api.HandleMouse(e)
+		}
+
 	case *tcell.EventResize:
 		_ = a.UpdateCanvas()
+		a.layoutDirty = true
 		if a.Api != nil {
 			a.Api.HandleResize()
 		}
@@ -167,12 +210,23 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 				return
 			}
+			if data == frameInterrupt {
+				return
+			}
 			if data == "gdb-exit" {
 				return
 			}
 		}
 	}
 
+}
+
+func (app *TermApp) CopyToClipboard(text string) {
+	if text == "" {
+		return
+	}
+	app.screen.SetClipboard([]byte(text))
+	platform.SetClipboardText(text)
 }
 
 func (app *TermApp) Events() chan Event {

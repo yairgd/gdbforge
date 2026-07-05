@@ -23,6 +23,10 @@ func NewCell() Cell {
 	}
 }
 
+func (c *Cell) IsBorder() bool {
+	return c.Up || c.Down || c.Left || c.Right
+}
+
 // The ideal solution is to use mixed-weight corner/separator glyphs,
 // but this becomes significantly more complex at this stage.
 //

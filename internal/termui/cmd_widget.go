@@ -256,5 +256,5 @@ func (m *CmdWidget) Draw(c Canvas) {
 	}
 
 	c.Print(0, 0, tcell.StyleDefault, m.text)
-	c.ShowCursor(m.cursor, 0)
+	c.ShowNativeCursor(m.cursor, 0)
 }

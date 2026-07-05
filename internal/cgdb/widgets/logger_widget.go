@@ -41,10 +41,10 @@ func NewLoggerWidget(logger *platform.Logger) *LoggerWidget {
 
 func (m *LoggerWidget) HandleEvent(ev tcell.Event) {
 	m.viewport.HandleEvent(ev)
-	switch ev.(type) {
-	case *tcell.EventResize:
-	case *tcell.EventKey:
-	}
+}
+
+func (m *LoggerWidget) SetCopyToClipboard(fn func(string)) {
+	m.viewport.SetCopyToClipboard(fn)
 }
 
 func (m *LoggerWidget) Draw(c termui.Canvas) {

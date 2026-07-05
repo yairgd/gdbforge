@@ -16,6 +16,18 @@ func (l *Layout) HandleEvent(ev tcell.Event) {
 	l.tree.HandleEvent(ev)
 }
 
+func (l *Layout) FocusAt(x, y int) bool {
+	return l.tree.FocusAt(x, y)
+}
+
+func (l *Layout) IsSeparatorAt(x, y int) bool {
+	return l.tree.findSeparator(x, y) != nil
+}
+
+func (l *Layout) IsDraggingSeparator() bool {
+	return l.tree.IsDraggingSeparator()
+}
+
 func (l *Layout) FocusLeft() {
 	l.tree.FocusLeft()
 }
@@ -49,4 +61,8 @@ func NewLayout(widget Widget) *Layout {
 		tree: NewWidgetTree(widget),
 	}
 	return layout
+}
+
+func (l *Layout) SetOnResize(fn func()) {
+	l.tree.SetOnResize(fn)
 }
