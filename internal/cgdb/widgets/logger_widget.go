@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"fmt"
+
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -30,11 +32,15 @@ func NewLoggerWidget(logger *platform.Logger) *LoggerWidget {
 
 	logger.AddSink(w)
 	w.log = logger.Named("LoggerWidget")
+	for i := 0; i < 50; i++ {
+		w.viewport.Buffer.AppendLine(fmt.Sprintf("Line number: %d", i))
+	}
 
 	return w
 }
 
 func (m *LoggerWidget) HandleEvent(ev tcell.Event) {
+	m.viewport.HandleEvent(ev)
 	switch ev.(type) {
 	case *tcell.EventResize:
 	case *tcell.EventKey:

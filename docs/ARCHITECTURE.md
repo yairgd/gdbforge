@@ -13,11 +13,16 @@ This document describes the high-level architecture of **cgdb-go**: subsystems, 
 - [System context](#system-context)
 - [Application framework](#application-framework)
 - [Startup](#startup)
+- [Services](#services)
 - [Application data flow](#application-data-flow)
 - [Application models](#application-models)
+- [Widget philosophy](#widget-philosophy)
+- [Generic widgets](#generic-widgets)
 - [Buffer concept](#buffer-concept)
 - [Why not :attach](#why-not-attach)
 - [Design philosophy](#design-philosophy)
+- [Platform layer](#platform-layer)
+- [TermUI layer](#termui-layer)
 - [High-level architecture](#high-level-architecture)
 - [Main subsystems](#main-subsystems)
 - [Data flow](#data-flow)
@@ -69,7 +74,13 @@ Each application defines its own set of models during startup. Examples:
 
 - `OrdersModel`, `PortfolioModel`, `WatchlistModel`, `ChartModel`, `LoggerModel`
 
-The same `termui` framework (split tree, `:buffer`, `:split`, `:tab`) serves both; only the models and services differ.
+**MSP application** (hypothetical)
+
+- `MSPV2InfoModel`, `LoggerModel`, …
+
+All models are created during application initialization. They live for the entire lifetime of the application, subscribe to application events, and continuously maintain their state.
+
+The same `termui` framework (split tree, `:buffer`, `:split`, `:tab`) serves all applications; only the models and services differ.
 
 ---
 
@@ -89,19 +100,36 @@ When an application starts, it creates:
 
 ---
 
+## Services
+
+Services communicate with the outside world. They publish events through the event bus and **never communicate directly with widgets**.
+
+| Service | Application |
+|---------|-------------|
+| `GDBClient` | GDB debugger |
+| `IBKRClient` | Trader |
+| `MSPV2Client` | MSP monitoring |
+| `SSHClient` | Remote shell / device access |
+
+Each application wires its own services during startup. Service output becomes domain events; models subscribe and update state. Widgets learn about the outside world only through their bound model.
+
+---
+
 ## Application data flow
 
-Application state flows in one direction. Widgets never communicate directly with services.
+Application state flows in one direction:
 
 ```text
 Service
     ↓
 Event Bus
     ↓
-Data Model
+Model
     ↓
 Widget (View)
 ```
+
+Widgets **never subscribe directly to external services**. Models own application state; widgets simply display models.
 
 Examples:
 
@@ -142,11 +170,64 @@ OrdersWidget OrdersWidget
 
 A widget's lifetime is independent from its model. Closing a pane destroys the widget, not the model. Opening `:buffer orders` again creates (or activates) a new widget bound to the existing `OrdersModel`.
 
+### Generic model interfaces
+
+Models are **application-specific** (`BreakpointModel`, `OrdersModel`, `MSPV2InfoModel`, …), but they expose **generic interfaces** understood by reusable widgets. Widgets never depend on application-specific model types.
+
+```text
+TextWidget   →  TextModel
+GraphWidget  →  GraphModel
+TableWidget  →  TableModel
+TreeWidget   →  TreeModel
+```
+
+The application implements concrete models; the widget depends only on the small interface it needs.
+
+---
+
+## Widget philosophy
+
+Widgets are **views**. A widget should contain little or no business logic. It receives a model (usually through an interface) and renders it.
+
+| Widget | Role |
+|--------|------|
+| `LoggerWidget` | Scrollable log output |
+| `GraphWidget` | Time series, histograms, scatter plots |
+| `TableWidget` | Tabular data |
+| `TreeWidget` | Hierarchical data |
+| `TextWidget` | Line-oriented text |
+
+Widgets should be **reusable across applications** whenever possible. The same `TableWidget` can display breakpoints in a debugger, orders in a trading app, or MSP telemetry in a monitoring app — as long as the bound model implements `TableModel`.
+
+---
+
+## Generic widgets
+
+Widgets operate on **small interfaces** rather than concrete model implementations.
+
+For example, `GraphWidget` depends on `GraphModel`. `GraphModel` represents graph data only — not how it should be drawn. Different applications may implement `GraphModel`:
+
+| Application model | Implements |
+|-------------------|------------|
+| `StockChartModel` | `GraphModel` |
+| `MSPV2InfoModel` | `GraphModel` |
+| `CPULoadModel` | `GraphModel` |
+
+The same `GraphWidget` displays all of them.
+
+**Rendering style** (line graph, histogram, scatter, etc.) is a responsibility of the **widget**, not the model. The model provides data; the widget decides how to render it.
+
 ---
 
 ## Buffer concept
 
-The `:buffer` command does **not** represent a text file. It represents an **application model** — the same role Vim's `:buffer` plays for text buffers, extended to arbitrary domain data.
+The meaning of `:buffer` differs from Vim:
+
+| | Vim | This framework |
+|---|-----|----------------|
+| **Buffer** | Text file | Named application model |
+
+`:buffer` does **not** open a file. It creates (or activates) a widget displaying the corresponding model. **The model already exists** — only the view is created on demand.
 
 **GDB application examples:**
 
@@ -168,7 +249,14 @@ The `:buffer` command does **not** represent a text file. It represents an **app
 :buffer chart
 ```
 
-Internally, these commands create (or activate) the appropriate widget for an **already existing** model. Models are created during application startup — not on demand when the user runs `:buffer`.
+**MSP application examples:**
+
+```text
+:buffer msp
+:buffer logger
+```
+
+Models are created during application startup — not on demand when the user runs `:buffer`.
 
 See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#buffer-command) and [INPUT.md](INPUT.md#vim-like-command-system).
 
@@ -183,15 +271,19 @@ The architecture intentionally avoids a runtime attachment mechanism such as:
 :attach breakpoints
 ```
 
-Such commands would imply models can appear or disappear at runtime and require the user to discover what is available. That unnecessarily complicates the experience.
+Such commands would expose the internal dependency graph between services, models, and widgets. The user should not be required to understand that wiring.
 
-Instead, every application **declares its available models during initialization**. The user only chooses **which model to display** — via `:buffer`, `:split`, or `:vsplit`. All models already exist; the window manager binds widgets to them.
+The relationship between services, models, and widgets is **defined during application startup**. Commands should express **user intent** (`:buffer logger`) rather than implementation details (`:attach logger`).
+
+Instead, every application **declares its available models during initialization**. The user only chooses **which model to display** — via `:buffer`, `:split`, `:vsplit`, or `:tab`. All models already exist; the window manager binds widgets to them.
 
 ---
 
 ## Design philosophy
 
-The framework **extends** the Vim interaction model; it does not replicate Vim's text-editing semantics.
+The framework **extends** Vim's interaction model rather than copying its implementation.
+
+Vim has **one** data model: the text buffer. This framework supports **many application-defined data models**. Each application declares its available models at startup; the user interacts with them using familiar Vim commands.
 
 **Vim:**
 
@@ -215,7 +307,45 @@ Widgets (Views)
 Window Manager
 ```
 
-The user still works with familiar Vim concepts — `:buffer`, `:split`, `:vsplit`, `:tab` — but the underlying objects are no longer limited to text files. They can represent any application-specific data model.
+Internally, `:buffer`, `:split`, `:vsplit`, and `:tab` create **views over existing models** instead of opening files. The user still works with familiar Vim concepts, but the underlying objects are no longer limited to text files — they can represent breakpoints, orders, telemetry, or any other domain state.
+
+---
+
+## Platform layer
+
+The **Platform** package contains reusable infrastructure independent from any specific application.
+
+| Component | Role |
+|-----------|------|
+| **Logger** | Structured logging |
+| **EventBus** | Event distribution between services and models |
+| **Buffer** | Reusable line-oriented data structure (no UI knowledge) |
+| **Lua** | Scripting and plugin host |
+| **SSH** | Remote access primitives |
+| **Runtime utilities** | Shared helpers used across applications |
+
+Platform components do not import terminal or widget packages. Today many of these live in or near `internal/core`; the target is a dedicated platform layer that applications and TermUI both depend on.
+
+**Design decision:** `Buffer` belongs to Platform because it is a reusable data structure with no UI knowledge. Scroll position and cursor visibility are presentation concerns — see [TermUI layer](#termui-layer).
+
+---
+
+## TermUI layer
+
+**TermUI** is responsible for presentation: turning model state into terminal output and routing local input.
+
+| Component | Role |
+|-----------|------|
+| **Canvas** | Local-coordinate drawing context |
+| **Grid** | Off-screen cell framebuffer |
+| **Viewport** | Scroll window, cursor visibility, visible region over a model |
+| **Widget** | View interface (`Draw`, `HandleEvent`) |
+| **Layout** | Split-tree geometry |
+| **Window manager** | Tabs, splits, model-to-widget binding |
+
+**Design decision:** `Viewport` belongs to TermUI because it manages scrolling, cursor visibility, and rendering. `Buffer` belongs to Platform because it holds data with no presentation logic.
+
+Implementation today: `internal/termui` (Canvas, Grid, Layout, WidgetTree) plus scroll/view helpers still migrating from `internal/core`.
 
 ---
 
@@ -413,18 +543,22 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 | 4 | Layout engine owns positioning | Centralizes split ratios, resize, and border gutters |
 | 5 | Rendering backend should be replaceable | Grid → tcell today; could swap to alternate terminal libs |
 | 6 | Business logic lives in models; widgets are views | Services update models via events; widgets never call services |
-| 7 | TabBar, CmdLine, Workspace are top-level | Split tree stays scoped to Workspace only |
-| 8 | Only Workspace contains the split tree | TabBar/CmdLine never participate in recursive splits |
-| 9 | Debugger backends must not import UI | Keeps GDB/OpenOCD/JTAG testable without a terminal |
+| 7 | Widgets depend on generic model interfaces | Same `GraphWidget` works across applications; models stay app-specific |
+| 8 | TabBar, CmdLine, Workspace are top-level | Split tree stays scoped to Workspace only |
+| 9 | Only Workspace contains the split tree | TabBar/CmdLine never participate in recursive splits |
+| 10 | Debugger backends must not import UI | Keeps GDB/OpenOCD/JTAG testable without a terminal |
+| 11 | Buffer is Platform; Viewport is TermUI | Data storage vs scroll/cursor/rendering concerns stay separated |
 
 ---
 
 ## Layer responsibilities
 
+The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections above define the reusable infrastructure vs presentation split. The subsections below map those roles onto today's packages and wiring.
+
 ### Services
 
-- Communicate with external systems (GDB, future OpenOCD, etc.).
-- Produce events; never import UI packages.
+- Communicate with external systems (`GDBClient`, `IBKRClient`, `MSPV2Client`, `SSHClient`, …).
+- Publish events on the event bus; never import UI packages; never talk to widgets directly.
 - Example: `internal/gdb.GDBClient` — PTY I/O, MI2 parsing.
 
 ### Event bus
@@ -436,16 +570,18 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 ### Models
 
 - Own application state for a domain concern (breakpoints, source, console output, …).
+- Application-specific types (`BreakpointModel`, `OrdersModel`, `MSPV2InfoModel`, …) that implement generic widget interfaces (`TextModel`, `GraphModel`, `TableModel`, …).
 - Subscribe to events; update internal data continuously.
 - Exist for the application lifetime; independent of widget lifetime.
 - **Current state:** partially represented by `core.Buffer` and widget-local state; explicit model types per domain are the target.
 
 ### Widgets
 
-- Display models; never own business logic.
-- Never communicate directly with services.
+- Display models via small interfaces; never depend on application-specific model types.
+- Never own business logic; never communicate directly with services.
 - Created on demand when the user displays a model (`:buffer`, splits); destroyed when a pane closes.
 - Multiple widgets may bind to the same model.
+- Rendering style (line graph vs histogram, table columns, etc.) is decided by the widget, not the model.
 
 ### Window manager
 
@@ -456,10 +592,13 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 
 ### Presentation (`internal/termui`)
 
-- Owns `tcell.Screen` lifecycle.
-- Registers top-level widgets (today: flat list; target: structured Root).
-- Runs the poll/draw loop.
-- Must **not** parse GDB MI records directly — delegates to widgets that use `internal/gdb`.
+See [TermUI layer](#termui-layer). Owns:
+
+- `tcell.Screen` lifecycle.
+- Canvas, Grid, Layout, WidgetTree, Viewport (target).
+- Top-level widget registration (today: flat list; target: structured Root).
+- Poll/draw loop.
+- Must **not** parse GDB MI records directly — delegates to app widgets that use `internal/gdb`.
 
 ### Application (`cmd/cgdb` + `internal/cgdb`)
 
@@ -474,12 +613,14 @@ These principles are **non-negotiable** for cgdb-go. They explain many seemingly
 
 ### Domain (`internal/core` + `termui` event types)
 
+See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
+
 - **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` debugger events** — `GdbOutputMsg`, etc. (`internal/core/events.go`) — for backend → UI paths.
+- **`core` debugger events** — `GdbOutputMsg`, etc. (`internal/core/events.go`) — for backend → model paths.
 - **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/cgdb`.
-- `Buffer`, `Viewport` for text panes.
+- `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termui`).
-- `Debugger` interface — minimal send API.
+- `Debugger` interface — minimal send API for services.
 
 ### Infrastructure (`internal/gdb`)
 
@@ -623,8 +764,11 @@ The **target** architecture is documented across this tree. The **current** code
 | Component | Target | Current state |
 |-----------|--------|---------------|
 | Application models | Explicit model per domain; created at startup | Partial — `core.Buffer` + widget-local state |
+| Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete types |
 | Model → widget binding | `:buffer` activates widget for existing model | Partial — widgets created in layout at init |
 | Service → bus → model | GDB events update models, not widgets directly | Partial — GDB uses `EventInterrupt` into widgets |
+| Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` |
+| Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both in `internal/core` today |
 | Root layout | TabBar + Workspace + CmdLine | Flat widget list; `HandleResize` assigns tab + cmd line rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `Layout` / `WidgetTree` implemented |

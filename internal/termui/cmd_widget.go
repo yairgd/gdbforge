@@ -252,7 +252,6 @@ func (m *CmdWidget) Draw(c Canvas) {
 	c.ClearLine(0, tcell.StyleDefault)
 
 	if !m.active {
-		c.HideCursor()
 		return
 	}
 

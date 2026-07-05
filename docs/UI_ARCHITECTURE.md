@@ -42,6 +42,8 @@ Design goals:
 
 Widgets are **views**. They display application models and handle local input; they do not own business logic and never communicate directly with services.
 
+Reusable widgets (`LoggerWidget`, `GraphWidget`, `TableWidget`, `TreeWidget`, `TextWidget`) depend on **generic model interfaces** (`TextModel`, `GraphModel`, …), not application-specific types. See [ARCHITECTURE.md — Widget philosophy](ARCHITECTURE.md#widget-philosophy) and [Generic widgets](ARCHITECTURE.md#generic-widgets).
+
 A widget is created only when the user asks to display a model (for example via `:buffer code` or `:split`). Multiple widgets may display the same model simultaneously. Closing a pane destroys the widget, not the model.
 
 Every on-screen pane implements the `Widget` interface:

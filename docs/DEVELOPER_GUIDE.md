@@ -105,8 +105,8 @@ GDB path (target):
 
 | Term | Meaning |
 |------|---------|
-| **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events |
-| **Widget** | View displaying a model; implements `HandleEvent` + `Draw`; no business logic |
+| **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events; implements generic widget interfaces (`TextModel`, `GraphModel`, …) |
+| **Widget** | View displaying a model via a small interface; implements `HandleEvent` + `Draw`; no business logic; decides rendering style |
 | **Service** | External-system adapter (e.g. `GDBClient`); produces events; never imports UI |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |

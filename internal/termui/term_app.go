@@ -118,6 +118,8 @@ func (app *TermApp) UpdateCanvas() Canvas {
 }
 
 func (app *TermApp) Draw(c Canvas) {
+	c.grid.HideCursor()
+
 	for _, w := range app.widgets {
 		w.widget.Draw(Canvas{rect: w.rect, grid: c.grid})
 	}

@@ -124,6 +124,13 @@ func (a *DebuggerApp) InitB() {
 func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 
 	switch a.appState.Mode() {
+	case cgdb.ModeInsert:
+		if ev.Key() == tcell.KeyEscape {
+			a.appState.SetMode(cgdb.ModeNormal)
+			return
+		}
+		a.tab.HandleEvent(ev)
+		return
 
 	case cgdb.ModeNormal:
 
@@ -131,10 +138,13 @@ func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 			a.appState.SetMode(cgdb.ModeCommand)
 			a.cmdWidget.Activate()
 			return
-		} else {
-			a.trie.SearchPartial(ev)
-			a.tab.HandleEvent(ev)
 		}
+		if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
+			a.appState.SetMode(cgdb.ModeInsert)
+			return
+		}
+		a.trie.SearchPartial(ev)
+		return
 
 	case cgdb.ModeCommand:
 		a.cmdWidget.HandleEvent(ev)
@@ -142,6 +152,7 @@ func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
 			a.appState.SetMode(cgdb.ModeNormal)
 			a.cmdWidget.Deativate()
 		}
+		return
 
 	}
 }

@@ -184,6 +184,12 @@ func (g *Grid) Draw(
 			}
 		}
 	}
+
+	if g.cursorVisible {
+		screen.ShowCursor(g.cursorX, g.cursorY)
+	} else {
+		screen.HideCursor()
+	}
 }
 
 func (g *Grid) ClearLine(y int, style tcell.Style) {
