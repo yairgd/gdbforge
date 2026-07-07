@@ -12,8 +12,7 @@ type LoggerWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
-
-	log *platform.NamedLogger
+	log      *platform.NamedLogger
 }
 
 func (w *LoggerWidget) Write(entry platform.LogEntry) error {
@@ -22,16 +21,16 @@ func (w *LoggerWidget) Write(entry platform.LogEntry) error {
 	return nil
 }
 
-func NewLoggerWidget(logger *platform.Logger) *LoggerWidget {
+func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 	buf := platform.NewBuffer()
 
 	w := &LoggerWidget{
-		BaseWidget: termui.NewBaseWidget(),
+		BaseWidget: termui.NewBaseWidget(ctx),
 		viewport:   termui.NewViewport(buf),
 	}
 
-	logger.AddSink(w)
-	w.log = logger.Named("LoggerWidget")
+	ctx.Log.AddSink(w)
+	w.log = ctx.Log.Named("LoggerWidget")
 	for i := 0; i < 50; i++ {
 		w.viewport.Buffer.AppendLine(fmt.Sprintf("Line number: %d", i))
 	}

@@ -1,5 +1,9 @@
 package termui
 
+import (
+	"github.com/yairgd/cgdb-go/internal/platform"
+)
+
 const (
 	CmdPushData CommandID = iota + 10
 )
@@ -7,12 +11,14 @@ const (
 type BaseWidget struct {
 	Events chan Event // outbound -> app
 	Inbox  chan Event // inbound  <- app
+	Ctx    platform.AppContext
 }
 
-func NewBaseWidget() BaseWidget {
+func NewBaseWidget(ctx platform.AppContext) BaseWidget {
 	return BaseWidget{
 		Events: make(chan Event, 16),
 		Inbox:  make(chan Event, 16),
+		Ctx:    ctx,
 	}
 }
 

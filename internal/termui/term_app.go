@@ -10,7 +10,6 @@ import (
 
 type AppApi interface {
 	HandleCoreEvents(ev Event)
-	HandleKey(ev *tcell.EventKey)
 	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
 }
@@ -41,7 +40,9 @@ type TermApp struct {
 	mouseX      int
 	mouseY      int
 
-	layoutDirty bool
+	layoutDirty   bool
+	appState      platform.AppState
+	modeHandlers  ModeKeyHandlers
 }
 
 func NewTermApp() *TermApp {
@@ -57,15 +58,36 @@ func NewTermApp() *TermApp {
 	screen.EnableMouse(tcell.MouseMotionEvents)
 
 	return &TermApp{
-		screen:   screen,
-		exit:     false,
-		events:   make(chan Event, 100),
-		uiEvents: make(chan tcell.Event, 100),
+		screen:       screen,
+		exit:         false,
+		events:       make(chan Event, 100),
+		uiEvents:     make(chan tcell.Event, 100),
+		modeHandlers: make(ModeKeyHandlers),
 	}
 }
 
 func (app *TermApp) Widgets() []WidgetNode { return app.widgets }
 func (app *TermApp) Exit()                 { app.exit = true }
+
+func (app *TermApp) Mode() platform.Mode {
+	return app.appState.Mode()
+}
+
+func (app *TermApp) SetMode(mode platform.Mode) {
+	app.appState.SetMode(mode)
+}
+
+func (app *TermApp) RegisterModeHandler(mode platform.Mode, h KeyHandler) {
+	app.modeHandlers[mode] = h
+}
+
+func (app *TermApp) HandleKey(ev *tcell.EventKey) {
+	if h, ok := app.modeHandlers[app.appState.Mode()]; ok {
+		if h(ev) {
+			return
+		}
+	}
+}
 
 func (app *TermApp) Close() {
 	app.screen.Fini()
@@ -169,9 +191,7 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventKey:
 		a.mouseActive = false
-		if a.Api != nil {
-			a.Api.HandleKey(e)
-		}
+		a.HandleKey(e)
 
 		switch e.Key() {
 		case tcell.KeyCtrlD:

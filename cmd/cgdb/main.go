@@ -2,8 +2,8 @@ package main
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb"
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/collections"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -24,15 +24,13 @@ const (
 
 type DebuggerApp struct {
 	*termui.TermApp
-	trie      termui.Trie
-	appState  cgdb.AppState
+	trie      collections.Trie[any]
 	tab       *termui.TabWidget
 	cmdWidget *termui.CmdWidget
-	logger    *platform.Logger
-	eventBus  *platform.EventBus
+	ctx       platform.AppContext
 }
 
-func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
+func (app *DebuggerApp) BindKeySeq(fn collections.Callback, seqs ...string) {
 	for _, seq := range seqs {
 		app.trie.Bind(seq, fn)
 	}
@@ -48,27 +46,27 @@ func NewDebuggerApp() *DebuggerApp {
 }
 
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
-	log := app.logger.Named("MainApp")
+	log := app.ctx.Log.Named("MainApp")
 	log.Info("send left command")
 	app.tab.FocusLeft()
 }
 
 func (app *DebuggerApp) OnFocusRight(args ...any) {
-	log := app.logger.Named("MainApp")
+	log := app.ctx.Log.Named("MainApp")
 	log.Info("send right command")
 
 	app.tab.FocusRight()
 }
 
 func (app *DebuggerApp) OnFocusUp(args ...any) {
-	log := app.logger.Named("MainApp")
+	log := app.ctx.Log.Named("MainApp")
 	log.Info("send up command")
 
 	app.tab.FocusUp()
 }
 
 func (app *DebuggerApp) OnFocusDown(args ...any) {
-	log := app.logger.Named("MainApp")
+	log := app.ctx.Log.Named("MainApp")
 	log.Info("send down command")
 
 	app.tab.FocusDown()
@@ -108,7 +106,7 @@ func (a *DebuggerApp) InitB() {
 	a.BindKeySeq(a.OnFocusUp, "<C-w>k", "<C-w><Up>")
 	a.BindKeySeq(a.OnFocusDown, "<C-w>j", "<C-w><Down>")
 
-	a.logger = platform.NewLogger()
+	a.ctx = platform.NewAppContext()
 
 	// exaplr how to use filesynk
 	fileSink, err := platform.NewFileSink("cgdb.log")
@@ -116,50 +114,54 @@ func (a *DebuggerApp) InitB() {
 		panic(err)
 	}
 	defer fileSink.Close()
-	a.logger.AddSink(fileSink)
+	a.ctx.Log.AddSink(fileSink)
 
-	a.eventBus = platform.NewEventBus()
+	l := widgets.NewLoggerWidget(a.ctx)
+	a.tab.HorizontalSplit(l)
 
+	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
+	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)
+	a.RegisterModeHandler(platform.ModeCommand, a.handleCommandKey)
 }
 
-func (a *DebuggerApp) HandleKey(ev *tcell.EventKey) {
-
-	switch a.appState.Mode() {
-	case cgdb.ModeInsert:
-		if ev.Key() == tcell.KeyEscape {
-			a.appState.SetMode(cgdb.ModeNormal)
-			return
-		}
-		a.tab.HandleEvent(ev)
-		return
-
-	case cgdb.ModeNormal:
-
-		if isCopyKey(ev) {
-			a.tab.HandleEvent(ev)
-			return
-		}
-		if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
-			a.appState.SetMode(cgdb.ModeCommand)
-			a.cmdWidget.Activate()
-			return
-		}
-		if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
-			a.appState.SetMode(cgdb.ModeInsert)
-			return
-		}
-		a.trie.SearchPartial(ev)
-		return
-
-	case cgdb.ModeCommand:
-		a.cmdWidget.HandleEvent(ev)
-		if ev.Key() == tcell.KeyEnter {
-			a.appState.SetMode(cgdb.ModeNormal)
-			a.cmdWidget.Deativate()
-		}
-		return
-
+func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyEscape {
+		a.SetMode(platform.ModeNormal)
+		return true
 	}
+	a.tab.HandleEvent(ev)
+	return true
+}
+
+func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
+	if isCopyKey(ev) {
+		a.tab.HandleEvent(ev)
+		return true
+	}
+	if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
+		a.SetMode(platform.ModeCommand)
+		a.cmdWidget.Activate()
+		return true
+	}
+	if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
+		a.SetMode(platform.ModeInsert)
+		return true
+	}
+	if key, ok := platform.KeyFromEvent(ev); ok {
+		a.trie.SearchPartial(key)
+	} else {
+		a.trie.ResetPartial()
+	}
+	return true
+}
+
+func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
+	a.cmdWidget.HandleEvent(ev)
+	if ev.Key() == tcell.KeyEnter {
+		a.SetMode(platform.ModeNormal)
+		a.cmdWidget.Deativate()
+	}
+	return true
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {
@@ -168,21 +170,21 @@ func isCopyKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
-	if a.appState.Mode() == cgdb.ModeCommand {
+	if a.Mode() == platform.ModeCommand {
 		return
 	}
 
 	if ev.Buttons()&tcell.ButtonPrimary != 0 {
 		x, y := ev.Position()
 		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
-			a.appState.SetMode(cgdb.ModeInsert)
+			a.SetMode(platform.ModeInsert)
 		}
 	}
 
 	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
 		x, y := ev.Position()
 		if a.tab.FocusAt(x, y) {
-			a.appState.SetMode(cgdb.ModeInsert)
+			a.SetMode(platform.ModeInsert)
 		}
 	}
 
@@ -212,8 +214,8 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 		// TODO: show unknown command feedback in the UI
 
 	case termui.CmdExitMode:
-		if app.appState.Mode() == cgdb.ModeCommand {
-			app.appState.SetMode(cgdb.ModeNormal)
+		if app.Mode() == platform.ModeCommand {
+			app.SetMode(platform.ModeNormal)
 			app.cmdWidget.Deativate()
 		}
 		// TODO: show unknown command feedback in the UI
@@ -237,7 +239,7 @@ func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
 			return
 		}
 
-		l := widgets.NewLoggerWidget(app.logger)
+		l := widgets.NewLoggerWidget(app.ctx)
 		l.Events = app.Events()
 		l.SetCopyToClipboard(app.CopyToClipboard)
 		tab.HorizontalSplit(l)

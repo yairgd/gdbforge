@@ -38,11 +38,14 @@ type Viewport struct {
 	hasSel    bool
 
 	copyToClipboard func(string)
+
+	cursor CursorPainter
 }
 
 func NewViewport(buf *platform.Buffer) *Viewport {
 	return &Viewport{
 		Buffer: buf,
+		cursor: &NativeCursor{},
 	}
 }
 
@@ -99,22 +102,8 @@ func (v *Viewport) Draw(c Canvas) {
 		}
 	}
 
-	v.drawCursor(c)
-}
-
-func (v *Viewport) drawCursor(c Canvas) {
-	if v.hasSel {
-		return
-	}
-
-	localX := v.CursorCol - v.Left
-	localY := v.CursorLine - v.Top
-
-	if localY < 0 || localY >= v.height || localX < 0 || localX >= v.width {
-		return
-	}
-
-	c.ShowNativeCursor(localX, localY)
+	v.cursor.Draw(c, v)
+	// v.drawCursor(c)
 }
 
 func (v *Viewport) HandleEvent(ev tcell.Event) {
