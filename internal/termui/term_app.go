@@ -9,7 +9,6 @@ import (
 )
 
 type AppApi interface {
-	HandleCoreEvents(ev Event)
 	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
 }
@@ -40,9 +39,10 @@ type TermApp struct {
 	mouseX      int
 	mouseY      int
 
-	layoutDirty   bool
-	appState      platform.AppState
-	modeHandlers  ModeKeyHandlers
+	layoutDirty      bool
+	appState         platform.AppState
+	modeHandlers     ModeKeyHandlers
+	commandHandlers  CommandHandlers
 }
 
 func NewTermApp() *TermApp {
@@ -58,11 +58,12 @@ func NewTermApp() *TermApp {
 	screen.EnableMouse(tcell.MouseMotionEvents)
 
 	return &TermApp{
-		screen:       screen,
-		exit:         false,
-		events:       make(chan Event, 100),
-		uiEvents:     make(chan tcell.Event, 100),
-		modeHandlers: make(ModeKeyHandlers),
+		screen:          screen,
+		exit:            false,
+		events:          make(chan Event, 100),
+		uiEvents:        make(chan tcell.Event, 100),
+		modeHandlers:    make(ModeKeyHandlers),
+		commandHandlers: make(CommandHandlers),
 	}
 }
 
@@ -79,6 +80,20 @@ func (app *TermApp) SetMode(mode platform.Mode) {
 
 func (app *TermApp) RegisterModeHandler(mode platform.Mode, h KeyHandler) {
 	app.modeHandlers[mode] = h
+}
+
+func (app *TermApp) RegisterCommandHandler(id CommandID, h CommandHandler) {
+	app.commandHandlers[id] = h
+}
+
+func (app *TermApp) HandleCoreEvents(ev Event) {
+	msg, ok := ev.(CommandEvent)
+	if !ok {
+		return
+	}
+	if h, ok := app.commandHandlers[msg.CommandID()]; ok {
+		h(msg)
+	}
 }
 
 func (app *TermApp) HandleKey(ev *tcell.EventKey) {
@@ -118,9 +133,7 @@ func (app *TermApp) Run() {
 		select {
 		// events from termui events
 		case ev := <-app.events:
-			if app.Api != nil {
-				app.Api.HandleCoreEvents(ev)
-			}
+			app.HandleCoreEvents(ev)
 		// event from tcell
 		case ev := <-app.uiEvents:
 			app.HandleEvent(ev)

@@ -52,53 +52,58 @@ func (t *Trie[T]) insert(pending []platform.Key, onExactMatch Callback) {
 	root.OnExactMatch = onExactMatch
 }
 
-func (t *Trie[T]) Insert(str string, data T) bool {
+func (t *Trie[T]) Insert(data T, strs ...string) {
+
+	for _, str := range strs {
+		pending, ok := platform.ParseKeySequence(str)
+		if !ok {
+			return
+		}
+
+		root := &t.root
+		for _, key := range pending {
+			if root.Children == nil {
+				root.Children = make(map[platform.Key]*TrieNode[T])
+			}
+			if _, exists := root.Children[key]; !exists {
+				root.Children[key] = &TrieNode[T]{}
+			}
+			root = root.Children[key]
+		}
+		root.IsTerminal = true
+		root.data = data
+	}
+	return
+}
+
+func (t *Trie[T]) SearchFull(str string) (T, bool) {
+	var zero T
+
+	root := &t.root
+
 	pending, ok := platform.ParseKeySequence(str)
 	if !ok {
-		return false
+		return zero, false
 	}
 
-	root := &t.root
 	for _, key := range pending {
-		if root.Children == nil {
-			root.Children = make(map[platform.Key]*TrieNode[T])
+		child, ok := root.Children[key]
+		if !ok {
+			return zero, false
 		}
-		if _, exists := root.Children[key]; !exists {
-			root.Children[key] = &TrieNode[T]{}
-		}
-		root = root.Children[key]
+		root = child
 	}
-	root.IsTerminal = true
-	root.data = data
-	return true
+
+	if !root.IsTerminal {
+		return zero, false
+	}
+
+	return root.data, true
 }
 
-func (t *Trie[T]) SearchFull(str string) bool {
-	root := &t.root
+func (t *Trie[T]) SearchPartial(key platform.Key) (T, bool) {
+	var zero T
 
-	if pending, ok := platform.ParseKeySequence(str); ok {
-		for _, key := range pending {
-			if child, ok := root.Children[key]; ok {
-				root = child
-			} else {
-				return false
-			}
-		}
-
-		if !root.IsTerminal {
-			return false
-		}
-
-		if root.OnExactMatch != nil {
-			root.OnExactMatch()
-		}
-
-		return true
-	}
-	return false
-}
-
-func (t *Trie[T]) SearchPartial(key platform.Key) bool {
 	if t.current == nil {
 		t.current = &t.root
 	}
@@ -108,24 +113,18 @@ func (t *Trie[T]) SearchPartial(key platform.Key) bool {
 		t.seq += key.String()
 		t.keySeq = append(t.keySeq, key)
 	} else {
-		t.current = nil
-		t.seq = ""
-		t.keySeq = t.keySeq[:0]
-		return false
+		t.ResetPartial()
+		return zero, false
 	}
 
 	if !t.current.IsTerminal {
-		return false
+		return zero, false
 	}
 
-	if t.current.OnExactMatch != nil {
-		t.current.OnExactMatch(t.seq, t.keySeq)
-		t.current = nil
-		t.seq = ""
-		t.keySeq = t.keySeq[:0]
-	}
+	data := t.current.data
+	t.ResetPartial()
 
-	return true
+	return data, true
 }
 
 func (t *Trie[T]) ResetPartial() {
@@ -134,7 +133,7 @@ func (t *Trie[T]) ResetPartial() {
 	t.keySeq = t.keySeq[:0]
 }
 
-func (t *Trie[T]) Completer(str string) ([]T, bool) {
+func (t *Trie[T]) Complete(str string) ([]T, bool) {
 	root := &t.root
 
 	keys, ok := platform.ParseKeySequence(str)
