@@ -131,38 +131,97 @@ func (l *WidgetTree) updateSplitDrag(mx, my int) {
 	}
 
 	r := n.layoutRect
+
+	var total, local int
 	switch n.Dir {
 	case Vertical:
-		avail := r.W() - 1
-		if avail < minPaneCells*2 {
-			return
-		}
-		localX := mx - r.X()
-		if localX < minPaneCells {
-			localX = minPaneCells
-		}
-		if localX > avail-minPaneCells {
-			localX = avail - minPaneCells
-		}
-		n.Ratio = float64(localX) / float64(avail)
-
+		total = r.W()
+		local = mx - r.X()
 	case Horizontal:
-		avail := r.H() - 1
-		if avail < minPaneCells*2 {
-			return
-		}
-		localY := my - r.Y()
-		if localY < minPaneCells {
-			localY = minPaneCells
-		}
-		if localY > avail-minPaneCells {
-			localY = avail - minPaneCells
-		}
-		n.Ratio = float64(localY) / float64(avail)
+		total = r.H()
+		local = my - r.Y()
 	}
+
+	avail := total - 1
+	if avail < minPaneCells*2 {
+		return
+	}
+	if local < minPaneCells {
+		local = minPaneCells
+	}
+	if local > avail-minPaneCells {
+		local = avail - minPaneCells
+	}
+
+	n.Ratio = float64(local) / float64(avail)
+
+	// Only the two panes adjacent to this separator should change size. Keep
+	// every other pane at its current absolute size by adjusting the ratios
+	// along the two edges that meet the separator.
+	pinFirstEdge(n.First, n.Dir, local)
+	pinSecondEdge(n.Second, n.Dir, total-local-1)
 
 	if l.onResize != nil {
 		l.onResize()
+	}
+}
+
+// extent returns the node's current size (in cells) along dir, as of the last
+// BuildLayout. Leaves store their region in canvas; splits store it in layoutRect.
+func (n *Node) extent(dir SplitDir) int {
+	var r Rect
+	if n.Type == NodeLeaf {
+		r = n.canvas.Rect()
+	} else {
+		r = n.layoutRect
+	}
+	if dir == Vertical {
+		return r.W()
+	}
+	return r.H()
+}
+
+// pinFirstEdge walks the far (right/bottom) edge of a subtree that will occupy
+// `region` cells along dir, keeping every First child at its current absolute
+// size so only the edge-most leaf absorbs the change.
+func pinFirstEdge(node *Node, dir SplitDir, region int) {
+	for node != nil && node.Type == NodeSplit && node.Dir == dir {
+		avail := region - 1
+		if avail < minPaneCells*2 {
+			return
+		}
+		firstAbs := node.First.extent(dir)
+		if firstAbs < minPaneCells {
+			firstAbs = minPaneCells
+		}
+		if firstAbs > avail-minPaneCells {
+			firstAbs = avail - minPaneCells
+		}
+		node.Ratio = float64(firstAbs) / float64(avail)
+		region = region - firstAbs - 1
+		node = node.Second
+	}
+}
+
+// pinSecondEdge is the mirror of pinFirstEdge for the near (left/top) edge:
+// it keeps every Second child at its current absolute size.
+func pinSecondEdge(node *Node, dir SplitDir, region int) {
+	for node != nil && node.Type == NodeSplit && node.Dir == dir {
+		avail := region - 1
+		if avail < minPaneCells*2 {
+			return
+		}
+		secondAbs := node.Second.extent(dir)
+		if secondAbs < minPaneCells {
+			secondAbs = minPaneCells
+		}
+		if secondAbs > avail-minPaneCells {
+			secondAbs = avail - minPaneCells
+		}
+		firstW := avail - secondAbs
+		node.Ratio = float64(firstW) / float64(avail)
+		region = firstW
+		node = node.First
 	}
 }
 
