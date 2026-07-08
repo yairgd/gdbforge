@@ -41,9 +41,14 @@ func (n *Node) ComputeRatios() {
 		return
 	}
 
-	total := n.First.Leaves + n.Second.Leaves
+	// Weight by leaves along this split's direction only, so a perpendicular
+	// nested split counts as a single unit. This keeps outer proportions stable
+	// when panes are added in the opposite direction (matches the pre-drag
+	// Units()-based sizing).
+	first := Units(n.First, n.Dir)
+	total := Units(n, n.Dir)
 
-	n.Ratio = float64(n.First.Leaves) / float64(total)
+	n.Ratio = float64(first) / float64(total)
 
 	n.First.ComputeRatios()
 	n.Second.ComputeRatios()

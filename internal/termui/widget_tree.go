@@ -39,7 +39,6 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 
 	node.Type = NodeSplit
 	node.Dir = dir
-	node.Ratio = 0.5
 
 	node.First = &Node{Type: NodeLeaf, Widget: node.Widget, Ratio: 1, parent: node}
 	w.focus = node.First
@@ -47,6 +46,11 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 	node.Second = &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: node}
 
 	node.Widget = nil
+
+	// Recompute every split's ratio from directional leaf counts so panes are
+	// evenly sized (1/N per direction), matching the pre-drag layout. buildLayout
+	// still honors node.Ratio, so separator drags remain effective after a split.
+	w.root.ComputeRatios()
 }
 
 func (l *WidgetTree) HandleEvent(ev tcell.Event) {
@@ -368,6 +372,8 @@ func (t *WidgetTree) DeleteFocus() bool {
 		for t.focus.Type == NodeSplit {
 			t.focus = t.focus.First
 		}
+		// Rebalance remaining panes to even sizes.
+		t.root.ComputeRatios()
 		return false
 	}
 
@@ -383,6 +389,8 @@ func (t *WidgetTree) DeleteFocus() bool {
 	for t.focus.Type == NodeSplit {
 		t.focus = t.focus.First
 	}
+	// Rebalance remaining panes to even sizes.
+	t.root.ComputeRatios()
 	return false
 }
 
