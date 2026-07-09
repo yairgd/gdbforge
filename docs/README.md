@@ -136,6 +136,7 @@ Details: [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md).
 | Area | Status |
 |------|--------|
 | Split tree layout | Implemented |
+| Per-pane focus status line | Implemented |
 | Canvas / Grid / Cell borders | Implemented |
 | GDB MI2 PTY client | Prototype |
 | Root layout (TabBar + Workspace + CmdLine) | Partial |

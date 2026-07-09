@@ -106,7 +106,7 @@ GDB path (target):
 | Term | Meaning |
 |------|---------|
 | **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events; implements generic widget interfaces (`TextModel`, `GraphModel`, …) |
-| **Widget** | View displaying a model via a small interface; implements `HandleEvent` + `Draw`; no business logic; decides rendering style |
+| **Widget** | View displaying a model via a small interface; implements `HandleEvent`, `Draw`, and `DrawStatusLine`; no business logic; decides rendering style |
 | **Service** | External-system adapter (e.g. `GDBClient`); produces events; never imports UI |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
@@ -204,11 +204,24 @@ Widgets are views. Before adding a widget, ensure the corresponding **model** ex
 2. Create `internal/cgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
 
 ```go
-type MyWidget struct { /* state */ }
+type MyWidget struct {
+    termui.BaseWidget
+    /* state */
+}
+
+func NewMyWidget() *MyWidget {
+    w := &MyWidget{
+        BaseWidget: termui.BaseWidget{PaneName: "MyPane"},
+    }
+    return w
+}
 
 func (w *MyWidget) HandleEvent(ev tcell.Event) { /* ... */ }
-func (w *MyWidget) Draw(c Canvas) { /* draw within c.W(), c.H() */ }
+func (w *MyWidget) Draw(c Canvas) { /* draw within rows 0..c.H()-1 */ }
+// DrawStatusLine inherited from BaseWidget; override for custom status text
 ```
+
+Set `PaneName` for the per-pane status bar label shown when this pane has focus. Do not draw on row `c.H()` inside `Draw` — the layout system owns that row.
 
 3. Register via the window manager when the user displays the model:
 
@@ -275,7 +288,7 @@ Build + draw happens in `Layout.Draw`:
 
 ```go
 l.tree.BuildLayout(c)  // assign rects, draw borders
-l.tree.Draw(c)         // widget draws
+l.tree.Draw(c)         // widgets → clear status rows → redraw grid → status lines
 ```
 
 See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md).
@@ -388,6 +401,7 @@ Always update docs when changing architecture-visible behavior.
 | Interaction modes | `internal/cgdb/mode_manager.go` |
 | Key-sequence trie | `trie.go`, bindings in `cmd/cgdb/main.go` |
 | Widget interface | `widget.go` |
+| Per-pane status line | `status_line.go`, `base_widget.go` |
 | Split tree | `node.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |

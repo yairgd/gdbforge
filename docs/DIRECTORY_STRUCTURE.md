@@ -89,7 +89,9 @@ task build
 | `utf.go` | UTF-8 / ANSI text drawing |
 | `tab.go` | Tab container (single-tab stub) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
-| `base_widget.go` | Placeholder for shared widget helpers |
+| `base_widget.go` | Shared widget helpers: event channels, `PaneName`, default `DrawStatusLine` |
+| `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
+| `named_widget.go` | Optional `WindowName()` hook for dynamic pane titles |
 
 ## internal/commands
 

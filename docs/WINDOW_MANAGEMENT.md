@@ -1,6 +1,6 @@
 # Window Management
 
-cgdb-go organizes debugger panes through a **Workspace** containing a recursive **split tree**, managed at the top level by **tabs** and a global **command line**. A future **status bar** will sit below the workspace or above the command line.
+cgdb-go organizes debugger panes through a **Workspace** containing a recursive **split tree**, managed at the top level by **tabs** and a global **command line**. Each workspace pane shows a **per-pane status line** at its bottom edge when focused; a global debugger status bar is still planned above the command line.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -16,7 +16,8 @@ cgdb-go organizes debugger panes through a **Workspace** containing a recursive 
 - [Tab management](#tab-management)
 - [Command line](#command-line)
 - [Buffer command](#buffer-command)
-- [Future status bar](#future-status-bar)
+- [Per-pane status line](#per-pane-status-line)
+- [Global status bar (planned)](#global-status-bar-planned)
 - [Planned window operations](#planned-window-operations)
 
 ---
@@ -297,9 +298,31 @@ The architecture does **not** use `:attach <name>`. All models exist from startu
 
 ---
 
-## Future status bar
+## Per-pane status line
 
-A **status bar** is planned between Workspace and CmdLine (or integrated into CmdLine's opposite edge):
+Each leaf pane in the split tree has a one-row **status band** at local `y = c.H()` — immediately below the widget content area (`0..H-1`). This row is owned by the layout system, not by individual widget `Draw` methods.
+
+| State | Appearance |
+|-------|------------|
+| Focused | Styled bar: `▎ {PaneName}` (sky blue on dark slate gray) |
+| Unfocused | Blank row with `tcell.StyleDefault` (terminal default background) |
+
+**Draw order** (after `BuildLayout`):
+
+1. Widget content (`Draw`)
+2. Clear all pane status rows (`ClearStatusLine`)
+3. Redraw split separators (`redrawGrid`) — restores border glyphs and default style
+4. Paint status bar on the focused pane only (`DrawStatusLine`)
+
+Widgets set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Container widgets (`TabWidget`, `CmdWidget`) use a no-op.
+
+Implementation: `status_line.go`, `base_widget.go`, `widget_tree.go` (`drawWidgets`, `clearStatusRows`, `redrawGrid`, `drawStatusLines`).
+
+---
+
+## Global status bar (planned)
+
+A **global status bar** is still planned between Workspace and CmdLine (or integrated into CmdLine's opposite edge):
 
 ```text
 +--------------------------------------------------+
@@ -321,7 +344,7 @@ Planned contents:
 | Thread | Active thread ID |
 | Backend | `GDB` / `OpenOCD` indicator |
 
-**Design decision:** status bar is **read-only** and outside the split tree — it never steals focus. Updates arrive via `core.Event` from debugger backends, not from widget polling.
+**Design decision:** the global status bar is **read-only** and outside the split tree — it never steals focus. Updates arrive via `core.Event` from debugger backends, not from widget polling. This is separate from the per-pane focus indicator described above.
 
 ---
 

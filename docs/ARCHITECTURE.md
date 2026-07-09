@@ -339,7 +339,7 @@ Platform components do not import terminal or widget packages. Today many of the
 | **Canvas** | Local-coordinate drawing context |
 | **Grid** | Off-screen cell framebuffer |
 | **Viewport** | Scroll window, cursor visibility, visible region over a model |
-| **Widget** | View interface (`Draw`, `HandleEvent`) |
+| **Widget** | View interface (`Draw`, `DrawStatusLine`, `HandleEvent`) |
 | **Layout** | Split-tree geometry |
 | **Window manager** | Tabs, splits, model-to-widget binding |
 

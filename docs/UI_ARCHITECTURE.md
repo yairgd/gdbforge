@@ -52,6 +52,7 @@ Every on-screen pane implements the `Widget` interface:
 type Widget interface {
     HandleEvent(ev tcell.Event)
     Draw(c Canvas)
+    DrawStatusLine(c Canvas, active bool)
 }
 ```
 
@@ -63,6 +64,12 @@ classDiagram
         <<interface>>
         +HandleEvent(ev)
         +Draw(c Canvas)
+        +DrawStatusLine(c, active)
+    }
+
+    class BaseWidget {
+        +PaneName string
+        +DrawStatusLine(c, active)
     }
 
     class CodeWidget {
@@ -90,9 +97,12 @@ classDiagram
     Widget <|.. GDBWidget
     Widget <|.. CmdWidget
     Widget <|.. TabWidget
+    BaseWidget <|-- CodeWidget
 ```
 
-**Why an interface, not a base struct?** Go embedding could provide defaults, but the interface keeps widgets independent. A shared `BaseWidget` file exists as a placeholder for future helpers — it is intentionally empty today.
+**`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Widgets embed `BaseWidget` and set `PaneName` in their constructor, or override `DrawStatusLine` for custom behavior. Container widgets (`TabWidget`, `CmdWidget`) implement a no-op `DrawStatusLine`.
+
+**Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 
 **Design decision:** widgets receive `Canvas`, not `tcell.Screen`. This prevents accidental full-screen draws and enforces layout boundaries.
 
@@ -170,7 +180,11 @@ Implementation: `node.go`, `widget_tree.go`.
 Layout runs in two phases each frame:
 
 1. **`BuildLayout`** — walk the tree, divide `Rect`s, draw split borders into the `Grid`, assign child `Canvas` values.
-2. **`Draw`** — each leaf widget draws into its pre-assigned `Canvas`.
+2. **`Draw`** — four sub-phases on the workspace tree:
+   - **Draw widgets** — each leaf calls `Widget.Draw(canvas)` for rows `0..H-1`.
+   - **Clear status rows** — `ClearStatusLine` on every leaf (`tcell.StyleDefault`).
+   - **Redraw grid** — re-run `DrawVerticalLocal` / `DrawHorizontalLocal` for all splits (restores border cells and default style after widget overwrites).
+   - **Draw status lines** — focused leaf calls `DrawStatusLine(canvas, true)`; inactive leaves no-op.
 
 ```mermaid
 flowchart TB
@@ -182,11 +196,16 @@ flowchart TB
         R --> Split --> Border --> Assign
     end
 
-    subgraph DrawPhase["Draw (recursive)"]
+    subgraph DrawPhase["Draw (WidgetTree)"]
         Leaf["Leaf: Widget.Draw(canvas)"]
-        Assign --> Leaf
+        Clear["ClearStatusLine on each leaf"]
+        Restore["redrawGrid: restore separators"]
+        Status["DrawStatusLine on focused leaf"]
+        Assign --> Leaf --> Clear --> Restore --> Status
     end
 ```
+
+**Per-pane status line:** each leaf pane has a one-row band at local `y = c.H()` (immediately below the content area). Only the focused pane paints a styled label via `PaintStatusBar`. Inactive panes leave that row blank with default terminal styling after the grid restore. Helpers live in `status_line.go`.
 
 ### Split geometry
 
@@ -330,6 +349,7 @@ Current behavior:
 - New tree starts with focus on the root leaf.
 - `Split` moves focus to the **first** (original) child.
 - **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
+- **Visual focus:** the focused leaf's `DrawStatusLine` paints `▎ {PaneName}` on the pane's bottom status row (see [Layout engine](#layout-engine)).
 
 **Mode-aware routing** (implemented in `cmd/cgdb/main.go`):
 
@@ -341,7 +361,7 @@ Current behavior:
 **Planned behavior** (see [INPUT.md](INPUT.md)):
 
 - Focus mode: all keys routed to focused widget; normal-mode navigation keys suppressed.
-- Visual focus indicator (border highlight).
+- Bold border highlight on the focused pane's split edges (status line provides pane-name feedback today).
 
 **Gap:** no dedicated focus mode; tab still receives keys in normal mode after trie processing.
 

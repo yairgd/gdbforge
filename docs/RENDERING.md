@@ -135,11 +135,12 @@ c.DrawVerticalLocal(leftW, 0, c.H(), false)
 c.DrawHorizontalLocal(topH, 0, c.W(), false)
 ```
 
-These call into `Grid.DrawVertical` / `DrawHorizontal`, setting edge flags on the separator line.
+These call into `Grid.DrawVertical` / `DrawHorizontal`, setting edge flags on the separator line. During the draw phase, `WidgetTree.redrawGrid` repeats these calls after widget content is drawn so separators recover from overwrites. Border cells reset `Rune = 0` and `Style = tcell.StyleDefault` before edge flags are applied.
 
 ```mermaid
 flowchart TB
     Layout["BuildLayout"]
+    Draw["WidgetTree.Draw"]
     DV["DrawVerticalLocal"]
     DH["DrawHorizontalLocal"]
     Grid["Grid edge flags"]
@@ -148,12 +149,14 @@ flowchart TB
 
     Layout --> DV --> Grid
     Layout --> DH --> Grid
+    Draw --> DV
+    Draw --> DH
     Grid --> Compose --> Tcell
 ```
 
 **Design decision:** borders belong to the **layout engine**, not widgets. Widgets should not draw their own outer frame — this prevents double borders and misaligned corners in nested splits.
 
-**Planned:** focused pane gets `bold=true` on its bordering edges for visual feedback.
+**Planned:** focused pane gets `bold=true` on its bordering edges for visual feedback. Today, focus is indicated by the per-pane status line (`▎ {name}`) at the bottom of the focused leaf.
 
 ---
 
@@ -180,6 +183,23 @@ Border runes use Unicode **Box Drawing** block (U+2500–U+257F) with **Heavy** 
 Terminal emulators with UTF-8 enabled (the default in modern terminals) render these correctly. Fallback to ASCII `+--|` is not implemented — a future compatibility mode.
 
 Implementation: `utf.go`, `cell.go`.
+
+---
+
+## Per-pane status line
+
+The focused workspace pane paints a one-row status band below its content area. This happens in the `WidgetTree.Draw` phase **after** widgets draw and split borders are restored:
+
+| Step | Function | Purpose |
+|------|----------|---------|
+| 1 | `drawWidgets` | Pane content on rows `0..H-1` |
+| 2 | `clearStatusRows` | `ClearStatusLine` — reset status row to `tcell.StyleDefault` |
+| 3 | `redrawGrid` | Re-apply `DrawVertical` / `DrawHorizontal` with default style |
+| 4 | `drawStatusLines` | `PaintStatusBar` on focused leaf only |
+
+`PaintStatusBar` fills the pane width on row `c.H()` and writes `▎ {name}`. Widgets should not draw on the status row inside `Draw` — use `PaneName` on `BaseWidget` or override `DrawStatusLine`.
+
+Implementation: `status_line.go`, `widget_tree.go`, `base_widget.go`.
 
 ---
 

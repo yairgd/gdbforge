@@ -25,7 +25,8 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `Widget` interface | Done | `HandleEvent` + `Draw` |
+| `Widget` interface | Done | `HandleEvent` + `Draw` + `DrawStatusLine` |
+| Per-pane status line | Done | Focus bar via `BaseWidget.PaneName`; grid restore before paint |
 | Split tree (`Node`, `WidgetTree`) | Done | Binary splits, ratio layout |
 | `Canvas` / `Rect` | Done | Local coordinates |
 | `Grid` / `Cell` borders | Done | Unicode box drawing |
@@ -36,8 +37,8 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Partial | **Normal + Command** wired via `cgdb.AppState` |
-| `CodeWidget` | Prototype | Placeholder draw (random background) |
-| `LoggerWidget` | Prototype | Title stub |
+| `CodeWidget` | Prototype | Placeholder draw (random background); `PaneName: "Code"` |
+| `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Prototype | MI input/output, buffer display |
 | `GDBClient` MI2 PTY | Prototype | Hardcoded target `hello` |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
