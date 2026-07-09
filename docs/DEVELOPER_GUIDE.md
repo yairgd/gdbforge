@@ -217,14 +217,19 @@ func (w *MyWidget) Draw(c Canvas) { /* draw within c.W(), c.H() */ }
 layout.NewSplit(Vertical, NewMyWidget(myModel))
 ```
 
-4. To publish domain events, wire the widget to the bus:
+4. To wire the command line, pass a `CommandRegistry` and `CompletionPresenter`:
 
 ```go
-cmd := termui.NewCmdWidget(completer)
-cmd.Events = app.Events()
+a.cmdWidget = termui.NewCmdWidget(
+    a.commandReg,
+    termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
+)
+a.cmdWidget.Events = a.Events()
 ```
 
-5. Handle events in the application — not in the widget:
+5. Build the command tree with the DSL in `ExapData()` — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
+
+6. Handle legacy bus events in the application when needed:
 
 ```go
 func (app *MyApp) HandleCoreEvents(ev termui.Event) {
@@ -234,10 +239,13 @@ func (app *MyApp) HandleCoreEvents(ev termui.Event) {
 }
 ```
 
-6. Bind multi-key sequences on the app trie:
+6. Bind key chords in `InitKeyBindings()`:
 
 ```go
-app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
+a.keyBindings.Bind(
+    commands.NewCommand("move-left", func(args ...any) { a.OnFocusLeft() }),
+    "<C-w>l", "<C-w><Left>",
+)
 ```
 
 **Rules:**
@@ -361,9 +369,8 @@ dlv debug ./cmd/docserve -- --port 8765
 | New application model | App startup in `cmd/cgdb`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
 | New service / backend | Implement `core.Debugger`, new `internal/<backend>/` |
-| New `:` command | Add private `CommandID` in app, register in completer, handle in `HandleCoreEvents` |
-| New `:buffer` target | Register model name at startup; handle in `HandleCoreEvents` → window manager |
-| New key chord | `app.BindKeySeq(callback, "<C-x>…")` in `InitB` |
+| New `:` command | Add `Cmd` / `Group` in `ExapData()`; implement `Action` on `DebuggerApp` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| New key chord | `InitKeyBindings()` → `keyBindings.Bind(...)` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Add `backBuffer`, per-frame clear; extend `BackCells` diff |
 | Focus mode | Wire `ModeFocus` in `HandleKey`, suppress tab dispatch |
@@ -384,7 +391,8 @@ Always update docs when changing architecture-visible behavior.
 | Split tree | `node.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
-| Command line | `cmd_widget.go`, `history.go`, `autocomplete.go` |
+| Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| Command line | `cmd_widget.go`, `completion_presenter.go`, `log_completion_presenter.go`, `history.go` |
 | Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`, `logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
@@ -397,6 +405,7 @@ Always update docs when changing architecture-visible behavior.
 
 ## Related documentation
 
+- [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree, DSL, parser, tab completion
 - [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) — deep UI dive
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB MI2 details
 - [ROADMAP.md](ROADMAP.md) — what's planned

@@ -18,9 +18,6 @@ const (
 	cmdBacktrace
 	cmdInfo
 	cmdRun
-	cmdQuit
-	cmdVerticalSplit
-	cmdHorizontalSplit
 )
 
 type DebuggerApp struct {
@@ -96,16 +93,42 @@ func (app *DebuggerApp) ShowThreads(args ...any) {
 	log.Info("show threads")
 }
 
-func (app *DebuggerApp) SplitHorizontal(args ...any) {}
-func (app *DebuggerApp) SplitVertical(args ...any)   {}
-func (app *DebuggerApp) BreakFileLine(args ...any)   {}
-func (app *DebuggerApp) BreakFunction(args ...any)   {}
+func (app *DebuggerApp) SplitHorizontal(args ...any) {
+	w := app.Widgets()[0].Widget()
+	tab, ok := w.(*termui.TabWidget)
+	if !ok {
+		return
+	}
+
+	l := widgets.NewLoggerWidget(app.ctx)
+	l.Events = app.Events()
+	l.SetCopyToClipboard(app.CopyToClipboard)
+	tab.HorizontalSplit(l)
+	app.RequestRedraw()
+}
+
+func (app *DebuggerApp) SplitVertical(args ...any) {
+	app.tab.VerticalSplit(widgets.NewCodeWidget())
+	app.RequestRedraw()
+}
+
+func (app *DebuggerApp) EnterInsertMode(args ...any) {
+	app.SetMode(platform.ModeInsert)
+}
+
+func (app *DebuggerApp) Quit(args ...any) {
+	if app.tab.DeleteFocus() {
+		app.Exit()
+	}
+	app.RequestRedraw()
+}
 
 // ExapData builds the example command hierarchy on commandReg.Root:
 //
 //	/ → window → left, right, up, down
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
+//	/ → vs, split, i, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",
@@ -121,7 +144,11 @@ func (a *DebuggerApp) ExapData() {
 		Group("info",
 			commands.Cmd("registers", a.ShowRegisters),
 			commands.Cmd("threads", a.ShowThreads),
-		)
+		).
+		Leaf("vs", a.SplitVertical).
+		Leaf("split", a.SplitHorizontal).
+		Leaf("quit", a.Quit)
+
 }
 
 func (a *DebuggerApp) InitKeyBindings() {
@@ -197,9 +224,6 @@ func (a *DebuggerApp) InitB() {
 
 	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
 	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)
-	a.RegisterCommandHandler(cmdQuit, a.handleQuit)
-	a.RegisterCommandHandler(cmdVerticalSplit, a.handleVerticalSplit)
-	a.RegisterCommandHandler(cmdHorizontalSplit, a.handleHorizontalSplit)
 }
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
@@ -239,8 +263,10 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	a.cmdWidget.HandleEvent(ev)
 	if ev.Key() == tcell.KeyEnter {
-		a.SetMode(platform.ModeNormal)
 		a.cmdWidget.Deativate()
+		if a.Mode() == platform.ModeCommand {
+			a.SetMode(platform.ModeNormal)
+		}
 	}
 	return true
 }
@@ -294,35 +320,6 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 		app.SetMode(platform.ModeNormal)
 		app.cmdWidget.Deativate()
 	}
-	return true
-}
-
-func (app *DebuggerApp) handleQuit(_ termui.CommandEvent) bool {
-	if app.tab.DeleteFocus() {
-		app.Exit()
-	}
-	app.RequestRedraw()
-	return true
-}
-
-func (app *DebuggerApp) handleVerticalSplit(_ termui.CommandEvent) bool {
-	app.tab.VerticalSplit(widgets.NewCodeWidget())
-	app.RequestRedraw()
-	return true
-}
-
-func (app *DebuggerApp) handleHorizontalSplit(_ termui.CommandEvent) bool {
-	w := app.Widgets()[0].Widget()
-	tab, ok := w.(*termui.TabWidget)
-	if !ok {
-		return true
-	}
-
-	l := widgets.NewLoggerWidget(app.ctx)
-	l.Events = app.Events()
-	l.SetCopyToClipboard(app.CopyToClipboard)
-	tab.HorizontalSplit(l)
-	app.RequestRedraw()
 	return true
 }
 

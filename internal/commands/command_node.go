@@ -32,7 +32,7 @@ func (r *CommandRegistry) SearchPartial(key platform.Key) (*CommandNode, bool) {
 }
 
 type CommandNode struct {
-	Parent   *CommandNode
+	//	Parent   *CommandNode
 	Children *collections.Trie[*CommandNode]
 	Name     string
 	Action   func(args ...any)

@@ -15,7 +15,9 @@ type LoggerWidget struct {
 
 func (w *LoggerWidget) Write(entry platform.LogEntry) error {
 	w.viewport.Buffer.AppendLine(entry.Text)
-	w.viewport.ScrollToBottom()
+	if w.viewport.FollowTail() {
+		w.viewport.ScrollToBottom()
+	}
 	return nil
 }
 

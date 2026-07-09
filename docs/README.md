@@ -19,6 +19,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 | **[WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)** | UI contributors | Splits, tabs, workspace, command line |
 | **[RENDERING.md](RENDERING.md)** | Rendering contributors | Cells, borders, Unicode, diff rendering |
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
+| **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, future JTAG / OpenOCD |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua plans, feature panes, automation |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |

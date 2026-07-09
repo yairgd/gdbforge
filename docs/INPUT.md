@@ -272,50 +272,34 @@ type AppState struct {
 
 The CmdLine accepts `:` prefixed commands. Press `:` to activate `CmdWidget`; type a command and press Enter.
 
-### Architecture
+**Full reference:** [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree ownership, DSL, `CommandParser`, tab completion.
+
+### Architecture (current)
 
 ```mermaid
 flowchart LR
     CmdLine["CmdWidget"]
-    Parse["Parse :cmd args"]
-    Completer["termui.AutoCompleter"]
-    Bus["TermApp.events"]
-    Handler["HandleCoreEvents"]
-    Actions["App dispatch by CommandID"]
+    Parser["commands.CommandParser"]
+    Tree["CommandRegistry.Root"]
+    Presenter["CompletionPresenter"]
+    Action["CommandNode.Action"]
 
-    CmdLine --> Parse --> Completer
-    Parse -->|"SubmitMsg"| Bus --> Handler --> Actions
+    CmdLine --> Parser
+    Parser --> Tree
+    CmdLine -->|"Tab"| Presenter
+    CmdLine -->|"Enter"| Action
 ```
 
 Flow:
 
 1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()`.
-2. User types `:break main`, presses Enter.
-3. `CmdWidget` tokenizes input (`break`, args `main`).
-4. `AutoCompleter` resolves `break` → app-private `cmdBreak` ID.
-5. `SubmitMsg{Text, CmdID, Args}` published on event bus.
-6. **`HandleCoreEvents`** switches on `CommandID()` — exit, forward to GDB, layout change, etc.
-7. Unknown commands arrive with `termui.CmdUnknown`.
+2. User types `:window left`, presses **Tab** → parser `Sync` + `Suggestions` → `CompletionPresenter.Show`.
+3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
+4. Tree is built at startup via DSL in `ExapData()` (`Group` / `Cmd`).
 
-### Command ID ownership
+### Legacy note
 
-| Layer | Constants | Visibility |
-|-------|-----------|------------|
-| `termui` | `CmdUnknown` | Infra — shared sentinel for unrecognized commands |
-| `cmd/cgdb` | `cmdBreak`, `cmdQuit`, … | **Private to app** — `iota + 1` so `0` stays `CmdUnknown` |
-
-The completer is built in the application with app command IDs:
-
-```go
-completer := termui.NewSimpleCompleter([]termui.Command{
-    {ID: cmdBreak, Name: "break"},
-    {ID: cmdQuit, Name: "quit"},
-})
-a.cmdWidget = termui.NewCmdWidget(completer)
-a.cmdWidget.Events = a.Events()
-```
-
-`termui` never imports app command constants — it only emits resolved IDs from the completer.
+Older docs described a flat `termui.AutoCompleter` + `CommandID` + `SubmitMsg` path for every colon command. Tree leaves now execute via `CommandParser` directly. `SubmitMsg` / `HandleCoreEvents` remain for infra events (`CmdExitMode`, layout commands not yet in the tree).
 
 ### Command categories
 
@@ -381,6 +365,7 @@ screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 
 ## Related documentation
 
+- [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree, DSL, parser, tab completion
 - [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) — CmdLine placement
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB input forwarding
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — adding event handlers

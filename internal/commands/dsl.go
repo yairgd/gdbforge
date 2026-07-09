@@ -23,3 +23,9 @@ func (n *CommandNode) Group(name string, children ...*CommandNode) *CommandNode 
 	n.Insert(Group(name, children...))
 	return n
 }
+
+// Leaf inserts a leaf command into n and returns n so siblings can be chained.
+func (n *CommandNode) Leaf(name string, action func(args ...any)) *CommandNode {
+	n.Insert(Cmd(name, action))
+	return n
+}

@@ -30,6 +30,9 @@ cgdb-go/
 │   └── dbug/              # (removed — was a dev helper)
 ├── internal/
 │   ├── termui/            # TUI framework (tcell) ★
+│   ├── commands/          # Command tree, parser, DSL, key bindings ★
+│   ├── collections/       # Shared trie (keys + command children) ★
+│   ├── platform/          # Buffer, Logger, AppContext ★
 │   ├── cgdb/              # App layer: modes, app state ★
 │   │   ├── mode_manager.go
 │   │   └── widgets/
@@ -71,9 +74,10 @@ task build
 |------|----------------|
 | `term_app.go` | Event loop, `AppApi`, `termui.Event` bus, widget list, grid buffers |
 | `event.go`, `command.go` | UI event bus, `SubmitMsg`, `CommandID`, `CmdUnknown` |
-| `cmd_widget.go` | Global `:` command line |
-| `trie.go` | Multi-key sequence prefix tree |
-| `history.go`, `autocomplete.go` | CmdLine helpers |
+| `cmd_widget.go` | Global `:` command line (`CommandParser`, tab completion) |
+| `completion_presenter.go` | `CompletionPresenter` interface |
+| `log_completion_presenter.go` | Log-backed tab completion display |
+| `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types |
 | `widget_tree.go` | Split/focus/layout recursion |
@@ -86,6 +90,19 @@ task build
 | `tab.go` | Tab container (single-tab stub) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Placeholder for shared widget helpers |
+
+## internal/commands
+
+**Hierarchical command tree** for colon commands, tab completion, and shared `CommandNode` types for key bindings.
+
+| File | Responsibility |
+|------|----------------|
+| `command_node.go` | `CommandNode`, `CommandRegistry` — tree storage |
+| `command_parser.go` | `CommandParser` — navigate tree, complete, execute |
+| `dsl.go` | `Cmd`, `Group` — declarative tree builder |
+| `key_binding_gegistry.go` | `KeyBindingRegistry` — key chord → command |
+
+See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, `CommandRegistry` = owns, `CommandParser` = navigates).
 
 ## internal/cgdb
 

@@ -4,7 +4,7 @@ This document describes the high-level architecture of **cgdb-go**: subsystems, 
 
 **cgdb-go is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
 
-**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
+**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
 ---
 
@@ -715,45 +715,32 @@ classDiagram
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
 | `GdbOutputMsg` | Raw GDB output for UI consumption |
 
-### Command IDs
+### Command IDs and colon commands
+
+Colon commands use a **hierarchical command tree** (`internal/commands`). See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` / `CommandRegistry` / `CommandParser`), the DSL, and tab completion.
 
 | Layer | Owns |
 |-------|------|
-| **`termui`** | `CommandID` type, **`CmdUnknown`** (value `0`), `SubmitMsg`, event bus channel |
-| **Application** (`cmd/cgdb`) | Private constants: `cmdBreak`, `cmdQuit`, … starting at `iota + 1` |
+| **`commands.CommandNode`** | Tree nodes — `Name`, `Children`, `Action` |
+| **`commands.CommandRegistry`** | `Root` tree + key-binding trie |
+| **`commands.CommandParser`** | Runtime cursor — `current`, `token`, `path` |
+| **`termui.CmdWidget`** | `:` input; holds parser + `CompletionPresenter` |
 
-`CmdWidget` never references app command names. It resolves user input through `termui.AutoCompleter` and emits `SubmitMsg{CmdID: …}`. Unknown commands emit `termui.CmdUnknown`.
+Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via `CommandParser.Execute()` → `CommandNode.Action`.
 
-### Wiring
+### Wiring (current)
 
 ```go
-// termui/term_app.go
-type AppApi interface {
-    HandleCoreEvents(ev Event)          // all domain events land here
-    HandleKey(ev *tcell.EventKey)       // mode routing, trie, widget dispatch
-    HandleResize()                      // assign top-level widget rects
-}
+a.commandReg = commands.NewCommandRegistry()
+a.ExapData()  // DSL: Root.Group(...).Group(...)
 
-// cmd/cgdb/main.go
-type DebuggerApp struct {
-    *termui.TermApp
-    trie      termui.Trie
-    appState  cgdb.AppState
-    tab       *termui.TabWidget
-    cmdWidget *termui.CmdWidget
-}
-
-a.cmdWidget.Events = a.Events()
-
-func (app *DebuggerApp) HandleCoreEvents(ev termui.Event) {
-    switch msg.CommandID() {
-    case termui.CmdUnknown: /* feedback */
-    case cmdQuit:         /* close pane or exit */
-    }
-}
+a.cmdWidget = termui.NewCmdWidget(
+    a.commandReg,
+    termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
+)
 ```
 
-Implementation: `internal/termui/event.go`, `internal/termui/command.go`, `internal/cgdb/mode_manager.go`, `internal/termui/trie.go`, `internal/termui/term_app.go`, `internal/termui/cmd_widget.go`.
+Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/termui/completion_presenter.go`, `cmd/cgdb/main.go`.
 
 ---
 
@@ -795,5 +782,6 @@ Detailed tracker: [ROADMAP.md](ROADMAP.md).
 | Splits, tabs, command line | [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) |
 | Cells, borders, Unicode | [RENDERING.md](RENDERING.md) |
 | Keyboard, modes | [INPUT.md](INPUT.md) |
+| Command tree, DSL, parser | [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | GDB MI2 | [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 | Package map | [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) |

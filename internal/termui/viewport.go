@@ -135,10 +135,12 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		}
 		v.clearSelection()
 		if e.Buttons()&tcell.WheelUp != 0 {
+			v.leaveFollowTail()
 			v.Up()
 		}
 		if e.Buttons()&tcell.WheelDown != 0 {
 			v.Down()
+			v.maybeFollowTail()
 		}
 		v.EnsureVisible(v.width, v.height)
 		return
@@ -190,28 +192,36 @@ func (v *Viewport) handleKey(key *tcell.EventKey) {
 	switch key.Key() {
 
 	case tcell.KeyUp:
+		v.leaveFollowTail()
 		v.Up()
 
 	case tcell.KeyDown:
 		v.Down()
+		v.maybeFollowTail()
 
 	case tcell.KeyLeft:
+		v.leaveFollowTail()
 		v.LeftChar()
 
 	case tcell.KeyRight:
 		v.RightChar()
+		v.maybeFollowTail()
 
 	case tcell.KeyPgUp:
+		v.leaveFollowTail()
 		v.PageUp(10)
 
 	case tcell.KeyPgDn:
 		v.PageDown(10)
+		v.maybeFollowTail()
 
 	case tcell.KeyHome:
+		v.leaveFollowTail()
 		v.Home()
 
 	case tcell.KeyEnd:
 		v.End()
+		v.maybeFollowTail()
 
 	default:
 		return
@@ -317,6 +327,43 @@ func (v *Viewport) clearSelection() {
 
 func (v *Viewport) SetFollowTail(follow bool) {
 	v.followTail = follow
+}
+
+func (v *Viewport) FollowTail() bool {
+	return v.followTail
+}
+
+func (v *Viewport) leaveFollowTail() {
+	v.followTail = false
+}
+
+func (v *Viewport) maybeFollowTail() {
+	if v.Buffer == nil {
+		return
+	}
+
+	last := v.Buffer.NumLines() - 1
+	if last < 0 {
+		v.followTail = true
+		return
+	}
+
+	if v.CursorLine < last {
+		return
+	}
+
+	if v.height <= 0 {
+		v.followTail = true
+		return
+	}
+
+	maxTop := last - v.height + 1
+	if maxTop < 0 {
+		maxTop = 0
+	}
+	if v.Top >= maxTop {
+		v.followTail = true
+	}
 }
 
 func (v *Viewport) ScrollToBottom() {
