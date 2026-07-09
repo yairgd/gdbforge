@@ -118,6 +118,8 @@ func (g *Grid) DrawVertical(
 
 		c := &g.Cells[x][y]
 
+		c.Rune = 0
+		c.Style = tcell.StyleDefault
 		c.Bold = bold
 
 		if y == y1 {
@@ -147,6 +149,8 @@ func (g *Grid) DrawHorizontal(
 
 		c := &g.Cells[x][y]
 
+		c.Rune = 0
+		c.Style = tcell.StyleDefault
 		c.Bold = bold
 
 		if x == x1 {

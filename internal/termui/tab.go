@@ -109,6 +109,8 @@ func (t *TabWidget) Draw(c Canvas) {
 	}
 }
 
+func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}
+
 //
 // Helper
 //

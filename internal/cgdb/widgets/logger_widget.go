@@ -29,6 +29,7 @@ func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 		viewport:   termui.NewViewport(buf),
 		buf:        buf,
 	}
+	w.PaneName = "Log"
 
 	w.viewport.SetFollowTail(true)
 	ctx.Log.AddSink(w)
@@ -46,9 +47,5 @@ func (m *LoggerWidget) SetCopyToClipboard(fn func(string)) {
 }
 
 func (m *LoggerWidget) Draw(c termui.Canvas) {
-	style := tcell.StyleDefault
-	title := "Logger"
-	c.Printf(0, c.H(), style, "%s %d", title, 0)
 	m.viewport.Draw(c)
-
 }

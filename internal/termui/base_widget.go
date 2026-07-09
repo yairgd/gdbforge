@@ -9,9 +9,10 @@ const (
 )
 
 type BaseWidget struct {
-	Events chan Event // outbound -> app
-	Inbox  chan Event // inbound  <- app
-	Ctx    platform.AppContext
+	Events   chan Event // outbound -> app
+	Inbox    chan Event // inbound  <- app
+	Ctx      platform.AppContext
+	PaneName string
 }
 
 func NewBaseWidget(ctx platform.AppContext) BaseWidget {
@@ -34,6 +35,12 @@ func (b *BaseWidget) Start(handler func(Event)) {
 			handler(ev)
 		}
 	}()
+}
+
+func (b *BaseWidget) DrawStatusLine(c Canvas, active bool) {
+	if active && b.PaneName != "" {
+		PaintStatusBar(c, b.PaneName)
+	}
 }
 
 // send event into the widget

@@ -279,3 +279,5 @@ func (m *CmdWidget) Draw(c Canvas) {
 	c.Print(0, 0, tcell.StyleDefault, m.text)
 	c.ShowNativeCursor(m.cursor, 0)
 }
+
+func (m *CmdWidget) DrawStatusLine(c Canvas, active bool) {}

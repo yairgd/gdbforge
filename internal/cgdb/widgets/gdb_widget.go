@@ -169,3 +169,9 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 
 	c.ShowNativeCursor(m.Cursor+promptLen, inputY)
 }
+
+func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	if active {
+		termui.PaintStatusBar(c, "GDB")
+	}
+}

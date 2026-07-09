@@ -464,22 +464,106 @@ func HorizontalOverlap(a, b Rect) bool {
 }
 
 func (l *WidgetTree) Draw(c Canvas) {
-	l.draw(c, l.root)
+	l.drawWidgets(l.root)
+	l.clearStatusRows(l.root)
+	l.redrawGrid(l.root, c)
+	l.drawStatusLines(l.root)
 }
 
-func (l *WidgetTree) draw(c Canvas, node *Node) {
-	if node.Type == NodeLeaf {
-		node.Widget.Draw(node.canvas)
-		if node == l.focus {
-			c.Printf(0, 0, tcell.StyleDefault, "active")
-		} else {
-			c.Printf(0, 0, tcell.StyleDefault, "      ")
-		}
+func (l *WidgetTree) clearStatusRows(node *Node) {
+	if node == nil {
 		return
 	}
-	l.draw(node.First.canvas, node.First)
-	l.draw(node.Second.canvas, node.Second)
+	if node.Type == NodeLeaf {
+		ClearStatusLine(node.canvas)
+		return
+	}
+	l.clearStatusRows(node.First)
+	l.clearStatusRows(node.Second)
+}
 
+func (l *WidgetTree) drawWidgets(node *Node) {
+	if node == nil {
+		return
+	}
+	if node.Type == NodeLeaf {
+		node.Widget.Draw(node.canvas)
+		return
+	}
+	l.drawWidgets(node.First)
+	l.drawWidgets(node.Second)
+}
+
+func (l *WidgetTree) drawStatusLines(node *Node) {
+	if node == nil {
+		return
+	}
+	if node.Type == NodeLeaf {
+		node.Widget.DrawStatusLine(node.canvas, node == l.focus)
+		return
+	}
+	l.drawStatusLines(node.First)
+	l.drawStatusLines(node.Second)
+}
+
+func (l *WidgetTree) redrawGrid(node *Node, c Canvas) {
+	if node == nil || node.Type == NodeLeaf {
+		return
+	}
+
+	switch node.Dir {
+	case Vertical:
+		leftW, _, r1, r2 := verticalSplitRects(node, c)
+		c.DrawVerticalLocal(leftW, 0, c.H(), false)
+		l.redrawGrid(node.First, c.WithRect(r1))
+		l.redrawGrid(node.Second, c.WithRect(r2))
+
+	case Horizontal:
+		topH, _, r1, r2 := horizontalSplitRects(node, c)
+		c.DrawHorizontalLocal(topH, 0, c.W(), false)
+		l.redrawGrid(node.First, c.WithRect(r1))
+		l.redrawGrid(node.Second, c.WithRect(r2))
+	}
+}
+
+func verticalSplitRects(node *Node, c Canvas) (leftW, rightW int, r1, r2 Rect) {
+	avail := c.W() - 1
+	if avail < 1 {
+		return 0, 0, c.Rect(), c.Rect()
+	}
+
+	leftW = int(float64(avail) * node.Ratio)
+	if leftW < minPaneCells {
+		leftW = minPaneCells
+	}
+	if leftW > avail-minPaneCells {
+		leftW = avail - minPaneCells
+	}
+	rightW = c.W() - leftW - 1
+
+	r1 = c.ChildRect(0, 0, leftW, c.H())
+	r2 = c.ChildRect(leftW+1, 0, rightW, c.H())
+	return leftW, rightW, r1, r2
+}
+
+func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect) {
+	avail := c.H() - 1
+	if avail < 1 {
+		return 0, 0, c.Rect(), c.Rect()
+	}
+
+	topH = int(float64(avail) * node.Ratio)
+	if topH < minPaneCells {
+		topH = minPaneCells
+	}
+	if topH > avail-minPaneCells {
+		topH = avail - minPaneCells
+	}
+	bottomH = c.H() - topH - 1
+
+	r1 = c.ChildRect(0, 0, c.W(), topH)
+	r2 = c.ChildRect(0, topH+1, c.W(), bottomH)
+	return topH, bottomH, r1, r2
 }
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
@@ -505,20 +589,12 @@ func (l *WidgetTree) buildLayout(
 	switch node.Dir {
 
 	case Vertical:
+		leftW, _, r1, r2 := verticalSplitRects(node, c)
 		avail := c.W() - 1
 		if avail < 1 {
 			return
 		}
-
-		leftW := int(float64(avail) * node.Ratio)
-		if leftW < minPaneCells {
-			leftW = minPaneCells
-		}
-		if leftW > avail-minPaneCells {
-			leftW = avail - minPaneCells
-		}
 		node.Ratio = float64(leftW) / float64(avail)
-		rightW := c.W() - leftW - 1
 
 		c.DrawVerticalLocal(leftW, 0, c.H(), false)
 
@@ -526,27 +602,16 @@ func (l *WidgetTree) buildLayout(
 		node.layoutRect = cr
 		node.sepRect = NewRect(c.ScreenX(leftW), c.ScreenY(0), 1, c.H())
 
-		r1 := c.ChildRect(0, 0, leftW, c.H())
 		l.buildLayout(node.First, c.WithRect(r1))
-
-		r2 := c.ChildRect(leftW+1, 0, rightW, c.H())
 		l.buildLayout(node.Second, c.WithRect(r2))
 
 	case Horizontal:
+		topH, _, r1, r2 := horizontalSplitRects(node, c)
 		avail := c.H() - 1
 		if avail < 1 {
 			return
 		}
-
-		topH := int(float64(avail) * node.Ratio)
-		if topH < minPaneCells {
-			topH = minPaneCells
-		}
-		if topH > avail-minPaneCells {
-			topH = avail - minPaneCells
-		}
 		node.Ratio = float64(topH) / float64(avail)
-		bottomH := c.H() - topH - 1
 
 		c.DrawHorizontalLocal(topH, 0, c.W(), false)
 
@@ -554,10 +619,7 @@ func (l *WidgetTree) buildLayout(
 		node.layoutRect = cr
 		node.sepRect = NewRect(c.ScreenX(0), c.ScreenY(topH), c.W(), 1)
 
-		r1 := c.ChildRect(0, 0, c.W(), topH)
 		l.buildLayout(node.First, c.WithRect(r1))
-
-		r2 := c.ChildRect(0, topH+1, c.W(), bottomH)
 		l.buildLayout(node.Second, c.WithRect(r2))
 
 	}
