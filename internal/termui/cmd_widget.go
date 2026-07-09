@@ -5,29 +5,25 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/commands"
 )
 
 type CmdWidget struct {
 	BaseWidget
 
-	history     History
-	completer   AutoCompleter
-	active      bool
-	completions []string
-	compIndex   int
-	text        string
-	cursor      int
+	history   History
+	parser    *commands.CommandParser
+	presenter CompletionPresenter
+	active    bool
+	text      string
+	cursor    int
 }
 
-func NewCmdWidget(completer AutoCompleter) *CmdWidget {
-
-	if completer == nil {
-		completer = NewSimpleCompleter(nil)
-	}
-
+func NewCmdWidget(reg *commands.CommandRegistry, presenter CompletionPresenter) *CmdWidget {
 	return &CmdWidget{
 		history:   NewMemoryHistory(),
-		completer: completer,
+		parser:    commands.NewCommandParser(reg),
+		presenter: presenter,
 		active:    false,
 	}
 }
@@ -44,32 +40,51 @@ func (c *CmdWidget) submitCommand() {
 		line = strings.TrimSpace(line[1:])
 	}
 
-	parts := strings.Fields(line)
-	if len(parts) == 0 {
+	if line == "" {
 		c.emit(SubmitMsg{Text: c.text, CmdID: CmdUnknown})
 		return
 	}
 
-	args := ""
-	if len(parts) > 1 {
-		args = strings.Join(parts[1:], " ")
-	}
-
-	matches := c.completer.Complete(parts[0])
-	if len(matches) == 0 {
-		c.emit(SubmitMsg{
-			Text:  c.text,
-			CmdID: CmdUnknown,
-			Args:  args,
-		})
+	if err := c.parser.Parse(line); err != nil {
+		c.emit(SubmitMsg{Text: c.text, CmdID: CmdUnknown})
 		return
 	}
 
-	c.emit(SubmitMsg{
-		Text:  c.text,
-		CmdID: matches[0].ID,
-		Args:  args,
-	})
+	if c.parser.CanExecute() {
+		_ = c.parser.Execute()
+		return
+	}
+
+	c.emit(SubmitMsg{Text: c.text, CmdID: CmdUnknown})
+}
+
+func (c *CmdWidget) syncParser() {
+	line := c.text
+	if strings.HasPrefix(line, ":") {
+		line = line[1:]
+	}
+	c.parser.Sync(line, c.cursor-1)
+}
+
+func (c *CmdWidget) tokenBounds() (start, end int) {
+	runes := []rune(c.text)
+	end = c.cursor
+	start = 1
+	for i := 1; i < end; i++ {
+		if runes[i] == ' ' {
+			start = i + 1
+		}
+	}
+	return start, end
+}
+
+func (c *CmdWidget) replaceToken(name string) {
+	start, end := c.tokenBounds()
+	runes := []rune(c.text)
+	prefix := string(runes[:start])
+	suffix := string(runes[end:])
+	c.text = prefix + name + suffix
+	c.cursor = len([]rune(prefix + name))
 }
 func (c *CmdWidget) Activate() {
 	c.active = true
@@ -108,23 +123,29 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 
 		case tcell.KeyTAB:
+			c.syncParser()
+			suggestions := c.parser.Suggestions()
 
-			prefix := c.text
-
-			if strings.HasPrefix(prefix, ":") {
-				prefix = prefix[1:]
+			if c.presenter != nil {
+				names := make([]string, len(suggestions))
+				for i, node := range suggestions {
+					names[i] = node.Name
+				}
+				c.presenter.Show(CompletionResult{
+					Input: c.text,
+					Token: c.parser.CurrentToken(),
+					Names: names,
+				})
 			}
 
-			if idx := strings.IndexAny(prefix, " \t"); idx >= 0 {
-				prefix = prefix[:idx]
-			}
-
-			matches := c.completer.Complete(prefix)
-
-			if len(matches) == 1 {
-
-				c.text = ":" + matches[0].Name
-				c.cursor = len([]rune(c.text))
+			if len(suggestions) == 1 {
+				node := suggestions[0]
+				c.replaceToken(node.Name)
+				children, _ := node.Complete("")
+				if len(children) > 0 {
+					c.text += " "
+					c.cursor = len([]rune(c.text))
+				}
 			}
 
 			return

@@ -1,8 +1,6 @@
 package widgets
 
 import (
-	"fmt"
-
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -16,8 +14,8 @@ type LoggerWidget struct {
 }
 
 func (w *LoggerWidget) Write(entry platform.LogEntry) error {
-	b := w.viewport.Buffer
-	b.AppendText(entry.Text)
+	w.viewport.Buffer.AppendLine(entry.Text)
+	w.viewport.ScrollToBottom()
 	return nil
 }
 
@@ -27,13 +25,12 @@ func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 	w := &LoggerWidget{
 		BaseWidget: termui.NewBaseWidget(ctx),
 		viewport:   termui.NewViewport(buf),
+		buf:        buf,
 	}
 
+	w.viewport.SetFollowTail(true)
 	ctx.Log.AddSink(w)
 	w.log = ctx.Log.Named("LoggerWidget")
-	for i := 0; i < 50; i++ {
-		w.viewport.Buffer.AppendLine(fmt.Sprintf("Line number: %d", i))
-	}
 
 	return w
 }

@@ -26,6 +26,7 @@ type Viewport struct {
 	// Last canvas size seen during Draw (used for scrolling).
 	width  int
 	height int
+	followTail bool
 
 	// Screen origin of the widget rect (set during Draw).
 	screenX int
@@ -63,6 +64,10 @@ func (v *Viewport) Draw(c Canvas) {
 	v.height = c.H()
 	v.screenX = c.ScreenX(0)
 	v.screenY = c.ScreenY(0)
+
+	if v.followTail {
+		v.ScrollToBottom()
+	}
 
 	style := tcell.StyleDefault
 	selStyle := style.Reverse(true)
@@ -308,6 +313,31 @@ func (v *Viewport) copySelection() {
 func (v *Viewport) clearSelection() {
 	v.selActive = false
 	v.hasSel = false
+}
+
+func (v *Viewport) SetFollowTail(follow bool) {
+	v.followTail = follow
+}
+
+func (v *Viewport) ScrollToBottom() {
+	if v.Buffer == nil {
+		return
+	}
+
+	last := v.Buffer.NumLines() - 1
+	if last < 0 {
+		return
+	}
+
+	v.CursorLine = last
+	v.clampCursorCol()
+
+	if v.height > 0 && last >= v.height {
+		v.Top = last - v.height + 1
+		return
+	}
+
+	v.Top = 0
 }
 
 func (v *Viewport) Up() {

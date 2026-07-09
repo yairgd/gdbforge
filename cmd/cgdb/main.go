@@ -107,53 +107,26 @@ func (app *DebuggerApp) BreakFunction(args ...any)   {}
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
 func (a *DebuggerApp) ExapData() {
-	root := a.commandReg.Root
-
-	window := root.InsertName("window")
-	window.InsertName("left").Action = a.OnFocusLeft
-	window.InsertName("right").Action = a.OnFocusRight
-	window.InsertName("up").Action = a.OnFocusUp
-	window.InsertName("down").Action = a.OnFocusDown
-
-	breakCmd := root.InsertName("break")
-	breakCmd.InsertName("file").Action = a.BreakFile
-	breakCmd.InsertName("delete").Action = a.DeleteBreakpoint
-
-	info := root.InsertName("info")
-	info.InsertName("registers").Action = a.ShowRegisters
-	info.InsertName("threads").Action = a.ShowThreads
+	a.commandReg.Root.
+		Group("window",
+			commands.Cmd("left", a.OnFocusLeft),
+			commands.Cmd("right", a.OnFocusRight),
+			commands.Cmd("up", a.OnFocusUp),
+			commands.Cmd("down", a.OnFocusDown),
+		).
+		Group("break",
+			commands.Cmd("file", a.BreakFile),
+			commands.Cmd("delete", a.DeleteBreakpoint),
+		).
+		Group("info",
+			commands.Cmd("registers", a.ShowRegisters),
+			commands.Cmd("threads", a.ShowThreads),
+		)
 }
 
-func (a *DebuggerApp) InitB() {
-	codeWidgetLeft := widgets.NewCodeWidget()
-	codeWidgetRight := widgets.NewCodeWidget()
-
-	a.tab = termui.NewTabTwoHozSplitWins(
-		"basic debugger",
-		codeWidgetLeft,
-		codeWidgetRight,
-	)
-	a.tab.SetOnResize(a.RequestFrame)
-	a.AddWidget(a.tab)
-
-	completer := termui.NewSimpleCompleter([]termui.Command{
-		{ID: cmdBreak, Name: "break"},
-		{ID: cmdContinue, Name: "continue"},
-		{ID: cmdNext, Name: "next"},
-		{ID: cmdStep, Name: "step"},
-		{ID: cmdPrint, Name: "print"},
-		{ID: cmdBacktrace, Name: "bt"},
-		{ID: cmdInfo, Name: "info"},
-		{ID: cmdRun, Name: "run"},
-		{ID: cmdQuit, Name: "quit"},
-		{ID: cmdVerticalSplit, Name: "vs"},
-		{ID: cmdHorizontalSplit, Name: "split"},
-	})
-	a.cmdWidget = termui.NewCmdWidget(completer)
-	a.cmdWidget.Events = a.Events()
-	a.AddWidget(a.cmdWidget)
-
+func (a *DebuggerApp) InitKeyBindings() {
 	a.keyBindings = commands.NewKeyBindingRegistry()
+
 	a.keyBindings.Bind(
 		commands.NewCommand("move-left", func(args ...any) {
 			a.OnFocusLeft()
@@ -181,9 +154,31 @@ func (a *DebuggerApp) InitB() {
 		}),
 		"<C-w>j", "<C-w><Down>",
 	)
+}
 
-	a.ExapData()
+func (a *DebuggerApp) InitB() {
+	codeWidgetLeft := widgets.NewCodeWidget()
+	codeWidgetRight := widgets.NewCodeWidget()
+
+	a.tab = termui.NewTabTwoHozSplitWins(
+		"basic debugger",
+		codeWidgetLeft,
+		codeWidgetRight,
+	)
+	a.tab.SetOnResize(a.RequestFrame)
+	a.AddWidget(a.tab)
+
 	a.ctx = platform.NewAppContext()
+
+	a.cmdWidget = termui.NewCmdWidget(
+		a.commandReg,
+		termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
+	)
+	a.cmdWidget.Events = a.Events()
+	a.AddWidget(a.cmdWidget)
+
+	a.InitKeyBindings()
+	a.ExapData()
 
 	// exaplr how to use filesynk
 	fileSink, err := platform.NewFileSink("cgdb.log")
@@ -331,52 +326,7 @@ func (app *DebuggerApp) handleHorizontalSplit(_ termui.CommandEvent) bool {
 	return true
 }
 
-// exampleCommandDSL demonstrates a future declarative syntax for building the
-// command tree. It is not wired into command execution, key bindings, or the
-// colon-command parser — the returned registry is discarded after construction.
-//
-// Compared to repeated InsertName() calls, this DSL reads as a nested outline:
-// groups and commands mirror the logical hierarchy (window → split → horizontal)
-// instead of spelling out each parent/child link imperatively.
-//
-// Each CommandNode still owns a Children trie internally; the DSL never exposes
-// that detail. The trie is an implementation mechanism for efficient child lookup
-// and future auto-completion, while Group/Cmd describe the command tree itself.
-func exampleCommandDSL(app *DebuggerApp) *commands.CommandRegistry {
-	registry := commands.NewCommandRegistry()
-
-	registry.Root.
-		Group("window",
-			commands.Cmd("left", app.OnFocusLeft),
-			commands.Cmd("right", app.OnFocusRight),
-			commands.Cmd("up", app.OnFocusUp),
-			commands.Cmd("down", app.OnFocusDown),
-
-			commands.Group("split",
-				commands.Cmd("horizontal", app.SplitHorizontal),
-				commands.Cmd("vertical", app.SplitVertical),
-			),
-		).
-		Group("break",
-			commands.Group("file",
-				commands.Cmd("line", app.BreakFileLine),
-				commands.Cmd("function", app.BreakFunction),
-			),
-
-			commands.Cmd("delete", app.DeleteBreakpoint),
-		).
-		Group("info",
-			commands.Cmd("registers", app.ShowRegisters),
-			commands.Cmd("threads", app.ShowThreads),
-		)
-
-	return registry
-}
-
 func main() {
-
 	app := NewDebuggerApp()
-	_ = exampleCommandDSL(app) // DSL demo only; not connected to the running app
 	app.Run()
-
 }
