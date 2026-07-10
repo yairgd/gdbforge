@@ -467,6 +467,9 @@ func (l *WidgetTree) Draw(c Canvas) {
 	l.drawWidgets(l.root)
 	l.clearStatusRows(l.root)
 	l.redrawGrid(l.root, c)
+	c.DrawHorizontalLocal(c.H(), 0, c.W(), false)
+	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
+
 	l.drawStatusLines(l.root)
 }
 
