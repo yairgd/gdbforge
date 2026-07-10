@@ -128,9 +128,10 @@ func (app *DebuggerApp) Quit(args ...any) {
 // ExapData builds the example command hierarchy on commandReg.Root:
 //
 //	/ → window → left, right, up, down
+//	/ → window → break → file, delete
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
-//	/ → vs, split, i, quit
+//	/ → vs, split, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",
@@ -138,6 +139,10 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("right", a.OnFocusRight),
 			commands.Cmd("up", a.OnFocusUp),
 			commands.Cmd("down", a.OnFocusDown),
+			commands.Group("break",
+				commands.Cmd("file", a.BreakFile),
+				commands.Cmd("delete", a.DeleteBreakpoint),
+			),
 		).
 		Group("break",
 			commands.Cmd("file", a.BreakFile),
@@ -150,7 +155,6 @@ func (a *DebuggerApp) ExapData() {
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
 		Leaf("quit", a.Quit)
-
 }
 
 func (a *DebuggerApp) InitKeyBindings() {
@@ -199,10 +203,8 @@ func (a *DebuggerApp) InitB() {
 
 	a.ctx = platform.NewAppContext()
 
-	a.cmdWidget = termui.NewCmdWidget(
-		a.commandReg,
-		termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
-	)
+	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.Events = a.Events()
 	a.AddWidget(a.cmdWidget)
 

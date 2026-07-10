@@ -6,25 +6,24 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/commands"
+	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
 type CmdWidget struct {
 	BaseWidget
 
-	history   History
-	parser    *commands.CommandParser
-	presenter CompletionPresenter
-	active    bool
-	text      string
-	cursor    int
+	history History
+	parser  *commands.CommandParser
+	active  bool
+	text    string
+	cursor  int
 }
 
-func NewCmdWidget(reg *commands.CommandRegistry, presenter CompletionPresenter) *CmdWidget {
+func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 	return &CmdWidget{
-		history:   NewMemoryHistory(),
-		parser:    commands.NewCommandParser(reg),
-		presenter: presenter,
-		active:    false,
+		history: NewMemoryHistory(),
+		parser:  commands.NewCommandParser(reg),
+		active:  false,
 	}
 }
 
@@ -126,12 +125,12 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			c.syncParser()
 			suggestions := c.parser.Suggestions()
 
-			if c.presenter != nil {
-				names := make([]string, len(suggestions))
-				for i, node := range suggestions {
-					names[i] = node.Name
-				}
-				c.presenter.Show(CompletionResult{
+			names := make([]string, len(suggestions))
+			for i, node := range suggestions {
+				names[i] = node.Name
+			}
+			if c.Ctx.Bus != nil {
+				platform.Publish(c.Ctx.Bus, CompletionMsg{
 					Input: c.text,
 					Token: c.parser.CurrentToken(),
 					Names: names,

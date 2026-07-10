@@ -17,8 +17,18 @@ type SubmitMsg struct {
 	Args  string
 }
 
-func (m SubmitMsg) Type() string          { return "SubmitMsg" }
-func (m SubmitMsg) CommandID() CommandID  { return m.CmdID }
+func (m SubmitMsg) Type() string         { return "SubmitMsg" }
+func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
+
+// CompletionMsg is published on platform.EventBus when Tab requests completions.
+// Subscribers (log pane, future popup, etc.) decide how to display them.
+type CompletionMsg struct {
+	Input string
+	Token string
+	Names []string
+}
+
+func (m CompletionMsg) Type() string { return "CompletionMsg" }
 
 type BaseEvent struct {
 	Cmd  Command
