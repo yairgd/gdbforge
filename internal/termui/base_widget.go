@@ -38,8 +38,8 @@ func (b *BaseWidget) Start(handler func(Event)) {
 }
 
 func (b *BaseWidget) DrawStatusLine(c Canvas, active bool) {
-	if active && b.PaneName != "" {
-		PaintStatusBar(c, b.PaneName)
+	if b.PaneName != "" {
+		PaintStatusBar(c, b.PaneName, active)
 	}
 }
 

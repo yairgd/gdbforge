@@ -113,7 +113,9 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 }
 
 func (app *DebuggerApp) EnterInsertMode(args ...any) {
+	app.tab.SetInsertActive(true)
 	app.SetMode(platform.ModeInsert)
+	app.RequestRedraw()
 }
 
 func (app *DebuggerApp) Quit(args ...any) {
@@ -228,7 +230,9 @@ func (a *DebuggerApp) InitB() {
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEscape {
+		a.tab.SetInsertActive(false)
 		a.SetMode(platform.ModeNormal)
+		a.RequestRedraw()
 		return true
 	}
 	a.tab.HandleEvent(ev)
@@ -246,7 +250,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		return true
 	}
 	if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
-		a.SetMode(platform.ModeInsert)
+		a.EnterInsertMode()
 		return true
 	}
 	if key, ok := platform.KeyFromEvent(ev); ok {
@@ -284,14 +288,14 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	if ev.Buttons()&tcell.ButtonPrimary != 0 {
 		x, y := ev.Position()
 		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
-			a.SetMode(platform.ModeInsert)
+			a.EnterInsertMode()
 		}
 	}
 
 	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
 		x, y := ev.Position()
 		if a.tab.FocusAt(x, y) {
-			a.SetMode(platform.ModeInsert)
+			a.EnterInsertMode()
 		}
 	}
 

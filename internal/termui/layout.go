@@ -66,3 +66,7 @@ func NewLayout(widget Widget) *Layout {
 func (l *Layout) SetOnResize(fn func()) {
 	l.tree.SetOnResize(fn)
 }
+
+func (l *Layout) SetInsertActive(active bool) {
+	l.tree.SetInsertActive(active)
+}

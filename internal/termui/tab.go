@@ -131,6 +131,12 @@ func (t *TabWidget) SetOnResize(fn func()) {
 	}
 }
 
+func (t *TabWidget) SetInsertActive(active bool) {
+	if layout := t.ActiveLayout(); layout != nil {
+		layout.SetInsertActive(active)
+	}
+}
+
 func (t *TabWidget) VerticalSplit(w Widget) {
 	t.tabs[t.active].layout.NewSplit(Vertical, w)
 

@@ -22,6 +22,9 @@ type WidgetTree struct {
 	root  *Node
 	focus *Node
 
+	// insertActive: true → green status on focus; false → blue (normal mode).
+	insertActive bool
+
 	dragSplit        *Node
 	onResize         func()
 	grid             *Grid
@@ -32,6 +35,10 @@ type WidgetTree struct {
 
 func (w *WidgetTree) SetOnResize(fn func()) {
 	w.onResize = fn
+}
+
+func (w *WidgetTree) SetInsertActive(active bool) {
+	w.insertActive = active
 }
 
 func NewWidgetTree(newWidget Widget) WidgetTree {
@@ -433,7 +440,10 @@ func (l *WidgetTree) Draw(c Canvas) {
 	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
 
 	WalkLeaves(l.root, func(n *Node) {
-		n.Widget.DrawStatusLine(l.leafCanvas(n), n == l.focus)
+		if n != l.focus {
+			return
+		}
+		n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
 	})
 }
 

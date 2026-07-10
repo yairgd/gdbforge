@@ -171,7 +171,5 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 }
 
 func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
-	if active {
-		termui.PaintStatusBar(c, "GDB")
-	}
+	termui.PaintStatusBar(c, "GDB", active)
 }

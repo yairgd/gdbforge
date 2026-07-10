@@ -12,18 +12,30 @@ func StatusLineRow(c Canvas) int {
 	return c.H()
 }
 
-// PaintStatusBar renders the pane name on the bottom grid row of c, overwriting
-// whatever was drawn on that row. Uses canvas coordinates only.
-func PaintStatusBar(c Canvas, name string) {
+func statusBarStyle(active bool) tcell.Style {
+	if active {
+		// Insert-mode focus: strong green bar.
+		return tcell.StyleDefault.
+			Foreground(tcell.ColorWhite).
+			Background(tcell.ColorDarkGreen).
+			Bold(true)
+	}
+	// Normal mode / remembered pane: muted blue bar.
+	return tcell.StyleDefault.
+		Foreground(tcell.ColorLightCyan).
+		Background(tcell.ColorNavy).
+		Bold(false)
+}
+
+// PaintStatusBar renders the pane name on the bottom grid row of c.
+// active selects the insert-mode (green) vs remembered (blue) style.
+func PaintStatusBar(c Canvas, name string, active bool) {
 	if name == "" || c.W() <= 0 || c.H() <= 0 {
 		return
 	}
 
 	row := StatusLineRow(c)
-	style := tcell.StyleDefault.
-		Foreground(tcell.ColorSkyblue).
-		Background(tcell.ColorDarkSlateGray).
-		Bold(true)
+	style := statusBarStyle(active)
 
 	c.ClearLineRange(row, 0, c.W(), style)
 
