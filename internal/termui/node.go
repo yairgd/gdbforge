@@ -14,14 +14,13 @@ const (
 	Vertical                   // Split left/right (side by side)
 )
 
-// Node is a pure data object for the binary layout tree.
-// Tree algorithms live in layout_tree.go; GUI behavior lives on WidgetTree.
+// Node is structural tree state only. Per-frame paint/hit geometry lives in
+// WidgetTree.geom; tree algorithms live in layout_tree.go.
 type Node struct {
 	Type NodeType // Defines whether this is a Leaf or Split node
 
 	// --- Leaf node fields ---
 	Widget Widget // The UI component stored in this node (only valid if Type == Leaf)
-	canvas Canvas
 
 	// --- Split node fields ---
 	Dir   SplitDir // Direction of the split (Horizontal or Vertical)
@@ -31,8 +30,4 @@ type Node struct {
 	Second *Node // Second child node (bottom or right depending on Dir)
 
 	parent *Node
-
-	// Separator geometry (screen coords, valid after BuildLayout on split nodes).
-	layoutRect Rect
-	sepRect    Rect
 }

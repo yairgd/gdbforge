@@ -10,6 +10,14 @@ const DirectionWeight = 1000
 
 const minPaneCells = 3
 
+// layoutGeom holds per-frame paint and hit-test geometry for a node.
+// Rebuilt by BuildLayout; not stored on Node.
+type layoutGeom struct {
+	canvas     Canvas // leaf paint region
+	layoutRect Rect   // split region (screen coords)
+	sepRect    Rect   // separator hit target (screen coords)
+}
+
 type WidgetTree struct {
 	root  *Node
 	focus *Node
@@ -18,6 +26,8 @@ type WidgetTree struct {
 	onResize         func()
 	grid             *Grid
 	mousePrimaryHeld bool
+
+	geom map[*Node]layoutGeom
 }
 
 func (w *WidgetTree) SetOnResize(fn func()) {
@@ -30,7 +40,30 @@ func NewWidgetTree(newWidget Widget) WidgetTree {
 	return WidgetTree{
 		root:  node,
 		focus: node,
+		geom:  make(map[*Node]layoutGeom),
 	}
+}
+
+func (w *WidgetTree) leafCanvas(n *Node) Canvas {
+	return w.geom[n].canvas
+}
+
+func (w *WidgetTree) leafRect(n *Node) Rect {
+	return w.geom[n].canvas.Rect()
+}
+
+func (w *WidgetTree) extentAlong(n *Node, dir SplitDir) int {
+	g := w.geom[n]
+	var r Rect
+	if n.Type == NodeLeaf {
+		r = g.canvas.Rect()
+	} else {
+		r = g.layoutRect
+	}
+	if dir == Vertical {
+		return r.W()
+	}
+	return r.H()
 }
 
 func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
@@ -102,7 +135,7 @@ func (l *WidgetTree) findSeparator(x, y int) *Node {
 		if found != nil {
 			return
 		}
-		if !n.sepRect.Contains(x, y) {
+		if !l.geom[n].sepRect.Contains(x, y) {
 			return
 		}
 		if l.grid != nil && !l.grid.isSplitSeparatorCell(x, y, n.Dir) {
@@ -119,7 +152,7 @@ func (l *WidgetTree) updateSplitDrag(mx, my int) {
 		return
 	}
 
-	r := n.layoutRect
+	r := l.geom[n].layoutRect
 
 	var total, local int
 	switch n.Dir {
@@ -144,11 +177,15 @@ func (l *WidgetTree) updateSplitDrag(mx, my int) {
 
 	n.Ratio = float64(local) / float64(avail)
 
+	extent := func(node *Node) int {
+		return l.extentAlong(node, n.Dir)
+	}
+
 	// Only the two panes adjacent to this separator should change size. Keep
 	// every other pane at its current absolute size by adjusting the ratios
 	// along the two edges that meet the separator.
-	pinFirstEdge(n.First, n.Dir, local)
-	pinSecondEdge(n.Second, n.Dir, total-local-1)
+	pinFirstEdge(n.First, n.Dir, local, extent)
+	pinSecondEdge(n.Second, n.Dir, total-local-1, extent)
 
 	if l.onResize != nil {
 		l.onResize()
@@ -161,7 +198,7 @@ func (l *WidgetTree) IsDraggingSeparator() bool {
 
 func (t *WidgetTree) FocusAt(x, y int) bool {
 	for _, n := range CollectLeaves(t.root) {
-		if n.canvas.Rect().Contains(x, y) {
+		if t.leafRect(n).Contains(x, y) {
 			t.focus = n
 			return true
 		}
@@ -179,6 +216,7 @@ func abs(x int) int {
 func (t *WidgetTree) FocusRight() {
 	leaves := CollectLeaves(t.root)
 	cur := t.focus
+	curR := t.leafRect(cur)
 
 	var best *Node
 	bestScore := math.MaxInt
@@ -189,12 +227,13 @@ func (t *WidgetTree) FocusRight() {
 			continue
 		}
 
-		dx := n.canvas.rect.x - cur.canvas.rect.Right()
+		nr := t.leafRect(n)
+		dx := nr.x - curR.Right()
 		if dx < 0 {
 			continue
 		}
 
-		dy := abs(n.canvas.rect.CenterY() - cur.canvas.rect.CenterY())
+		dy := abs(nr.CenterY() - curR.CenterY())
 
 		score := dx*DirectionWeight + dy
 
@@ -212,6 +251,7 @@ func (t *WidgetTree) FocusRight() {
 func (t *WidgetTree) FocusLeft() {
 	leaves := CollectLeaves(t.root)
 	cur := t.focus
+	curR := t.leafRect(cur)
 
 	var best *Node
 	bestScore := math.MaxInt
@@ -222,13 +262,14 @@ func (t *WidgetTree) FocusLeft() {
 			continue
 		}
 
+		nr := t.leafRect(n)
 		// Must be to the left.
-		if n.canvas.rect.Right() > cur.canvas.rect.x {
+		if nr.Right() > curR.x {
 			continue
 		}
 
-		dx := cur.canvas.rect.x - n.canvas.rect.Right()
-		dy := abs(n.canvas.rect.CenterY() - cur.canvas.rect.CenterY())
+		dx := curR.x - nr.Right()
+		dy := abs(nr.CenterY() - curR.CenterY())
 
 		score := dx*DirectionWeight + dy
 
@@ -246,6 +287,7 @@ func (t *WidgetTree) FocusLeft() {
 func (t *WidgetTree) FocusDown() {
 	leaves := CollectLeaves(t.root)
 	cur := t.focus
+	curR := t.leafRect(cur)
 
 	var best *Node
 	bestScore := math.MaxInt
@@ -256,13 +298,14 @@ func (t *WidgetTree) FocusDown() {
 			continue
 		}
 
+		nr := t.leafRect(n)
 		// Must be below.
-		if n.canvas.rect.y < cur.canvas.rect.Bottom() {
+		if nr.y < curR.Bottom() {
 			continue
 		}
 
-		dy := n.canvas.rect.y - cur.canvas.rect.Bottom()
-		dx := abs(n.canvas.rect.CenterX() - cur.canvas.rect.CenterX())
+		dy := nr.y - curR.Bottom()
+		dx := abs(nr.CenterX() - curR.CenterX())
 
 		score := dy*DirectionWeight + dx
 
@@ -280,6 +323,7 @@ func (t *WidgetTree) FocusDown() {
 func (t *WidgetTree) FocusUp() {
 	leaves := CollectLeaves(t.root)
 	cur := t.focus
+	curR := t.leafRect(cur)
 
 	var best *Node
 	bestScore := math.MaxInt
@@ -290,13 +334,14 @@ func (t *WidgetTree) FocusUp() {
 			continue
 		}
 
+		nr := t.leafRect(n)
 		// Must be above.
-		if n.canvas.rect.Bottom() > cur.canvas.rect.y {
+		if nr.Bottom() > curR.y {
 			continue
 		}
 
-		dy := cur.canvas.rect.y - n.canvas.rect.Bottom()
-		dx := abs(n.canvas.rect.CenterX() - cur.canvas.rect.CenterX())
+		dy := curR.y - nr.Bottom()
+		dx := abs(nr.CenterX() - curR.CenterX())
 
 		score := dy*DirectionWeight + dx
 
@@ -378,40 +423,41 @@ func HorizontalOverlap(a, b Rect) bool {
 
 func (l *WidgetTree) Draw(c Canvas) {
 	WalkLeaves(l.root, func(n *Node) {
-		n.Widget.Draw(n.canvas)
+		n.Widget.Draw(l.leafCanvas(n))
 	})
 	WalkLeaves(l.root, func(n *Node) {
-		ClearStatusLine(n.canvas)
+		ClearStatusLine(l.leafCanvas(n))
 	})
-	l.redrawGrid(c)
+	l.redrawGrid(l.root, c)
 	c.DrawHorizontalLocal(c.H(), 0, c.W(), false)
 	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
 
 	WalkLeaves(l.root, func(n *Node) {
-		n.Widget.DrawStatusLine(n.canvas, n == l.focus)
+		n.Widget.DrawStatusLine(l.leafCanvas(n), n == l.focus)
 	})
 }
 
-func (l *WidgetTree) redrawGrid(c Canvas) {
-	WalkWithContext(l.root, c,
-		nil,
-		func(node *Node, c Canvas) (first, second Canvas, cont bool) {
-			switch node.Dir {
-			case Vertical:
-				leftW, _, r1, r2 := verticalSplitRects(node, c)
-				// Extend ±1 so this bar meets parent horizontal separators
-				// (otherwise it stops on the pane edge and never shares a cell).
-				c.DrawVerticalLocal(leftW, -1, c.H()+1, false)
-				return c.WithRect(r1), c.WithRect(r2), true
-			case Horizontal:
-				topH, _, r1, r2 := horizontalSplitRects(node, c)
-				// Extend ±1 so this bar meets parent vertical separators.
-				c.DrawHorizontalLocal(topH, -1, c.W()+1, false)
-				return c.WithRect(r1), c.WithRect(r2), true
-			}
-			return c, c, false
-		},
-	)
+func (l *WidgetTree) redrawGrid(node *Node, c Canvas) {
+	if node == nil || node.Type == NodeLeaf {
+		return
+	}
+
+	switch node.Dir {
+	case Vertical:
+		leftW, _, r1, r2 := verticalSplitRects(node, c)
+		// Extend ±1 so this bar meets parent horizontal separators
+		// (otherwise it stops on the pane edge and never shares a cell).
+		c.DrawVerticalLocal(leftW, -1, c.H()+1, false)
+		l.redrawGrid(node.First, c.WithRect(r1))
+		l.redrawGrid(node.Second, c.WithRect(r2))
+
+	case Horizontal:
+		topH, _, r1, r2 := horizontalSplitRects(node, c)
+		// Extend ±1 so this bar meets parent vertical separators.
+		c.DrawHorizontalLocal(topH, -1, c.W()+1, false)
+		l.redrawGrid(node.First, c.WithRect(r1))
+		l.redrawGrid(node.Second, c.WithRect(r2))
+	}
 }
 
 func verticalSplitRects(node *Node, c Canvas) (leftW, rightW int, r1, r2 Rect) {
@@ -456,37 +502,49 @@ func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect)
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
 	l.grid = c.grid
-	WalkWithContext(l.root, c,
-		func(node *Node, c Canvas) {
-			node.canvas = c
-		},
-		func(node *Node, c Canvas) (first, second Canvas, cont bool) {
-			switch node.Dir {
-			case Vertical:
-				leftW, _, r1, r2 := verticalSplitRects(node, c)
-				avail := c.W() - 1
-				if avail < 1 {
-					return c, c, false
-				}
-				node.Ratio = float64(leftW) / float64(avail)
-				c.DrawVerticalLocal(leftW, -1, c.H()+1, false)
-				node.layoutRect = c.Rect()
-				node.sepRect = NewRect(c.ScreenX(leftW), c.ScreenY(0), 1, c.H())
-				return c.WithRect(r1), c.WithRect(r2), true
+	l.geom = make(map[*Node]layoutGeom)
+	l.buildLayout(l.root, c)
+}
 
-			case Horizontal:
-				topH, _, r1, r2 := horizontalSplitRects(node, c)
-				avail := c.H() - 1
-				if avail < 1 {
-					return c, c, false
-				}
-				node.Ratio = float64(topH) / float64(avail)
-				c.DrawHorizontalLocal(topH, -1, c.W()+1, false)
-				node.layoutRect = c.Rect()
-				node.sepRect = NewRect(c.ScreenX(0), c.ScreenY(topH), c.W(), 1)
-				return c.WithRect(r1), c.WithRect(r2), true
-			}
-			return c, c, false
-		},
-	)
+func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
+	if node == nil {
+		return
+	}
+
+	if node.Type == NodeLeaf {
+		l.geom[node] = layoutGeom{canvas: c}
+		return
+	}
+
+	switch node.Dir {
+	case Vertical:
+		leftW, _, r1, r2 := verticalSplitRects(node, c)
+		avail := c.W() - 1
+		if avail < 1 {
+			return
+		}
+		node.Ratio = float64(leftW) / float64(avail)
+		c.DrawVerticalLocal(leftW, -1, c.H()+1, false)
+		l.geom[node] = layoutGeom{
+			layoutRect: c.Rect(),
+			sepRect:    NewRect(c.ScreenX(leftW), c.ScreenY(0), 1, c.H()),
+		}
+		l.buildLayout(node.First, c.WithRect(r1))
+		l.buildLayout(node.Second, c.WithRect(r2))
+
+	case Horizontal:
+		topH, _, r1, r2 := horizontalSplitRects(node, c)
+		avail := c.H() - 1
+		if avail < 1 {
+			return
+		}
+		node.Ratio = float64(topH) / float64(avail)
+		c.DrawHorizontalLocal(topH, -1, c.W()+1, false)
+		l.geom[node] = layoutGeom{
+			layoutRect: c.Rect(),
+			sepRect:    NewRect(c.ScreenX(0), c.ScreenY(topH), c.W(), 1),
+		}
+		l.buildLayout(node.First, c.WithRect(r1))
+		l.buildLayout(node.Second, c.WithRect(r2))
+	}
 }

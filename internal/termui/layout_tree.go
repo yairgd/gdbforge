@@ -1,8 +1,8 @@
 package termui
 
-// layout_tree.go holds binary-tree traversal and layout algorithms for Node.
-// Node itself is a pure data object; WidgetTree expresses GUI behavior via
-// these visitors rather than implementing its own recursion.
+// layout_tree.go holds binary-tree traversal and ratio algorithms for Node.
+// It is UI-free: no Canvas/Rect dependencies. WidgetTree supplies extents when
+// pin helpers need absolute sizes from the last layout frame.
 
 // WalkLeaves visits every leaf under n in left-to-right order.
 func WalkLeaves(n *Node, fn func(*Node)) {
@@ -56,38 +56,6 @@ func WalkPostOrder(n *Node, fn func(*Node)) {
 	fn(n)
 }
 
-// WalkWithContext walks the tree while threading a per-node context value.
-// onLeaf is called for leaves. onSplit is called for splits and must return
-// the contexts for First and Second; if cont is false, children are skipped.
-func WalkWithContext[T any](
-	n *Node,
-	ctx T,
-	onLeaf func(n *Node, ctx T),
-	onSplit func(n *Node, ctx T) (first, second T, cont bool),
-) {
-	if n == nil {
-		return
-	}
-	if n.Type == NodeLeaf {
-		if onLeaf != nil {
-			onLeaf(n, ctx)
-		}
-		return
-	}
-	var first, second T
-	cont := true
-	if onSplit != nil {
-		first, second, cont = onSplit(n, ctx)
-	} else {
-		first, second = ctx, ctx
-	}
-	if !cont {
-		return
-	}
-	WalkWithContext(n.First, first, onLeaf, onSplit)
-	WalkWithContext(n.Second, second, onLeaf, onSplit)
-}
-
 // CollectLeaves returns all leaf nodes under n in left-to-right order.
 func CollectLeaves(n *Node) []*Node {
 	var leaves []*Node
@@ -129,31 +97,17 @@ func ComputeRatios(n *Node) {
 	ComputeRatios(n.Second)
 }
 
-// nodeExtent returns the node's current size (in cells) along dir, as of the
-// last BuildLayout. Leaves store their region in canvas; splits in layoutRect.
-func nodeExtent(n *Node, dir SplitDir) int {
-	var r Rect
-	if n.Type == NodeLeaf {
-		r = n.canvas.Rect()
-	} else {
-		r = n.layoutRect
-	}
-	if dir == Vertical {
-		return r.W()
-	}
-	return r.H()
-}
-
 // pinFirstEdge walks the far (right/bottom) edge of a subtree that will occupy
 // region cells along dir, keeping every First child at its current absolute
 // size so only the edge-most leaf absorbs the change.
-func pinFirstEdge(node *Node, dir SplitDir, region int) {
+// extent returns the node's size along dir from the caller's layout frame.
+func pinFirstEdge(node *Node, dir SplitDir, region int, extent func(*Node) int) {
 	for node != nil && node.Type == NodeSplit && node.Dir == dir {
 		avail := region - 1
 		if avail < minPaneCells*2 {
 			return
 		}
-		firstAbs := nodeExtent(node.First, dir)
+		firstAbs := extent(node.First)
 		if firstAbs < minPaneCells {
 			firstAbs = minPaneCells
 		}
@@ -168,13 +122,13 @@ func pinFirstEdge(node *Node, dir SplitDir, region int) {
 
 // pinSecondEdge is the mirror of pinFirstEdge for the near (left/top) edge:
 // it keeps every Second child at its current absolute size.
-func pinSecondEdge(node *Node, dir SplitDir, region int) {
+func pinSecondEdge(node *Node, dir SplitDir, region int, extent func(*Node) int) {
 	for node != nil && node.Type == NodeSplit && node.Dir == dir {
 		avail := region - 1
 		if avail < minPaneCells*2 {
 			return
 		}
-		secondAbs := nodeExtent(node.Second, dir)
+		secondAbs := extent(node.Second)
 		if secondAbs < minPaneCells {
 			secondAbs = minPaneCells
 		}
