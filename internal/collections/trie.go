@@ -7,33 +7,23 @@ import (
 type Callback func(args ...any)
 
 type TrieNode[T any] struct {
-	Children     map[platform.Key]*TrieNode[T]
-	IsTerminal   bool
-	OnEnter      func()
-	OnExactMatch Callback
-	data         T
+	Children   map[platform.Key]*TrieNode[T]
+	IsTerminal bool
+	data       T
 }
 
 type Trie[T any] struct {
 	root    TrieNode[T]
 	current *TrieNode[T]
-	seq     string
-	keySeq  []platform.Key
+	//seq     string
+	//keySeq  []platform.Key
 }
 
 func NewTrie[T any]() *Trie[T] {
 	return &Trie[T]{}
 }
 
-func (t *Trie[T]) Bind(str string, fn Callback) bool {
-	if pending, ok := platform.ParseKeySequence(str); ok {
-		t.insert(pending, fn)
-		return true
-	}
-	return false
-}
-
-func (t *Trie[T]) insert(pending []platform.Key, onExactMatch Callback) {
+func (t *Trie[T]) insert(pending []platform.Key) { //, onExactMatch Callback) {
 	root := &t.root
 
 	for _, key := range pending {
@@ -49,7 +39,6 @@ func (t *Trie[T]) insert(pending []platform.Key, onExactMatch Callback) {
 		root = root.Children[key]
 	}
 	root.IsTerminal = true
-	root.OnExactMatch = onExactMatch
 }
 
 func (t *Trie[T]) Insert(data T, strs ...string) {
@@ -110,8 +99,8 @@ func (t *Trie[T]) SearchPartial(key platform.Key) (T, bool) {
 
 	if child, ok := t.current.Children[key]; ok {
 		t.current = child
-		t.seq += key.String()
-		t.keySeq = append(t.keySeq, key)
+		//		t.seq += key.String()
+		//		t.keySeq = append(t.keySeq, key)
 	} else {
 		t.ResetPartial()
 		return zero, false
@@ -129,8 +118,8 @@ func (t *Trie[T]) SearchPartial(key platform.Key) (T, bool) {
 
 func (t *Trie[T]) ResetPartial() {
 	t.current = nil
-	t.seq = ""
-	t.keySeq = t.keySeq[:0]
+	// t.seq = ""
+	// t.keySeq = t.keySeq[:0]
 }
 
 func (t *Trie[T]) Complete(str string) ([]T, bool) {
