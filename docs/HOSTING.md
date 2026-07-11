@@ -102,7 +102,8 @@ The same viewer works as a static site — no Go runtime on GitHub Pages.
 ### Export locally
 
 ```bash
-go run ./cmd/docserve --export _site --base /cgdb-go/
+go run ./cmd/docserve --export _site --base /cgdb-go/ \
+  --site-origin https://YOUR_USER.github.io
 # or:
 task docs:export
 ```
@@ -111,6 +112,7 @@ task docs:export
 |------|---------|
 | `--export DIR` | Write static site to `DIR` and exit |
 | `--base PATH` | URL prefix for project Pages (e.g. `/cgdb-go/`) |
+| `--site-origin URL` | Absolute origin for canonical / Open Graph / sitemap (e.g. `https://user.github.io`) |
 | `--serve-static DIR` | Preview a previously exported directory |
 
 Output layout:
@@ -118,14 +120,35 @@ Output layout:
 ```text
 _site/
   .nojekyll
-  index.html
-  doc/*.md              # HTML shells
-  raw/*.md              # markdown sources
+  robots.txt
+  sitemap.xml          # when --site-origin is set
+  index.html           # pre-rendered Markdown + SEO meta
+  doc/*.md             # HTML shells with pre-rendered body
+  raw/*.md
   raw/diagrams/*
   www/site.css, docs.js
   diagrams/index.html
-  diagrams/*.mermaid    # HTML shells
+  diagrams/*.mermaid
 ```
+
+### SEO included in export
+
+| Item | Behavior |
+|------|----------|
+| `robots.txt` | Allows crawl; points at `sitemap.xml` when origin is set |
+| `sitemap.xml` | All doc + diagram URLs (requires `--site-origin`) |
+| `<title>` | First `#` heading from the Markdown (fallback: file name) |
+| Meta description | First prose paragraph (~155 chars) |
+| Canonical + `og:url` | Absolute URL from `--site-origin` + `--base` |
+| Open Graph / Twitter | `og:title`, `og:description`, `twitter:card`, … |
+| Pre-rendered HTML | Markdown converted at export so crawlers see content without JS |
+
+### Google Search Console
+
+1. Deploy Pages and open the site URL.
+2. In [Google Search Console](https://search.google.com/search-console), add a URL-prefix property for `https://YOUR_USER.github.io/cgdb-go/`.
+3. Verify (HTML file upload, DNS, or meta tag — HTML file is easiest for project Pages).
+4. Submit `https://YOUR_USER.github.io/cgdb-go/sitemap.xml`.
 
 ### Preview exported site
 

@@ -78,6 +78,40 @@ func (s *docServer) export(outDir, base string) error {
 		}
 	}
 
+	if err := s.writeSEOFiles(outDir, base); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *docServer) writeSEOFiles(outDir, base string) error {
+	base = normalizeBase(base)
+
+	robots := robotsTxt(s.siteOrigin, base)
+	if err := os.WriteFile(filepath.Join(outDir, "robots.txt"), []byte(robots), 0o644); err != nil {
+		return fmt.Errorf("write robots.txt: %w", err)
+	}
+
+	if s.siteOrigin == "" {
+		return nil
+	}
+
+	paths := []string{"/", "/diagrams/"}
+	for _, name := range s.listDocPages() {
+		if name == "README.md" {
+			continue
+		}
+		paths = append(paths, "/doc/"+name)
+	}
+	for _, name := range s.listDiagrams() {
+		paths = append(paths, "/diagrams/"+name)
+	}
+
+	sm := sitemapXML(s.siteOrigin, base, paths)
+	if err := os.WriteFile(filepath.Join(outDir, "sitemap.xml"), []byte(sm), 0o644); err != nil {
+		return fmt.Errorf("write sitemap.xml: %w", err)
+	}
 	return nil
 }
 

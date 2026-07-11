@@ -146,36 +146,23 @@ On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `Cm
 
 ---
 
-## Key-sequence trie
+## Key-sequence bindings
 
-Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`termui.Trie`** owned by `DebuggerApp`.
+Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/cgdb/keybindings.go`).
 
 ```go
-type DebuggerApp struct {
-    *termui.TermApp
-    trie      termui.Trie
-    appState  cgdb.AppState
-    // ...
-}
-
-func (app *DebuggerApp) BindKeySeq(fn termui.Callback, seqs ...string) {
-    for _, seq := range seqs {
-        app.trie.Bind(seq, fn)
-    }
+func (a *DebuggerApp) InitKeyBindings() {
+    a.keyBindings = commands.NewKeyBindingRegistry()
+    a.keyBindings.Bind(
+        commands.NewCommand("move-left", func(args ...any) { a.OnFocusLeft() }),
+        "<C-w>l", "<C-w><Left>",
+    )
 }
 ```
 
-Sequence syntax (parsed by `Trie.ParseSequence`):
+In **normal mode** (`cmd/cgdb/input.go`), each key event calls `keyBindings.SearchPartial(key)` before forwarding to the tab.
 
-| Token | Example |
-|-------|---------|
-| Control | `<C-w>`, `<C-d>` |
-| Arrow keys | `<Up>`, `<Left>` |
-| Single rune | append after modifiers, e.g. `<C-w>h` |
-
-In **normal mode**, each key event calls `Trie.SearchPartial(ev)` before `TabWidget.HandleEvent`. The trie tracks partial matches across keystrokes; on an exact match it invokes the bound callback (e.g. `OnFocusLeft` → `tab.FocusLeft()`).
-
-**Current bindings** (`cmd/cgdb/main.go`):
+**Current bindings:**
 
 | Sequence | Action |
 |----------|--------|
@@ -184,9 +171,9 @@ In **normal mode**, each key event calls `Trie.SearchPartial(ev)` before `TabWid
 | `<C-w>k`, `<C-w><Up>` | Focus up pane |
 | `<C-w>j`, `<C-w><Down>` | Focus down pane |
 
-Implementation: `internal/termui/trie.go`.
+Implementation: `internal/collections/trie.go` via `KeyBindingRegistry`.
 
-**Design decision:** the trie lives on the application object, not in `TermApp`, so key bindings remain app-specific while `termui` provides the generic prefix-tree machinery.
+**Design decision:** bindings live on the application object, not in `TermApp`, so key chords remain app-specific while shared packages provide the prefix-tree machinery.
 
 ---
 
@@ -281,21 +268,21 @@ flowchart LR
     CmdLine["CmdWidget"]
     Parser["commands.CommandParser"]
     Tree["CommandRegistry.Root"]
-    Presenter["CompletionPresenter"]
+    Bus["platform.EventBus"]
     Action["CommandNode.Action"]
 
     CmdLine --> Parser
     Parser --> Tree
-    CmdLine -->|"Tab"| Presenter
+    CmdLine -->|"Tab · CompletionMsg"| Bus
     CmdLine -->|"Enter"| Action
 ```
 
 Flow:
 
-1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()`.
-2. User types `:window left`, presses **Tab** → parser `Sync` + `Suggestions` → `CompletionPresenter.Show`.
+1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/cgdb/input.go`).
+2. User types `:window left`, presses **Tab** → parser `Sync` + `Suggestions` → `Publish(CompletionMsg)`; `LoggerWidget` (or a popup) subscribes.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
-4. Tree is built at startup via DSL in `ExapData()` (`Group` / `Cmd`).
+4. Tree is built at startup via DSL in `ExapData()` (`cmd/cgdb/command_tree.go`).
 
 ### Legacy note
 

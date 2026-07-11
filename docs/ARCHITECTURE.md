@@ -525,7 +525,9 @@ flowchart TB
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the bus is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/main.go`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the `TermApp` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+
+Typed app notifications (e.g. tab completions) use **`platform.EventBus`** (`Subscribe` / `Publish`) so UI consumers can register without constructor injection.
 
 Terminal input routing (modes, trie, widget dispatch) is also centralized in **`DebuggerApp`**, keeping `TermApp` a generic event loop and draw orchestrator.
 
@@ -606,7 +608,7 @@ See [TermUI layer](#termui-layer). Owns:
 - `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns:
   - **`HandleCoreEvents`** — single dispatch hub for domain events.
   - **`AppState`** (`internal/cgdb/mode_manager.go`) — interaction mode (`ModeNormal`, `ModeCommand`, …).
-  - **`Trie`** — multi-key binding table (`BindKeySeq`, `SearchPartial` in normal mode).
+  - **`keyBindings`** — multi-key chords (`InitKeyBindings`, `SearchPartial` in normal mode).
   - Direct references to **`TabWidget`** and **`CmdWidget`** for layout and command-line routing.
 - Defines app-specific `CommandID` values (break, continue, quit, …).
 - **`ModeNormal` / `ModeCommand`** are wired; focus and search modes are reserved.
@@ -724,23 +726,23 @@ Colon commands use a **hierarchical command tree** (`internal/commands`). See [C
 | **`commands.CommandNode`** | Tree nodes — `Name`, `Children`, `Action` |
 | **`commands.CommandRegistry`** | `Root` tree + key-binding trie |
 | **`commands.CommandParser`** | Runtime cursor — `current`, `token`, `path` |
-| **`termui.CmdWidget`** | `:` input; holds parser + `CompletionPresenter` |
+| **`termui.CmdWidget`** | `:` input; holds parser; publishes `CompletionMsg` on Tab |
 
 Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via `CommandParser.Execute()` → `CommandNode.Action`.
 
 ### Wiring (current)
 
 ```go
+// cmd/cgdb/setup.go
 a.commandReg = commands.NewCommandRegistry()
-a.ExapData()  // DSL: Root.Group(...).Group(...)
+a.ExapData()  // cmd/cgdb/command_tree.go
 
-a.cmdWidget = termui.NewCmdWidget(
-    a.commandReg,
-    termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
-)
+a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget.Ctx = a.ctx
+// LoggerWidget Subscribes to CompletionMsg on ctx.Bus
 ```
 
-Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/termui/completion_presenter.go`, `cmd/cgdb/main.go`.
+Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/platform/event_bus.go`, `cmd/cgdb/`.
 
 ---
 
@@ -768,7 +770,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
 | Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |
 
-Entry point: `cmd/cgdb/main.go`.
+Entry point: `cmd/cgdb/` (`main.go` + `app.go`, `setup.go`, …).
 
 Detailed tracker: [ROADMAP.md](ROADMAP.md).
 

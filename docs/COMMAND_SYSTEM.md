@@ -46,9 +46,11 @@ flowchart TB
 
     subgraph ui ["UI layer"]
         CmdW["CmdWidget"]
-        Presenter["CompletionPresenter"]
+        Bus["platform.EventBus"]
+        LogW["LoggerWidget"]
         CmdW --> Parser
-        CmdW --> Presenter
+        CmdW -->|"Publish CompletionMsg"| Bus
+        Bus -->|"Subscribe"| LogW
     end
 
     Parser -->|"references"| Registry
@@ -81,13 +83,22 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │   ├── left      → Action: OnFocusLeft
 │   ├── right     → Action: OnFocusRight
 │   ├── up        → Action: OnFocusUp
-│   └── down      → Action: OnFocusDown
+│   ├── down      → Action: OnFocusDown
+│   └── break
+│       ├── file  → Action: BreakFile
+│       └── delete → Action: DeleteBreakpoint
 ├── break
 │   ├── file      → Action: BreakFile
 │   └── delete    → Action: DeleteBreakpoint
-└── info
-    ├── registers → Action: ShowRegisters
-    └── threads   → Action: ShowThreads
+├── info
+│   ├── registers → Action: ShowRegisters
+│   └── threads   → Action: ShowThreads
+├── run
+│   ├── start
+│   └── stop
+├── vs            → Action: SplitVertical
+├── split         → Action: SplitHorizontal
+└── quit          → Action: Quit
 ```
 
 ```go
@@ -188,7 +199,7 @@ The DSL in `internal/commands/dsl.go` builds the tree declaratively instead of i
 | `Group(name, children...)` | Container node with children attached |
 | `(n *CommandNode).Group(name, children...)` | Inserts a group into `n`, returns `n` for chaining |
 
-### Example (`DebuggerApp.ExapData`)
+### Example (`DebuggerApp.ExapData` in `cmd/cgdb/command_tree.go`)
 
 ```go
 func (a *DebuggerApp) ExapData() {
@@ -198,15 +209,16 @@ func (a *DebuggerApp) ExapData() {
             commands.Cmd("right", a.OnFocusRight),
             commands.Cmd("up", a.OnFocusUp),
             commands.Cmd("down", a.OnFocusDown),
+            commands.Group("break",
+                commands.Cmd("file", a.BreakFile),
+                commands.Cmd("delete", a.DeleteBreakpoint),
+            ),
         ).
         Group("break",
             commands.Cmd("file", a.BreakFile),
             commands.Cmd("delete", a.DeleteBreakpoint),
         ).
-        Group("info",
-            commands.Cmd("registers", a.ShowRegisters),
-            commands.Cmd("threads", a.ShowThreads),
-        )
+        // ...
 }
 ```
 
@@ -238,7 +250,8 @@ sequenceDiagram
     participant User
     participant CmdW as CmdWidget
     participant Parser as CommandParser
-    participant Presenter as CompletionPresenter
+    participant Bus as platform.EventBus
+    participant LogW as LoggerWidget
     participant Tree as CommandNode tree
 
     User->>CmdW: Tab
@@ -248,7 +261,8 @@ sequenceDiagram
     Parser->>Tree: current.Complete(token)
     Tree-->>Parser: []*CommandNode
     Parser-->>CmdW: suggestions
-    CmdW->>Presenter: Show(CompletionResult)
+    CmdW->>Bus: Publish(CompletionMsg)
+    Bus->>LogW: showCompletion → log.Info
 
     User->>CmdW: Enter
     CmdW->>Parser: Parse(line)
@@ -257,41 +271,39 @@ sequenceDiagram
     Parser->>Tree: current.Action()
 ```
 
-Wiring in `cmd/cgdb/main.go`:
+Wiring in `cmd/cgdb/setup.go`:
 
 ```go
-a.cmdWidget = termui.NewCmdWidget(
-    a.commandReg,
-    termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
-)
+a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
+a.cmdWidget.Events = a.Events()
+
+l := widgets.NewLoggerWidget(a.ctx) // Subscribe(ctx.Bus, showCompletion)
 ```
 
 On **Enter**, the widget calls `Parse` then `Execute` if `CanExecute()`. Leaf actions run directly on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
 
 ---
 
-## Tab completion presenter
+## Tab completion via EventBus
 
-Tab completion display is decoupled from `CmdWidget` via the **`CompletionPresenter`** interface (`internal/termui/completion_presenter.go`):
+Tab completion is announced as a **`termui.CompletionMsg`** on **`platform.EventBus`** (not an injected presenter):
 
 ```go
-type CompletionResult struct {
+type CompletionMsg struct {
     Input string
     Token string
     Names []string
 }
-
-type CompletionPresenter interface {
-    Show(result CompletionResult)
-}
 ```
 
-| Implementation | File | Behavior |
-|----------------|------|----------|
-| `LogCompletionPresenter` | `log_completion_presenter.go` | Writes `completions: …` to `platform.Logger` (shown in `LoggerWidget`) |
-| *(future)* `PopupCompletionPresenter` | — | Show candidates in a popup near the cmd line |
+| Role | Where | Behavior |
+|------|-------|----------|
+| Publisher | `CmdWidget` (Tab) | `platform.Publish(ctx.Bus, CompletionMsg{…})` |
+| Subscriber | `LoggerWidget` | `platform.Subscribe` → `log.Info("completions: …")` (sink → viewport) |
+| Future popup | new subscriber | Same `CompletionMsg`; no `CmdWidget` changes |
 
-`CmdWidget` depends only on the interface. Swap or compose presenters without changing the widget.
+Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 
 ---
 
@@ -305,6 +317,7 @@ Key chords use the **same `CommandNode` type** but a **different registry**:
 | Key chords | `KeyBindingRegistry` trie | `SearchPartial(key)` per keypress |
 
 ```go
+// cmd/cgdb/keybindings.go
 func (a *DebuggerApp) InitKeyBindings() {
     a.keyBindings = commands.NewKeyBindingRegistry()
     a.keyBindings.Bind(
@@ -323,18 +336,17 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Colon command (tree)
 
-1. Add a `Cmd` or nested `Group` in `ExapData()` (or call `Root.Group(…)` elsewhere at init).
-2. Implement the handler method on `DebuggerApp` (e.g. `func (a *DebuggerApp) MyCmd(args ...any)`).
+1. Add a `Cmd` or nested `Group` in `ExapData()` (`cmd/cgdb/command_tree.go`).
+2. Implement the handler on `DebuggerApp` in `cmd/cgdb/actions.go`.
 3. No `CommandID` or `HandleCoreEvents` wiring needed for tree leaves — `Execute()` calls `Action` directly.
 
 ### Key chord
 
-1. Add `a.keyBindings.Bind(commands.NewCommand("name", handler), "keys...")` in `InitKeyBindings()`.
+1. Add `a.keyBindings.Bind(…)` in `cmd/cgdb/keybindings.go`.
 
 ### Tab completion feedback
 
-1. Implement `CompletionPresenter` (or reuse `LogCompletionPresenter`).
-2. Pass to `NewCmdWidget(reg, presenter)`.
+1. Subscribe to `termui.CompletionMsg` on `platform.EventBus` (see `LoggerWidget`), or add another subscriber for a popup UI.
 
 ---
 
@@ -346,9 +358,14 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/commands/command_parser.go` | `CommandParser` — navigation, completion, execution |
 | `internal/commands/dsl.go` | `Cmd`, `Group` builders |
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
-| `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter |
-| `internal/termui/completion_presenter.go` | `CompletionPresenter` interface |
-| `internal/termui/log_completion_presenter.go` | Log-backed presenter |
+| `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
+| `internal/termui/event.go` | `CompletionMsg` and other UI events |
+| `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
+| `internal/cgdb/widgets/logger_widget.go` | Completions subscriber + log sink |
+| `cmd/cgdb/command_tree.go` | `ExapData` DSL |
+| `cmd/cgdb/keybindings.go` | `InitKeyBindings` |
+| `cmd/cgdb/actions.go` | Command action methods |
+| `cmd/cgdb/setup.go` | `InitB` wiring |
 
 ---
 

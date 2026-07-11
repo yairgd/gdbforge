@@ -54,8 +54,20 @@ cgdb-go/
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/cgdb/main.go` | `cgdb` | **cgdb-go prototype** — split workspace demo |
+| `cmd/cgdb/` | `cgdb` | **cgdb-go** debugger app (`package main`, split across files) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
+
+### `cmd/cgdb` layout
+
+| File | Responsibility |
+|------|----------------|
+| `main.go` | `main()` entry |
+| `app.go` | `DebuggerApp`, constants, `NewDebuggerApp` |
+| `setup.go` | `InitB` — widgets, log, mode/command handlers |
+| `command_tree.go` | `ExapData` colon-command DSL |
+| `keybindings.go` | `InitKeyBindings` |
+| `actions.go` | Command action methods (focus, split, quit, …) |
+| `input.go` | Mode key handlers, mouse, resize |
 
 Build all commands:
 
@@ -72,15 +84,14 @@ task build
 
 | File | Responsibility |
 |------|----------------|
-| `term_app.go` | Event loop, `AppApi`, `termui.Event` bus, widget list, grid buffers |
-| `event.go`, `command.go` | UI event bus, `SubmitMsg`, `CommandID`, `CmdUnknown` |
-| `cmd_widget.go` | Global `:` command line (`CommandParser`, tab completion) |
-| `completion_presenter.go` | `CompletionPresenter` interface |
-| `log_completion_presenter.go` | Log-backed tab completion display |
+| `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers |
+| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID`, `CmdUnknown` |
+| `cmd_widget.go` | Global `:` command line (`CommandParser`, publishes completions) |
 | `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
 | `widget.go` | `Widget` interface |
-| `node.go` | Split tree node types |
-| `widget_tree.go` | Split/focus/layout recursion |
+| `node.go` | Split tree node types (structural) |
+| `layout_tree.go` | Tree walks and ratio algorithms |
+| `widget_tree.go` | Split/focus/layout GUI; `geom` map |
 | `layout.go` | `Layout` facade over `WidgetTree` |
 | `canvas.go` | Local-coordinate drawing context |
 | `grid.go` | Off-screen cell framebuffer |
@@ -115,9 +126,9 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
 | `widgets/gdb_widget.go` | GDB console pane |
-| `widgets/logger_widget.go` | Logger pane prototype |
+| `widgets/logger_widget.go` | Log pane; `Sink` + `CompletionMsg` subscriber |
 
-`cmd/cgdb` imports this package for `cgdb.AppState`. Key routing, trie bindings, and widget composition remain in `cmd/cgdb/main.go` (`DebuggerApp`).
+`cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 
 ```mermaid
 flowchart TB
@@ -231,13 +242,13 @@ flowchart BT
 | Widget (view of a model)? | `internal/cgdb/widgets` or `termui` |
 | GDB MI parsing? | `gdb` |
 | Scrollable text storage primitive? | `core` |
-| Key binding in normal mode? | `cmd/cgdb` (`Trie`, `BindKeySeq`) |
-| Interaction mode state? | `internal/cgdb` (`AppState`) |
+| Key binding in normal mode? | `cmd/cgdb/keybindings.go` + `input.go` |
+| Interaction mode state? | `platform.AppState` via `TermApp` |
 | Spawn/debug external process? | `gdb` (or future backend service) |
 | `:buffer` / model registry? | App startup + `HandleCoreEvents` dispatch |
-| Vim `:` command registry? | `termui` completer + `cmd/cgdb` dispatch |
+| Vim `:` command registry? | `internal/commands` + `cmd/cgdb/command_tree.go` |
 | Draw box borders? | `termui` Grid/Cell |
-| Compose services + models + UI? | `cmd/cgdb` |
+| Compose services + models + UI? | `cmd/cgdb/setup.go` |
 
 When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core` or a dedicated model package over `termui`.
 

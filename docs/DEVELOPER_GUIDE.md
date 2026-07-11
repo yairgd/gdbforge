@@ -30,10 +30,10 @@
 
 | Order | File | Why |
 |-------|------|-----|
-| 1 | `cmd/cgdb/main.go` | Entry point — how the app is wired |
+| 1 | `cmd/cgdb/main.go` → `app.go` → `setup.go` | Entry + app wiring |
 | 2 | `internal/termui/term_app.go` | Event loop, grids, draw flush |
 | 3 | `internal/termui/widget.go` | Widget contract |
-| 4 | `internal/termui/widget_tree.go` | Split layout algorithm |
+| 4 | `internal/termui/widget_tree.go`, `layout_tree.go` | Split layout |
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
 | 7 | `internal/cgdb/widgets/gdb_widget.go` | Async GDB → UI example |
@@ -230,17 +230,16 @@ Set `PaneName` for the per-pane status bar label shown when this pane has focus.
 layout.NewSplit(Vertical, NewMyWidget(myModel))
 ```
 
-4. To wire the command line, pass a `CommandRegistry` and `CompletionPresenter`:
+4. Wire the command line with a `CommandRegistry` (completions use the app event bus):
 
 ```go
-a.cmdWidget = termui.NewCmdWidget(
-    a.commandReg,
-    termui.NewLogCompletionPresenter(a.ctx.Log.Named("CmdLine")),
-)
+a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget.Ctx = a.ctx
 a.cmdWidget.Events = a.Events()
+// LoggerWidget (or a popup) Subscribes to termui.CompletionMsg on ctx.Bus
 ```
 
-5. Build the command tree with the DSL in `ExapData()` — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
+5. Build the command tree with the DSL in `ExapData()` (`cmd/cgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
 
 6. Handle legacy bus events in the application when needed:
 
@@ -382,7 +381,7 @@ dlv debug ./cmd/docserve -- --port 8765
 | New application model | App startup in `cmd/cgdb`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
 | New service / backend | Implement `core.Debugger`, new `internal/<backend>/` |
-| New `:` command | Add `Cmd` / `Group` in `ExapData()`; implement `Action` on `DebuggerApp` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| New `:` command | Add `Cmd` / `Group` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | New key chord | `InitKeyBindings()` → `keyBindings.Bind(...)` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Add `backBuffer`, per-frame clear; extend `BackCells` diff |
@@ -397,22 +396,22 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/main.go` (`DebuggerApp`, `HandleKey`) |
-| Interaction modes | `internal/cgdb/mode_manager.go` |
-| Key-sequence trie | `trie.go`, bindings in `cmd/cgdb/main.go` |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/app.go` + `input.go` |
+| Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) |
+| Key-sequence bindings | `internal/commands` + `cmd/cgdb/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
-| Split tree | `node.go`, `widget_tree.go`, `layout.go` |
+| Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `layout.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
-| Command line | `cmd_widget.go`, `completion_presenter.go`, `log_completion_presenter.go`, `history.go` |
+| Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + EventBus |
 | Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`, `logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |
 | Debugger events | `core/events.go` |
-| Entry point | `cmd/cgdb/main.go` |
+| Entry point | `cmd/cgdb/` (`main.go` + companions) |
 | Docs server | `cmd/docserve/main.go` |
 
 ---

@@ -7,7 +7,7 @@
 //
 // Static export (GitHub Pages):
 //
-//	go run ./cmd/docserve --export _site --base /cgdb-go/
+//	go run ./cmd/docserve --export _site --base /cgdb-go/ --site-origin https://USER.github.io
 //
 // Preview exported site:
 //
@@ -34,6 +34,7 @@ func main() {
 	strictPort := flag.Bool("strict-port", false, "exit if port is already in use")
 	exportDir := flag.String("export", "", "write static site to directory and exit")
 	basePath := flag.String("base", "/", "URL base path for static export (e.g. /cgdb-go/)")
+	siteOrigin := flag.String("site-origin", "", "absolute site origin for SEO (e.g. https://user.github.io)")
 	serveStatic := flag.String("serve-static", "", "serve a previously exported static directory")
 	flag.Parse()
 
@@ -50,7 +51,7 @@ func main() {
 		log.Fatalf("README.md not found under %s", docsRoot)
 	}
 
-	srv := &docServer{docsRoot: docsRoot, base: "/"}
+	srv := &docServer{docsRoot: docsRoot, base: "/", siteOrigin: strings.TrimRight(*siteOrigin, "/")}
 
 	if *exportDir != "" {
 		if err := srv.export(*exportDir, *basePath); err != nil {
@@ -183,8 +184,9 @@ func docsRootDir() (string, error) {
 }
 
 type docServer struct {
-	docsRoot string
-	base     string
+	docsRoot   string
+	base       string
+	siteOrigin string
 }
 
 func (s *docServer) serveHTTP(w http.ResponseWriter, r *http.Request) {

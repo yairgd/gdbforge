@@ -5,6 +5,8 @@ go 1.25.5
 require (
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.8
+	github.com/yuin/goldmark v1.8.2
+	golang.design/x/clipboard v0.8.0
 	golang.org/x/sys v0.46.0
 )
 
@@ -13,7 +15,6 @@ require (
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.design/x/clipboard v0.8.0 // indirect
 	golang.design/x/x11 v0.2.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/image v0.28.0 // indirect

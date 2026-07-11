@@ -57,20 +57,9 @@ func (m *LoggerWidget) Draw(c termui.Canvas) {
 }
 
 func (m *LoggerWidget) showCompletion(msg termui.CompletionMsg) {
-    if len(msg.Names) == 0 {
-        m.log.Info("completions: (none)")
-        return
-    }
-    m.log.Info("completions: " + strings.Join(msg.Names, "  "))
-}
-
-func (m *LoggerWidget) showCompletion11(msg termui.CompletionMsg) {
-	text := "completions: (none)"
-	if len(msg.Names) > 0 {
-		text = "completions: " + strings.Join(msg.Names, "  ")
+	if len(msg.Names) == 0 {
+		m.log.Info("completions: (none)")
+		return
 	}
-	m.viewport.Buffer.AppendLine(text)
-	if m.viewport.FollowTail() {
-		m.viewport.ScrollToBottom()
-	}
+	m.log.Info("completions: " + strings.Join(msg.Names, "  "))
 }

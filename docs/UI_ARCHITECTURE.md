@@ -351,11 +351,12 @@ Current behavior:
 - **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
 - **Visual focus:** the focused leaf's `DrawStatusLine` paints `▎ {PaneName}` on the pane's bottom status row (see [Layout engine](#layout-engine)).
 
-**Mode-aware routing** (implemented in `cmd/cgdb/main.go`):
+**Mode-aware routing** (implemented in `cmd/cgdb/input.go`):
 
 | Mode | Terminal keys routed to |
 |------|-------------------------|
-| `ModeNormal` | Trie (partial match) + `TabWidget` → focused leaf |
+| `ModeNormal` | Key bindings (partial match) + `TabWidget` → focused leaf |
+| `ModeInsert` | Focused leaf widget |
 | `ModeCommand` | `CmdWidget` only |
 
 **Planned behavior** (see [INPUT.md](INPUT.md)):
@@ -367,25 +368,27 @@ Current behavior:
 
 ---
 
-## Key-sequence trie
+## Key-sequence bindings
 
-`termui.Trie` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns the trie and binds callbacks:
+`commands.KeyBindingRegistry` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns bindings (`cmd/cgdb/keybindings.go`):
 
 ```go
-app.BindKeySeq(app.OnFocusLeft, "<C-w>l", "<C-w><Left>")
+a.keyBindings.Bind(
+    commands.NewCommand("move-left", func(args ...any) { a.OnFocusLeft() }),
+    "<C-w>l", "<C-w><Left>",
+)
 ```
 
 | API | Purpose |
 |-----|---------|
-| `Bind(str, fn)` | Register a sequence string → callback |
-| `SearchPartial(ev)` | Feed one key; invoke callback on exact terminal match |
-| `ParseSequence(str)` | Parse `"<C-w>h"` into `[]Key` |
+| `Bind(cmd, seqs...)` | Register key sequence(s) → `CommandNode` |
+| `SearchPartial(key)` | Feed one key; return command on exact match |
 
-Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) defined in `trie.go`.
+Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) from `platform` key parsing.
 
-**Design decision:** trie state (`current`, `keySeq`) is per-application, not global — multiple apps or test harnesses can bind independently.
+**Design decision:** binding state is per-application, not global — multiple apps or tests can bind independently.
 
-Implementation: `internal/termui/trie.go`. Wiring: `cmd/cgdb/main.go` (`BindKeySeq`, called from `HandleKey` in normal mode).
+Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`. Wiring: `cmd/cgdb/keybindings.go` + `input.go` (normal mode).
 
 ---
 
@@ -510,7 +513,7 @@ sequenceDiagram
     Main->>App: Close / Fini
 ```
 
-`AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/main.go`):
+`AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/`):
 
 - `HandleKey` — mode routing, trie dispatch, widget `HandleEvent`.
 - `HandleResize` — top-level widget rects after `UpdateCanvas`.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -48,11 +50,11 @@ func (s *docServer) navLinks(base string) string {
 	return strings.Join(parts, "\n      ")
 }
 
-func pageShell(title, bodyAttrs, nav, placeholder, base string) []byte {
+func pageShell(seo pageSEO, bodyAttrs, nav, placeholder string) []byte {
 	if placeholder == "" {
 		placeholder = "<p>Loading…</p>"
 	}
-	base = normalizeBase(base)
+	base := normalizeBase(seo.Base)
 	metaBase := html.EscapeString(base)
 	cssHref := html.EscapeString(joinBase(base, "/www/site.css"))
 	jsHref := html.EscapeString(joinBase(base, "/www/docs.js"))
@@ -62,8 +64,7 @@ func pageShell(title, bodyAttrs, nav, placeholder, base string) []byte {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="docs-base" content="%s">
-  <title>%s — cgdb-go Docs</title>
-  <link rel="stylesheet" href="%s">
+%s  <link rel="stylesheet" href="%s">
 </head>
 <body %s>
   <header>
@@ -76,18 +77,56 @@ func pageShell(title, bodyAttrs, nav, placeholder, base string) []byte {
   <footer>cgdb-go docs · Markdown + Mermaid via CDN</footer>
   <script src="%s"></script>
 </body>
-</html>`, metaBase, html.EscapeString(title), cssHref, bodyAttrs, nav, placeholder, jsHref)
+</html>`, metaBase, seo.headTags(), cssHref, bodyAttrs, nav, placeholder, jsHref)
 	return []byte(doc)
 }
 
+func (s *docServer) seoFor(title, description, path, base string) pageSEO {
+	return pageSEO{
+		Title:       title,
+		Description: description,
+		Path:        path,
+		Base:        base,
+		SiteOrigin:  s.siteOrigin,
+	}
+}
+
+func (s *docServer) readMarkdown(name string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(s.docsRoot, name))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (s *docServer) prerenderDoc(name, base string) string {
+	md, err := s.readMarkdown(name)
+	if err != nil {
+		return "<p>Loading…</p>"
+	}
+	htmlBody, err := renderMarkdownHTML(md, base)
+	if err != nil {
+		return "<p>Loading…</p>\n<!-- prerender failed: " + html.EscapeString(err.Error()) + " -->"
+	}
+	return htmlBody
+}
+
 func (s *docServer) readmeHTML(base string) []byte {
-	return pageShell("Documentation", `data-page="readme"`, s.navLinks(base), "", base)
+	md, _ := s.readMarkdown("README.md")
+	title := titleFromMarkdown(md, "Documentation")
+	desc := descriptionFromMarkdown(md)
+	seo := s.seoFor(title, desc, "/", base)
+	return pageShell(seo, `data-page="readme"`, s.navLinks(base), s.prerenderDoc("README.md", base))
 }
 
 func (s *docServer) docPageHTML(name, base string) []byte {
-	title := strings.ReplaceAll(strings.TrimSuffix(name, ".md"), "_", " ")
+	fallback := strings.ReplaceAll(strings.TrimSuffix(name, ".md"), "_", " ")
+	md, _ := s.readMarkdown(name)
+	title := titleFromMarkdown(md, fallback)
+	desc := descriptionFromMarkdown(md)
+	seo := s.seoFor(title, desc, "/doc/"+name, base)
 	attrs := fmt.Sprintf(`data-page="doc" data-md="%s"`, html.EscapeString(name))
-	return pageShell(title, attrs, s.navLinks(base), "", base)
+	return pageShell(seo, attrs, s.navLinks(base), s.prerenderDoc(name, base))
 }
 
 func (s *docServer) diagramsIndexHTML(base string) []byte {
@@ -95,10 +134,32 @@ func (s *docServer) diagramsIndexHTML(base string) []byte {
 	b, _ := json.Marshal(names)
 	b64 := base64.StdEncoding.EncodeToString(b)
 	attrs := fmt.Sprintf(`data-page="diagrams" data-diagrams-b64="%s"`, b64)
-	return pageShell("Diagrams", attrs, s.navLinks(base), "", base)
+
+	var list strings.Builder
+	list.WriteString(`<article class="markdown-body"><h2>Mermaid diagrams</h2>`)
+	list.WriteString(`<p>Standalone diagram pages (sources in <code>docs/diagrams/</code>).</p><ul class="diagram-list">`)
+	for _, n := range names {
+		href := joinBase(base, "/diagrams/"+url.PathEscape(n))
+		fmt.Fprintf(&list, `<li><a href="%s">%s</a></li>`, html.EscapeString(href), html.EscapeString(n))
+	}
+	list.WriteString(`</ul></article>`)
+
+	seo := s.seoFor("Diagrams", "Standalone Mermaid architecture diagrams for cgdb-go.", "/diagrams/", base)
+	return pageShell(seo, attrs, s.navLinks(base), list.String())
 }
 
 func (s *docServer) diagramPageHTML(name, base string) []byte {
 	attrs := fmt.Sprintf(`data-page="diagram" data-diagram="%s"`, html.EscapeString(name))
-	return pageShell(name, attrs, s.navLinks(base), "", base)
+	src, err := os.ReadFile(filepath.Join(s.docsRoot, "diagrams", name))
+	placeholder := "<p>Loading…</p>"
+	if err == nil {
+		placeholder = fmt.Sprintf(
+			`<article class="markdown-body"><h2>%s</h2><p><a href="%s">← Documentation index</a></p><pre><code>%s</code></pre></article>`,
+			html.EscapeString(name),
+			html.EscapeString(joinBase(base, "/")),
+			html.EscapeString(string(src)),
+		)
+	}
+	seo := s.seoFor(name, "Mermaid diagram: "+name+" (cgdb-go documentation).", "/diagrams/"+name, base)
+	return pageShell(seo, attrs, s.navLinks(base), placeholder)
 }
