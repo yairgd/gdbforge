@@ -15,9 +15,12 @@ type GDBWidget struct {
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
-	InputBuf    string
-	lastCommand string
-	Cursor      int
+	InputBuf string
+	Cursor   int
+
+	history    []string
+	histIndex  int // len(history) means editing a new/draft line
+	histDraft  string
 
 	Debugger      core.Debugger
 	gdbInputState gdb.GdbInputState
@@ -25,14 +28,44 @@ type GDBWidget struct {
 
 func NewGDBWidget(dbg core.Debugger) *GDBWidget {
 	buf := core.NewBuffer()
-	return &GDBWidget{
+	w := &GDBWidget{
 		BaseWidget:    termui.BaseWidget{PaneName: "GDB"},
 		Buffer:        buf,
 		Viewport:      core.Viewport{Height: 10},
 		Debugger:      dbg,
 		Cursor:        0,
+		histIndex:     0,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
+	w.initKeyBindings()
+	return w
+}
+
+func (m *GDBWidget) initKeyBindings() {
+	// History (readline / classic terminal)
+	m.BindKeyFunc("hist-prev", func(args ...any) { m.historyPrev() }, "<Up>", "<C-p>")
+	m.BindKeyFunc("hist-next", func(args ...any) { m.historyNext() }, "<Down>", "<C-n>")
+
+	// Cursor motion
+	m.BindKeyFunc("cursor-left", func(args ...any) { m.moveLeft() }, "<Left>", "<C-b>")
+	m.BindKeyFunc("cursor-right", func(args ...any) { m.moveRight() }, "<Right>", "<C-f>")
+	m.BindKeyFunc("cursor-home", func(args ...any) { m.moveHome() }, "<Home>", "<C-a>")
+	m.BindKeyFunc("cursor-end", func(args ...any) { m.moveEnd() }, "<End>", "<C-e>")
+
+	// Editing
+	m.BindKeyFunc("backspace", func(args ...any) { m.backspace() }, "<Backspace>", "<C-h>")
+	m.BindKeyFunc("delete", func(args ...any) { m.deleteForward() }, "<Delete>")
+	m.BindKeyFunc("kill-line", func(args ...any) { m.killToEnd() }, "<C-k>")
+	m.BindKeyFunc("kill-bol", func(args ...any) { m.killToStart() }, "<C-u>")
+	m.BindKeyFunc("kill-word", func(args ...any) { m.killWord() }, "<C-w>")
+
+	// Submit / signals / viewport
+	m.BindKeyFunc("submit", func(args ...any) { m.submit() }, "<Enter>")
+	m.BindKeyFunc("interrupt", func(args ...any) { m.interrupt() }, "<C-c>")
+	m.BindKeyFunc("eof-quit", func(args ...any) { m.eofQuit() }, "<C-d>")
+	m.BindKeyFunc("clear", func(args ...any) { m.Clear() }, "<C-l>")
+	m.BindKeyFunc("scroll-up", func(args ...any) { m.scrollUp() }, "<PgUp>")
+	m.BindKeyFunc("scroll-down", func(args ...any) { m.scrollDown() }, "<PgDn>")
 }
 
 func (m *GDBWidget) StartGdbUIBridge(
@@ -58,6 +91,15 @@ func (m *GDBWidget) StartGdbUIBridge(
 	}()
 }
 
+func (m *GDBWidget) Clear() {
+	if m.Buffer != nil {
+		m.Buffer.Clear()
+	}
+	m.Viewport.TopLine = 0
+	m.InputBuf = ""
+	m.Cursor = 0
+}
+
 func (m *GDBWidget) handleAsyncRecord(line string) {
 	reason := gdb.ExtractMIField(line, "reason")
 	if strings.HasPrefix(line, "*stopped") {
@@ -75,10 +117,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 		switch data := e.Data().(type) {
 		case core.GdbOutputMsg:
 			if data.Data != "" {
-				lines := strings.Split(data.Data, "\n")
-				for _, line := range lines {
-					m.gdbInputState.PushLine(line)
-				}
+				m.gdbInputState.PushRaw(data.Data)
 			}
 		case string:
 			if data == "gdb-timeout" {
@@ -93,48 +132,173 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventResize:
 	case *tcell.EventKey:
-		if m.Debugger == nil {
+		if m.HandleBoundKey(e) {
 			return
 		}
-		switch e.Key() {
-		case tcell.KeyCtrlC:
-			_ = m.Debugger.SendRaw("\x03")
-		case tcell.KeyCtrlD:
-			_ = m.Debugger.Send("q")
-		case tcell.KeyEnter:
-			if m.InputBuf != "" {
-				_ = m.Debugger.Send(m.InputBuf)
-				m.lastCommand = m.InputBuf
-			} else if m.lastCommand != "" {
-				_ = m.Debugger.Send(m.lastCommand)
-			} else {
-				_ = m.Debugger.Send("")
-			}
-			m.Viewport.FollowBottom(m.Buffer)
-			m.InputBuf = ""
-			m.Cursor = 0
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if m.Cursor > 0 {
-				m.InputBuf = m.InputBuf[:m.Cursor-1] + m.InputBuf[m.Cursor:]
-				m.Cursor--
-			}
-		case tcell.KeyLeft:
-			if m.Cursor > 0 {
-				m.Cursor--
-			}
-		case tcell.KeyRight:
-			if m.Cursor < len(m.InputBuf) {
-				m.Cursor++
-			}
-		case tcell.KeyUp:
-			_ = m.Debugger.SendRaw("\x1b[A")
-		case tcell.KeyDown:
-			_ = m.Debugger.SendRaw("\x1b[B")
-		case tcell.KeyRune:
-			r := string(e.Rune())
-			m.InputBuf = m.InputBuf[:m.Cursor] + r + m.InputBuf[m.Cursor:]
-			m.Cursor += len(r)
+		// Some terminals still emit KeyBackspace (0x08) instead of KeyBackspace2.
+		if e.Key() == tcell.KeyBackspace {
+			m.backspace()
+			return
 		}
+		if e.Key() == tcell.KeyRune {
+			m.insertRune(e.Rune())
+		}
+	}
+}
+
+func (m *GDBWidget) insertRune(r rune) {
+	s := string(r)
+	m.InputBuf = m.InputBuf[:m.Cursor] + s + m.InputBuf[m.Cursor:]
+	m.Cursor += len(s)
+}
+
+func (m *GDBWidget) moveLeft() {
+	if m.Cursor > 0 {
+		m.Cursor--
+	}
+}
+
+func (m *GDBWidget) moveRight() {
+	if m.Cursor < len(m.InputBuf) {
+		m.Cursor++
+	}
+}
+
+func (m *GDBWidget) moveHome() {
+	m.Cursor = 0
+}
+
+func (m *GDBWidget) moveEnd() {
+	m.Cursor = len(m.InputBuf)
+}
+
+func (m *GDBWidget) backspace() {
+	if m.Cursor > 0 {
+		m.InputBuf = m.InputBuf[:m.Cursor-1] + m.InputBuf[m.Cursor:]
+		m.Cursor--
+	}
+}
+
+func (m *GDBWidget) deleteForward() {
+	if m.Cursor < len(m.InputBuf) {
+		m.InputBuf = m.InputBuf[:m.Cursor] + m.InputBuf[m.Cursor+1:]
+	}
+}
+
+func (m *GDBWidget) killToEnd() {
+	if m.Cursor < len(m.InputBuf) {
+		m.InputBuf = m.InputBuf[:m.Cursor]
+	}
+}
+
+func (m *GDBWidget) killToStart() {
+	if m.Cursor > 0 {
+		m.InputBuf = m.InputBuf[m.Cursor:]
+		m.Cursor = 0
+	}
+}
+
+func (m *GDBWidget) killWord() {
+	if m.Cursor == 0 {
+		return
+	}
+	i := m.Cursor
+	for i > 0 && m.InputBuf[i-1] == ' ' {
+		i--
+	}
+	for i > 0 && m.InputBuf[i-1] != ' ' {
+		i--
+	}
+	m.InputBuf = m.InputBuf[:i] + m.InputBuf[m.Cursor:]
+	m.Cursor = i
+}
+
+func (m *GDBWidget) historyPrev() {
+	if len(m.history) == 0 {
+		return
+	}
+	if m.histIndex == len(m.history) {
+		m.histDraft = m.InputBuf
+	}
+	if m.histIndex > 0 {
+		m.histIndex--
+		m.InputBuf = m.history[m.histIndex]
+		m.Cursor = len(m.InputBuf)
+	}
+}
+
+func (m *GDBWidget) historyNext() {
+	if m.histIndex >= len(m.history) {
+		return
+	}
+	m.histIndex++
+	if m.histIndex == len(m.history) {
+		m.InputBuf = m.histDraft
+	} else {
+		m.InputBuf = m.history[m.histIndex]
+	}
+	m.Cursor = len(m.InputBuf)
+}
+
+func (m *GDBWidget) pushHistory(cmd string) {
+	if cmd == "" {
+		return
+	}
+	if n := len(m.history); n > 0 && m.history[n-1] == cmd {
+		m.histIndex = n
+		m.histDraft = ""
+		return
+	}
+	m.history = append(m.history, cmd)
+	m.histIndex = len(m.history)
+	m.histDraft = ""
+}
+
+func (m *GDBWidget) submit() {
+	if m.Debugger == nil {
+		return
+	}
+	cmd := m.InputBuf
+	if cmd == "" && len(m.history) > 0 {
+		cmd = m.history[len(m.history)-1]
+	}
+	if cmd != "" {
+		m.pushHistory(cmd)
+		_ = m.Debugger.Send(cmd)
+	} else {
+		_ = m.Debugger.Send("")
+	}
+	m.Viewport.FollowBottom(m.Buffer)
+	m.InputBuf = ""
+	m.Cursor = 0
+}
+
+func (m *GDBWidget) interrupt() {
+	if m.Debugger != nil {
+		_ = m.Debugger.SendRaw("\x03")
+	}
+}
+
+func (m *GDBWidget) eofQuit() {
+	if m.Debugger != nil {
+		_ = m.Debugger.Send("q")
+	}
+}
+
+func (m *GDBWidget) scrollUp() {
+	if m.Viewport.TopLine > 0 {
+		m.Viewport.TopLine--
+	}
+}
+
+func (m *GDBWidget) scrollDown() {
+	if m.Buffer.NumLines() <= m.Viewport.Height {
+		m.Viewport.TopLine = 0
+		return
+	}
+	maxTop := m.Buffer.NumLines() - m.Viewport.Height
+	if m.Viewport.TopLine < maxTop {
+		m.Viewport.TopLine++
 	}
 }
 

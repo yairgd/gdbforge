@@ -68,9 +68,11 @@ func (m *GdbInputState) Clear() {
 // ---------- INPUT SIDE ----------
 //
 
-// PushRaw should receive RAW chunks from GDB (not split lines!)
-func (m *GdbInputState) PushRaw11111(data string) {
-
+// PushRaw accepts raw PTY chunks and splits complete MI lines.
+func (m *GdbInputState) PushRaw(data string) {
+	if data == "" {
+		return
+	}
 	m.lineBuf += data
 
 	for {
@@ -78,10 +80,8 @@ func (m *GdbInputState) PushRaw11111(data string) {
 		if i == -1 {
 			break
 		}
-
 		line := m.lineBuf[:i]
 		m.lineBuf = m.lineBuf[i+1:]
-
 		m.PushLine(line)
 	}
 }

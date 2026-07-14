@@ -28,6 +28,7 @@ type DebuggerApp struct {
 	tab       *termui.TabWidget
 	cmdWidget *termui.CmdWidget
 	ctx       platform.AppContext
+	miLog     *platform.NamedLogger
 
 	cfg       SessionConfig
 	gdbClient *gdb.GDBClient

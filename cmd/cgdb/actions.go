@@ -78,6 +78,14 @@ func (app *DebuggerApp) EnterInsertMode(args ...any) {
 	app.RequestRedraw()
 }
 
+func (app *DebuggerApp) ClearFocus(args ...any) {
+	w := app.tab.FocusedWidget()
+	if c, ok := w.(termui.Clearable); ok {
+		c.Clear()
+	}
+	app.RequestFrame()
+}
+
 func (app *DebuggerApp) Quit(args ...any) {
 	if app.tab.DeleteFocus() {
 		if app.gdbClient != nil {

@@ -10,7 +10,7 @@ import (
 //	/ → window → break → file, delete
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
-//	/ → vs, split, quit
+//	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",
@@ -37,5 +37,6 @@ func (a *DebuggerApp) ExapData() {
 		).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
+		Leaf("clear", a.ClearFocus).
 		Leaf("quit", a.Quit)
 }

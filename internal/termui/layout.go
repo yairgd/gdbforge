@@ -70,3 +70,7 @@ func (l *Layout) SetOnResize(fn func()) {
 func (l *Layout) SetInsertActive(active bool) {
 	l.tree.SetInsertActive(active)
 }
+
+func (l *Layout) FocusedWidget() Widget {
+	return l.tree.FocusedWidget()
+}

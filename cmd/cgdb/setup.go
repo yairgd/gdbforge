@@ -8,20 +8,30 @@ import (
 )
 
 func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
-	codeWidget := widgets.NewCodeWidget()
+	a.ctx = platform.NewAppContext()
+
+	fileSink, err := platform.NewFileSink("cgdb.log")
+	if err != nil {
+		panic(err)
+	}
+	a.ctx.Log.AddSink(fileSink)
+	a.miLog = a.ctx.Log.Named("gdb-mi")
+
+	logWidget := widgets.NewLoggerWidget(a.ctx)
+	logWidget.Events = a.Events()
+	logWidget.SetCopyToClipboard(a.CopyToClipboard)
+
 	a.gdbWidget = widgets.NewGDBWidget(a.gdbClient)
 	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
 
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",
-		codeWidget,
+		logWidget,
 		a.gdbWidget,
 	)
 	a.tab.FocusDown()
 	a.tab.SetOnResize(a.RequestFrame)
 	a.AddWidget(a.tab)
-
-	a.ctx = platform.NewAppContext()
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
@@ -30,12 +40,6 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 
 	a.InitKeyBindings()
 	a.ExapData()
-
-	fileSink, err := platform.NewFileSink("cgdb.log")
-	if err != nil {
-		panic(err)
-	}
-	a.ctx.Log.AddSink(fileSink)
 
 	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
 	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)

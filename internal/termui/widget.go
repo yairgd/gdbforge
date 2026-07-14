@@ -9,3 +9,8 @@ type Widget interface {
 	Draw(c Canvas)
 	DrawStatusLine(c Canvas, active bool)
 }
+
+// Clearable is implemented by widgets that can clear their content via :clear.
+type Clearable interface {
+	Clear()
+}

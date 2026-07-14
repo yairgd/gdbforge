@@ -122,6 +122,11 @@ func (t *Trie[T]) ResetPartial() {
 	// t.keySeq = t.keySeq[:0]
 }
 
+// InPartial reports whether SearchPartial has advanced into a chord.
+func (t *Trie[T]) InPartial() bool {
+	return t.current != nil
+}
+
 func (t *Trie[T]) Complete(str string) ([]T, bool) {
 	root := &t.root
 

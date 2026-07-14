@@ -1,7 +1,10 @@
 package main
 
 import (
+	"strings"
+
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -106,6 +109,15 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 }
 
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
+	if msg, ok := ev.Data().(core.GdbOutputMsg); ok && a.miLog != nil {
+		// Log every raw MI chunk line for the top Log pane (and file sink).
+		for _, line := range strings.Split(msg.Data, "\n") {
+			a.miLog.Info(line)
+		}
+		if msg.Err != nil {
+			a.miLog.Error(msg.Err.Error())
+		}
+	}
 	if a.gdbWidget != nil {
 		a.gdbWidget.HandleEvent(ev)
 	}

@@ -41,6 +41,21 @@ func (w *WidgetTree) SetInsertActive(active bool) {
 	w.insertActive = active
 }
 
+// FocusedWidget returns the leaf widget that currently has focus.
+func (w *WidgetTree) FocusedWidget() Widget {
+	if w.focus == nil {
+		return nil
+	}
+	n := w.focus
+	for n != nil && n.Type == NodeSplit {
+		n = n.First
+	}
+	if n == nil {
+		return nil
+	}
+	return n.Widget
+}
+
 func NewWidgetTree(newWidget Widget) WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: nil}
 

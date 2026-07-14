@@ -115,14 +115,21 @@ func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}
 // Helper
 //
 
-// ActiveWidget returns the currently active widget.
-// Useful for future features like focus or tab switching.
+// ActiveLayout returns the layout of the currently selected tab.
 func (t *TabWidget) ActiveLayout() *Layout {
 	if len(t.tabs) == 0 {
 		return nil
 	}
 
 	return t.tabs[t.active].layout
+}
+
+// FocusedWidget returns the focused leaf widget in the active tab.
+func (t *TabWidget) FocusedWidget() Widget {
+	if layout := t.ActiveLayout(); layout != nil {
+		return layout.FocusedWidget()
+	}
+	return nil
 }
 
 func (t *TabWidget) SetOnResize(fn func()) {
