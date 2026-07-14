@@ -21,9 +21,10 @@ type CmdWidget struct {
 
 func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 	return &CmdWidget{
-		history: NewMemoryHistory(),
-		parser:  commands.NewCommandParser(reg),
-		active:  false,
+		BaseWidget: BaseWidget{cursor: NewNativeCursor()},
+		history:    NewMemoryHistory(),
+		parser:     commands.NewCommandParser(reg),
+		active:     false,
 	}
 }
 
@@ -276,7 +277,12 @@ func (m *CmdWidget) Draw(c Canvas) {
 	}
 
 	c.Print(0, 0, tcell.StyleDefault, m.text)
-	c.ShowNativeCursor(m.cursor, 0)
+	under := ' '
+	if m.cursor >= 0 && m.cursor < len(m.text) {
+		under = rune(m.text[m.cursor])
+	}
+	// Cmd line is active while typing :commands — always show caret.
+	m.Cursor().Paint(c, m.cursor, 0, under)
 }
 
 func (m *CmdWidget) DrawStatusLine(c Canvas, active bool) {}

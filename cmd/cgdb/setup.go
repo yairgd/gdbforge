@@ -17,7 +17,7 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 	a.ctx.Log.AddSink(fileSink)
 	a.miLog = a.ctx.Log.Named("gdb-mi")
 
-	logWidget := widgets.NewLoggerWidget(a.ctx)
+	logWidget := termui.NewLoggerWidget(a.ctx)
 	logWidget.Events = a.Events()
 	logWidget.SetCopyToClipboard(a.CopyToClipboard)
 

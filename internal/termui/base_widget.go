@@ -18,6 +18,11 @@ type BaseWidget struct {
 
 	// Per-widget key chord trie; only consulted for the focused insert-mode pane.
 	keys *commands.KeyBindingRegistry
+
+	// focused is set by the layout before Draw when this leaf has focus.
+	focused bool
+	// cursor paints the caret for widgets that type/navigate (default: system block).
+	cursor CellCursor
 }
 
 func NewBaseWidget(ctx platform.AppContext) BaseWidget {
@@ -26,7 +31,40 @@ func NewBaseWidget(ctx platform.AppContext) BaseWidget {
 		Inbox:  make(chan Event, 16),
 		Ctx:    ctx,
 		keys:   commands.NewKeyBindingRegistry(),
+		cursor: NewNativeCursor(),
 	}
+}
+
+// SetFocused is called by WidgetTree before Draw.
+func (b *BaseWidget) SetFocused(focused bool) {
+	b.focused = focused
+}
+
+func (b *BaseWidget) Focused() bool {
+	return b.focused
+}
+
+// SetCursor replaces the widget caret (NativeCursor / InverseCursor / custom).
+func (b *BaseWidget) SetCursor(c CellCursor) {
+	if c == nil {
+		c = NewNativeCursor()
+	}
+	b.cursor = c
+}
+
+func (b *BaseWidget) Cursor() CellCursor {
+	if b.cursor == nil {
+		b.cursor = NewNativeCursor()
+	}
+	return b.cursor
+}
+
+// PaintCursor draws the caret when this widget is focused.
+func (b *BaseWidget) PaintCursor(c Canvas, x, y int, under rune) {
+	if !b.focused {
+		return
+	}
+	b.Cursor().Paint(c, x, y, under)
 }
 
 func (b *BaseWidget) ensureKeys() {

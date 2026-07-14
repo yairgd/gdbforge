@@ -37,6 +37,7 @@ func NewGDBWidget(dbg core.Debugger) *GDBWidget {
 		histIndex:     0,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
+	w.SetCursor(termui.NewNativeCursor())
 	w.initKeyBindings()
 	return w
 }
@@ -303,7 +304,9 @@ func (m *GDBWidget) scrollDown() {
 }
 
 func (m *GDBWidget) Draw(c termui.Canvas) {
-	contentH := c.H() - 2
+	// Status bar is painted at y=c.H() (just below the leaf). Reserve only the
+	// last in-pane row for the (gdb) input line — not two rows (that left a gap).
+	contentH := c.H() - 1
 	if contentH < 1 {
 		contentH = 1
 	}
@@ -323,7 +326,7 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 		c.DrawANSIText(0, y, line, lineStyle)
 	}
 
-	inputY := c.H() - 2
+	inputY := c.H() - 1
 	if inputY < 0 {
 		inputY = 0
 	}
@@ -336,12 +339,18 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 		}
 		c.SetContent(x, inputY, ch, tcell.StyleDefault.Foreground(tcell.ColorYellow))
 	}
+	under := ' '
 	for x, ch := range m.InputBuf {
 		if x+promptLen >= c.W() {
 			break
 		}
 		c.SetContent(x+promptLen, inputY, ch, tcell.StyleDefault)
+		if x == m.Cursor {
+			under = ch
+		}
 	}
-
-	c.ShowNativeCursor(m.Cursor+promptLen, inputY)
+	if m.Cursor < len(m.InputBuf) {
+		under = rune(m.InputBuf[m.Cursor])
+	}
+	m.PaintCursor(c, m.Cursor+promptLen, inputY, under)
 }

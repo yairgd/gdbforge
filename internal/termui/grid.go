@@ -223,10 +223,17 @@ func (g *Grid) ShowCursor(x, y int) {
 }
 
 func (g *Grid) ShowNativeCursor(x, y int) {
+	g.ShowNativeCursorStyle(x, y, tcell.CursorStyleSteadyBlock)
+}
+
+func (g *Grid) ShowNativeCursorStyle(x, y int, style tcell.CursorStyle) {
+	if style == 0 {
+		style = tcell.CursorStyleSteadyBlock
+	}
 	g.cursorVisible = true
 	g.cursorX = x
 	g.cursorY = y
-	g.cursorStyle = tcell.CursorStyleBlinkingBar
+	g.cursorStyle = style
 	g.pointerShape = ""
 	g.nativeCursorSet = true
 }

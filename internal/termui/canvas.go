@@ -131,9 +131,14 @@ func (c Canvas) ShowCursor(localX, localY int) {
 }
 
 func (c Canvas) ShowNativeCursor(localX, localY int) {
-	c.grid.ShowNativeCursor(
+	c.ShowNativeCursorStyle(localX, localY, 0)
+}
+
+func (c Canvas) ShowNativeCursorStyle(localX, localY int, style tcell.CursorStyle) {
+	c.grid.ShowNativeCursorStyle(
 		c.ScreenX(localX),
 		c.ScreenY(localY),
+		style,
 	)
 }
 

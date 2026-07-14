@@ -38,9 +38,19 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		cmd, ok := a.keyBindings.SearchPartial(key)
 		if ok {
 			cmd.Action()
+			return true
+		}
+		if a.keyBindings.InPartial() {
+			return true
 		}
 	} else {
 		a.keyBindings.ResetPartial()
+	}
+	// Focused scrollable panes (e.g. Log) handle their bindings without insert mode.
+	if w := a.tab.FocusedWidget(); w != nil {
+		if h, ok := w.(termui.FocusKeyHandler); ok && h.HandleFocusKey(ev) {
+			return true
+		}
 	}
 	return true
 }

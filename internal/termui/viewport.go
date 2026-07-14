@@ -40,18 +40,33 @@ type Viewport struct {
 
 	copyToClipboard func(string)
 
-	cursor CursorPainter
+	cursor        CursorPainter
+	cursorVisible bool
 }
 
 func NewViewport(buf *platform.Buffer) *Viewport {
 	return &Viewport{
-		Buffer: buf,
-		cursor: &NativeCursor{},
+		Buffer:        buf,
+		cursor:        NewNativeCursor(),
+		cursorVisible: true,
 	}
 }
 
 func (v *Viewport) SetCopyToClipboard(fn func(string)) {
 	v.copyToClipboard = fn
+}
+
+// SetCursor replaces the viewport caret painter (NativeCursor by default).
+func (v *Viewport) SetCursor(c CursorPainter) {
+	if c == nil {
+		c = NewNativeCursor()
+	}
+	v.cursor = c
+}
+
+// SetCursorVisible toggles caret painting (typically only the focused pane).
+func (v *Viewport) SetCursorVisible(visible bool) {
+	v.cursorVisible = visible
 }
 
 // Draw renders the visible portion of the buffer.
@@ -120,6 +135,102 @@ func (v *Viewport) HandleEvent(ev tcell.Event) {
 	}
 }
 
+// ScrollLineUp moves the caret up one line. The viewport scrolls only once
+// the caret is already on the first visible line (same as classic Up).
+func (v *Viewport) ScrollLineUp() {
+	v.leaveFollowTail()
+	v.Up()
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+// ScrollLineDown moves the caret down one line; scrolls at the bottom edge.
+func (v *Viewport) ScrollLineDown() {
+	v.Down()
+	v.maybeFollowTail()
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+// ViewScrollLineUp always shifts the viewport one line (mouse wheel).
+func (v *Viewport) ViewScrollLineUp() {
+	v.leaveFollowTail()
+	if v.Top > 0 {
+		v.Top--
+		if v.CursorLine > 0 {
+			v.CursorLine--
+		}
+	}
+	v.clampCursorIntoView()
+	v.clearSelection()
+}
+
+// ViewScrollLineDown always shifts the viewport one line (mouse wheel).
+func (v *Viewport) ViewScrollLineDown() {
+	if v.Buffer == nil {
+		return
+	}
+	last := v.Buffer.NumLines() - 1
+	if last < 0 {
+		return
+	}
+	maxTop := 0
+	if v.height > 0 && last >= v.height {
+		maxTop = last - v.height + 1
+	}
+	if v.Top < maxTop {
+		v.Top++
+		if v.CursorLine < last {
+			v.CursorLine++
+		}
+	}
+	v.clampCursorIntoView()
+	v.maybeFollowTail()
+	v.clearSelection()
+}
+
+func (v *Viewport) ScrollPageUp(pageSize int) {
+	v.leaveFollowTail()
+	v.PageUp(pageSize)
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) ScrollPageDown(pageSize int) {
+	v.PageDown(pageSize)
+	v.maybeFollowTail()
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) ScrollHome() {
+	v.leaveFollowTail()
+	v.Home()
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) ScrollEnd() {
+	v.End()
+	v.maybeFollowTail()
+	v.clearSelection()
+	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) clampCursorIntoView() {
+	if v.height <= 0 {
+		return
+	}
+	if v.CursorLine < v.Top {
+		v.CursorLine = v.Top
+	}
+	bottom := v.Top + v.height - 1
+	if v.CursorLine > bottom {
+		v.CursorLine = bottom
+	}
+	v.clampCursorCol()
+}
+
 func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 	if v.Buffer == nil || v.width <= 0 || v.height <= 0 {
 		return
@@ -133,16 +244,12 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
 			return
 		}
-		v.clearSelection()
 		if e.Buttons()&tcell.WheelUp != 0 {
-			v.leaveFollowTail()
-			v.Up()
+			v.ViewScrollLineUp()
 		}
 		if e.Buttons()&tcell.WheelDown != 0 {
-			v.Down()
-			v.maybeFollowTail()
+			v.ViewScrollLineDown()
 		}
-		v.EnsureVisible(v.width, v.height)
 		return
 	}
 

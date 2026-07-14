@@ -113,6 +113,16 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 		if l.handleMouse(me) {
 			return
 		}
+		// Wheel over a pane: deliver to that leaf (not only the focused one).
+		if me.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+			mx, my := me.Position()
+			for _, n := range CollectLeaves(l.root) {
+				if l.leafRect(n).Contains(mx, my) {
+					n.Widget.HandleEvent(ev)
+					return
+				}
+			}
+		}
 	}
 
 	if l.focus != nil && l.focus.Type == NodeLeaf {
@@ -445,6 +455,9 @@ func HorizontalOverlap(a, b Rect) bool {
 
 func (l *WidgetTree) Draw(c Canvas) {
 	WalkLeaves(l.root, func(n *Node) {
+		if f, ok := n.Widget.(Focusable); ok {
+			f.SetFocused(n == l.focus)
+		}
 		n.Widget.Draw(l.leafCanvas(n))
 	})
 	WalkLeaves(l.root, func(n *Node) {
