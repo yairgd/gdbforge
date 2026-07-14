@@ -80,6 +80,9 @@ func (app *DebuggerApp) EnterInsertMode(args ...any) {
 
 func (app *DebuggerApp) Quit(args ...any) {
 	if app.tab.DeleteFocus() {
+		if app.gdbClient != nil {
+			app.gdbClient.Close()
+		}
 		app.Exit()
 	}
 	app.RequestRedraw()

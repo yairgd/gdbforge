@@ -11,6 +11,7 @@ import (
 type AppApi interface {
 	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
+	HandleInterrupt(ev *tcell.EventInterrupt)
 }
 
 type WidgetNode struct {
@@ -240,15 +241,14 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		case string:
 			if data == redrawInterrupt {
 				_ = a.UpdateCanvas()
-
 				return
 			}
 			if data == frameInterrupt {
 				return
 			}
-			if data == "gdb-exit" {
-				return
-			}
+		}
+		if a.Api != nil {
+			a.Api.HandleInterrupt(e)
 		}
 	}
 

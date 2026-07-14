@@ -172,34 +172,10 @@ func (t *TabWidget) DeleteFocus() bool {
 
 }
 
-// NewTab creates a new tab with an initial horizontal split layout.
-// The layout contains two widgets: top and bottom.
+// NewTabTwoHozSplitWins creates a tab with a horizontal split: top over bottom.
 func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
-
-	//w, h := canvas.grid.W, canvas.grid.H
-	//	rect := Rect{0, 0, w, h - 2}
-	// place the node insde layout
-	layout := NewLayout(top) //, rect, canvas)
-	//	layout.SetRect(rect)
-	// split it to another node with bottom widget
-
-	//	layout.NewSplit(Horizontal, top)
-	//	layout.NewSplit(Vertical, top)
-	//	layout.NewSplit(Vertical, top)
-	//	layout.NewSplit(Horizontal, top)
-	//	layout.NewSplit(Vertical, bottom)
-
-	//	layout.NewSplit(Horizontal, bottom)
-	//layout.NewSplit(Vertical, bottom)
-
-	//layout.NewSplit(Vertical, bottom)
-	//layout.NewSplit(Horizontal, bottom)
-	//layout.NewSplit(Vertical, bottom)
-	//	layout.NewSplit(Horizontal, bottom)
-	//	layout.NewSplit(Vertical, top)
-	//	layout.NewSplit(Horizontal, bottom)
-
-	//layout.BuildLayout(canvas)
+	layout := NewLayout(top)
+	layout.NewSplit(Horizontal, bottom)
 
 	return &TabWidget{
 		tabs: []Tab{
@@ -210,5 +186,4 @@ func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 		},
 		active: 0,
 	}
-
 }

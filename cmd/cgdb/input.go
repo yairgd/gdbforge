@@ -104,3 +104,9 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 	}
 	return true
 }
+
+func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
+	if a.gdbWidget != nil {
+		a.gdbWidget.HandleEvent(ev)
+	}
+}

@@ -1,8 +1,7 @@
 package gdb
 
 import (
-	//	"fmt"
-
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -17,14 +16,30 @@ type GDBClient struct {
 	ptmx *os.File
 }
 
-func NewGDBClient() (*GDBClient, chan core.GdbOutputMsg, error) {
+func NewGDBClient(gdbPath, prog string, progArgs ...string) (*GDBClient, chan core.GdbOutputMsg, error) {
+	if gdbPath == "" {
+		gdbPath = "gdb"
+	}
+	if prog == "" {
+		return nil, nil, fmt.Errorf("program path is required")
+	}
 
-	cmd := exec.Command("gdb", "--interpreter=mi2", "hello")
-	//cmd := exec.Command("gdb", "hello")
+	var args []string
+	if len(progArgs) > 0 {
+		args = append([]string{"--interpreter=mi2", "--args", prog}, progArgs...)
+	} else {
+		args = []string{"--interpreter=mi2", prog}
+	}
+
+	if _, err := exec.LookPath(gdbPath); err != nil {
+		return nil, nil, fmt.Errorf("find %s: %w", gdbPath, err)
+	}
+
+	cmd := exec.Command(gdbPath, args...)
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("start %s: %w", gdbPath, err)
 	}
 	_ = setRaw(int(ptmx.Fd()))
 
@@ -36,12 +51,12 @@ func NewGDBClient() (*GDBClient, chan core.GdbOutputMsg, error) {
 	outputChan := make(chan core.GdbOutputMsg)
 
 	client.Start(outputChan)
-	client.Send("\n")
+	_ = client.Send("")
 
 	return client, outputChan, nil
 }
 
-// Start reads from PTY and pushes structured messages
+// Start reads from PTY and pushes structured messages.
 func (c *GDBClient) Start(output chan<- core.GdbOutputMsg) {
 	go func() {
 		buf := make([]byte, 1024)
@@ -55,17 +70,13 @@ func (c *GDBClient) Start(output chan<- core.GdbOutputMsg) {
 				output <- core.GdbOutputMsg{
 					Data: msg,
 				}
-				//fmt.Print(msg)
-
 			}
 
 			if err != nil {
 				if err != io.EOF {
 					output <- core.GdbOutputMsg{Err: err}
-
 				}
 				close(output)
-
 				return
 			}
 		}
@@ -85,10 +96,13 @@ func (c *GDBClient) SendRaw(s string) error {
 func (c *GDBClient) Close() {
 	if c.ptmx != nil {
 		_ = c.ptmx.Close()
+		c.ptmx = nil
 	}
 
 	if c.cmd != nil && c.cmd.Process != nil {
 		_ = c.cmd.Process.Kill()
+		_, _ = c.cmd.Process.Wait()
+		c.cmd = nil
 	}
 }
 

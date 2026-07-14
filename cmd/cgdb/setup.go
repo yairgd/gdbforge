@@ -2,19 +2,22 @@ package main
 
 import (
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-func (a *DebuggerApp) InitB() {
-	codeWidgetLeft := widgets.NewCodeWidget()
-	codeWidgetRight := widgets.NewCodeWidget()
+func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
+	codeWidget := widgets.NewCodeWidget()
+	a.gdbWidget = widgets.NewGDBWidget(a.gdbClient)
+	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
 
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",
-		codeWidgetLeft,
-		codeWidgetRight,
+		codeWidget,
+		a.gdbWidget,
 	)
+	a.tab.FocusDown()
 	a.tab.SetOnResize(a.RequestFrame)
 	a.AddWidget(a.tab)
 
@@ -28,16 +31,11 @@ func (a *DebuggerApp) InitB() {
 	a.InitKeyBindings()
 	a.ExapData()
 
-	// exaplr how to use filesynk
 	fileSink, err := platform.NewFileSink("cgdb.log")
 	if err != nil {
 		panic(err)
 	}
-	defer fileSink.Close()
 	a.ctx.Log.AddSink(fileSink)
-
-	l := widgets.NewLoggerWidget(a.ctx)
-	a.tab.HorizontalSplit(l)
 
 	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
 	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)

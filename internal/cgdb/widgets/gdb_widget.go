@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"log"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -11,6 +10,8 @@ import (
 )
 
 type GDBWidget struct {
+	termui.BaseWidget
+
 	Buffer   *core.Buffer
 	Viewport core.Viewport
 
@@ -22,39 +23,37 @@ type GDBWidget struct {
 	gdbInputState gdb.GdbInputState
 }
 
-func NewGDBWidget() *GDBWidget {
+func NewGDBWidget(dbg core.Debugger) *GDBWidget {
 	buf := core.NewBuffer()
-	client, outputChan, err := gdb.NewGDBClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	widget := &GDBWidget{
+	return &GDBWidget{
+		BaseWidget:    termui.BaseWidget{PaneName: "GDB"},
 		Buffer:        buf,
 		Viewport:      core.Viewport{Height: 10},
-		Debugger:      client,
+		Debugger:      dbg,
 		Cursor:        0,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
-	widget.StartGdbUIBridge(nil, outputChan)
-	return widget
 }
 
 func (m *GDBWidget) StartGdbUIBridge(
 	screen tcell.Screen,
 	outputChan <-chan core.GdbOutputMsg,
 ) {
+	if screen == nil {
+		return
+	}
+
 	go func() {
 		for msg := range outputChan {
-			screen.PostEvent(tcell.NewEventInterrupt(msg))
+			_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
 		}
-		screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
+		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 	}()
 
 	go func() {
 		for {
 			<-m.gdbInputState.Timer.C
-			screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
+			_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
 		}
 	}()
 }
@@ -94,23 +93,22 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventResize:
 	case *tcell.EventKey:
+		if m.Debugger == nil {
+			return
+		}
 		switch e.Key() {
 		case tcell.KeyCtrlC:
-			if m.Debugger.SendRaw != nil {
-				m.Debugger.SendRaw("\x03")
-			}
+			_ = m.Debugger.SendRaw("\x03")
 		case tcell.KeyCtrlD:
-			if m.Debugger.Send != nil {
-				m.Debugger.Send("q\n")
-			}
+			_ = m.Debugger.Send("q")
 		case tcell.KeyEnter:
-			if m.Debugger.Send != nil {
-				if m.InputBuf != "" {
-					m.Debugger.Send(m.InputBuf)
-					m.lastCommand = m.InputBuf
-				} else {
-					m.Debugger.Send(m.lastCommand)
-				}
+			if m.InputBuf != "" {
+				_ = m.Debugger.Send(m.InputBuf)
+				m.lastCommand = m.InputBuf
+			} else if m.lastCommand != "" {
+				_ = m.Debugger.Send(m.lastCommand)
+			} else {
+				_ = m.Debugger.Send("")
 			}
 			m.Viewport.FollowBottom(m.Buffer)
 			m.InputBuf = ""
@@ -129,13 +127,9 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 				m.Cursor++
 			}
 		case tcell.KeyUp:
-			if m.Debugger.SendRaw != nil {
-				m.Debugger.SendRaw("\x1b[A")
-			}
+			_ = m.Debugger.SendRaw("\x1b[A")
 		case tcell.KeyDown:
-			if m.Debugger.SendRaw != nil {
-				m.Debugger.SendRaw("\x1b[B")
-			}
+			_ = m.Debugger.SendRaw("\x1b[B")
 		case tcell.KeyRune:
 			r := string(e.Rune())
 			m.InputBuf = m.InputBuf[:m.Cursor] + r + m.InputBuf[m.Cursor:]
@@ -145,8 +139,17 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 }
 
 func (m *GDBWidget) Draw(c termui.Canvas) {
+	contentH := c.H() - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+	m.Viewport.Height = contentH
+
 	lines := m.Viewport.VisibleLines(m.Buffer)
 	for y, line := range lines {
+		if y >= contentH {
+			break
+		}
 		lineStyle := tcell.StyleDefault
 		if strings.HasPrefix(line, ">>>") {
 			lineStyle = lineStyle.Foreground(tcell.ColorTeal).Bold(true)
@@ -157,9 +160,18 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 	}
 
 	inputY := c.H() - 2
+	if inputY < 0 {
+		inputY = 0
+	}
 	prompt := "(gdb) "
 	promptLen := len(prompt)
 
+	for x, ch := range prompt {
+		if x >= c.W() {
+			break
+		}
+		c.SetContent(x, inputY, ch, tcell.StyleDefault.Foreground(tcell.ColorYellow))
+	}
 	for x, ch := range m.InputBuf {
 		if x+promptLen >= c.W() {
 			break
@@ -168,8 +180,4 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 	}
 
 	c.ShowNativeCursor(m.Cursor+promptLen, inputY)
-}
-
-func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
-	termui.PaintStatusBar(c, "GDB", active)
 }
