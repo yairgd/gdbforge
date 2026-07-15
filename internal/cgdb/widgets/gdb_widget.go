@@ -79,7 +79,7 @@ func (m *GDBWidget) initKeyBindings() {
 	m.BindKeyFunc("kill-word", func(args ...any) { m.killWord() }, "<C-w>")
 
 	// Submit / signals / viewport
-	m.BindKeyFunc("submit", func(args ...any) { m.submit() }, "<Enter>")
+	m.BindKeyFunc("submit", func(args ...any) { m.submit() }, "<Enter>", "<C-m>", "<C-j>")
 	m.BindKeyFunc("interrupt", func(args ...any) { m.interrupt() }, "<C-c>")
 	m.BindKeyFunc("eof-quit", func(args ...any) { m.eofQuit() }, "<C-d>")
 	m.BindKeyFunc("clear", func(args ...any) { m.Clear() }, "<C-l>")
@@ -145,6 +145,35 @@ func (m *GDBWidget) appendOutputText(text string) {
 	m.buf.AppendLine(text)
 }
 
+func (m *GDBWidget) stripTrailingBareGdbPrompt() {
+	for m.buf.NumLines() > 0 {
+		last := strings.TrimSpace(m.buf.Line(m.buf.NumLines() - 1))
+		if last != "" && last != "(gdb)" {
+			return
+		}
+		m.buf.RemoveLine(m.buf.NumLines() - 1)
+		if last == "(gdb)" {
+			return
+		}
+	}
+}
+
+func (m *GDBWidget) echoSubmittedCommand(cmd string) {
+	n := m.buf.NumLines()
+	if n > 0 && strings.TrimSpace(m.buf.Line(n-1)) == "(gdb)" {
+		m.buf.SetLine(n-1, "(gdb) "+cmd)
+		return
+	}
+	m.buf.AppendLine("(gdb) " + cmd)
+}
+
+func (m *GDBWidget) clearInputLine() {
+	m.InputBuf = ""
+	m.Cursor = 0
+	m.histDraft = ""
+	m.histIndex = len(m.history)
+}
+
 func (m *GDBWidget) handleAsyncRecord(line string) {
 	reason := gdb.ExtractMIField(line, "reason")
 	if strings.HasPrefix(line, "*stopped") {
@@ -170,7 +199,9 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 				m.gdbInputState.Clear()
 				miCmd := gdb.NewMiMsg(buf)
 				m.appendOutputLines(miCmd.CreateBufferForLine())
-				m.appendOutputText("(gdb) ")
+				// Prompt lives on the dedicated input row — don't leave a bare
+				// "(gdb) " line in the scrollback above it.
+				m.stripTrailingBareGdbPrompt()
 				m.out.SetFollowTail(true)
 				m.out.ScrollToBottom()
 			}
@@ -342,14 +373,15 @@ func (m *GDBWidget) submit() {
 	}
 	if cmd != "" {
 		m.pushHistory(cmd)
+		m.echoSubmittedCommand(cmd)
 		_ = m.Debugger.Send(cmd)
 	} else {
 		_ = m.Debugger.Send("")
 	}
+	// Always wipe the typed line after Enter — prompt stays, text does not.
+	m.clearInputLine()
 	m.out.SetFollowTail(true)
 	m.out.ScrollToBottom()
-	m.InputBuf = ""
-	m.Cursor = 0
 }
 
 func (m *GDBWidget) interrupt() {
@@ -378,6 +410,10 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 	if inputY < 0 {
 		inputY = 0
 	}
+	// Clear the whole input row first — TermApp does not wipe the grid every
+	// frame, so a shorter InputBuf after Enter would otherwise leave ghosts.
+	c.ClearLine(inputY, tcell.StyleDefault)
+
 	prompt := "(gdb) "
 	promptLen := len(prompt)
 
