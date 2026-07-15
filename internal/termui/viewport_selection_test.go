@@ -75,3 +75,27 @@ func TestClipboardCopyShared(t *testing.T) {
 		t.Fatalf("copy: got %q want %q", got, "hello")
 	}
 }
+
+func TestFollowTailPadsShortBufferToBottom(t *testing.T) {
+	buf := platform.NewBuffer()
+	buf.AppendLine("a")
+	buf.AppendLine("b")
+	v := NewViewport(buf)
+	v.width = 40
+	v.height = 10
+	v.SetFollowTail(true)
+
+	if pad := v.followPadTop(); pad != 8 {
+		t.Fatalf("padTop=%d want 8", pad)
+	}
+	v.padTop = v.followPadTop()
+	pos := v.posFromLocal(0, 8)
+	if pos.line != 0 {
+		t.Fatalf("click on first content row mapped to line %d", pos.line)
+	}
+	pos = v.posFromLocal(0, 9)
+	if pos.line != 1 {
+		t.Fatalf("click on last content row mapped to line %d", pos.line)
+	}
+}
+

@@ -25,6 +25,11 @@ type Viewport struct {
 	width  int
 	height int
 	followTail bool
+	// padTop is blank rows above content when follow-tail and the buffer is
+	// shorter than the viewport (bottom-align short buffers). Unused today
+	// when the draw area height matches the line count (e.g. GDB walking
+	// prompt); kept for layouts that want content pinned to the bottom edge.
+	padTop int
 
 	// Screen origin of the widget rect (set during Draw).
 	screenX int
@@ -82,6 +87,7 @@ func (v *Viewport) Draw(c Canvas) {
 	if v.followTail {
 		v.ScrollToBottom()
 	}
+	v.padTop = v.followPadTop()
 
 	style := tcell.StyleDefault
 	selStyle := style.Reverse(true)
@@ -89,7 +95,11 @@ func (v *Viewport) Draw(c Canvas) {
 	height := v.height
 
 	for row := 0; row < height; row++ {
-		line := v.Top + row
+		if row < v.padTop {
+			c.ClearLine(row, style)
+			continue
+		}
+		line := v.Top + (row - v.padTop)
 		if line >= v.Buffer.NumLines() {
 			c.ClearLine(row, style)
 			continue
@@ -429,8 +439,19 @@ func (v *Viewport) handleKey(key *tcell.EventKey) {
 	v.EnsureVisible(v.width, v.height)
 }
 
+func (v *Viewport) followPadTop() int {
+	if !v.followTail || v.Buffer == nil || v.height <= 0 {
+		return 0
+	}
+	n := v.Buffer.NumLines()
+	if n <= 0 || n >= v.height {
+		return 0
+	}
+	return v.height - n
+}
+
 func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
-	line := v.Top + ly
+	line := v.Top + (ly - v.padTop)
 	if line < 0 {
 		line = 0
 	}

@@ -111,10 +111,11 @@ func (m *GDBWidget) Clear() {
 	if m.buf != nil {
 		m.buf.Clear()
 	}
+	// Screen reset: empty buffer → prompt at top-left; as lines arrive the
+	// prompt walks down one row at a time until the pane is full.
 	m.out.Home()
 	m.out.SetFollowTail(true)
-	m.InputBuf = ""
-	m.Cursor = 0
+	m.clearInputLine()
 }
 
 func (m *GDBWidget) SetFocused(focused bool) {
@@ -392,22 +393,32 @@ func (m *GDBWidget) eofQuit() {
 }
 
 func (m *GDBWidget) Draw(c termui.Canvas) {
-	// Status bar is painted at y=c.H() (just below the leaf). Reserve the
-	// last in-pane row for the (gdb) input line.
-	contentH := c.H() - 1
-	if contentH < 1 {
-		contentH = 1
+	// TermApp does not wipe every frame — clear so the walking prompt and a
+	// shorter InputBuf do not leave ghosts.
+	for y := 0; y < c.H(); y++ {
+		c.ClearLine(y, tcell.StyleDefault)
 	}
-	content := c.WithRect(c.ChildRect(0, 0, c.W(), contentH))
-	m.out.Draw(content)
+	h := c.H()
+	if h < 1 {
+		return
+	}
 
-	inputY := c.H() - 1
-	if inputY < 0 {
-		inputY = 0
+	n := 0
+	if m.buf != nil {
+		n = m.buf.NumLines()
 	}
-	// Clear the whole input row first — TermApp does not wipe the grid every
-	// frame, so a shorter InputBuf after Enter would otherwise leave ghosts.
-	c.ClearLine(inputY, tcell.StyleDefault)
+
+	// Terminal-style: prompt sits on the next free row under the scrollback.
+	// Only pin it to the bottom (and scroll) once the pane is full.
+	// While browsing history (follow-tail off), keep the prompt on the last row.
+	inputY := n
+	if !m.out.FollowTail() || inputY > h-1 {
+		inputY = h - 1
+	}
+	if contentH := inputY; contentH > 0 {
+		content := c.WithRect(c.ChildRect(0, 0, c.W(), contentH))
+		m.out.Draw(content)
+	}
 
 	prompt := "(gdb) "
 	promptLen := len(prompt)

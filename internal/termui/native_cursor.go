@@ -33,7 +33,7 @@ func (n *NativeCursor) Draw(c Canvas, v *Viewport) {
 	}
 
 	localX := v.CursorCol - v.Left
-	localY := v.CursorLine - v.Top
+	localY := v.CursorLine - v.Top + v.padTop
 
 	if localY < 0 || localY >= v.height || localX < 0 || localX >= v.width {
 		return
