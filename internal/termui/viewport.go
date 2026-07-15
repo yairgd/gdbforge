@@ -1,8 +1,6 @@
 package termui
 
 import (
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
@@ -38,7 +36,11 @@ type Viewport struct {
 	selActive bool
 	hasSel    bool
 
-	copyToClipboard func(string)
+	clipboard ClipboardIO
+	readOnly  bool // true → Cut copies only; Paste ignored
+
+	// LineStyle optionally colors a full buffer line before selection reverse.
+	LineStyle func(line string) tcell.Style
 
 	cursor        CursorPainter
 	cursorVisible bool
@@ -49,11 +51,8 @@ func NewViewport(buf *platform.Buffer) *Viewport {
 		Buffer:        buf,
 		cursor:        NewNativeCursor(),
 		cursorVisible: true,
+		readOnly:      true,
 	}
-}
-
-func (v *Viewport) SetCopyToClipboard(fn func(string)) {
-	v.copyToClipboard = fn
 }
 
 // SetCursor replaces the viewport caret painter (NativeCursor by default).
@@ -96,7 +95,12 @@ func (v *Viewport) Draw(c Canvas) {
 			continue
 		}
 
-		text := v.Buffer.Line(line)
+		full := v.Buffer.Line(line)
+		lineStyle := style
+		if v.LineStyle != nil {
+			lineStyle = v.LineStyle(full)
+		}
+		text := full
 		if v.Left < len(text) {
 			text = text[v.Left:]
 		} else {
@@ -109,12 +113,12 @@ func (v *Viewport) Draw(c Canvas) {
 
 		visibleLen := len(text)
 		if visibleLen < width {
-			c.ClearLineRange(row, visibleLen, width, style)
+			c.ClearLineRange(row, visibleLen, width, lineStyle)
 		}
 
 		for col, ch := range text {
 			bufCol := v.Left + col
-			st := style
+			st := lineStyle
 			if v.containsSel(line, bufCol) {
 				st = selStyle
 			}
@@ -132,6 +136,8 @@ func (v *Viewport) HandleEvent(ev tcell.Event) {
 		v.handleMouse(e)
 	case *tcell.EventKey:
 		v.handleKey(e)
+	case *tcell.EventPaste:
+		v.PasteAtCursor()
 	}
 }
 
@@ -140,7 +146,7 @@ func (v *Viewport) HandleEvent(ev tcell.Event) {
 func (v *Viewport) ScrollLineUp() {
 	v.leaveFollowTail()
 	v.Up()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(-1)
 	v.EnsureVisible(v.width, v.height)
 }
 
@@ -148,7 +154,7 @@ func (v *Viewport) ScrollLineUp() {
 func (v *Viewport) ScrollLineDown() {
 	v.Down()
 	v.maybeFollowTail()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(1)
 	v.EnsureVisible(v.width, v.height)
 }
 
@@ -157,12 +163,16 @@ func (v *Viewport) ViewScrollLineUp() {
 	v.leaveFollowTail()
 	if v.Top > 0 {
 		v.Top--
-		if v.CursorLine > 0 {
+		if v.selActive {
+			// Live drag: pull selection into newly revealed lines at the top edge.
+			v.CursorLine = v.Top
+			v.CursorCol = 0
+		} else if v.CursorLine > 0 {
 			v.CursorLine--
 		}
 	}
 	v.clampCursorIntoView()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(-1)
 }
 
 // ViewScrollLineDown always shifts the viewport one line (mouse wheel).
@@ -180,41 +190,61 @@ func (v *Viewport) ViewScrollLineDown() {
 	}
 	if v.Top < maxTop {
 		v.Top++
-		if v.CursorLine < last {
+		if v.selActive {
+			// Live drag: pull selection into newly revealed lines at the bottom edge.
+			v.CursorLine = v.Top + v.height - 1
+			if v.CursorLine > last {
+				v.CursorLine = last
+			}
+			v.CursorCol = len(v.Buffer.Line(v.CursorLine))
+		} else if v.CursorLine < last {
 			v.CursorLine++
 		}
 	}
 	v.clampCursorIntoView()
 	v.maybeFollowTail()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(1)
 }
 
 func (v *Viewport) ScrollPageUp(pageSize int) {
 	v.leaveFollowTail()
 	v.PageUp(pageSize)
-	v.clearSelection()
+	v.extendSelectionAfterScroll(-1)
 	v.EnsureVisible(v.width, v.height)
 }
 
 func (v *Viewport) ScrollPageDown(pageSize int) {
 	v.PageDown(pageSize)
 	v.maybeFollowTail()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(1)
 	v.EnsureVisible(v.width, v.height)
 }
 
 func (v *Viewport) ScrollHome() {
 	v.leaveFollowTail()
 	v.Home()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(-1)
 	v.EnsureVisible(v.width, v.height)
 }
 
 func (v *Viewport) ScrollEnd() {
 	v.End()
 	v.maybeFollowTail()
-	v.clearSelection()
+	v.extendSelectionAfterScroll(1)
 	v.EnsureVisible(v.width, v.height)
+}
+
+// extendSelectionAfterScroll keeps an existing mark while scrolling, and while
+// dragging extends selCursor to the caret on the newly revealed edge.
+func (v *Viewport) extendSelectionAfterScroll(dir int) {
+	if !v.selActive && !v.hasSel {
+		return
+	}
+	if v.selActive {
+		v.selCursor = bufferPos{line: v.CursorLine, col: v.CursorCol}
+		v.hasSel = v.selAnchor != v.selCursor
+	}
+	_ = dir
 }
 
 func (v *Viewport) clampCursorIntoView() {
@@ -241,7 +271,9 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 	ly := my - v.screenY
 
 	if e.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
-		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+		// Allow wheel during an active drag even if the pointer is outside;
+		// otherwise require the pointer over the pane.
+		if !v.selActive && (lx < 0 || ly < 0 || lx >= v.width || ly >= v.height) {
 			return
 		}
 		if e.Buttons()&tcell.WheelUp != 0 {
@@ -260,40 +292,88 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		}
 		v.hasSel = v.selAnchor != v.selCursor
 		if v.hasSel {
-			v.copySelection()
+			v.CopySelection()
 		}
 		return
 	}
 
-	if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+	if e.Buttons()&tcell.ButtonPrimary == 0 {
 		return
 	}
 
-	pos := v.posFromLocal(lx, ly)
-
-	if e.Buttons()&tcell.ButtonPrimary != 0 {
-		if !v.selActive {
-			v.clearSelection()
-			v.selActive = true
-			v.selAnchor = pos
-			v.hasSel = false
+	// New click must start inside; drag may leave the pane and auto-scroll.
+	if !v.selActive {
+		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+			return
 		}
+		pos := v.posFromLocal(lx, ly)
+		v.clearSelection()
+		v.selActive = true
+		v.selAnchor = pos
 		v.selCursor = pos
-		v.hasSel = v.selAnchor != v.selCursor
+		v.hasSel = false
 		v.CursorLine = pos.line
 		v.CursorCol = pos.col
 		v.clampCursorCol()
-		v.EnsureVisible(v.width, v.height)
+		return
 	}
+
+	// Drag beyond the pane edges: scroll to reveal the missing area and pin
+	// the selection endpoint to that edge (lines not visible on first click).
+	for ly < 0 {
+		before := v.Top
+		v.ViewScrollLineUp()
+		ly = 0
+		if v.Top == before {
+			break
+		}
+	}
+	for ly >= v.height {
+		before := v.Top
+		v.ViewScrollLineDown()
+		ly = v.height - 1
+		if v.Top == before {
+			break
+		}
+	}
+	if lx < 0 {
+		lx = 0
+	}
+	if lx >= v.width {
+		lx = v.width - 1
+	}
+	if ly < 0 {
+		ly = 0
+	}
+	if ly >= v.height {
+		ly = v.height - 1
+	}
+
+	pos := v.posFromLocal(lx, ly)
+	v.selCursor = pos
+	v.hasSel = v.selAnchor != v.selCursor
+	v.CursorLine = pos.line
+	v.CursorCol = pos.col
+	v.clampCursorCol()
+	v.EnsureVisible(v.width, v.height)
 }
 
 func (v *Viewport) handleKey(key *tcell.EventKey) {
-	if key.Key() == tcell.KeyCtrlC ||
-		(key.Key() == tcell.KeyRune && key.Rune() == 'c' && key.Modifiers()&tcell.ModCtrl != 0) {
+	ctrl := key.Modifiers()&tcell.ModCtrl != 0
+	switch {
+	case key.Key() == tcell.KeyCtrlC || (ctrl && key.Key() == tcell.KeyRune && key.Rune() == 'c'):
 		if v.hasSel {
-			v.copySelection()
-			return
+			v.CopySelection()
 		}
+		return
+	case key.Key() == tcell.KeyCtrlX || (ctrl && key.Key() == tcell.KeyRune && key.Rune() == 'x'):
+		if v.hasSel {
+			v.CutSelection()
+		}
+		return
+	case key.Key() == tcell.KeyCtrlV || (ctrl && key.Key() == tcell.KeyRune && key.Rune() == 'v'):
+		v.PasteAtCursor()
+		return
 	}
 
 	switch key.Key() {
@@ -301,40 +381,51 @@ func (v *Viewport) handleKey(key *tcell.EventKey) {
 	case tcell.KeyUp:
 		v.leaveFollowTail()
 		v.Up()
+		v.extendSelectionAfterScroll(-1)
 
 	case tcell.KeyDown:
 		v.Down()
 		v.maybeFollowTail()
+		v.extendSelectionAfterScroll(1)
 
 	case tcell.KeyLeft:
 		v.leaveFollowTail()
 		v.LeftChar()
+		if !v.selActive {
+			v.clearSelection()
+		}
 
 	case tcell.KeyRight:
 		v.RightChar()
 		v.maybeFollowTail()
+		if !v.selActive {
+			v.clearSelection()
+		}
 
 	case tcell.KeyPgUp:
 		v.leaveFollowTail()
 		v.PageUp(10)
+		v.extendSelectionAfterScroll(-1)
 
 	case tcell.KeyPgDn:
 		v.PageDown(10)
 		v.maybeFollowTail()
+		v.extendSelectionAfterScroll(1)
 
 	case tcell.KeyHome:
 		v.leaveFollowTail()
 		v.Home()
+		v.extendSelectionAfterScroll(-1)
 
 	case tcell.KeyEnd:
 		v.End()
 		v.maybeFollowTail()
+		v.extendSelectionAfterScroll(1)
 
 	default:
 		return
 	}
 
-	v.clearSelection()
 	v.EnsureVisible(v.width, v.height)
 }
 
@@ -389,42 +480,6 @@ func (v *Viewport) containsSel(line, col int) bool {
 		return col < end.col
 	}
 	return true
-}
-
-func (v *Viewport) selectedText() string {
-	if !v.hasSel || v.Buffer == nil {
-		return ""
-	}
-
-	start, end := v.normalizedSel()
-	if start == end {
-		return ""
-	}
-
-	if start.line == end.line {
-		return v.Buffer.Line(start.line)[start.col:end.col]
-	}
-
-	var b strings.Builder
-	b.WriteString(v.Buffer.Line(start.line)[start.col:])
-	for line := start.line + 1; line < end.line; line++ {
-		b.WriteByte('\n')
-		b.WriteString(v.Buffer.Line(line))
-	}
-	b.WriteByte('\n')
-	b.WriteString(v.Buffer.Line(end.line)[:end.col])
-	return b.String()
-}
-
-func (v *Viewport) copySelection() {
-	if v.copyToClipboard == nil {
-		return
-	}
-	text := v.selectedText()
-	if text == "" {
-		return
-	}
-	v.copyToClipboard(text)
 }
 
 func (v *Viewport) clearSelection() {
@@ -578,9 +633,11 @@ func (v *Viewport) PageUp(pageSize int) {
 	}
 }
 
+// Home moves the caret and view to the top-left of the buffer.
 func (v *Viewport) Home() {
-
+	v.CursorLine = 0
 	v.CursorCol = 0
+	v.Top = 0
 	v.Left = 0
 }
 

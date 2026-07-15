@@ -57,6 +57,7 @@ func NewTermApp() *TermApp {
 	}
 
 	screen.EnableMouse(tcell.MouseMotionEvents)
+	screen.EnablePaste()
 
 	return &TermApp{
 		screen:          screen,
@@ -260,6 +261,21 @@ func (app *TermApp) CopyToClipboard(text string) {
 	}
 	app.screen.SetClipboard([]byte(text))
 	platform.SetClipboardText(text)
+}
+
+func (app *TermApp) PasteFromClipboard() string {
+	if text, ok := platform.GetClipboardText(); ok {
+		return text
+	}
+	return ""
+}
+
+// ClipboardIO returns the shared bridge for Viewport-backed widgets.
+func (app *TermApp) ClipboardIO() ClipboardIO {
+	return ClipboardIO{
+		Copy:  app.CopyToClipboard,
+		Paste: app.PasteFromClipboard,
+	}
 }
 
 func (app *TermApp) Events() chan Event {

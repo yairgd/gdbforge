@@ -30,3 +30,16 @@ func SetClipboardText(text string) bool {
 	clipboard.Write(clipboard.FmtText, []byte(text))
 	return true
 }
+
+// GetClipboardText reads the system clipboard text.
+func GetClipboardText() (string, bool) {
+	clipOnce.Do(initClipboard)
+	if !clipOK {
+		return "", false
+	}
+	b := clipboard.Read(clipboard.FmtText)
+	if len(b) == 0 {
+		return "", false
+	}
+	return string(b), true
+}

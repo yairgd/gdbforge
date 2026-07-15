@@ -14,7 +14,7 @@ GOFILES := $(shell find . -name '*.go')
 
 $(BIN_DIR)/cgdb: $(GOFILES)
 	@mkdir -p $(BIN_DIR)
-	go build -gcflags="all=-N -l" -o $@ ./cmd/cgdb
+	go build -gcflags="all=-N -l" -o $@ ./cmd/cgdb 
 
 build: $(BIN_DIR)/cgdb
 	
@@ -31,7 +31,7 @@ build1:
 # -------- Run --------
 .PHONY: run
 run:
-	go run ./cmd/cgdb
+	go run ./cmd/cgdb ./hello
 
 # -------- Debug Dlv --------
 .PHONY: debug

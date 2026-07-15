@@ -6,32 +6,39 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/gdb"
+	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
 type GDBWidget struct {
 	termui.BaseWidget
 
-	Buffer   *core.Buffer
-	Viewport core.Viewport
+	out *termui.Viewport
+	buf *platform.Buffer
 
 	InputBuf string
 	Cursor   int
 
-	history    []string
-	histIndex  int // len(history) means editing a new/draft line
-	histDraft  string
+	history   []string
+	histIndex int // len(history) means editing a new/draft line
+	histDraft string
 
 	Debugger      core.Debugger
 	gdbInputState gdb.GdbInputState
 }
 
 func NewGDBWidget(dbg core.Debugger) *GDBWidget {
-	buf := core.NewBuffer()
+	buf := platform.NewBuffer()
+	out := termui.NewViewport(buf)
+	out.SetFollowTail(true)
+	out.SetReadOnly(true)
+	out.SetCursorVisible(false)
+	out.LineStyle = gdbLineStyle
+
 	w := &GDBWidget{
 		BaseWidget:    termui.BaseWidget{PaneName: "GDB"},
-		Buffer:        buf,
-		Viewport:      core.Viewport{Height: 10},
+		out:           out,
+		buf:           buf,
 		Debugger:      dbg,
 		Cursor:        0,
 		histIndex:     0,
@@ -40,6 +47,17 @@ func NewGDBWidget(dbg core.Debugger) *GDBWidget {
 	w.SetCursor(termui.NewNativeCursor())
 	w.initKeyBindings()
 	return w
+}
+
+func gdbLineStyle(line string) tcell.Style {
+	st := tcell.StyleDefault
+	if strings.HasPrefix(line, ">>>") {
+		return st.Foreground(tcell.ColorTeal).Bold(true)
+	}
+	if strings.HasPrefix(line, "(gdb)") {
+		return st.Foreground(tcell.ColorYellow)
+	}
+	return st
 }
 
 func (m *GDBWidget) initKeyBindings() {
@@ -65,8 +83,12 @@ func (m *GDBWidget) initKeyBindings() {
 	m.BindKeyFunc("interrupt", func(args ...any) { m.interrupt() }, "<C-c>")
 	m.BindKeyFunc("eof-quit", func(args ...any) { m.eofQuit() }, "<C-d>")
 	m.BindKeyFunc("clear", func(args ...any) { m.Clear() }, "<C-l>")
-	m.BindKeyFunc("scroll-up", func(args ...any) { m.scrollUp() }, "<PgUp>")
-	m.BindKeyFunc("scroll-down", func(args ...any) { m.scrollDown() }, "<PgDn>")
+	m.BindKeyFunc("scroll-up", func(args ...any) { m.out.ScrollPageUp(10) }, "<PgUp>")
+	m.BindKeyFunc("scroll-down", func(args ...any) { m.out.ScrollPageDown(10) }, "<PgDn>")
+}
+
+func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {
+	m.out.SetClipboard(io)
 }
 
 func (m *GDBWidget) StartGdbUIBridge(
@@ -93,12 +115,34 @@ func (m *GDBWidget) StartGdbUIBridge(
 }
 
 func (m *GDBWidget) Clear() {
-	if m.Buffer != nil {
-		m.Buffer.Clear()
+	if m.buf != nil {
+		m.buf.Clear()
 	}
-	m.Viewport.TopLine = 0
+	m.out.Home()
+	m.out.SetFollowTail(true)
 	m.InputBuf = ""
 	m.Cursor = 0
+}
+
+func (m *GDBWidget) SetFocused(focused bool) {
+	m.BaseWidget.SetFocused(focused)
+	// Caret stays on the (gdb) input line; output uses mouse selection only.
+	m.out.SetCursorVisible(false)
+}
+
+func (m *GDBWidget) appendOutputLines(lines []string) {
+	for _, line := range lines {
+		m.appendOutputText(line)
+	}
+}
+
+// appendOutputText mirrors the old core.Buffer AppendText "(gdb) " merge rule.
+func (m *GDBWidget) appendOutputText(text string) {
+	if n := m.buf.NumLines(); n > 0 && m.buf.Line(n-1) == "(gdb) " {
+		m.buf.SetLine(n-1, m.buf.Line(n-1)+text)
+		return
+	}
+	m.buf.AppendLine(text)
 }
 
 func (m *GDBWidget) handleAsyncRecord(line string) {
@@ -125,15 +169,29 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 				buf := m.gdbInputState.Buffer()
 				m.gdbInputState.Clear()
 				miCmd := gdb.NewMiMsg(buf)
-				m.Buffer.AppendBuffer(miCmd.CreateBufferForLine())
-				m.Buffer.AppendText("(gdb) ")
-				m.Viewport.FollowBottom(m.Buffer)
+				m.appendOutputLines(miCmd.CreateBufferForLine())
+				m.appendOutputText("(gdb) ")
+				m.out.SetFollowTail(true)
+				m.out.ScrollToBottom()
 			}
 		}
 
+	case *tcell.EventMouse:
+		m.out.HandleEvent(e)
+
 	case *tcell.EventResize:
 	case *tcell.EventKey:
+		// Prefer copying a selection over sending SIGINT.
+		if isCtrlC(e) && m.out.HasSelection() {
+			m.out.CopySelection()
+			return
+		}
 		if m.HandleBoundKey(e) {
+			return
+		}
+		// Copy/cut/paste for output selection when not consumed as GDB editing.
+		if isClipboardKey(e) {
+			m.out.HandleEvent(e)
 			return
 		}
 		// Some terminals still emit KeyBackspace (0x08) instead of KeyBackspace2.
@@ -145,6 +203,25 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 			m.insertRune(e.Rune())
 		}
 	}
+}
+
+func isCtrlC(e *tcell.EventKey) bool {
+	return e.Key() == tcell.KeyCtrlC ||
+		(e.Key() == tcell.KeyRune && e.Rune() == 'c' && e.Modifiers()&tcell.ModCtrl != 0)
+}
+
+func isClipboardKey(e *tcell.EventKey) bool {
+	if e.Key() == tcell.KeyCtrlC || e.Key() == tcell.KeyCtrlX || e.Key() == tcell.KeyCtrlV {
+		return true
+	}
+	if e.Modifiers()&tcell.ModCtrl == 0 || e.Key() != tcell.KeyRune {
+		return false
+	}
+	switch e.Rune() {
+	case 'c', 'C', 'x', 'X', 'v', 'V':
+		return true
+	}
+	return false
 }
 
 func (m *GDBWidget) insertRune(r rune) {
@@ -269,7 +346,8 @@ func (m *GDBWidget) submit() {
 	} else {
 		_ = m.Debugger.Send("")
 	}
-	m.Viewport.FollowBottom(m.Buffer)
+	m.out.SetFollowTail(true)
+	m.out.ScrollToBottom()
 	m.InputBuf = ""
 	m.Cursor = 0
 }
@@ -286,45 +364,15 @@ func (m *GDBWidget) eofQuit() {
 	}
 }
 
-func (m *GDBWidget) scrollUp() {
-	if m.Viewport.TopLine > 0 {
-		m.Viewport.TopLine--
-	}
-}
-
-func (m *GDBWidget) scrollDown() {
-	if m.Buffer.NumLines() <= m.Viewport.Height {
-		m.Viewport.TopLine = 0
-		return
-	}
-	maxTop := m.Buffer.NumLines() - m.Viewport.Height
-	if m.Viewport.TopLine < maxTop {
-		m.Viewport.TopLine++
-	}
-}
-
 func (m *GDBWidget) Draw(c termui.Canvas) {
-	// Status bar is painted at y=c.H() (just below the leaf). Reserve only the
-	// last in-pane row for the (gdb) input line — not two rows (that left a gap).
+	// Status bar is painted at y=c.H() (just below the leaf). Reserve the
+	// last in-pane row for the (gdb) input line.
 	contentH := c.H() - 1
 	if contentH < 1 {
 		contentH = 1
 	}
-	m.Viewport.Height = contentH
-
-	lines := m.Viewport.VisibleLines(m.Buffer)
-	for y, line := range lines {
-		if y >= contentH {
-			break
-		}
-		lineStyle := tcell.StyleDefault
-		if strings.HasPrefix(line, ">>>") {
-			lineStyle = lineStyle.Foreground(tcell.ColorTeal).Bold(true)
-		} else if strings.HasPrefix(line, "(gdb)") {
-			lineStyle = lineStyle.Foreground(tcell.ColorYellow)
-		}
-		c.DrawANSIText(0, y, line, lineStyle)
-	}
+	content := c.WithRect(c.ChildRect(0, 0, c.W(), contentH))
+	m.out.Draw(content)
 
 	inputY := c.H() - 1
 	if inputY < 0 {

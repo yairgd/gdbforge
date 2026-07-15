@@ -67,8 +67,17 @@ func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {
-	return ev.Key() == tcell.KeyCtrlC ||
-		(ev.Key() == tcell.KeyRune && ev.Rune() == 'c' && ev.Modifiers()&tcell.ModCtrl != 0)
+	if ev.Key() == tcell.KeyCtrlC || ev.Key() == tcell.KeyCtrlX || ev.Key() == tcell.KeyCtrlV {
+		return true
+	}
+	if ev.Modifiers()&tcell.ModCtrl == 0 || ev.Key() != tcell.KeyRune {
+		return false
+	}
+	switch ev.Rune() {
+	case 'c', 'C', 'x', 'X', 'v', 'V':
+		return true
+	}
+	return false
 }
 
 func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {

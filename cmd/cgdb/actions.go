@@ -62,7 +62,7 @@ func (app *DebuggerApp) SplitHorizontal(args ...any) {
 
 	l := termui.NewLoggerWidget(app.ctx)
 	l.Events = app.Events()
-	l.SetCopyToClipboard(app.CopyToClipboard)
+	l.SetClipboard(app.ClipboardIO())
 	tab.HorizontalSplit(l)
 	app.RequestRedraw()
 }

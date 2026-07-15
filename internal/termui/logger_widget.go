@@ -35,6 +35,7 @@ func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 	w.PaneName = "Log"
 
 	w.viewport.SetFollowTail(true)
+	w.viewport.SetReadOnly(true)
 	ctx.Log.AddSink(w)
 	w.log = ctx.Log.Named("LoggerWidget")
 
@@ -59,8 +60,8 @@ func (m *LoggerWidget) initKeyBindings() {
 func (m *LoggerWidget) Clear() {
 	if m.viewport != nil && m.viewport.Buffer != nil {
 		m.viewport.Buffer.Clear()
-		m.viewport.Home()
-		m.viewport.SetFollowTail(true)
+		m.viewport.Home() // top-left of the pane
+		m.viewport.SetFollowTail(false)
 	}
 }
 
@@ -86,8 +87,18 @@ func (m *LoggerWidget) HandleEvent(ev tcell.Event) {
 	}
 }
 
+// SetClipboard wires the shared Viewport copy/paste bridge.
+func (m *LoggerWidget) SetClipboard(io ClipboardIO) {
+	m.viewport.SetClipboard(io)
+}
+
+// SetCopyToClipboard keeps the older API; prefer SetClipboard.
 func (m *LoggerWidget) SetCopyToClipboard(fn func(string)) {
 	m.viewport.SetCopyToClipboard(fn)
+}
+
+func (m *LoggerWidget) Viewport() *Viewport {
+	return m.viewport
 }
 
 func (m *LoggerWidget) SetFocused(focused bool) {

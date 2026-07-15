@@ -19,9 +19,10 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 
 	logWidget := termui.NewLoggerWidget(a.ctx)
 	logWidget.Events = a.Events()
-	logWidget.SetCopyToClipboard(a.CopyToClipboard)
+	logWidget.SetClipboard(a.ClipboardIO())
 
 	a.gdbWidget = widgets.NewGDBWidget(a.gdbClient)
+	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
 
 	a.tab = termui.NewTabTwoHozSplitWins(
