@@ -1,77 +1,39 @@
 package gdb
 
 import (
-	"strconv"
 	"strings"
-	"time"
 )
 
-type MiState int
+// MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
+type MiUpdate struct {
+	DisplayLines []string
+	PromptReady  bool
+	State        GdbState
+	ErrorMsg     string
+	Stopped      *MiStopMsg
+}
 
-const (
-	Done1 MiState = iota
-	Error1
-	Running1
-)
-
+// GdbInputState splits PTY chunks into MI lines and streams display updates.
 type GdbInputState struct {
-	gdbState MiState
-
-	// raw MI lines (burst collection)
-	buffer []string
-
-	// console output (what you show)
-	Console []string
-
-	// line buffer for stream-safe splitting
 	lineBuf string
-
-	Timer *time.Timer
+	state   GdbState
 }
 
 func NewGdbInputState() *GdbInputState {
-
-	m := &GdbInputState{
-		gdbState: Done1,
-		buffer:   []string{},
-		Console:  []string{},
-		Timer:    time.NewTimer(10 * time.Millisecond),
-	}
-
-	// stop timer initially
-	if !m.Timer.Stop() {
-		select {
-		case <-m.Timer.C:
-		default:
-		}
-	}
-
-	return m
+	return &GdbInputState{state: Done}
 }
-func (m *GdbInputState) Buffer() []string {
-	return m.buffer
-}
+
 func (m *GdbInputState) Clear() {
-	m.gdbState = Done1
-	m.buffer = m.buffer[:0]
 	m.lineBuf = ""
-
-	if !m.Timer.Stop() {
-		select {
-		case <-m.Timer.C:
-		default:
-		}
-	}
+	m.state = Done
 }
 
-//
-// ---------- INPUT SIDE ----------
-//
-
-// PushRaw accepts raw PTY chunks and splits complete MI lines.
-func (m *GdbInputState) PushRaw(data string) {
+// PushRaw accepts raw PTY chunks, splits on '\n', and processes each complete
+// MI record immediately (streams, results, async, prompt).
+func (m *GdbInputState) PushRaw(data string) MiUpdate {
+	var out MiUpdate
 	if data == "" {
-		return
+		return out
 	}
 	m.lineBuf += data
 
@@ -82,127 +44,74 @@ func (m *GdbInputState) PushRaw(data string) {
 		}
 		line := m.lineBuf[:i]
 		m.lineBuf = m.lineBuf[i+1:]
-		m.PushLine(line)
+		m.consumeLine(line, &out)
 	}
-}
-func ReplaceEscapedNewline(s string) string {
-	// אם אין בכלל "\n" כטקסט — נחזיר כמו שהוא
-	if !strings.Contains(s, `\n`) {
-		return s
-	}
-
-	// החלפה של "\" + "n" ל־newline אמיתי
-	return strings.ReplaceAll(s, `\n`, "\n")
+	return out
 }
 
-func (m *GdbInputState) PushLine(line string) {
-
+func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
+	line = strings.TrimSpace(line)
 	if line == "" {
 		return
 	}
 
-	// Check if escaped newline exists
-	hasEscapedNewline := strings.Contains(line, `\n`)
-
-	if hasEscapedNewline {
-		// Remove all occurrences of "\n"
-		//	line = strings.ReplaceAll(line, `\n`, "")
-	}
-
-	// collect burst
-	m.buffer = append(m.buffer, line)
-
-	// If there was "\n" → add empty line
-	if hasEscapedNewline {
-		//	m.buffer = append(m.buffer, "")
-	}
-
-	// detect state
 	switch {
+	case strings.HasPrefix(line, "~\""):
+		out.DisplayLines = append(out.DisplayLines, decodeStreamPayload(line)...)
+
+	case strings.HasPrefix(line, "@\""):
+		out.DisplayLines = append(out.DisplayLines, decodeStreamPayload(line)...)
+
+	case strings.HasPrefix(line, "&\""):
+		// Log stream is usually the CLI echo / noise; the UI already echoes
+		// submitted commands. Surface it only when paired with ^error.
+
 	case strings.HasPrefix(line, "^error"):
-		m.gdbState = Error1
+		m.state = Error
+		out.State = Error
+		msg := ExtractMIField(line, "msg")
+		out.ErrorMsg = msg
+		if msg != "" {
+			out.DisplayLines = append(out.DisplayLines, msg)
+		}
+
 	case strings.HasPrefix(line, "^running"):
-		m.gdbState = Running1
-	case strings.HasPrefix(line, "^done"):
-		m.gdbState = Done1
-	}
+		m.state = Running
+		out.State = Running
 
-	// reset timer
-	if !m.Timer.Stop() {
-		select {
-		case <-m.Timer.C:
-		default:
+	case strings.HasPrefix(line, "^done"), strings.HasPrefix(line, "^connected"), strings.HasPrefix(line, "^exit"):
+		m.state = Done
+		out.State = Done
+
+	case strings.HasPrefix(line, "*stopped"):
+		stop := MiStopMsg{
+			Reason:   ExtractMIField(line, "reason"),
+			ThreadId: ExtractMIField(line, "thread-id"),
 		}
+		out.Stopped = &stop
+
+	case line == "(gdb)":
+		out.PromptReady = true
+
+	default:
+		// notify (=...), other async, or partial — ignore for display
 	}
-	m.Timer.Reset(100 * time.Millisecond)
 }
 
-//
-// ---------- PROCESSING ----------
-//
-
-// Call this when timer fires
-func (m *GdbInputState) Flush1111() {
-
-	for _, line := range m.buffer {
-
-		if len(line) == 0 {
-			continue
-		}
-
-		switch line[0] {
-
-		case '~': // console output
-			text := extractQuoted(line)
-			text = unescape(text)
-		//	m.appendConsole(text)
-
-		case '&':
-			// optional: ignore (or handle as log)
-
-		case '^':
-			// result (state only)
-
-		case '=', '*':
-			// async events → ignore for console
-		}
+func decodeStreamPayload(line string) []string {
+	// ~"..." / @"..." / &"..."
+	if len(line) < 3 || line[len(line)-1] != '"' {
+		return nil
 	}
-
-	m.buffer = m.buffer[:0]
-}
-
-//
-// ---------- CONSOLE ----------
-//
-
-func (m *GdbInputState) appendConsole11111(text string) {
-
+	text := DecodeMIString(line[2 : len(line)-1])
+	text = ExpandTabs(text, 8)
+	if text == "" {
+		return nil
+	}
 	parts := strings.Split(text, "\n")
-
-	for i, p := range parts {
-		if i == len(parts)-1 && p == "" {
-			continue
-		}
-		m.Console = append(m.Console, p)
+	// Drop a trailing empty segment from a final '\n'.
+	if n := len(parts); n > 0 && parts[n-1] == "" {
+		parts = parts[:n-1]
 	}
-}
-
-//
-// ---------- HELPERS ----------
-//
-
-func extractQuoted(line string) string {
-	i := strings.IndexByte(line, '"')
-	if i == -1 {
-		return ""
-	}
-	return line[i:]
-}
-
-func unescape(s string) string {
-	out, err := strconv.Unquote(s)
-	if err != nil {
-		return s
-	}
-	return out
+	return parts
 }

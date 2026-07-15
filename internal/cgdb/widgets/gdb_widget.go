@@ -105,13 +105,6 @@ func (m *GDBWidget) StartGdbUIBridge(
 		}
 		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 	}()
-
-	go func() {
-		for {
-			<-m.gdbInputState.Timer.C
-			_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
-		}
-	}()
 }
 
 func (m *GDBWidget) Clear() {
@@ -174,14 +167,28 @@ func (m *GDBWidget) clearInputLine() {
 	m.histIndex = len(m.history)
 }
 
-func (m *GDBWidget) handleAsyncRecord(line string) {
-	reason := gdb.ExtractMIField(line, "reason")
-	if strings.HasPrefix(line, "*stopped") {
-		switch reason {
-		case "breakpoint-hit":
-		case "end-stepping-range":
-		case "exited-normally":
-		}
+func (m *GDBWidget) handleStop(stop *gdb.MiStopMsg) {
+	if stop == nil {
+		return
+	}
+	switch stop.Reason {
+	case "breakpoint-hit":
+	case "end-stepping-range":
+	case "exited-normally":
+	}
+}
+
+func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
+	if len(upd.DisplayLines) > 0 {
+		m.appendOutputLines(upd.DisplayLines)
+		// Prompt lives on the dedicated input row — don't leave a bare
+		// "(gdb) " line in the scrollback above it.
+		m.stripTrailingBareGdbPrompt()
+		m.out.SetFollowTail(true)
+		m.out.ScrollToBottom()
+	}
+	if upd.Stopped != nil {
+		m.handleStop(upd.Stopped)
 	}
 }
 
@@ -191,19 +198,7 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 		switch data := e.Data().(type) {
 		case core.GdbOutputMsg:
 			if data.Data != "" {
-				m.gdbInputState.PushRaw(data.Data)
-			}
-		case string:
-			if data == "gdb-timeout" {
-				buf := m.gdbInputState.Buffer()
-				m.gdbInputState.Clear()
-				miCmd := gdb.NewMiMsg(buf)
-				m.appendOutputLines(miCmd.CreateBufferForLine())
-				// Prompt lives on the dedicated input row — don't leave a bare
-				// "(gdb) " line in the scrollback above it.
-				m.stripTrailingBareGdbPrompt()
-				m.out.SetFollowTail(true)
-				m.out.ScrollToBottom()
+				m.applyMiUpdate(m.gdbInputState.PushRaw(data.Data))
 			}
 		}
 
