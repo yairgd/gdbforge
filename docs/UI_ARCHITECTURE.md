@@ -78,8 +78,9 @@ classDiagram
     }
 
     class GDBWidget {
-        +Buffer *core.Buffer
+        +Viewport *termui.Viewport
         +Debugger core.Debugger
+        +InputBuf string
     }
 
     class CmdWidget {
@@ -528,8 +529,8 @@ sequenceDiagram
 | Widget | File | Status |
 |--------|------|--------|
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
-| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Functional prototype — MI input, buffer draw |
-| `LoggerWidget` | `internal/cgdb/widgets/logger_widget.go` | Prototype — title stub |
+| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | GDB console — streaming MI, walking prompt, Viewport selection |
+| `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
 | `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
 | `TabWidget` | `internal/termui/tab.go` | Single-tab container forwarding to `Layout` |
 

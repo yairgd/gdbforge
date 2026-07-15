@@ -361,7 +361,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
 | `internal/termui/event.go` | `CompletionMsg` and other UI events |
 | `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
-| `internal/cgdb/widgets/logger_widget.go` | Completions subscriber + log sink |
+| `internal/termui/logger_widget.go` | Completions subscriber + log sink |
 | `cmd/cgdb/command_tree.go` | `ExapData` DSL |
 | `cmd/cgdb/keybindings.go` | `InitKeyBindings` |
 | `cmd/cgdb/actions.go` | Command action methods |

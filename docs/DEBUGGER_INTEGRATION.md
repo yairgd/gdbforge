@@ -41,7 +41,7 @@ flowchart TB
 
     subgraph Backend["Service · gdb"]
         Client["GDBClient"]
-        MI["MiMsg / GdbInputState"]
+        MI["GdbInputState · MiUpdate"]
         PTY["PTY I/O"]
     end
 
@@ -149,31 +149,40 @@ GDB MI2 emits several record types:
 | `=` | Notify async | `=breakpoint-created,...` |
 | `(gdb)` | Prompt | Ready for input |
 
-### GdbInputState
+### GdbInputState (streaming)
 
-Batches incoming lines with a **100ms debounce timer**:
+`PushRaw` is called on the **UI thread** for each `GdbOutputMsg` chunk:
 
-1. `PushLine(line)` appends to burst buffer, resets timer.
-2. On timer fire → widget processes batch via `NewMiMsg(buf)`.
+1. Append bytes to `lineBuf`; split on `\n`.
+2. For each complete line, classify the MI record and accumulate an `MiUpdate`.
+3. Return immediately — no timer, no wait for a “full burst”.
 
-**Design rationale:** GDB sends bursts of related lines (console + result + prompt). Debouncing produces atomic UI updates.
+| Record | Effect on `MiUpdate` |
+|--------|----------------------|
+| `~` / `@` | Decode stream payload → `DisplayLines` |
+| `&` | Ignored for display (CLI echo; UI already echoes submits) |
+| `^error` | Set `Error` state; surface `msg=` |
+| `^done` / `^running` / … | Update `GdbState` |
+| `*stopped` | Fill `Stopped` (`reason`, `thread-id`) |
+| `(gdb)` | `PromptReady` |
 
-### MiMsg
+Incomplete lines remain in `lineBuf` across chunks.
 
-`NewMiMsg` processes a line batch:
+**Design rationale:** GDB often splits writes mid-line; newline buffering is required. Per-line dispatch is enough for correctness and feels faster than a 100ms debounce.
+
+### MiMsg (batch helper)
+
+`MiMsg` / `NewMiMsg` / `CreateBufferForLine` remain as a batch-oriented helper for offline or test parsing. The live GDB pane uses streaming `MiUpdate` from `GdbInputState`.
 
 ```go
-type MiMsg struct {
-    CmdLine      []string   // ~ console stream
-    GdbLog       []string   // & log stream
-    GdbError     []string   // ^error messages
-    TargetStdOut []string   // @ target stream
-    MiStopMsg    MiStopMsg  // *stopped details
-    gdbState     GdbState   // Done / Error / Running
+type MiUpdate struct {
+    DisplayLines []string
+    PromptReady  bool
+    State        GdbState
+    ErrorMsg     string
+    Stopped      *MiStopMsg
 }
 ```
-
-`CreateBufferForLine()` converts parsed state into display lines for `core.Buffer`.
 
 ### MI string decoding
 
@@ -192,37 +201,44 @@ sequenceDiagram
     participant User
     participant Widget as GDBWidget
     participant State as GdbInputState
-    participant MI as MiMsg
-    participant Buf as core.Buffer
+    participant Buf as platform.Buffer
     participant Client as GDBClient
     participant GDB as GDB
 
     User->>Widget: KeyEnter / typed command
     Widget->>Client: Send(input)
     Client->>GDB: PTY write
-    GDB-->>Client: MI output
+    GDB-->>Client: MI output chunk
     Client-->>Widget: EventInterrupt GdbOutputMsg
-    Widget->>State: PushLine
-    Note over State: timer 100ms
-    State-->>Widget: timeout
-    Widget->>MI: NewMiMsg(buffer)
-    MI-->>Buf: CreateBufferForLine
-    Widget->>Widget: Draw
+    Widget->>State: PushRaw(chunk)
+    State-->>Widget: MiUpdate (complete lines)
+    Widget->>Buf: append DisplayLines
+    Widget->>Widget: Draw on next frame
 ```
 
 Key components:
 
 | Component | Role |
 |-----------|------|
-| `core.Buffer` | Scrollable output lines |
-| `core.Viewport` | Visible window + follow-bottom |
-| `InputBuf` / `Cursor` | User command editing |
-| `handleAsyncRecord` | React to `*stopped` (stub) |
+| `platform.Buffer` + `termui.Viewport` | Scrollable output (selection/clipboard shared) |
+| `InputBuf` / `Cursor` | User command editing on a dedicated prompt row |
+| `applyMiUpdate` / `handleStop` | Paint streams; react to `*stopped` (stub) |
+
+### Console layout (walking prompt)
+
+Terminal-style after `Ctrl+L` (clear / screen reset):
+
+1. Empty scrollback → `(gdb)` + caret at **top-left**.
+2. Each new output line → prompt moves **one row down**.
+3. While free rows remain → leave blank space below; do **not** jump the prompt to the bottom.
+4. When the pane is full → pin prompt to the last row and scroll the viewport (`followTail`).
+
+While the user scrolls history (`followTail` off), the prompt stays on the bottom row.
 
 Draw highlights:
 
 - Lines starting with `>>>` — teal bold (future: stop reason).
-- Lines starting with `(gdb)` — yellow prompt.
+- Echoed / prompt text with `(gdb)` — yellow.
 
 ---
 

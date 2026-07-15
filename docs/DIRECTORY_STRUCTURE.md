@@ -100,7 +100,9 @@ task build
 | `utf.go` | UTF-8 / ANSI text drawing |
 | `tab.go` | Tab container (single-tab stub) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
-| `base_widget.go` | Shared widget helpers: event channels, `PaneName`, default `DrawStatusLine` |
+| `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
+| `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional `padTop` |
+| `logger_widget.go` | Reusable log pane (`platform.Sink`, `:clear`, scroll bindings) |
 | `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
 | `named_widget.go` | Optional `WindowName()` hook for dynamic pane titles |
 
@@ -125,8 +127,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 |------|----------------|
 | `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
-| `widgets/gdb_widget.go` | GDB console pane |
-| `widgets/logger_widget.go` | Log pane; `Sink` + `CompletionMsg` subscriber |
+| `widgets/gdb_widget.go` | GDB console (streaming MI, walking `(gdb)` prompt) |
 
 `cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 
@@ -167,8 +168,8 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 |------|----------------|
 | `gdb_client.go` | Spawn GDB, PTY I/O, reader goroutine |
 | `mi.go` | MI string decode, field extraction, tab expansion |
-| `mi_msg.go` | Batch line parser → structured `MiMsg` |
-| `mi_state.go` | Burst buffering with debounce timer |
+| `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
+| `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 
 **Rule:** no imports from `termui`. Output reaches UI via `core.GdbOutputMsg` channel + `EventInterrupt`.
 

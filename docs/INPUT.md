@@ -74,7 +74,7 @@ sequenceDiagram
 |-------------|----------|
 | `EventKey` | Primary keyboard input |
 | `EventResize` | Terminal size change → reallocate canvas |
-| `EventInterrupt` | Async injection (GDB output, timers) |
+| `EventInterrupt` | Async injection (GDB output, redraw wakes) |
 | `EventMouse` | Mouse click/scroll (enabled via `EnableMouse`) |
 
 ### Dispatch (current)
@@ -112,17 +112,21 @@ flowchart TB
 
 ### Widget-level handling
 
-Example: `GDBWidget` (`gdb_widget.go`):
+Example: `GDBWidget` (`internal/cgdb/widgets/gdb_widget.go`), when the GDB pane is focused (insert):
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Send input buffer to GDB |
-| `Backspace` | Edit input |
-| `Left` / `Right` | Move cursor |
-| `Up` / `Down` | Send escape sequences to GDB (history) |
-| `Ctrl+C` | Send SIGINT (`\x03`) |
-| `Ctrl+D` | Send `q\n` to GDB |
+| `Enter` | Echo command to scrollback, send to GDB, clear input line |
+| `Backspace` / `Delete` | Edit input |
+| `Left` / `Right`, `Home` / `End` | Move cursor (`Ctrl-B/F/A/E` aliases) |
+| `Up` / `Down` | Local readline-style history (`Ctrl-P/N`) |
+| `Ctrl+C` | Copy selection if any; otherwise SIGINT (`\x03`) |
+| `Ctrl+D` | Send `q` to GDB |
+| `Ctrl+L` | Clear scrollback (screen reset — prompt returns to top-left) |
+| `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
+
+The `(gdb)` prompt is drawn as a separate input row: it walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full.
 
 Example: `CmdWidget` (`cmd_widget.go`):
 
@@ -305,17 +309,23 @@ The `:buffer <name>` command displays an application model, not a file. Each `<n
 
 ## Async input from debugger
 
-GDB output is **not keyboard input** but arrives through the same event loop:
+GDB output is **not keyboard input** but arrives through the same event loop so it stays ordered with keys and draw:
 
 ```go
 screen.PostEvent(tcell.NewEventInterrupt(msg))  // core.GdbOutputMsg
-screen.PostEvent(tcell.NewEventInterrupt("gdb-timeout"))
 screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 ```
 
-`GDBWidget` uses a **burst timer** (`GdbInputState.Timer`, 100ms) to batch MI lines before parsing into `MiMsg`. This prevents partial-line flicker when GDB sends rapid output.
+Bridge path:
 
-**Design rationale:** MI output arrives in arbitrary chunk boundaries. Line buffering + debounce produces stable UI updates without implementing a full async state machine in the draw path.
+1. PTY reader goroutine → `chan core.GdbOutputMsg`
+2. Bridge goroutine only calls `PostEvent` (never touches widgets)
+3. UI thread `HandleInterrupt` / `GDBWidget.HandleEvent` → `GdbInputState.PushRaw`
+4. Each complete MI line is processed immediately → `MiUpdate` → append display lines
+
+Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+
+**Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 
 ---
 

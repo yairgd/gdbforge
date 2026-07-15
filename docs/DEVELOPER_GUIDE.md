@@ -311,19 +311,18 @@ Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](R
 flowchart LR
     PTY["PTY reader goroutine"]
     Ch["chan GdbOutputMsg"]
-    Post["screen.PostEvent"]
+    Bridge["bridge · PostEvent only"]
     Widget["GDBWidget.HandleEvent"]
-    State["GdbInputState"]
-    MI["MiMsg"]
-    Buf["core.Buffer"]
+    State["GdbInputState.PushRaw"]
+    Upd["MiUpdate"]
+    Buf["platform.Buffer / Viewport"]
 
-    PTY --> Ch --> Post --> Widget --> State
-    State -->|"timer"| MI --> Buf
+    PTY --> Ch --> Bridge --> Widget --> State --> Upd --> Buf
 ```
 
-**Do not** read from the GDB channel in `Draw`. **Do not** call widget methods from the reader goroutine.
+**Do not** read from the GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
 
-Timer debounce: 100ms (`mi_state.go`). Adjust carefully — too short causes flicker; too long feels laggy.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. No debounce timer.
 
 ---
 
@@ -331,9 +330,9 @@ Timer debounce: 100ms (`mi_state.go`). Adjust carefully — too short causes fli
 
 | Thread | May do |
 |--------|--------|
-| **Main / tcell loop** | HandleEvent, Draw, SetContent, Grid |
-| **GDB reader goroutine** | Read PTY, send to channel, `PostEvent` only |
-| **Timer goroutine** | `PostEvent("gdb-timeout")` only |
+| **Main / tcell loop** | HandleEvent, Draw, SetContent, Grid, `PushRaw` / buffer updates |
+| **GDB reader goroutine** | Read PTY, send to `outputChan` |
+| **Bridge goroutine** | `range` channel → `PostEvent` only |
 
 **Never:** call `Draw` or `screen.SetContent` from a background goroutine.
 
@@ -406,7 +405,7 @@ Always update docs when changing architecture-visible behavior.
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + EventBus |
-| Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`, `logger_widget.go` |
+| Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |

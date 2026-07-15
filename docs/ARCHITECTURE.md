@@ -470,14 +470,13 @@ sequenceDiagram
     participant PTY as PTY reader goroutine
     participant Screen as tcell.Screen
     participant Widget as GDBWidget
-    participant Buf as core.Buffer
+    participant Buf as platform.Buffer
 
     GDB-->>PTY: MI output chunk
     PTY->>Screen: PostEvent(EventInterrupt GdbOutputMsg)
     Screen->>Widget: HandleEvent
-    Widget->>Widget: GdbInputState.PushLine
-    Note over Widget: Timer fires → MiMsg batch
-    Widget->>Buf: AppendBuffer
+    Widget->>Widget: GdbInputState.PushRaw → MiUpdate
+    Widget->>Buf: Append display lines
     Widget->>Widget: Draw on next frame
 ```
 

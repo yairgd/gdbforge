@@ -1,5 +1,5 @@
 sequenceDiagram
-    participant UI as GDBWidget / CmdWidget
+    participant UI as GDBWidget
     participant Core as core.Debugger
     participant Client as gdb.GDBClient
     participant PTY as GDB PTY
@@ -10,6 +10,6 @@ sequenceDiagram
     Client->>GDB: MI command
     GDB-->>PTY: ~console / ^done / *stopped
     PTY-->>Client: Read chunk
-    Client-->>UI: GdbOutputMsg via channel
-    UI->>UI: GdbInputState burst + MiMsg parse
-    UI->>UI: Buffer.AppendBuffer → redraw
+    Client-->>UI: GdbOutputMsg via PostEvent
+    UI->>UI: GdbInputState.PushRaw → MiUpdate
+    UI->>UI: Viewport buffer append → redraw
