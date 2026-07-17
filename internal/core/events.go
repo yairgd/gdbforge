@@ -13,6 +13,14 @@ type GdbOutputMsg struct {
 
 func (GdbOutputMsg) Type() string { return "GdbOutputMsg" }
 
+// ExecOutputMsg carries raw PTY chunks from an ExecClient session.
+type ExecOutputMsg struct {
+	Data string
+	Err  error
+}
+
+func (ExecOutputMsg) Type() string { return "ExecOutputMsg" }
+
 type ConsoleOutput struct{ Text string }
 type TargetOutput struct{ Text string }
 type LogOutput struct{ Text string }

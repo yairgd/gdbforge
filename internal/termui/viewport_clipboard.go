@@ -73,7 +73,7 @@ func (v *Viewport) selectedText() string {
 
 // CopySelection copies the current mark to the clipboard and keeps the highlight.
 func (v *Viewport) CopySelection() {
-	v.clipboard.copyText(v.selectedText())
+	v.clipboard.copyText(StripANSI(v.selectedText()))
 }
 
 // CutSelection copies then deletes when the viewport is editable.
@@ -82,7 +82,7 @@ func (v *Viewport) CutSelection() {
 	if text == "" {
 		return
 	}
-	v.clipboard.copyText(text)
+	v.clipboard.copyText(StripANSI(text))
 	if v.readOnly {
 		return
 	}

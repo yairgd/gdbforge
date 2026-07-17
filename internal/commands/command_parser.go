@@ -1,7 +1,9 @@
 package commands
 
-import "strings"
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var (
 	ErrUnknownCommand       = errors.New("unknown command")
@@ -13,6 +15,7 @@ type CommandParser struct {
 
 	current *CommandNode
 	token   string
+	args    []string
 
 	path []*CommandNode
 }
@@ -28,6 +31,7 @@ func NewCommandParser(reg *CommandRegistry) *CommandParser {
 func (p *CommandParser) Reset() {
 	p.current = p.registry.Root
 	p.token = ""
+	p.args = p.args[:0]
 	p.path = p.path[:0]
 }
 
@@ -56,7 +60,14 @@ func (p *CommandParser) Path() []*CommandNode {
 	return p.path
 }
 
+func (p *CommandParser) Args() []string {
+	return p.args
+}
+
 func (p *CommandParser) Suggestions() []*CommandNode {
+	if p.current != nil && p.current.RestArgs {
+		return nil
+	}
 	list, _ := p.current.Complete(p.token)
 	return list
 }
@@ -75,6 +86,9 @@ func (p *CommandParser) Accept() error {
 }
 
 func (p *CommandParser) HasChildren() bool {
+	if p.current != nil && p.current.RestArgs {
+		return false
+	}
 	list, _ := p.current.Children.Complete("")
 	return len(list) > 0
 }
@@ -88,6 +102,15 @@ func (p *CommandParser) Execute(args ...any) error {
 		return ErrCommandNotExecutable
 	}
 
+	if len(args) == 0 && len(p.args) > 0 {
+		anyArgs := make([]any, len(p.args))
+		for i, a := range p.args {
+			anyArgs[i] = a
+		}
+		p.current.Action(anyArgs...)
+		return nil
+	}
+
 	p.current.Action(args...)
 	return nil
 }
@@ -95,11 +118,32 @@ func (p *CommandParser) Execute(args ...any) error {
 func (p *CommandParser) Parse(line string) error {
 	p.Reset()
 
-	for _, token := range strings.Fields(line) {
+	line = strings.TrimSpace(line)
+	// Vim-style :!cmd — bang may be glued to the command (:!ls) or spaced (:! ls).
+	if strings.HasPrefix(line, "!") {
+		p.token = "!"
+		if err := p.Accept(); err != nil {
+			return err
+		}
+		if p.current.RestArgs {
+			rest := strings.TrimSpace(line[1:])
+			if rest != "" {
+				p.args = strings.Fields(rest)
+			}
+			return nil
+		}
+	}
+
+	tokens := strings.Fields(line)
+	for i, token := range tokens {
 		p.token = token
 
 		if err := p.Accept(); err != nil {
 			return err
+		}
+		if p.current.RestArgs {
+			p.args = append([]string(nil), tokens[i+1:]...)
+			return nil
 		}
 	}
 
@@ -118,11 +162,32 @@ func (p *CommandParser) Sync(line string, cursor int) {
 		cursor = len(runes)
 	}
 
+	if len(runes) > 0 && runes[0] == '!' {
+		p.token = "!"
+		if err := p.Accept(); err == nil && p.current != nil && p.current.RestArgs {
+			if cursor > 1 {
+				p.token = string(runes[1:cursor])
+			} else {
+				p.token = ""
+			}
+			return
+		}
+		p.Reset()
+	}
+
 	tokenStart := 0
 	for i := 0; i < cursor; i++ {
 		if runes[i] == ' ' || runes[i] == '\t' {
+			if p.current != nil && p.current.RestArgs {
+				p.token = string(runes[tokenStart:cursor])
+				return
+			}
 			p.token = string(runes[tokenStart:i])
 			_ = p.Accept()
+			if p.current != nil && p.current.RestArgs {
+				p.token = string(runes[i+1 : cursor])
+				return
+			}
 			tokenStart = i + 1
 		}
 	}

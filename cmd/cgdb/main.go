@@ -27,5 +27,10 @@ func main() {
 	defer client.Close()
 
 	app := NewDebuggerApp(cfg, client, outputChan)
+	defer func() {
+		if app.execClient != nil {
+			app.execClient.Close()
+		}
+	}()
 	app.Run()
 }

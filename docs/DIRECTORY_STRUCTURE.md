@@ -97,12 +97,12 @@ task build
 | `grid.go` | Off-screen cell framebuffer |
 | `cell.go` | Border edge composition |
 | `rect.go` | Rectangle primitive |
-| `utf.go` | UTF-8 / ANSI text drawing |
+| `utf.go` | UTF-8 / ANSI text drawing (`DrawANSIText`, `StripANSI`, width helpers) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
-| `input_line.go` | Reusable readline editor (text, cursor, history) |
-| `console_pane.go` | Natural REPL transcript: scrollback + walking prompt + InputLine |
-| `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional `padTop` |
+| `input_line.go` | Reusable readline editor (text, cursor, history, paste insert) |
+| `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine |
+| `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional ANSI + `OmitTail` |
 | `logger_widget.go` | Reusable log pane (`platform.Sink`, `:clear`, scroll bindings) |
 | `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
 | `named_widget.go` | Optional `WindowName()` hook for dynamic pane titles |
@@ -115,7 +115,7 @@ task build
 |------|----------------|
 | `command_node.go` | `CommandNode`, `CommandRegistry` — tree storage |
 | `command_parser.go` | `CommandParser` — navigate tree, complete, execute |
-| `dsl.go` | `Cmd`, `Group` — declarative tree builder |
+| `dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` — declarative tree builder |
 | `key_binding_gegistry.go` | `KeyBindingRegistry` — key chord → command |
 
 See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, `CommandRegistry` = owns, `CommandParser` = navigates).
@@ -130,6 +130,17 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `widgets/code_widget.go` | Source view pane |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:edit about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
+| `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
+
+## internal/execcli
+
+**External process PTY client** (Vim-style `:!` sessions).
+
+| File | Responsibility |
+|------|----------------|
+| `exec_client.go` | `ExecClient` — `pty.Start`, read loop, `Send` / `SendRaw` / `SetSize` / `Close` |
+
+See [EXEC_SHELL.md](EXEC_SHELL.md).
 
 `cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 
@@ -190,6 +201,8 @@ Application orchestration for cgdb-go lives in **`cmd/cgdb`** (`DebuggerApp` emb
 | `WINDOW_MANAGEMENT.md` | Splits, tabs, CmdLine |
 | `RENDERING.md` | Grid, cells, diff rendering |
 | `INPUT.md` | Keyboard, modes, commands |
+| `COMMAND_SYSTEM.md` | Command tree, DSL, rest-args |
+| `EXEC_SHELL.md` | `:!` exec panes, jump list |
 | `DEBUGGER_INTEGRATION.md` | GDB and future backends |
 | `PLUGINS.md` | Lua extensibility plans |
 | `DIRECTORY_STRUCTURE.md` | This file |

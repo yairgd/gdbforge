@@ -34,4 +34,9 @@ func (a *DebuggerApp) InitKeyBindings() {
 		}),
 		"<C-w>j", "<C-w><Down>",
 	)
+
+	a.keyBindings.Bind(
+		commands.NewCommand("jump-back", a.JumpBack),
+		"<C-o>",
+	)
 }

@@ -12,14 +12,19 @@ import (
 type ConsolePane struct {
 	BaseWidget
 
-	out   *Viewport
-	buf   *platform.Buffer
-	input *InputLine
+	out       *Viewport
+	buf       *platform.Buffer
+	input     *InputLine
+	clipboard ClipboardIO
 
 	Prompt      string
 	PromptStyle tcell.Style
 	TextStyle   tcell.Style
 	LineStyle   func(line string) tcell.Style
+
+	// livePrompt means the last buffer line is the active prompt; input is
+	// drawn on the same row immediately after that line (GDB/bash/ssh).
+	livePrompt bool
 
 	OnSubmit    func(cmd string)
 	OnInterrupt func()
@@ -57,7 +62,38 @@ func (p *ConsolePane) Viewport() *Viewport { return p.out }
 func (p *ConsolePane) Buffer() *platform.Buffer { return p.buf }
 
 func (p *ConsolePane) SetClipboard(io ClipboardIO) {
+	p.clipboard = io
 	p.out.SetClipboard(io)
+}
+
+// SetANSI enables ANSI/SGR color rendering in the scrollback viewport.
+func (p *ConsolePane) SetANSI(on bool) {
+	p.out.ANSI = on
+}
+
+// SetLivePrompt marks whether the last buffer line hosts the input caret
+// (drawn on the same row, after the line's visible end).
+func (p *ConsolePane) SetLivePrompt(on bool) {
+	p.livePrompt = on
+}
+
+// LivePrompt reports whether input is attached to the last buffer line.
+func (p *ConsolePane) LivePrompt() bool {
+	return p.livePrompt
+}
+
+// EnsureLivePrompt makes the last buffer line equal to Prompt and marks it live
+// so the input line continues on that same row.
+func (p *ConsolePane) EnsureLivePrompt() {
+	if p.buf == nil {
+		return
+	}
+	if n := p.buf.NumLines(); n > 0 && p.buf.Line(n-1) == p.Prompt {
+		p.livePrompt = true
+		return
+	}
+	p.buf.AppendLine(p.Prompt)
+	p.livePrompt = true
 }
 
 func (p *ConsolePane) SetFocused(focused bool) {
@@ -102,6 +138,7 @@ func (p *ConsolePane) Clear() {
 	if p.buf != nil {
 		p.buf.Clear()
 	}
+	p.livePrompt = false
 	p.out.Home()
 	p.out.SetFollowTail(true)
 	p.input.Clear()
@@ -111,14 +148,22 @@ func (p *ConsolePane) Clear() {
 func (p *ConsolePane) EchoSubmit(cmd string) {
 	n := p.buf.NumLines()
 	promptTrim := strings.TrimSpace(p.Prompt)
+	if p.livePrompt && n > 0 {
+		p.buf.SetLine(n-1, p.buf.Line(n-1)+cmd)
+		p.livePrompt = false
+		return
+	}
 	if n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == promptTrim {
 		p.buf.SetLine(n-1, p.Prompt+cmd)
+		p.livePrompt = false
 		return
 	}
 	p.buf.AppendLine(p.Prompt + cmd)
+	p.livePrompt = false
 }
 
 func (p *ConsolePane) AppendLines(lines []string) {
+	p.dropLivePromptHost()
 	for _, line := range lines {
 		p.AppendText(line)
 	}
@@ -132,6 +177,21 @@ func (p *ConsolePane) AppendText(text string) {
 	p.buf.AppendLine(text)
 }
 
+// dropLivePromptHost removes the last line when it is only the live input host,
+// so new scrollback is not inserted after a stale prompt.
+func (p *ConsolePane) dropLivePromptHost() {
+	if !p.livePrompt || p.buf == nil {
+		return
+	}
+	n := p.buf.NumLines()
+	if n == 0 {
+		p.livePrompt = false
+		return
+	}
+	p.buf.RemoveLine(n - 1)
+	p.livePrompt = false
+}
+
 // StripTrailingBarePrompt removes a trailing empty or bare prompt line from scrollback.
 func (p *ConsolePane) StripTrailingBarePrompt() {
 	promptTrim := strings.TrimSpace(p.Prompt)
@@ -141,6 +201,7 @@ func (p *ConsolePane) StripTrailingBarePrompt() {
 			return
 		}
 		p.buf.RemoveLine(p.buf.NumLines() - 1)
+		p.livePrompt = false
 		if last == promptTrim {
 			return
 		}
@@ -158,6 +219,10 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 		p.out.HandleEvent(e)
 
 	case *tcell.EventKey:
+		if isPasteKey(e) {
+			p.pasteIntoInput()
+			return
+		}
 		if p.HandleBoundKey(e) {
 			return
 		}
@@ -172,7 +237,42 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 		if e.Key() == tcell.KeyRune {
 			p.input.InsertRune(e.Rune())
 		}
+
+	case *tcell.EventClipboard:
+		if data := e.Data(); len(data) > 0 {
+			p.pasteText(string(data))
+		}
+
+	case *tcell.EventPaste:
+		// Bracketed-paste start/end markers only; payload is EventClipboard or keys.
 	}
+}
+
+// pasteIntoInput inserts the system clipboard into the input line (not scrollback).
+func (p *ConsolePane) pasteIntoInput() {
+	p.pasteText(p.clipboard.pasteText())
+}
+
+func (p *ConsolePane) pasteText(text string) {
+	if text == "" {
+		return
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		text = text[:i]
+	}
+	p.input.InsertText(text)
+}
+
+func isPasteKey(e *tcell.EventKey) bool {
+	if e.Key() == tcell.KeyCtrlV {
+		return true
+	}
+	if e.Modifiers()&tcell.ModCtrl == 0 || e.Key() != tcell.KeyRune {
+		return false
+	}
+	return e.Rune() == 'v' || e.Rune() == 'V'
 }
 
 func isConsoleClipboardKey(e *tcell.EventKey) bool {
@@ -203,15 +303,48 @@ func (p *ConsolePane) Draw(c Canvas) {
 		n = p.buf.NumLines()
 	}
 
+	attach := p.livePrompt && p.out.FollowTail() && n > 0
 	inputY := n
+	if attach {
+		inputY = n - 1
+	}
 	if !p.out.FollowTail() || inputY > h-1 {
 		inputY = h - 1
+		attach = false
 	}
 	if contentH := inputY; contentH > 0 {
 		content := c.WithRect(c.ChildRect(0, 0, c.W(), contentH))
+		if attach {
+			p.out.OmitTail = 1
+		}
 		p.out.Draw(content)
+		p.out.OmitTail = 0
 	}
 
-	cursorX, under := p.input.Draw(c, 0, inputY, p.Prompt, p.PromptStyle, p.TextStyle)
+	promptCols := 0
+	prompt := p.Prompt
+	if attach {
+		host := p.buf.Line(n - 1)
+		hostStyle := tcell.StyleDefault
+		if p.LineStyle != nil {
+			hostStyle = p.LineStyle(host)
+		}
+		if p.out.ANSI {
+			promptCols = c.DrawANSIText(0, inputY, 0, host, hostStyle, nil)
+		} else {
+			col := 0
+			for _, ch := range host {
+				if col >= c.W() {
+					break
+				}
+				c.SetContent(col, inputY, ch, hostStyle)
+				col++
+			}
+			promptCols = col
+		}
+		prompt = ""
+	}
+
+	cursorX, under := p.input.Draw(c, promptCols, inputY, prompt, p.PromptStyle, p.TextStyle)
 	p.PaintCursor(c, cursorX, inputY, under)
 }

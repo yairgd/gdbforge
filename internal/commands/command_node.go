@@ -32,10 +32,12 @@ func (r *CommandRegistry) SearchPartial(key platform.Key) (*CommandNode, bool) {
 }
 
 type CommandNode struct {
-	//	Parent   *CommandNode
+	Parent   *CommandNode
 	Children *collections.Trie[*CommandNode]
 	Name     string
 	Action   func(args ...any)
+	// RestArgs means tokens after this node are passed to Action, not walked as children.
+	RestArgs bool
 }
 
 func NewCommandNode(name string) *CommandNode {
@@ -62,6 +64,7 @@ func (n *CommandNode) Insert(child *CommandNode) {
 	if n.Children == nil {
 		n.Children = collections.NewTrie[*CommandNode]()
 	}
+	child.Parent = n
 	n.Children.Insert(child, child.Name)
 }
 

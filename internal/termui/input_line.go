@@ -52,6 +52,15 @@ func (l *InputLine) InsertRune(r rune) {
 	l.cursor += len(s)
 }
 
+// InsertText inserts s at the caret (used for clipboard paste).
+func (l *InputLine) InsertText(s string) {
+	if s == "" {
+		return
+	}
+	l.text = l.text[:l.cursor] + s + l.text[l.cursor:]
+	l.cursor += len(s)
+}
+
 func (l *InputLine) MoveLeft() {
 	if l.cursor > 0 {
 		l.cursor--

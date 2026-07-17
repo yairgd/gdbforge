@@ -2,7 +2,7 @@
 
 cgdb-go routes user actions through a **hierarchical command tree**. Colon commands (`:window left`), tab completion, and key chords (`Ctrl+W h`) all resolve against the same `CommandNode` types, but through different entry points.
 
-**Companion docs:** [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
+**Companion docs:** [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) · [EXEC_SHELL.md](EXEC_SHELL.md)
 
 ---
 
@@ -13,6 +13,7 @@ cgdb-go routes user actions through a **hierarchical command tree**. Colon comma
 - [CommandRegistry — owns the tree](#commandregistry--owns-the-tree)
 - [CommandParser — navigates the tree](#commandparser--navigates-the-tree)
 - [DSL — building the tree](#dsl--building-the-tree)
+- [Rest-args leaves](#rest-args-leaves)
 - [CmdWidget integration](#cmdwidget-integration)
 - [Tab completion presenter](#tab-completion-presenter)
 - [Key bindings](#key-bindings)
@@ -59,7 +60,7 @@ flowchart TB
 
 | Type | Role | Owns / holds |
 |------|------|----------------|
-| **`CommandNode`** | One node in the hierarchy | `Name`, `Children` trie, optional `Action` |
+| **`CommandNode`** | One node in the hierarchy | `Name`, `Children` trie, optional `Action`, optional `RestArgs` |
 | **`CommandRegistry`** | Application command catalog | `Root` node (the tree) + `Keys` trie for key chords |
 | **`CommandParser`** | Runtime cursor over the tree | `current`, `token`, `path` — **does not own the tree** |
 
@@ -200,8 +201,10 @@ The DSL in `internal/commands/dsl.go` builds the tree declaratively instead of i
 | Function | Creates |
 |----------|---------|
 | `Cmd(name, action)` | Leaf node with `Action` (not yet in tree) |
+| `CmdRest(name, action)` | Leaf with `RestArgs` — remainder of line → action args |
 | `Group(name, children...)` | Container node with children attached |
 | `(n *CommandNode).Group(name, children...)` | Inserts a group into `n`, returns `n` for chaining |
+| `(n *CommandNode).Leaf` / `LeafRest` | Insert leaf (or rest-args leaf) into `n`, return `n` |
 
 ### Example (`DebuggerApp.ExapData` in `cmd/cgdb/command_tree.go`)
 
@@ -242,6 +245,28 @@ The DSL reads as a nested outline: groups and commands mirror the logical hierar
 2. **`Group`** — container; may nest other `Group` calls for deeper paths (e.g. `window` → `split` → `horizontal`).
 3. **Chaining** — `.Group()` on `Root` returns `Root`, so sibling groups chain at the same level.
 4. **No tree mutation at runtime** — the DSL runs once during `InitB`; the parser only reads the result.
+
+---
+
+## Rest-args leaves
+
+Some commands need a free-form tail (shell argv, file paths). Those use **`RestArgs`**:
+
+| DSL | Effect |
+|-----|--------|
+| `Cmd(name, action)` / `Leaf` | Fixed leaf; further tokens must be children |
+| `CmdRest(name, action)` / `LeafRest` | Sets `CommandNode.RestArgs = true` |
+
+After `Accept()` lands on a rest-args node, `Parse` **stops walking** and stores remaining tokens in `parser.args`. `Execute()` passes them to `Action`.
+
+```text
+:!ssh root@host
+  │ └──────────┘
+  │    args (not Accept()'d)
+  └─ current stays on "!" → OnRun
+```
+
+Vim-style bang is registered as `LeafRest("!", a.OnRun)` and has an extra Parse/Sync path so `:!ls` (no space) works. Full product docs: [EXEC_SHELL.md](EXEC_SHELL.md).
 
 ---
 
@@ -328,11 +353,14 @@ func (a *DebuggerApp) InitKeyBindings() {
         commands.NewCommand("move-left", func(args ...any) { a.OnFocusLeft() }),
         "<C-w>l", "<C-w><Left>",
     )
-    // ...
+    a.keyBindings.Bind(
+        commands.NewCommand("jump-back", a.JumpBack),
+        "<C-o>",
+    )
 }
 ```
 
-A key binding can invoke the same handler as a colon command (`OnFocusLeft`) without sharing the parser — both are wired at init time in the application.
+A key binding can invoke the same handler as a colon command (`OnFocusLeft`) without sharing the parser — both are wired at init time in the application. `<C-o>` restores the previous pane widget after `:edit` / `:!` swaps — see [EXEC_SHELL.md](EXEC_SHELL.md).
 
 ---
 
@@ -360,7 +388,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 |------|----------------|
 | `internal/commands/command_node.go` | `CommandNode`, `CommandRegistry` |
 | `internal/commands/command_parser.go` | `CommandParser` — navigation, completion, execution |
-| `internal/commands/dsl.go` | `Cmd`, `Group` builders |
+| `internal/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
 | `internal/termui/event.go` | `CompletionMsg` and other UI events |

@@ -36,8 +36,55 @@ func (a *DebuggerApp) showBuiltin(name string) func(args ...any) {
 		if w == nil || a.tab == nil {
 			return
 		}
-		if a.tab.ReplaceFocusedWidget(w) {
+		if a.swapFocusedWidget(w) {
 			a.RequestFrame()
 		}
+	}
+}
+
+const widgetJumpMax = 32
+
+// swapFocusedWidget replaces the focused pane's widget and pushes the previous
+// one onto the jump list (for Ctrl-O).
+func (a *DebuggerApp) swapFocusedWidget(w termui.Widget) bool {
+	if a.tab == nil || w == nil {
+		return false
+	}
+	prev := a.tab.FocusedWidget()
+	if prev == w {
+		return false
+	}
+	if !a.tab.ReplaceFocusedWidget(w) {
+		return false
+	}
+	if prev != nil {
+		a.pushWidgetJump(prev)
+	}
+	return true
+}
+
+func (a *DebuggerApp) pushWidgetJump(w termui.Widget) {
+	if w == nil {
+		return
+	}
+	// Avoid consecutive duplicates.
+	if n := len(a.widgetJump); n > 0 && a.widgetJump[n-1] == w {
+		return
+	}
+	a.widgetJump = append(a.widgetJump, w)
+	if len(a.widgetJump) > widgetJumpMax {
+		a.widgetJump = a.widgetJump[len(a.widgetJump)-widgetJumpMax:]
+	}
+}
+
+// JumpBack restores the previous widget in the focused pane (Vim Ctrl-O).
+func (a *DebuggerApp) JumpBack(args ...any) {
+	if a.tab == nil || len(a.widgetJump) == 0 {
+		return
+	}
+	prev := a.widgetJump[len(a.widgetJump)-1]
+	a.widgetJump = a.widgetJump[:len(a.widgetJump)-1]
+	if a.tab.ReplaceFocusedWidget(prev) {
+		a.RequestFrame()
 	}
 }

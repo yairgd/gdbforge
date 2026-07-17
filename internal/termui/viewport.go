@@ -47,6 +47,13 @@ type Viewport struct {
 	// LineStyle optionally colors a full buffer line before selection reverse.
 	LineStyle func(line string) tcell.Style
 
+	// ANSI enables per-cell ANSI/SGR rendering (OSC/CSI sequences are not drawn).
+	ANSI bool
+
+	// OmitTail skips this many trailing buffer lines when drawing/scrolling
+	// (ConsolePane uses 1 so the live prompt is painted on the input row).
+	OmitTail int
+
 	cursor        CursorPainter
 	cursorVisible bool
 }
@@ -93,6 +100,7 @@ func (v *Viewport) Draw(c Canvas) {
 	selStyle := style.Reverse(true)
 	width := v.width
 	height := v.height
+	lineLimit := v.lineLimit()
 
 	for row := 0; row < height; row++ {
 		if row < v.padTop {
@@ -100,7 +108,7 @@ func (v *Viewport) Draw(c Canvas) {
 			continue
 		}
 		line := v.Top + (row - v.padTop)
-		if line >= v.Buffer.NumLines() {
+		if line >= lineLimit {
 			c.ClearLine(row, style)
 			continue
 		}
@@ -110,6 +118,19 @@ func (v *Viewport) Draw(c Canvas) {
 		if v.LineStyle != nil {
 			lineStyle = v.LineStyle(full)
 		}
+
+		if v.ANSI {
+			c.ClearLine(row, lineStyle)
+			lineNum := line
+			drawn := c.DrawANSIText(0, row, v.Left, full, lineStyle, func(bufByte int) bool {
+				return v.containsSel(lineNum, bufByte)
+			})
+			if drawn < width {
+				c.ClearLineRange(row, drawn, width, lineStyle)
+			}
+			continue
+		}
+
 		text := full
 		if v.Left < len(text) {
 			text = text[v.Left:]
@@ -443,11 +464,23 @@ func (v *Viewport) followPadTop() int {
 	if !v.followTail || v.Buffer == nil || v.height <= 0 {
 		return 0
 	}
-	n := v.Buffer.NumLines()
+	n := v.lineLimit()
 	if n <= 0 || n >= v.height {
 		return 0
 	}
 	return v.height - n
+}
+
+// lineLimit is the exclusive end line index for drawing/scrolling (respects OmitTail).
+func (v *Viewport) lineLimit() int {
+	if v.Buffer == nil {
+		return 0
+	}
+	n := v.Buffer.NumLines() - v.OmitTail
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
@@ -465,7 +498,13 @@ func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
 	col := v.Left + lx
 	lineLen := 0
 	if v.Buffer != nil && line >= 0 && line < v.Buffer.NumLines() {
-		lineLen = len(v.Buffer.Line(line))
+		raw := v.Buffer.Line(line)
+		if v.ANSI {
+			col = ANSIByteIndexAtVisible(raw, v.Left+lx)
+			lineLen = len(raw)
+		} else {
+			lineLen = len(raw)
+		}
 	}
 	if col > lineLen {
 		col = lineLen
@@ -554,7 +593,7 @@ func (v *Viewport) ScrollToBottom() {
 		return
 	}
 
-	last := v.Buffer.NumLines() - 1
+	last := v.lineLimit() - 1
 	if last < 0 {
 		return
 	}

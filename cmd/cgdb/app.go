@@ -4,6 +4,7 @@ import (
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/cgdb-go/internal/execcli"
 	"github.com/yairgd/cgdb-go/internal/gdb"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -33,6 +34,13 @@ type DebuggerApp struct {
 	cfg       SessionConfig
 	gdbClient *gdb.GDBClient
 	gdbWidget *widgets.GDBWidget
+
+	execClient *execcli.ExecClient
+	execWidget *widgets.ExecWidget
+
+	// widgetJump is a Vim-style jump list of prior widgets in the focused pane
+	// (pushed on :edit / :! swaps; Ctrl-O pops).
+	widgetJump []termui.Widget
 
 	// builtins are singleton views created once at startup (:edit about, :edit gdb, …).
 	builtins    map[string]termui.Widget

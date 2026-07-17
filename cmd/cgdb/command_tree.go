@@ -10,7 +10,8 @@ import (
 //	/ → window → break → file, delete
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
-//	/ → edit   → about, gdb  (built-in views; :edit about / :edit gdb)
+//	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
+//	/ → edit   → about, gdb, exec  (built-in views)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
@@ -32,13 +33,11 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("registers", a.ShowRegisters),
 			commands.Cmd("threads", a.ShowThreads),
 		).
-		Group("run",
-			commands.Cmd("start", nil),
-			commands.Cmd("stop", nil),
-		).
+		LeafRest("!", a.OnRun).
 		Group("edit",
 			commands.Cmd("about", a.showBuiltin("about")),
 			commands.Cmd("gdb", a.showBuiltin("gdb")),
+			commands.Cmd("exec", a.showBuiltin("exec")),
 		).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).

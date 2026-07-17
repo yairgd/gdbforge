@@ -251,6 +251,12 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		if a.Api != nil {
 			a.Api.HandleInterrupt(e)
 		}
+
+	case *tcell.EventClipboard, *tcell.EventPaste:
+		// Deliver to workspace widgets (TabWidget → focused pane / CmdWidget).
+		for i := range a.widgets {
+			a.widgets[i].widget.HandleEvent(e)
+		}
 	}
 
 }

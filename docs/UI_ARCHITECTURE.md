@@ -107,10 +107,13 @@ classDiagram
 | Type | Role |
 |------|------|
 | `InputLine` | Single-line editor + readline history |
-| `ConsolePane` | Scrollback + walking prompt + `InputLine`; echoes `prompt+cmd` only |
+| `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
 | `GDBWidget` | Wires `ConsolePane` to GDB MI / `Debugger` |
+| `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (plain PTY + ANSI) |
 
-**Built-in views** (`:edit about`, `:edit gdb`, future `:edit help` / `:edit registers`, …) are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type.
+**Built-in views** (`:edit about`, `:edit gdb`, `:edit exec`, …) and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md).
+
+**Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type.
 
 **Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 
@@ -528,6 +531,7 @@ sequenceDiagram
 |--------|------|--------|
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
 | `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
+| `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
 | `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:edit about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |

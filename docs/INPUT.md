@@ -119,6 +119,7 @@ GDB console keys are handled by shared termui pieces, then GDB-specific callback
 | `InputLine` | `termui/input_line.go` | Editing + history chords |
 | `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
 | `GDBWidget` | `cgdb/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
+| `ExecWidget` | `cgdb/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
 
 When the GDB pane is focused (insert):
 
@@ -131,8 +132,11 @@ When the GDB pane is focused (insert):
 | `Ctrl+C` | Copy selection if any; otherwise SIGINT (`\x03`) |
 | `Ctrl+D` | Send `q` to GDB |
 | `Ctrl+L` | Clear scrollback (screen reset — prompt returns to top-left) |
+| `Ctrl+V` | Paste clipboard into the input line |
 | `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
+
+**Normal mode:** `<C-o>` jumps back to the previous widget after `:edit` / `:!` (see [EXEC_SHELL.md](EXEC_SHELL.md)).
 
 The `(gdb)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Look stays a native GDB session (not chat labels).
 

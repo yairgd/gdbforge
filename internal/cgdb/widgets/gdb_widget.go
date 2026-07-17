@@ -126,6 +126,11 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 	if len(upd.DisplayLines) > 0 {
 		m.console.AppendLines(upd.DisplayLines)
 		m.console.StripTrailingBarePrompt()
+	}
+	if upd.PromptReady {
+		m.console.EnsureLivePrompt()
+	}
+	if len(upd.DisplayLines) > 0 || upd.PromptReady {
 		m.console.FollowTailAndScroll()
 	}
 	if upd.Stopped != nil {

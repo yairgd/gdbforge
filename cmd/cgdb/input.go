@@ -128,16 +128,29 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 }
 
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
-	if msg, ok := ev.Data().(core.GdbOutputMsg); ok && a.miLog != nil {
-		// Log every raw MI chunk line for the top Log pane (and file sink).
-		for _, line := range strings.Split(msg.Data, "\n") {
-			a.miLog.Info(line)
+	switch data := ev.Data().(type) {
+	case core.GdbOutputMsg:
+		if a.miLog != nil {
+			for _, line := range strings.Split(data.Data, "\n") {
+				a.miLog.Info(line)
+			}
+			if data.Err != nil {
+				a.miLog.Error(data.Err.Error())
+			}
 		}
-		if msg.Err != nil {
-			a.miLog.Error(msg.Err.Error())
+		if a.gdbWidget != nil {
+			a.gdbWidget.HandleEvent(ev)
 		}
-	}
-	if a.gdbWidget != nil {
-		a.gdbWidget.HandleEvent(ev)
+	case core.ExecOutputMsg:
+		if a.execWidget != nil {
+			a.execWidget.HandleEvent(ev)
+		}
+	default:
+		if a.gdbWidget != nil {
+			a.gdbWidget.HandleEvent(ev)
+		}
+		if a.execWidget != nil {
+			a.execWidget.HandleEvent(ev)
+		}
 	}
 }

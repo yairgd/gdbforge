@@ -385,7 +385,8 @@ dlv debug ./cmd/docserve -- --port 8765
 | New application model | App startup in `cmd/cgdb`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
 | New service / backend | Implement `core.Debugger`, new `internal/<backend>/` |
-| New `:` command | Add `Cmd` / `Group` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| `:!` / Exec pane | [EXEC_SHELL.md](EXEC_SHELL.md) |
 | New key chord | `InitKeyBindings()` → `keyBindings.Bind(...)` |
 | Tab switching | Extend `tab.go`, draw header in `TabWidget.Draw` |
 | Diff rendering | Add `backBuffer`, per-frame clear; extend `BackCells` diff |
@@ -423,6 +424,7 @@ Always update docs when changing architecture-visible behavior.
 ## Related documentation
 
 - [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree, DSL, parser, tab completion
+- [EXEC_SHELL.md](EXEC_SHELL.md) — `:!` exec panes, rest-args, Ctrl-O
 - [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) — deep UI dive
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB MI2 details
 - [ROADMAP.md](ROADMAP.md) — what's planned
