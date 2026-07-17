@@ -80,10 +80,10 @@ func (w *WidgetTree) ReplaceFocusedWidget(widget Widget) bool {
 	return true
 }
 
-func NewWidgetTree(newWidget Widget) WidgetTree {
+func NewWidgetTree(newWidget Widget) *WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: nil}
 
-	return WidgetTree{
+	return &WidgetTree{
 		root:  node,
 		focus: node,
 		geom:  make(map[*Node]layoutGeom),

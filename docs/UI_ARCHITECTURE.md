@@ -116,7 +116,7 @@ classDiagram
 
 **Design decision:** widgets receive `Canvas`, not `tcell.Screen`. This prevents accidental full-screen draws and enforces layout boundaries.
 
-**Design decision:** widgets bind to models at creation time. The window manager (`Layout`, `WidgetTree`, `:buffer` dispatch) owns widget lifecycle; models are owned by the application and outlive any single pane.
+**Design decision:** widgets bind to models at creation time. The window manager (`WidgetTree`, `TabWidget`, `:edit` / `:buffer` dispatch) owns widget lifecycle; models are owned by the application and outlive any single pane.
 
 ---
 
@@ -228,20 +228,9 @@ The gutter column/row is where `DrawVerticalLocal` / `DrawHorizontalLocal` write
 
 **Design decision:** `BuildLayout` sizes children using **`Units()`** (leaf-count weighting along the split axis). The `Ratio` field is set at split time (`0.5` default) and updated by `ComputeRatios` / `Rebalance`, but the current build path uses unit counts rather than `Ratio` directly.
 
-`Layout` is a thin facade over `WidgetTree`:
+Each tab owns a `WidgetTree` directly (no intermediate `Layout` type). `TabWidget.Draw` calls `BuildLayout` then `Draw` on the active tree.
 
-```go
-type Layout struct {
-    tree WidgetTree
-}
-
-func (l *Layout) Draw(c Canvas) {
-    l.tree.BuildLayout(c)
-    l.tree.Draw(c)
-}
-```
-
-Implementation: `layout.go`, `widget_tree.go` (`buildLayout`).
+Implementation: `widget_tree.go` (`buildLayout`), `tab.go`.
 
 ---
 
@@ -544,7 +533,7 @@ sequenceDiagram
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
 | `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
-| `TabWidget` | `internal/termui/tab.go` | Single-tab container forwarding to `Layout` |
+| `TabWidget` | `internal/termui/tab.go` | Tab container forwarding to a per-tab `WidgetTree` |
 
 Widget hierarchy target:
 

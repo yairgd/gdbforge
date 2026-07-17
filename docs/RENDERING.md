@@ -139,7 +139,7 @@ These call into `Grid.DrawVertical` / `DrawHorizontal`, setting edge flags on th
 
 ```mermaid
 flowchart TB
-    Layout["BuildLayout"]
+    Build["WidgetTree.BuildLayout"]
     Draw["WidgetTree.Draw"]
     DV["DrawVerticalLocal"]
     DH["DrawHorizontalLocal"]
@@ -147,14 +147,14 @@ flowchart TB
     Compose["EdgesToRune"]
     Tcell["screen.SetContent"]
 
-    Layout --> DV --> Grid
-    Layout --> DH --> Grid
+    Build --> DV --> Grid
+    Build --> DH --> Grid
     Draw --> DV
     Draw --> DH
     Grid --> Compose --> Tcell
 ```
 
-**Design decision:** borders belong to the **layout engine**, not widgets. Widgets should not draw their own outer frame — this prevents double borders and misaligned corners in nested splits.
+**Design decision:** borders belong to the **WidgetTree geometry pass**, not widgets. Widgets should not draw their own outer frame — this prevents double borders and misaligned corners in nested splits.
 
 **Planned:** focused pane gets `bold=true` on its bordering edges for visual feedback. Today, focus is indicated by the per-pane status line (`▎ {name}`) at the bottom of the focused leaf.
 

@@ -340,12 +340,12 @@ Platform components do not import terminal or widget packages. Today many of the
 | **Grid** | Off-screen cell framebuffer |
 | **Viewport** | Scroll window, cursor visibility, visible region over a model |
 | **Widget** | View interface (`Draw`, `DrawStatusLine`, `HandleEvent`) |
-| **Layout** | Split-tree geometry |
+| **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
 
 **Design decision:** `Viewport` belongs to TermUI because it manages scrolling, cursor visibility, and rendering. `Buffer` belongs to Platform because it holds data with no presentation logic.
 
-Implementation today: `internal/termui` (Canvas, Grid, Layout, WidgetTree) plus scroll/view helpers still migrating from `internal/core`.
+Implementation today: `internal/termui` (Canvas, Grid, WidgetTree) plus scroll/view helpers still migrating from `internal/core`.
 
 ---
 
@@ -356,7 +356,7 @@ flowchart TB
     subgraph Presentation["Presentation · internal/termui"]
         TermApp["TermApp"]
         RootLayout["Root: TabBar / Workspace / CmdLine"]
-        SplitTree["Split tree · Layout / WidgetTree"]
+        SplitTree["Split tree · WidgetTree"]
         Widgets["Widgets: Code, GDB, Cmd, …"]
         Render["Canvas → Grid → tcell"]
     end
@@ -397,10 +397,10 @@ flowchart TB
 | **Services** | App layer (`cmd/cgdb`, `internal/gdb`, …) | Communicate with external systems; produce events |
 | **Event bus** | `termui.Event` channel | Distribute events to models and application dispatch |
 | **Models** | App layer (planned; today partially `core.Buffer`, widget-local state) | Own application state; subscribe to events |
-| **Window manager** | `termui` (`Layout`, `WidgetTree`, `TabWidget`) | Layout, widget lifecycle, model-to-widget binding |
+| **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Layout, widget lifecycle, model-to-widget binding |
 | **Terminal application** | `termui.TermApp` | Event loop, screen init, widget registry, redraw orchestration |
 | **Root layout** | `termui` (planned `RootLayout`) | Fixed TabBar, flexible Workspace, fixed CmdLine |
-| **Split tree** | `termui.Layout`, `WidgetTree`, `Node` | Recursive pane division inside Workspace |
+| **Split tree** | `termui.WidgetTree`, `Node` | Recursive pane division inside Workspace |
 | **Widget layer** | `termui.Widget` implementations | Views that display models; per-pane input handling; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
 | **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
@@ -591,14 +591,14 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 - Manages layout (split tree, tabs).
 - Creates and destroys widget instances.
 - Binds widgets to existing models.
-- Implementation: `termui.Layout`, `WidgetTree`, `TabWidget`, `HandleCoreEvents` layout commands.
+- Implementation: `termui.WidgetTree`, `TabWidget`, `HandleCoreEvents` layout commands.
 
 ### Presentation (`internal/termui`)
 
 See [TermUI layer](#termui-layer). Owns:
 
 - `tcell.Screen` lifecycle.
-- Canvas, Grid, Layout, WidgetTree, Viewport (target).
+- Canvas, Grid, WidgetTree, Viewport (target).
 - Top-level widget registration (today: flat list; target: structured Root).
 - Poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to app widgets that use `internal/gdb`.
@@ -761,7 +761,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both in `internal/core` today |
 | Root layout | TabBar + Workspace + CmdLine | Flat widget list; `HandleResize` assigns tab + cmd line rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
-| Workspace | Split tree only | `Layout` / `WidgetTree` implemented |
+| Workspace | Split tree only | `WidgetTree` / `TabWidget` implemented |
 | CmdLine | Global `:` command input | `CmdWidget` on bottom row (`H-1`); mode routing in `DebuggerApp` |
 | Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
 | Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |

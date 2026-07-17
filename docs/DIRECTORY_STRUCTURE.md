@@ -91,14 +91,13 @@ task build
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types; `SetWidget` / `GetWidget` |
 | `layout_tree.go` | Tree walks and ratio algorithms |
-| `widget_tree.go` | Split/focus/layout GUI; `ReplaceFocusedWidget` |
-| `layout.go` | `Layout` facade over `WidgetTree` |
+| `widget_tree.go` | Split/focus/geometry; `ReplaceFocusedWidget` |
+| `tab.go` | Tab container over a per-tab `WidgetTree` |
 | `canvas.go` | Local-coordinate drawing context |
 | `grid.go` | Off-screen cell framebuffer |
 | `cell.go` | Border edge composition |
 | `rect.go` | Rectangle primitive |
 | `utf.go` | UTF-8 / ANSI text drawing |
-| `tab.go` | Tab container (single-tab stub) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
 | `input_line.go` | Reusable readline editor (text, cursor, history) |
@@ -139,7 +138,7 @@ flowchart TB
     TermApp --> Widget
     Widget --> Canvas
     Canvas --> Grid
-    Layout --> WidgetTree --> Node
+    WidgetTree --> Node
 ```
 
 ---

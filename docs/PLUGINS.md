@@ -53,7 +53,7 @@ cgdb-go is designed for **extensibility**: custom debugger panes, scripted autom
 flowchart TB
     subgraph UI["termui"]
         WidgetHost["Widget host / PluginPane"]
-        Layout["Layout / split tree"]
+        Tree["WidgetTree / split tree"]
     end
 
     subgraph PluginRuntime["Plugin runtime · planned"]
@@ -68,7 +68,7 @@ flowchart TB
         Session["Session config"]
     end
 
-    Layout --> WidgetHost
+    Tree --> WidgetHost
     WidgetHost --> LuaVM
     LuaVM --> Bindings
     Bindings --> Events
@@ -184,13 +184,13 @@ ui.command("my-cmd", function(args) ... end)
 
 Maps to `Canvas` drawing helpers and command registry.
 
-### Layout
+### Splits / workspace
 
 ```lua
 ui.open_pane("my-plugin.trace", { direction = "vertical" })
 ```
 
-Maps to `Layout.NewSplit` / focus APIs.
+Maps to `WidgetTree.Split` / focus APIs on the active tab.
 
 ---
 

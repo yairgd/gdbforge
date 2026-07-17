@@ -43,7 +43,7 @@
 
 ### Half-day path (implement a feature)
 
-Add: `internal/termui/layout.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_msg.go`, `internal/core/buffer.go`, `internal/core/events.go`, and skim `docs/diagrams/*.mermaid`.
+Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_msg.go`, `internal/core/buffer.go`, `internal/core/events.go`, and skim `docs/diagrams/*.mermaid`.
 
 ### Mental model
 
@@ -115,7 +115,7 @@ GDB path (target):
 | **Grid** | Off-screen `[][]Cell` framebuffer |
 | **Node** | Split tree node (leaf or split) |
 | **WidgetTree** | Split tree + focus tracking |
-| **Layout** | Facade over `WidgetTree` |
+| **WidgetTree** | Split tree + focus + geometry (`BuildLayout`) |
 | **Workspace** | Middle band containing the split tree only |
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
@@ -277,9 +277,9 @@ a.keyBindings.Bind(
 ## Layout and splits
 
 ```go
-layout := NewLayout(initialWidget)
-layout.NewSplit(Vertical, rightWidget)    // left | right
-layout.NewSplit(Horizontal, bottomWidget) // top / bottom (on focused pane)
+tree := NewWidgetTree(initialWidget)
+tree.Split(Vertical, rightWidget)    // left | right
+tree.Split(Horizontal, bottomWidget) // top / bottom (on focused pane)
 ```
 
 Split focused pane:
@@ -288,11 +288,11 @@ Split focused pane:
 - `Second` = new widget
 - `Ratio` = 0.5
 
-Build + draw happens in `Layout.Draw`:
+`TabWidget.Draw` builds then paints the active tree:
 
 ```go
-l.tree.BuildLayout(c)  // assign rects, draw borders
-l.tree.Draw(c)         // widgets → clear status rows → redraw grid → status lines
+tree.BuildLayout(c)  // assign rects, draw borders
+tree.Draw(c)         // widgets → clear status rows → redraw grid → status lines
 ```
 
 See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md).
@@ -405,7 +405,7 @@ Always update docs when changing architecture-visible behavior.
 | Key-sequence bindings | `internal/commands` + `cmd/cgdb/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
-| Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `layout.go` |
+| Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `tab.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |

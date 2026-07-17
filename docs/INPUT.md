@@ -263,7 +263,7 @@ type AppState struct {
 **Gaps:**
 
 - `ModeFocus` / `ModeInsert` / `ModeSearch` are defined but not routed yet.
-- `NewTabTwoHozSplitWins` currently passes only the first widget to `NewLayout`; the second widget argument is not wired into a split yet.
+- `NewTabTwoHozSplitWins` creates a horizontal split of its two widgets.
 
 ---
 

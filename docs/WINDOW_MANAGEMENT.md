@@ -175,8 +175,8 @@ Layout algorithm (`widget_tree.go`):
 ## Splitting at runtime
 
 ```go
-layout := NewLayout(initialWidget)
-layout.NewSplit(Vertical, newWidget)  // splits focused pane
+tree := NewWidgetTree(initialWidget)
+tree.Split(Vertical, newWidget)  // splits focused pane
 ```
 
 What happens:
@@ -188,20 +188,20 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-**Current gap in `TabWidget`:** `NewTabTwoHozSplitWins` accepts two widgets but only passes the first to `NewLayout`; the second widget is not yet installed in a split. Use `:vs` / `:split` at runtime or call `layout.NewSplit` directly for a working two-pane layout.
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets.
 
 ---
 
 ## Tab management
 
-Each tab owns an independent **Workspace layout** (a `Layout` / `WidgetTree` instance).
+Each tab owns an independent **`WidgetTree`** (split-tree workspace).
 
 ```mermaid
 flowchart LR
     TabBar["TabBar"]
-    T1["Tab 1 · Layout"]
-    T2["Tab 2 · Layout"]
-    T3["Tab 3 · Layout"]
+    T1["Tab 1 · WidgetTree"]
+    T2["Tab 2 · WidgetTree"]
+    T3["Tab 3 · WidgetTree"]
 
     TabBar --> T1
     TabBar --> T2
@@ -212,8 +212,8 @@ Current `TabWidget` implementation:
 
 ```go
 type Tab struct {
-    Title  string
-    Layout *Layout
+    Title string
+    tree  *WidgetTree
 }
 
 type TabWidget struct {
@@ -359,7 +359,7 @@ Planned contents:
 | `:only` | Collapse to single pane |
 | `:resize +N/-N` | Adjust split ratio |
 
-These will be implemented in the command router ([INPUT.md](INPUT.md)) and call into `Layout` / `WidgetTree` APIs.
+These will be implemented in the command router ([INPUT.md](INPUT.md)) and call into `WidgetTree` / `TabWidget` APIs.
 
 ---
 
