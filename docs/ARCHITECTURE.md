@@ -470,17 +470,19 @@ sequenceDiagram
     participant PTY as PTY reader goroutine
     participant Screen as tcell.Screen
     participant Widget as GDBWidget
-    participant Buf as platform.Buffer
+    participant Cons as ConsolePane
 
     GDB-->>PTY: MI output chunk
     PTY->>Screen: PostEvent(EventInterrupt GdbOutputMsg)
     Screen->>Widget: HandleEvent
     Widget->>Widget: GdbInputState.PushRaw → MiUpdate
-    Widget->>Buf: Append display lines
-    Widget->>Widget: Draw on next frame
+    Widget->>Cons: AppendLines
+    Cons->>Cons: Draw on next frame
 ```
 
 *Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
+
+Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (MI + `Debugger`).
 
 ### End-to-end data flow
 
@@ -767,7 +769,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw`; single `frontBuffer` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
-| Debugger | Abstract backend + GDB | GDB PTY prototype in `GDBWidget` |
+| Debugger | Abstract backend + GDB | GDB via ConsolePane + MI adapter in `GDBWidget` |
 
 Entry point: `cmd/cgdb/` (`main.go` + `app.go`, `setup.go`, …).
 

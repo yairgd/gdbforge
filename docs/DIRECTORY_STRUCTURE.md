@@ -101,6 +101,8 @@ task build
 | `tab.go` | Tab container (single-tab stub) |
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
+| `input_line.go` | Reusable readline editor (text, cursor, history) |
+| `console_pane.go` | Natural REPL transcript: scrollback + walking prompt + InputLine |
 | `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional `padTop` |
 | `logger_widget.go` | Reusable log pane (`platform.Sink`, `:clear`, scroll bindings) |
 | `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
@@ -127,7 +129,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 |------|----------------|
 | `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
-| `widgets/gdb_widget.go` | GDB console (streaming MI, walking `(gdb)` prompt) |
+| `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 
 `cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 

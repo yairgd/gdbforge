@@ -194,39 +194,47 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 
 ## GDBWidget bridge
 
-`GDBWidget` connects the GDB client to the UI:
+`GDBWidget` is a thin adapter over shared termui REPL pieces:
+
+```text
+InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient
+(edit/hist)   (scrollback +     (MI + Send)
+               walking prompt)
+```
+
+Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Widget as GDBWidget
+    participant GDBW as GDBWidget
+    participant Cons as ConsolePane
     participant State as GdbInputState
-    participant Buf as platform.Buffer
     participant Client as GDBClient
     participant GDB as GDB
 
-    User->>Widget: KeyEnter / typed command
-    Widget->>Client: Send(input)
+    User->>Cons: type / Enter
+    Cons->>GDBW: OnSubmit(cmd)
+    GDBW->>Cons: EchoSubmit(prompt+cmd)
+    GDBW->>Client: Send(cmd)
     Client->>GDB: PTY write
     GDB-->>Client: MI output chunk
-    Client-->>Widget: EventInterrupt GdbOutputMsg
-    Widget->>State: PushRaw(chunk)
-    State-->>Widget: MiUpdate (complete lines)
-    Widget->>Buf: append DisplayLines
-    Widget->>Widget: Draw on next frame
+    Client-->>GDBW: EventInterrupt GdbOutputMsg
+    GDBW->>State: PushRaw(chunk)
+    State-->>GDBW: MiUpdate
+    GDBW->>Cons: AppendLines / Draw
 ```
 
-Key components:
-
-| Component | Role |
-|-----------|------|
-| `platform.Buffer` + `termui.Viewport` | Scrollable output (selection/clipboard shared) |
-| `InputBuf` / `Cursor` | User command editing on a dedicated prompt row |
-| `applyMiUpdate` / `handleStop` | Paint streams; react to `*stopped` (stub) |
+| Component | File | Role |
+|-----------|------|------|
+| `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
+| `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
+| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | `OnSubmit`/`OnInterrupt`/`OnEOF` → Debugger; MI → AppendLines |
+| `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
 
 ### Console layout (walking prompt)
 
-Terminal-style after `Ctrl+L` (clear / screen reset):
+Terminal-style after `Ctrl+L` (clear / screen reset) — owned by `termui.ConsolePane`:
 
 1. Empty scrollback → `(gdb)` + caret at **top-left**.
 2. Each new output line → prompt moves **one row down**.
@@ -234,6 +242,8 @@ Terminal-style after `Ctrl+L` (clear / screen reset):
 4. When the pane is full → pin prompt to the last row and scroll the viewport (`followTail`).
 
 While the user scrolls history (`followTail` off), the prompt stays on the bottom row.
+
+Echo is `prompt+cmd` only (native GDB session, not chat labels).
 
 Draw highlights:
 

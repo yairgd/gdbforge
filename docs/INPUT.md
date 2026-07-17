@@ -112,13 +112,21 @@ flowchart TB
 
 ### Widget-level handling
 
-Example: `GDBWidget` (`internal/cgdb/widgets/gdb_widget.go`), when the GDB pane is focused (insert):
+GDB console keys are handled by shared termui pieces, then GDB-specific callbacks:
+
+| Layer | File | Owns |
+|-------|------|------|
+| `InputLine` | `termui/input_line.go` | Editing + history chords |
+| `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
+| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
+
+When the GDB pane is focused (insert):
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Echo command to scrollback, send to GDB, clear input line |
-| `Backspace` / `Delete` | Edit input |
-| `Left` / `Right`, `Home` / `End` | Move cursor (`Ctrl-B/F/A/E` aliases) |
+| `Enter` | Echo `(gdb) cmd` to scrollback, send to GDB, clear input line |
+| `Backspace` / `Delete` | Edit input (`InputLine`) |
+| `Left` / `Right`, `Home` / `End` | Move cursor (`Ctrl-B/F/A/E`) |
 | `Up` / `Down` | Local readline-style history (`Ctrl-P/N`) |
 | `Ctrl+C` | Copy selection if any; otherwise SIGINT (`\x03`) |
 | `Ctrl+D` | Send `q` to GDB |
@@ -126,7 +134,7 @@ Example: `GDBWidget` (`internal/cgdb/widgets/gdb_widget.go`), when the GDB pane 
 | `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
 
-The `(gdb)` prompt is drawn as a separate input row: it walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full.
+The `(gdb)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Look stays a native GDB session (not chat labels).
 
 Example: `CmdWidget` (`cmd_widget.go`):
 

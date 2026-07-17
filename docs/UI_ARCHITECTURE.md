@@ -78,9 +78,8 @@ classDiagram
     }
 
     class GDBWidget {
-        +Viewport *termui.Viewport
+        +ConsolePane *termui.ConsolePane
         +Debugger core.Debugger
-        +InputBuf string
     }
 
     class CmdWidget {
@@ -102,6 +101,14 @@ classDiagram
 ```
 
 **`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Widgets embed `BaseWidget` and set `PaneName` in their constructor, or override `DrawStatusLine` for custom behavior. Container widgets (`TabWidget`, `CmdWidget`) implement a no-op `DrawStatusLine`.
+
+**REPL building blocks** (for native terminal consoles, not chat UIs):
+
+| Type | Role |
+|------|------|
+| `InputLine` | Single-line editor + readline history |
+| `ConsolePane` | Scrollback + walking prompt + `InputLine`; echoes `prompt+cmd` only |
+| `GDBWidget` | Wires `ConsolePane` to GDB MI / `Debugger` |
 
 **Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 
@@ -529,7 +536,9 @@ sequenceDiagram
 | Widget | File | Status |
 |--------|------|--------|
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
-| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | GDB console — streaming MI, walking prompt, Viewport selection |
+| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
+| `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
+| `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
 | `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
 | `TabWidget` | `internal/termui/tab.go` | Single-tab container forwarding to `Layout` |

@@ -36,9 +36,10 @@
 | 4 | `internal/termui/widget_tree.go`, `layout_tree.go` | Split layout |
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
-| 7 | `internal/cgdb/widgets/gdb_widget.go` | Async GDB → UI example |
-| 8 | `internal/gdb/gdb_client.go` | PTY backend |
-| 9 | `docs/ARCHITECTURE.md` | Big picture |
+| 7 | `internal/termui/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
+| 8 | `internal/cgdb/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
+| 9 | `internal/gdb/gdb_client.go` | PTY backend |
+| 10 | `docs/ARCHITECTURE.md` | Big picture |
 
 ### Half-day path (implement a feature)
 
@@ -84,7 +85,7 @@ Data flow (target):
   Service → Event Bus → Model → Widget
 
 GDB path (today):
-  GDBClient (goroutine) → EventInterrupt → GDBWidget
+  GDBClient (goroutine) → EventInterrupt → GDBWidget → ConsolePane
 GDB path (target):
   GDBClient → GdbOutputMsg on bus → Model update → Widget redraw
 ```
@@ -97,6 +98,7 @@ GDB path (target):
 - Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget business logic.
 - App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
 - Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
+- Console editing/layout is shared (`InputLine` / `ConsolePane`); debugger backends only supply protocol glue.
 - Never spawn GDB from widget code — use `core.Debugger` from the app/service layer.
 
 ---
@@ -122,8 +124,11 @@ GDB path (target):
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |
-| **MiMsg** | Parsed batch of MI lines |
-| **GdbInputState** | Debounced line collector for MI bursts |
+| **MiMsg** | Parsed batch of MI lines (helper / tests) |
+| **MiUpdate** | Streaming display update from `GdbInputState.PushRaw` |
+| **GdbInputState** | Newline splitter; streams complete MI lines (no debounce timer) |
+| **InputLine** | Shared readline editor (text, cursor, history) |
+| **ConsolePane** | Shared natural REPL shell (scrollback + walking prompt) |
 
 ---
 
@@ -315,14 +320,14 @@ flowchart LR
     Widget["GDBWidget.HandleEvent"]
     State["GdbInputState.PushRaw"]
     Upd["MiUpdate"]
-    Buf["platform.Buffer / Viewport"]
+    Cons["ConsolePane.AppendLines"]
 
-    PTY --> Ch --> Bridge --> Widget --> State --> Upd --> Buf
+    PTY --> Ch --> Bridge --> Widget --> State --> Upd --> Cons
 ```
 
 **Do not** read from the GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
 
-`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. No debounce timer.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. No debounce timer. Console editing/layout lives in `InputLine` / `ConsolePane`; GDBWidget only wires MI and `Debugger`.
 
 ---
 
@@ -405,7 +410,7 @@ Always update docs when changing architecture-visible behavior.
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + EventBus |
-| Debugger panes | `internal/cgdb/widgets/code_widget.go`, `gdb_widget.go`; `internal/termui/logger_widget.go` |
+| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/cgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |

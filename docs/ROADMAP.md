@@ -39,7 +39,8 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | Interaction modes | Partial | **Normal + Command** wired via `cgdb.AppState` |
 | `CodeWidget` | Prototype | Placeholder draw (random background); `PaneName: "Code"` |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
-| `GDBWidget` | Working | Streaming MI, walking `(gdb)` prompt, Viewport clipboard |
+| `GDBWidget` | Working | ConsolePane + streaming MI; native `(gdb)` REPL |
+| `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript |
 | `GDBClient` MI2 PTY | Working | CLI-configured prog/args; buffered PTY channel |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
 | Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
