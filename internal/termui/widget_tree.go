@@ -43,6 +43,15 @@ func (w *WidgetTree) SetInsertActive(active bool) {
 
 // FocusedWidget returns the leaf widget that currently has focus.
 func (w *WidgetTree) FocusedWidget() Widget {
+	leaf := w.FocusedLeaf()
+	if leaf == nil {
+		return nil
+	}
+	return leaf.Widget
+}
+
+// FocusedLeaf returns the focused leaf node (walks into First if focus is a split).
+func (w *WidgetTree) FocusedLeaf() *Node {
 	if w.focus == nil {
 		return nil
 	}
@@ -50,10 +59,25 @@ func (w *WidgetTree) FocusedWidget() Widget {
 	for n != nil && n.Type == NodeSplit {
 		n = n.First
 	}
-	if n == nil {
+	if n == nil || n.Type != NodeLeaf {
 		return nil
 	}
-	return n.Widget
+	return n
+}
+
+// ReplaceFocusedWidget swaps the widget on the focused leaf in O(1).
+// Tree structure and geometry are unchanged. Returns false if there is no leaf
+// or widget is nil.
+func (w *WidgetTree) ReplaceFocusedWidget(widget Widget) bool {
+	if widget == nil {
+		return false
+	}
+	leaf := w.FocusedLeaf()
+	if leaf == nil {
+		return false
+	}
+	leaf.SetWidget(widget)
+	return true
 }
 
 func NewWidgetTree(newWidget Widget) WidgetTree {

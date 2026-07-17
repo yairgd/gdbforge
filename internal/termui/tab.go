@@ -132,6 +132,15 @@ func (t *TabWidget) FocusedWidget() Widget {
 	return nil
 }
 
+// ReplaceFocusedWidget replaces the widget shown in the focused window.
+// Does not split, create panes, or change layout geometry.
+func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {
+	if layout := t.ActiveLayout(); layout != nil {
+		return layout.ReplaceFocusedWidget(w)
+	}
+	return false
+}
+
 func (t *TabWidget) SetOnResize(fn func()) {
 	if layout := t.ActiveLayout(); layout != nil {
 		layout.SetOnResize(fn)

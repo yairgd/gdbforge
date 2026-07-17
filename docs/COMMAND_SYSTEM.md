@@ -96,8 +96,11 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 ├── run
 │   ├── start
 │   └── stop
+├── edit
+│   └── about     → Action: showBuiltin("about")  // replace focused window widget
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
+├── clear         → Action: ClearFocus
 └── quit          → Action: Quit
 ```
 

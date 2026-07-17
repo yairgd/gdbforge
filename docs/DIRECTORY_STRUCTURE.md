@@ -89,9 +89,9 @@ task build
 | `cmd_widget.go` | Global `:` command line (`CommandParser`, publishes completions) |
 | `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
 | `widget.go` | `Widget` interface |
-| `node.go` | Split tree node types (structural) |
+| `node.go` | Split tree node types; `SetWidget` / `GetWidget` |
 | `layout_tree.go` | Tree walks and ratio algorithms |
-| `widget_tree.go` | Split/focus/layout GUI; `geom` map |
+| `widget_tree.go` | Split/focus/layout GUI; `ReplaceFocusedWidget` |
 | `layout.go` | `Layout` facade over `WidgetTree` |
 | `canvas.go` | Local-coordinate drawing context |
 | `grid.go` | Off-screen cell framebuffer |
@@ -129,6 +129,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 |------|----------------|
 | `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
 | `widgets/code_widget.go` | Source view pane |
+| `widgets/about_widget.go` | Built-in About page (singleton via `:edit about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 
 `cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).

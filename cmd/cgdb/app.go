@@ -33,6 +33,10 @@ type DebuggerApp struct {
 	cfg       SessionConfig
 	gdbClient *gdb.GDBClient
 	gdbWidget *widgets.GDBWidget
+
+	// builtins are singleton views created once at startup (:edit about, …).
+	builtins    map[string]termui.Widget
+	aboutWidget *widgets.AboutWidget
 }
 
 func NewDebuggerApp(cfg SessionConfig, client *gdb.GDBClient, outputChan <-chan core.GdbOutputMsg) *DebuggerApp {

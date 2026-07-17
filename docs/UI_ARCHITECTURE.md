@@ -110,6 +110,8 @@ classDiagram
 | `ConsolePane` | Scrollback + walking prompt + `InputLine`; echoes `prompt+cmd` only |
 | `GDBWidget` | Wires `ConsolePane` to GDB MI / `Debugger` |
 
+**Built-in views** (`:edit about`, future `:edit help` / `:edit registers`, …) are singleton widgets owned by `DebuggerApp`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type.
+
 **Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 
 **Design decision:** widgets receive `Canvas`, not `tcell.Screen`. This prevents accidental full-screen draws and enforces layout boundaries.
@@ -537,6 +539,7 @@ sequenceDiagram
 |--------|------|--------|
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
 | `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
+| `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:edit about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |

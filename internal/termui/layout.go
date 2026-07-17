@@ -74,3 +74,8 @@ func (l *Layout) SetInsertActive(active bool) {
 func (l *Layout) FocusedWidget() Widget {
 	return l.tree.FocusedWidget()
 }
+
+// ReplaceFocusedWidget replaces the widget in the focused leaf window.
+func (l *Layout) ReplaceFocusedWidget(w Widget) bool {
+	return l.tree.ReplaceFocusedWidget(w)
+}

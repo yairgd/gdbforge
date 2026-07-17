@@ -25,6 +25,8 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
 
+	a.initBuiltins()
+
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",
 		logWidget,

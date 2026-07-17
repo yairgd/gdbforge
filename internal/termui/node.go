@@ -31,3 +31,20 @@ type Node struct {
 
 	parent *Node
 }
+
+// SetWidget replaces the widget on a leaf node in O(1). Layout/geometry are unchanged.
+// No-op if n is nil or not a leaf.
+func (n *Node) SetWidget(w Widget) {
+	if n == nil || n.Type != NodeLeaf {
+		return
+	}
+	n.Widget = w
+}
+
+// GetWidget returns the widget on this node (may be nil).
+func (n *Node) GetWidget() Widget {
+	if n == nil {
+		return nil
+	}
+	return n.Widget
+}
