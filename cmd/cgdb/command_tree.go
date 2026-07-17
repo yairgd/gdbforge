@@ -10,7 +10,7 @@ import (
 //	/ → window → break → file, delete
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
-//	/ → edit   → about  (built-in views; :edit about)
+//	/ → edit   → about, gdb  (built-in views; :edit about / :edit gdb)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
@@ -38,6 +38,7 @@ func (a *DebuggerApp) ExapData() {
 		).
 		Group("edit",
 			commands.Cmd("about", a.showBuiltin("about")),
+			commands.Cmd("gdb", a.showBuiltin("gdb")),
 		).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).

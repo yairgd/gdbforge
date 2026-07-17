@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -21,11 +20,7 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 	logWidget.Events = a.Events()
 	logWidget.SetClipboard(a.ClipboardIO())
 
-	a.gdbWidget = widgets.NewGDBWidget(a.gdbClient)
-	a.gdbWidget.SetClipboard(a.ClipboardIO())
-	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
-
-	a.initBuiltins()
+	a.initBuiltins(outputChan)
 
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",

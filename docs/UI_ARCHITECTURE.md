@@ -110,7 +110,7 @@ classDiagram
 | `ConsolePane` | Scrollback + walking prompt + `InputLine`; echoes `prompt+cmd` only |
 | `GDBWidget` | Wires `ConsolePane` to GDB MI / `Debugger` |
 
-**Built-in views** (`:edit about`, future `:edit help` / `:edit registers`, …) are singleton widgets owned by `DebuggerApp`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type.
+**Built-in views** (`:edit about`, `:edit gdb`, future `:edit help` / `:edit registers`, …) are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type.
 
 **Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 

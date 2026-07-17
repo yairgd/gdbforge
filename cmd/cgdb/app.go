@@ -34,7 +34,7 @@ type DebuggerApp struct {
 	gdbClient *gdb.GDBClient
 	gdbWidget *widgets.GDBWidget
 
-	// builtins are singleton views created once at startup (:edit about, …).
+	// builtins are singleton views created once at startup (:edit about, :edit gdb, …).
 	builtins    map[string]termui.Widget
 	aboutWidget *widgets.AboutWidget
 }
