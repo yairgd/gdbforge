@@ -279,11 +279,18 @@ func parseExtendedColor(codes []int) (tcell.Color, int) {
 		return tcell.ColorDefault, 0
 	}
 	switch codes[0] {
-	case 5: // 256-color
+	case 5: // 256-color palette index
 		if len(codes) < 2 {
 			return tcell.ColorDefault, 0
 		}
-		return tcell.Color(codes[1]), 2
+		idx := codes[1]
+		if idx < 0 {
+			idx = 0
+		}
+		if idx > 255 {
+			idx = 255
+		}
+		return tcell.PaletteColor(idx), 2
 	case 2: // truecolor
 		if len(codes) < 4 {
 			return tcell.ColorDefault, 0

@@ -312,9 +312,7 @@ Wiring in `cmd/cgdb/setup.go`:
 ```go
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
-a.cmdWidget.Events = a.Events()
-
-l := widgets.NewLoggerWidget(a.ctx) // Subscribe(ctx.Bus, showCompletion)
+a.completionBar = termui.NewCompletionBarWidget(a.ctx)
 ```
 
 On **Enter**, the widget calls `Parse` then `Execute` if `CanExecute()`. Leaf actions run directly on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
@@ -323,7 +321,7 @@ On **Enter**, the widget calls `Parse` then `Execute` if `CanExecute()`. Leaf ac
 
 ## Tab completion via EventBus
 
-Tab completion is announced as a **`termui.CompletionMsg`** on **`platform.EventBus`** (not an injected presenter):
+Tab completion is announced as a **`termui.CompletionMsg`** on **`platform.EventBus`**:
 
 ```go
 type CompletionMsg struct {
@@ -336,8 +334,10 @@ type CompletionMsg struct {
 | Role | Where | Behavior |
 |------|-------|----------|
 | Publisher | `CmdWidget` (Tab) | `platform.Publish(ctx.Bus, CompletionMsg{…})` |
-| Subscriber | `LoggerWidget` | `platform.Subscribe` → `log.Info("completions: …")` (sink → viewport) |
-| Future popup | new subscriber | Same `CompletionMsg`; no `CmdWidget` changes |
+| Subscriber | `CompletionBarWidget` | Wildmenu row above `:` (white-on-black); multi-match → `ModeCompletion` |
+| Keys | `ModeCompletion` | Left/Right/Up/Down cycle; Esc → `ModeCommand`; Enter applies token |
+
+Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is TermApp chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 
@@ -385,7 +385,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Tab completion feedback
 
-1. Subscribe to `termui.CompletionMsg` on `platform.EventBus` (see `LoggerWidget`), or add another subscriber for a popup UI.
+1. `CompletionBarWidget` subscribes to `termui.CompletionMsg` (wildmenu above the cmdline).
 
 ---
 
@@ -398,9 +398,10 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
+| `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
 | `internal/termui/event.go` | `CompletionMsg` and other UI events |
 | `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
-| `internal/termui/logger_widget.go` | Completions subscriber + log sink |
+| `internal/termui/logger_widget.go` | Log sink pane |
 | `cmd/cgdb/command_tree.go` | `ExapData` DSL |
 | `cmd/cgdb/keybindings.go` | `InitKeyBindings` |
 | `cmd/cgdb/actions.go` | Command action methods |

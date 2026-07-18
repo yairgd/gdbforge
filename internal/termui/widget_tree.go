@@ -80,6 +80,21 @@ func (w *WidgetTree) FocusedLeaf() *Node {
 	return n
 }
 
+// FocusWidget sets focus to the leaf that currently shows widget.
+// Does not require layout geometry (safe at startup before BuildLayout).
+func (w *WidgetTree) FocusWidget(widget Widget) bool {
+	if w == nil || widget == nil {
+		return false
+	}
+	for _, leaf := range CollectLeaves(w.root) {
+		if leaf.Widget == widget {
+			w.focus = leaf
+			return true
+		}
+	}
+	return false
+}
+
 // ReplaceFocusedWidget swaps the widget on the focused leaf in O(1).
 // Tree structure and geometry are unchanged. Returns false if there is no leaf
 // or widget is nil.

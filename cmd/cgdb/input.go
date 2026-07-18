@@ -26,6 +26,9 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		return true
 	}
 	if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
+		if a.completionBar != nil {
+			a.completionBar.Clear()
+		}
 		a.SetMode(platform.ModeCommand)
 		a.cmdWidget.Activate()
 		return true
@@ -57,13 +60,65 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	a.cmdWidget.HandleEvent(ev)
+	if ev.Key() == tcell.KeyTAB && a.completionBar != nil && a.completionBar.Active() {
+		a.SetMode(platform.ModeCompletion)
+		a.RequestFrame()
+		return true
+	}
 	if ev.Key() == tcell.KeyEnter {
+		if a.completionBar != nil {
+			a.completionBar.Clear()
+		}
 		a.cmdWidget.Deativate()
 		if a.Mode() == platform.ModeCommand {
 			a.SetMode(platform.ModeNormal)
 		}
 	}
 	return true
+}
+
+// handleCompletionKey owns keys while the wildmenu is open (ModeCompletion).
+func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
+	if a.completionBar == nil {
+		a.SetMode(platform.ModeCommand)
+		return true
+	}
+
+	switch ev.Key() {
+	case tcell.KeyEscape:
+		a.completionBar.Clear()
+		a.SetMode(platform.ModeCommand)
+		a.RequestFrame()
+		return true
+
+	case tcell.KeyEnter:
+		if name := a.completionBar.Selected(); name != "" {
+			a.cmdWidget.ApplyCompletion(name)
+		}
+		a.completionBar.Clear()
+		a.SetMode(platform.ModeCommand)
+		a.RequestFrame()
+		return true
+
+	case tcell.KeyLeft, tcell.KeyRight, tcell.KeyUp, tcell.KeyDown:
+		a.completionBar.HandleEvent(ev)
+		a.RequestFrame()
+		return true
+
+	case tcell.KeyTAB:
+		// Cycle forward like Right.
+		a.completionBar.HandleEvent(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+		a.RequestFrame()
+		return true
+
+	default:
+		// Printable / Backspace: leave wildmenu and edit the cmdline.
+		a.completionBar.Clear()
+		a.SetMode(platform.ModeCommand)
+		a.cmdWidget.HandleEvent(ev)
+		a.RequestFrame()
+		return true
+	}
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {
@@ -81,7 +136,7 @@ func isCopyKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
-	if a.Mode() == platform.ModeCommand {
+	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
 		return
 	}
 
@@ -103,15 +158,16 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 }
 
 func (a *DebuggerApp) HandleResize() {
-
 	c := a.UpdateCanvas()
 
 	w := a.Widgets()
-	if len(w) < 2 {
+	if len(w) < 3 {
 		return
 	}
+	// Tab keeps full height (it insets H-2 internally). Bar overlays H-2; cmd at H-1.
 	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
-	w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
+	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
+	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
 func (app *DebuggerApp) handleUnknownCommand(_ termui.CommandEvent) bool {
@@ -120,7 +176,11 @@ func (app *DebuggerApp) handleUnknownCommand(_ termui.CommandEvent) bool {
 }
 
 func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
-	if app.Mode() == platform.ModeCommand {
+	if app.completionBar != nil {
+		app.completionBar.Clear()
+	}
+	switch app.Mode() {
+	case platform.ModeCommand, platform.ModeCompletion:
 		app.SetMode(platform.ModeNormal)
 		app.cmdWidget.Deativate()
 	}

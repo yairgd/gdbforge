@@ -84,6 +84,7 @@ sequenceDiagram
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** then to `TabWidget`.
    - **`ModeCommand`** — all keys go to `CmdWidget`.
+   - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
 
 ```mermaid
 flowchart TB

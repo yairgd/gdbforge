@@ -21,7 +21,7 @@ func (m SubmitMsg) Type() string         { return "SubmitMsg" }
 func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
 
 // CompletionMsg is published on platform.EventBus when Tab requests completions.
-// Subscribers (log pane, future popup, etc.) decide how to display them.
+// CompletionBarWidget subscribes and shows a wildmenu row above the cmdline.
 type CompletionMsg struct {
 	Input string
 	Token string

@@ -131,24 +131,24 @@ func (v *Viewport) Draw(c Canvas) {
 			continue
 		}
 
-		text := full
-		if v.Left < len(text) {
-			text = text[v.Left:]
-		} else {
-			text = ""
+		// Horizontal scroll and columns are rune-based (not byte offsets), so
+		// multi-byte glyphs like ━ / │ / ▶ do not leave gaps.
+		runes := []rune(full)
+		start := v.Left
+		if start < 0 {
+			start = 0
+		}
+		if start > len(runes) {
+			start = len(runes)
+		}
+		visible := runes[start:]
+		if len(visible) > width {
+			visible = visible[:width]
 		}
 
-		if len(text) > width {
-			text = text[:width]
-		}
-
-		visibleLen := len(text)
-		if visibleLen < width {
-			c.ClearLineRange(row, visibleLen, width, lineStyle)
-		}
-
-		for col, ch := range text {
-			bufCol := v.Left + col
+		c.ClearLineRange(row, len(visible), width, lineStyle)
+		for col, ch := range visible {
+			bufCol := start + col
 			st := lineStyle
 			if v.containsSel(line, bufCol) {
 				st = selStyle

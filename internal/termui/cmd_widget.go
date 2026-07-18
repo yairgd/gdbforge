@@ -86,6 +86,14 @@ func (c *CmdWidget) replaceToken(name string) {
 	c.text = prefix + name + suffix
 	c.cursor = len([]rune(prefix + name))
 }
+
+// ApplyCompletion replaces the current token with name (wildmenu accept).
+func (c *CmdWidget) ApplyCompletion(name string) {
+	if name == "" {
+		return
+	}
+	c.replaceToken(name)
+}
 func (c *CmdWidget) Activate() {
 	c.active = true
 	c.text = ":"

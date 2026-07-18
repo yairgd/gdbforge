@@ -755,7 +755,7 @@ a.ExapData()  // cmd/cgdb/command_tree.go
 
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
-// LoggerWidget Subscribes to CompletionMsg on ctx.Bus
+a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 ```
 
 Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/platform/event_bus.go`, `cmd/cgdb/`.

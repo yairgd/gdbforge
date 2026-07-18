@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
 func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
@@ -23,10 +25,15 @@ func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("lines=%v", lines)
 	}
-	if !strings.HasPrefix(lines[1], "-->") {
-		t.Fatalf("want --> on line 2, got %q", lines[1])
+	plain1 := termui.StripANSI(lines[1])
+	if !strings.Contains(plain1, "━━▶") {
+		t.Fatalf("want ━━▶ on line 2, got %q", plain1)
 	}
-	if !strings.HasPrefix(lines[0], "   ") {
-		t.Fatalf("want blank gutter on line 1, got %q", lines[0])
+	if !strings.Contains(plain1, "│") {
+		t.Fatalf("want box-drawing │ gutter, got %q", plain1)
+	}
+	plain0 := termui.StripANSI(lines[0])
+	if !strings.Contains(plain0, "1") {
+		t.Fatalf("want line 1 gutter, got %q", plain0)
 	}
 }

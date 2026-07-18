@@ -26,10 +26,11 @@ type DebuggerApp struct {
 	commandReg  *commands.CommandRegistry
 	keyBindings *commands.KeyBindingRegistry
 
-	tab       *termui.TabWidget
-	cmdWidget *termui.CmdWidget
-	ctx       platform.AppContext
-	miLog     *platform.NamedLogger
+	tab            *termui.TabWidget
+	cmdWidget      *termui.CmdWidget
+	completionBar  *termui.CompletionBarWidget
+	ctx            platform.AppContext
+	miLog          *platform.NamedLogger
 
 	cfg       SessionConfig
 	gdbWidget *widgets.GDBWidget

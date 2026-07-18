@@ -50,3 +50,13 @@ func TestConsumeEscapePrivateMode(t *testing.T) {
 		t.Fatalf("next remaining %q ok=%v", text[next:], ok)
 	}
 }
+
+func TestApplySGR256PaletteColor(t *testing.T) {
+	base := tcell.StyleDefault
+	st := applySGR(base, base, "38;5;81")
+	fg, _, _ := st.Decompose()
+	want := tcell.PaletteColor(81)
+	if fg != want {
+		t.Fatalf("fg=%v want PaletteColor(81)=%v", fg, want)
+	}
+}

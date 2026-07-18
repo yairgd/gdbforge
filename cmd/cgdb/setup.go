@@ -29,10 +29,16 @@ func (a *DebuggerApp) InitB() error {
 		unnamed,
 		a.gdbWidget,
 	)
-	a.tab.FocusDown()
+	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
+	a.tab.FocusWidget(a.gdbWidget)
+	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)
 	a.tab.SetEqualAlways(a.State().EqualAlways())
 	a.AddWidget(a.tab)
+
+	a.completionBar = termui.NewCompletionBarWidget(a.ctx)
+	a.completionBar.Events = a.Events()
+	a.AddWidget(a.completionBar)
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
@@ -45,6 +51,7 @@ func (a *DebuggerApp) InitB() error {
 	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
 	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)
 	a.RegisterModeHandler(platform.ModeCommand, a.handleCommandKey)
+	a.RegisterModeHandler(platform.ModeCompletion, a.handleCompletionKey)
 
 	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
 	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)

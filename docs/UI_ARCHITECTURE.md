@@ -532,7 +532,7 @@ sequenceDiagram
 |--------|------|--------|
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
 | `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
-| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source Viewport; `-->` PC marker; `:e` / `:b` |
+| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source Viewport; `━━▶` PC marker; `:e` / `:b` |
 | `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
 | `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |

@@ -1,8 +1,6 @@
 package termui
 
 import (
-	"strings"
-
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
@@ -38,10 +36,6 @@ func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 	w.viewport.SetReadOnly(true)
 	ctx.Log.AddSink(w)
 	w.log = ctx.Log.Named("LoggerWidget")
-
-	if ctx.Bus != nil {
-		platform.Subscribe(ctx.Bus, w.showCompletion)
-	}
 
 	w.initKeyBindings()
 	return w
@@ -109,12 +103,4 @@ func (m *LoggerWidget) SetFocused(focused bool) {
 
 func (m *LoggerWidget) Draw(c Canvas) {
 	m.viewport.Draw(c)
-}
-
-func (m *LoggerWidget) showCompletion(msg CompletionMsg) {
-	if len(msg.Names) == 0 {
-		m.log.Info("completions: (none)")
-		return
-	}
-	m.log.Info("completions: " + strings.Join(msg.Names, "  "))
 }

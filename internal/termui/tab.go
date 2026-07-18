@@ -112,6 +112,14 @@ func (t *TabWidget) FocusedWidget() Widget {
 	return nil
 }
 
+// FocusWidget focuses the leaf showing w (safe before first layout).
+func (t *TabWidget) FocusWidget(w Widget) bool {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.FocusWidget(w)
+	}
+	return false
+}
+
 // ReplaceFocusedWidget replaces the widget shown in the focused window.
 // Does not split, create panes, or change tree geometry.
 func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {

@@ -244,7 +244,7 @@ layout.NewSplit(Vertical, NewMyWidget(myModel))
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
 a.cmdWidget.Events = a.Events()
-// LoggerWidget (or a popup) Subscribes to termui.CompletionMsg on ctx.Bus
+a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 ```
 
 5. Build the command tree with the DSL in `ExapData()` (`cmd/cgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
