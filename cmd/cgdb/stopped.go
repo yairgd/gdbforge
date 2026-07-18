@@ -19,16 +19,25 @@ type codeRefreshMsg struct {
 
 type breakpointsUIMsg struct{}
 
-// onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps.
+type debugInfoUIMsg struct{}
+
+// onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
+// and refreshes Threads / Call stack panes.
 func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
-	if stop == nil || stop.File == "" {
+	if stop == nil {
 		return
 	}
 	file := stop.File
 	line := stop.Line
+	if file != "" {
+		a.State().SetCurrentLocation(file, line)
+	}
 
-	a.State().SetCurrentLocation(file, line)
+	a.scheduleDebugInfoRefresh()
 
+	if file == "" {
+		return
+	}
 	go func() {
 		a.ensureSourceFiles()
 		// Do not -break-list on every stop: that flooded the PTY and froze input.
@@ -41,6 +50,69 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
 		}
 	}()
+}
+
+// scheduleDebugInfoRefresh coalesces -thread-info / -stack-list-frames on stop.
+func (a *DebuggerApp) scheduleDebugInfoRefresh() {
+	a.debugInfoMu.Lock()
+	if a.debugInfoRunning {
+		a.debugInfoPending = true
+		a.debugInfoMu.Unlock()
+		return
+	}
+	a.debugInfoRunning = true
+	a.debugInfoMu.Unlock()
+
+	go a.runDebugInfoRefresh()
+}
+
+func (a *DebuggerApp) runDebugInfoRefresh() {
+	for {
+		a.refreshThreadsAndStack()
+		if scr := a.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(debugInfoUIMsg{}))
+		}
+
+		a.debugInfoMu.Lock()
+		if a.debugInfoPending {
+			a.debugInfoPending = false
+			a.debugInfoMu.Unlock()
+			continue
+		}
+		a.debugInfoRunning = false
+		a.debugInfoMu.Unlock()
+		return
+	}
+}
+
+func (a *DebuggerApp) refreshThreadsAndStack() {
+	if a.gdbMcp == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if a.threadWidget != nil {
+		raw, err := a.gdbMcp.Query(ctx, "-thread-info")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("threads").Error(err.Error())
+			}
+		} else {
+			a.threadWidget.SetItems(mcp.ParseThreadInfo(raw))
+		}
+	}
+
+	if a.callstackWidget != nil {
+		raw, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("callstack").Error(err.Error())
+			}
+		} else {
+			a.callstackWidget.SetItems(mcp.ParseStackListFrames(raw))
+		}
+	}
 }
 
 // onBreakpointsChanged publishes a bus event; the Subscribe handler coalesces

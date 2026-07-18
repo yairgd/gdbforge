@@ -130,6 +130,8 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `mode_manager.go` | (removed — use `platform.AppState`) |
 | `widgets/code_widget.go` | Per-file source (`:e` / `:b`); `━━▶` PC; Space break toggle; red BP marks |
 | `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
+| `widgets/thread_widget.go` | Builtin `:b threads`; list from `-thread-info` on stop |
+| `widgets/callstack_widget.go` | Builtin `:b callstack`; frames from `-stack-list-frames` on stop |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
@@ -142,6 +144,8 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 |------|----------------|
 | `gdb_service.go` | `GdbMcpService` — `GdbCommand` under `WithWrite` + output capture |
 | `break_list.go` | Parse `-break-list` / pending BPs into `BreakInfo` |
+| `thread_info.go` | Parse `-thread-info` into `ThreadInfo` |
+| `stack_frames.go` | Parse `-stack-list-frames` into `StackFrame` |
 | `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with `gdb_command` tool |
 
 ## internal/ptyx

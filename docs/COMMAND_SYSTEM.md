@@ -270,10 +270,10 @@ Vim-like buffers use the same pattern:
 
 | Command | Handler | Behavior |
 |---------|---------|----------|
-| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
+| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
 | `:e file` | `LeafRest("e", OnEditFile)` | Resolve against `SourceFiles`/disk; **create** a CodeWidget named after the file if needed; show it |
 
-Default layout is `[No Name]` CodeWidget | GDB. Logger is `:b logger` only. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+Default layout is Code over GDB (left) and Breakpoints / Threads / Call stack (right). Logger is `:b logger` only. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

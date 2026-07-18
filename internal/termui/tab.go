@@ -219,3 +219,27 @@ func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 		active: 0,
 	}
 }
+
+// NewTabDefaultDebugLayout builds the default debugger workspace:
+//
+//	Vertical: left = Code over GDB; right = Breakpoints / Threads / Call stack.
+func NewTabDefaultDebugLayout(title string, code, gdb, bp, threads, callstack Widget) *TabWidget {
+	tree := NewWidgetTree(code)
+	tree.Split(Vertical, bp)
+	tree.FocusWidget(code)
+	tree.Split(Horizontal, gdb)
+	tree.FocusWidget(bp)
+	tree.Split(Horizontal, threads)
+	tree.FocusWidget(threads)
+	tree.Split(Horizontal, callstack)
+	tree.FocusWidget(gdb)
+	return &TabWidget{
+		tabs: []Tab{
+			{
+				Title: title,
+				tree:  tree,
+			},
+		},
+		active: 0,
+	}
+}

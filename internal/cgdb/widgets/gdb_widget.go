@@ -202,16 +202,18 @@ func (m *GDBWidget) handleStop(stop *gdb.MiStopMsg) {
 	}
 }
 
+// silentOwner is true when MCP holds the PTY write path so :AI / tool
+// traffic does not paint the GDB console.
+//
+// PTYOwnerApp must NOT suppress paint: stop-driven Queries (-thread-info,
+// -stack-list-frames, -break-list) overlap the UI response to commands like
+// "n", and suppressing would drop ~console / (gdb) lines while CodeWidget
+// still updates from *stopped.
 func (m *GDBWidget) silentOwner() bool {
 	if m.appState == nil {
 		return false
 	}
-	switch m.appState.PTYOwner() {
-	case platform.PTYOwnerApp, platform.PTYOwnerMCP:
-		return true
-	default:
-		return false
-	}
+	return m.appState.PTYOwner() == platform.PTYOwnerMCP
 }
 
 func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {

@@ -90,6 +90,7 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 			Reason:   ExtractMIField(line, "reason"),
 			ThreadId: ExtractMIField(line, "thread-id"),
 			File:     ExtractMIField(line, "fullname"),
+			Func:     ExtractMIField(line, "func"),
 		}
 		if stop.File == "" {
 			stop.File = ExtractMIField(line, "file")

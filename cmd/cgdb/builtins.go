@@ -38,6 +38,14 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
+	a.threadWidget = widgets.NewThreadWidget()
+	a.threadWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("threads", a.threadWidget)
+
+	a.callstackWidget = widgets.NewCallStackWidget()
+	a.callstackWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("callstack", a.callstackWidget)
+
 	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
 	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())

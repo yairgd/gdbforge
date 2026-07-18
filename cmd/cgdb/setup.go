@@ -27,10 +27,13 @@ func (a *DebuggerApp) InitB() error {
 		unnamed.SetPTY(a.gdbWidget.Session(), a.State())
 	}
 
-	a.tab = termui.NewTabTwoHozSplitWins(
+	a.tab = termui.NewTabDefaultDebugLayout(
 		"basic debugger",
 		unnamed,
 		a.gdbWidget,
+		a.bpWidget,
+		a.threadWidget,
+		a.callstackWidget,
 	)
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	a.tab.FocusWidget(a.gdbWidget)

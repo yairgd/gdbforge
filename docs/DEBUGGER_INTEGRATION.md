@@ -136,7 +136,7 @@ Writers (`PTYOwner` on `AppState`):
 |-------|-----|---------------|
 | `ui` | GDB / Exec console submit | Yes |
 | `mcp` | `:AI` / `GdbCommand` | Suppressed in GDBWidget |
-| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d** | Suppressed in GDBWidget |
+| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Not suppressed (MI `^done` rarely paints; must not hide UI `n` / stop console) |
 
 ```mermaid
 flowchart LR
@@ -168,6 +168,8 @@ Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget
 | Surface | How to open | Keys |
 |---------|-------------|------|
 | **BreakpointWidget** | `:b breakpoint` | `j`/`k` or Up/Down — bold selection; `e` — toggle (see below); `d` — delete |
+| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
+| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **CodeWidget** | `:e file` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — toggle break at cursor line |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
@@ -231,7 +233,17 @@ No `time.Sleep` debounce — coalesce is event-driven (pending flag). Redraw use
 - Space uses basename locations (`break hello.c:23` / `clear hello.c:23`) under `PTYOwnerApp`.
 - Horizontal scroll in ANSI mode uses visible columns (not raw byte offsets) so panes stay readable after `:vs`.
 
-PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` tells GDBWidget when to suppress console paint.
+PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` tells GDBWidget when to suppress console paint (**MCP only** — App stop Queries must not hide UI console output).
+
+### Threads and call stack on stop
+
+On each qualifying `*stopped`, `DebuggerApp` coalesces (pending flag, no timer):
+
+1. `Query("-thread-info")` → `ParseThreadInfo` → `ThreadWidget.SetItems`
+2. `Query("-stack-list-frames")` → `ParseStackListFrames` → `CallStackWidget.SetItems`
+3. `PostEvent(debugInfoUIMsg)` → `RequestFrame`
+
+Independent of `BreakpointsChangedMsg` (BP marks stay on breakpoint-change events).
 
 ---
 

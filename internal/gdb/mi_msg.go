@@ -8,7 +8,8 @@ type MiStopMsg struct {
 	Reason   string
 	ThreadId string
 	File     string // fullname or file from frame
-	Line     int    // 1-based
+	Func     string
+	Line     int // 1-based
 }
 type MiMsg struct {
 	CmdLine      []string

@@ -111,9 +111,11 @@ classDiagram
 | `GDBWidget` | Owns GDB `Session` (`ptyx`); wires `ConsolePane` to MI |
 | `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space toggles break; red BP marks |
 | `BreakpointWidget` | Builtin `:b breakpoint`; owns list; `e`/`d`; drives CodeWidget marks |
+| `ThreadWidget` | Builtin `:b threads`; list refreshed on GDB stop |
+| `CallStackWidget` | Builtin `:b callstack`; frames refreshed on GDB stop |
 | `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
 
-**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 **Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `fileBuffers` (keyed by path; PaneName = basename).
 
@@ -535,6 +537,8 @@ sequenceDiagram
 | `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
 | `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
 | `BreakpointWidget` | `internal/cgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
+| `ThreadWidget` | `internal/cgdb/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
+| `CallStackWidget` | `internal/cgdb/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
 | `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
 | `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |

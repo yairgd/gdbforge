@@ -53,9 +53,14 @@ type DebuggerApp struct {
 	fileBuffers map[string]*widgets.CodeWidget
 
 	bpWidget           *widgets.BreakpointWidget
+	threadWidget       *widgets.ThreadWidget
+	callstackWidget    *widgets.CallStackWidget
 	bpRefreshMu        sync.Mutex
 	bpRefreshRunning   bool
 	bpRefreshPending   bool
+	debugInfoMu        sync.Mutex
+	debugInfoRunning   bool
+	debugInfoPending   bool
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {

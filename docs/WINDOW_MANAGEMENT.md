@@ -204,7 +204,7 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets.
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. `NewTabDefaultDebugLayout` builds the default debugger workspace: vertical split with Code over GDB on the left and Breakpoints / Threads / Call stack stacked on the right.
 
 ---
 
@@ -286,7 +286,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default panes are `[No Name]` | GDB.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default layout (`NewTabDefaultDebugLayout`): left Code over GDB; right Breakpoints / Threads / Call stack.
 
 The longer-term `:buffer` idea selects which **application model** to display â€” it does not open a text file (except via the `:e` path above).
 
@@ -295,6 +295,8 @@ The longer-term `:buffer` idea selects which **application model** to display â€
 :b logger
 :b gdb
 :b breakpoint
+:b threads
+:b callstack
 :e main.c
 :b main.c
 ```
@@ -302,7 +304,6 @@ The longer-term `:buffer` idea selects which **application model** to display â€
 Future model names (aspirational):
 
 ```text
-:buffer threads
 :buffer registers
 :buffer memory
 ```

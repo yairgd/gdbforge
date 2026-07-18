@@ -370,6 +370,7 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 | **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down | Bold selection |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
+| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down | Bold selection (read-only this stage) |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
