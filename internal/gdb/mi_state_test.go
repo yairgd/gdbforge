@@ -56,8 +56,8 @@ func TestPushRawBreakpointNotify(t *testing.T) {
 		t.Fatal("expected BreakpointsChanged for =breakpoint-created")
 	}
 	u = st.PushRaw(`=breakpoint-modified,bkpt={number="1",enabled="n"}` + "\n")
-	if !u.BreakpointsChanged {
-		t.Fatal("expected BreakpointsChanged for =breakpoint-modified")
+	if u.BreakpointsChanged {
+		t.Fatal("hit-count/attr modified must not trigger break-list refresh")
 	}
 	u = st.PushRaw(`=breakpoint-deleted,id="1"` + "\n")
 	if !u.BreakpointsChanged {

@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"strings"
+	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
@@ -22,6 +23,7 @@ type GDBWidget struct {
 	appState      *platform.AppState
 	onStopped     func(*gdb.MiStopMsg)
 	onBreakpoints func()
+	onRunning     func()
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
@@ -76,6 +78,11 @@ func (m *GDBWidget) SetOnBreakpointsChanged(fn func()) {
 	m.onBreakpoints = fn
 }
 
+// SetOnRunning registers a callback for ^running (inferior resumed).
+func (m *GDBWidget) SetOnRunning(fn func()) {
+	m.onRunning = fn
+}
+
 // Session exposes the owned debugger for external APIs (e.g. MCP).
 // Callers may Send and Subscribe; they must not Close while the widget owns it.
 func (m *GDBWidget) Session() core.Session {
@@ -87,15 +94,84 @@ func (m *GDBWidget) Start(screen tcell.Screen) {
 		return
 	}
 	ch := m.outputChan
-	go func() {
-		for msg := range ch {
-			_ = screen.PostEvent(tcell.NewEventInterrupt(core.GdbOutputMsg{
-				Data: msg.Data,
-				Err:  msg.Err,
-			}))
-		}
+	// Coalesce PTY chunks off the UI thread so a free-running inferior's
+	// stdout does not PostEvent (and full-redraw) for every tiny read.
+	// Painting still happens only on the tcell event loop.
+	go coalesceGdbOutput(ch, func(msg core.GdbOutputMsg) {
+		_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
+	}, func() {
 		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
-	}()
+	})
+}
+
+const (
+	gdbOutputFlushInterval = 16 * time.Millisecond
+	gdbOutputFlushMaxBytes = 64 * 1024
+)
+
+func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(core.GdbOutputMsg), onExit func()) {
+	var pending strings.Builder
+	var flushTimer *time.Timer
+	var flushC <-chan time.Time
+
+	disarm := func() {
+		if flushTimer == nil {
+			return
+		}
+		if !flushTimer.Stop() {
+			select {
+			case <-flushTimer.C:
+			default:
+			}
+		}
+		flushTimer = nil
+		flushC = nil
+	}
+	flush := func() {
+		disarm()
+		if pending.Len() == 0 {
+			return
+		}
+		data := pending.String()
+		pending.Reset()
+		post(core.GdbOutputMsg{Data: data})
+	}
+	arm := func() {
+		if flushTimer != nil {
+			return
+		}
+		flushTimer = time.NewTimer(gdbOutputFlushInterval)
+		flushC = flushTimer.C
+	}
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				flush()
+				if onExit != nil {
+					onExit()
+				}
+				return
+			}
+			if msg.Err != nil {
+				flush()
+				post(core.GdbOutputMsg{Err: msg.Err})
+				continue
+			}
+			if msg.Data == "" {
+				continue
+			}
+			pending.WriteString(msg.Data)
+			if pending.Len() >= gdbOutputFlushMaxBytes {
+				flush()
+			} else {
+				arm()
+			}
+		case <-flushC:
+			flush()
+		}
+	}
 }
 
 func (m *GDBWidget) Close() {
@@ -231,7 +307,18 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 		}
 	}
 	if upd.Stopped != nil {
+		if m.appState != nil {
+			m.appState.SetInferiorRunning(false)
+		}
 		m.handleStop(upd.Stopped)
+	}
+	if upd.State == gdb.Running {
+		if m.appState != nil {
+			m.appState.SetInferiorRunning(true)
+		}
+		if m.onRunning != nil {
+			m.onRunning()
+		}
 	}
 	if upd.BreakpointsChanged && m.onBreakpoints != nil {
 		m.onBreakpoints()

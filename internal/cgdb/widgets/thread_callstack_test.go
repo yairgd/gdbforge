@@ -35,3 +35,41 @@ func TestCallStackWidgetSetItems(t *testing.T) {
 		t.Fatalf("lines=%v", lines)
 	}
 }
+
+func TestListWidgetsMouseSyncSelection(t *testing.T) {
+	bp := NewBreakpointWidget()
+	bp.SetFocused(true)
+	bp.MergeFromGDB([]mcp.BreakInfo{
+		{Number: 1, Enabled: true, File: "a.c", Line: 1},
+		{Number: 2, Enabled: true, File: "a.c", Line: 2},
+	})
+	bp.viewport.CursorLine = 1
+	bp.syncSelectedFromViewport()
+	if bp.Selected() != 1 {
+		t.Fatalf("bp selected=%d", bp.Selected())
+	}
+
+	th := NewThreadWidget()
+	th.SetFocused(true)
+	th.SetItems([]mcp.ThreadInfo{
+		{ID: "1", State: "stopped"},
+		{ID: "2", State: "running"},
+	})
+	th.viewport.CursorLine = 1
+	th.syncSelectedFromViewport()
+	if th.selected != 1 {
+		t.Fatalf("thread selected=%d", th.selected)
+	}
+
+	cs := NewCallStackWidget()
+	cs.SetFocused(true)
+	cs.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main"},
+		{Level: 1, Func: "start"},
+	})
+	cs.viewport.CursorLine = 1
+	cs.syncSelectedFromViewport()
+	if cs.selected != 1 {
+		t.Fatalf("callstack selected=%d", cs.selected)
+	}
+}

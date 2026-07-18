@@ -25,8 +25,8 @@ type GdbMcpService struct {
 	captureMax  time.Duration
 
 	// OnBreakpointsChanged is invoked after a command whose PTY output
-	// includes =breakpoint-* (created/deleted/modified). Lets the UI refresh
-	// even if a Subscribe fan-out chunk was dropped.
+	// includes =breakpoint-created/deleted. Lets the UI refresh even if a
+	// Subscribe fan-out chunk was dropped.
 	OnBreakpointsChanged func()
 }
 
@@ -91,7 +91,7 @@ func (s *GdbMcpService) query(ctx context.Context, command string, owner platfor
 	// Only MCP (not silent App -break-list) may re-notify: App queries must not
 	// re-enter onBreakpointsChanged or they flood the PTY write lock.
 	if err == nil && owner == platform.PTYOwnerMCP && s.OnBreakpointsChanged != nil &&
-		strings.Contains(raw, "=breakpoint-") {
+		(strings.Contains(raw, "=breakpoint-created") || strings.Contains(raw, "=breakpoint-deleted")) {
 		s.OnBreakpointsChanged()
 	}
 	return raw, err

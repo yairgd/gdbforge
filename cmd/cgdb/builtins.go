@@ -34,6 +34,11 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
 
+	a.outputWidget = widgets.NewOutputWidget()
+	a.outputWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("output", a.outputWidget)
+	a.maybeClearOutput()
+
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("breakpoint", a.bpWidget)
@@ -45,6 +50,9 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("callstack", a.callstackWidget)
+
+	a.State().RegisterLayout(platform.LayoutDefault)
+	a.State().SetCurrentLayout(platform.LayoutDefault)
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged

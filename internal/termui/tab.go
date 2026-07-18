@@ -2,6 +2,8 @@ package termui
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
 //
@@ -102,6 +104,14 @@ func (t *TabWidget) ActiveTree() *WidgetTree {
 		return nil
 	}
 	return t.tabs[t.active].tree
+}
+
+// SetActiveTree replaces the WidgetTree of the currently selected tab.
+func (t *TabWidget) SetActiveTree(tree *WidgetTree) {
+	if len(t.tabs) == 0 || tree == nil {
+		return
+	}
+	t.tabs[t.active].tree = tree
 }
 
 // FocusedWidget returns the focused leaf widget in the active tab.
@@ -222,17 +232,28 @@ func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 
 // NewTabDefaultDebugLayout builds the default debugger workspace:
 //
-//	Vertical: left = Code over GDB; right = Breakpoints / Threads / Call stack.
-func NewTabDefaultDebugLayout(title string, code, gdb, bp, threads, callstack Widget) *TabWidget {
+//	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
+//	ratios come from AppState.DefaultLayoutRatios (Left, Output, BottomFirst).
+func NewTabDefaultDebugLayout(title string, code, gdb, output, bp, threads, callstack Widget, ratios platform.DefaultLayoutRatios) *TabWidget {
+	ratios.Left = clampRatio(ratios.Left)
+	ratios.Output = clampRatio(ratios.Output)
+	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
 	tree := NewWidgetTree(code)
-	tree.Split(Vertical, bp)
+	// Temporarily equalize while building the tree so nested panes get even shares.
+	tree.SetEqualAlways(true)
+	tree.Split(Vertical, output)
 	tree.FocusWidget(code)
 	tree.Split(Horizontal, gdb)
+	tree.FocusWidget(output)
+	tree.Split(Horizontal, bp)
 	tree.FocusWidget(bp)
 	tree.Split(Horizontal, threads)
 	tree.FocusWidget(threads)
 	tree.Split(Horizontal, callstack)
 	tree.FocusWidget(gdb)
+	applyDefaultDebugRatios(tree.Root(), ratios)
+	// Caller enables equalalways as policy without wiping the preset ratios.
+	tree.SetEqualAlways(false)
 	return &TabWidget{
 		tabs: []Tab{
 			{
@@ -241,5 +262,39 @@ func NewTabDefaultDebugLayout(title string, code, gdb, bp, threads, callstack Wi
 			},
 		},
 		active: 0,
+	}
+}
+
+func clampRatio(r float64) float64 {
+	if r < 0.1 {
+		return 0.1
+	}
+	if r > 0.9 {
+		return 0.9
+	}
+	return r
+}
+
+// applyDefaultDebugRatios sets outer left/right width and right-column heights
+// from DefaultLayoutRatios (Output share; BottomFirst for Breakpoints in the
+// bottom half; Threads|Call stack split the remainder of that half).
+func applyDefaultDebugRatios(root *Node, ratios platform.DefaultLayoutRatios) {
+	if root == nil || root.Type != NodeSplit || root.Dir != Vertical {
+		return
+	}
+	root.Ratio = ratios.Left
+	right := root.Second // Output over (BP / Threads / Call stack)
+	if right == nil || right.Type != NodeSplit || right.Dir != Horizontal {
+		return
+	}
+	right.Ratio = ratios.Output
+	bottom := right.Second
+	if bottom == nil || bottom.Type != NodeSplit || bottom.Dir != Horizontal {
+		return
+	}
+	bottom.Ratio = ratios.BottomFirst
+	rest := bottom.Second
+	if rest != nil && rest.Type == NodeSplit && rest.Dir == Horizontal {
+		rest.Ratio = 0.5 // Threads | Call stack share the remaining bottom equally
 	}
 }

@@ -113,9 +113,10 @@ classDiagram
 | `BreakpointWidget` | Builtin `:b breakpoint`; owns list; `e`/`d`; drives CodeWidget marks |
 | `ThreadWidget` | Builtin `:b threads`; list refreshed on GDB stop |
 | `CallStackWidget` | Builtin `:b callstack`; frames refreshed on GDB stop |
+| `OutputWidget` | Builtin `:b output`; inferior stdout (`@` stream and raw PTY while running) |
 | `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
 
-**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b output`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 **Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `fileBuffers` (keyed by path; PaneName = basename).
 
@@ -201,7 +202,7 @@ Layout runs in two phases each frame:
    - **Draw widgets** — each leaf calls `Widget.Draw(canvas)` for rows `0..H-1`.
    - **Clear status rows** — `ClearStatusLine` on every leaf (`tcell.StyleDefault`).
    - **Redraw grid** — re-run `DrawVerticalLocal` / `DrawHorizontalLocal` for all splits (restores border cells and default style after widget overwrites).
-   - **Draw status lines** — focused leaf calls `DrawStatusLine(canvas, true)`; inactive leaves no-op.
+   - **Draw status lines** — every leaf calls `DrawStatusLine`; focused uses bar style, inactive overlays the name at column 4 on the grid.
 
 ```mermaid
 flowchart TB
@@ -222,7 +223,7 @@ flowchart TB
     end
 ```
 
-**Per-pane status line:** each leaf pane has a one-row band at local `y = c.H()` (immediately below the content area). Only the focused pane paints a styled label via `PaintStatusBar`. Inactive panes leave that row blank with default terminal styling after the grid restore. Helpers live in `status_line.go`.
+**Per-pane status line:** each leaf pane has a one-row band at local `y = c.H()` (immediately below the content area). Focused panes use `PaintStatusBar` (`▎ name`); unfocused panes keep the grid and overlay a gray name at column 4 (`PaintInactiveStatusBar`). Helpers live in `status_line.go`.
 
 ### Split geometry
 
@@ -539,6 +540,7 @@ sequenceDiagram
 | `BreakpointWidget` | `internal/cgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
 | `ThreadWidget` | `internal/cgdb/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
 | `CallStackWidget` | `internal/cgdb/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
+| `OutputWidget` | `internal/cgdb/widgets/output_widget.go` | `:b output`; program stdout (`printf`), not MI noise |
 | `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
 | `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |

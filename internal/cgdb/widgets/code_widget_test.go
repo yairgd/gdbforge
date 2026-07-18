@@ -9,6 +9,8 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/cgdb-go/internal/mcp"
+	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -90,6 +92,25 @@ func TestCodeWidgetMoveSel(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetSyncSelFromViewportClick(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.c")
+	src := "a\nb\nc\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := NewCodeWidget()
+	w.SetFocused(true)
+	if err := w.ShowLocation(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	w.viewport.CursorLine = 2 // 0-based → source line 3
+	w.syncSelFromViewport()
+	if w.SelLine() != 3 {
+		t.Fatalf("mouse sync sel=%d want 3", w.SelLine())
+	}
+}
+
 func TestCodeWidgetSpaceTogglesBreak(t *testing.T) {
 	w := NewCodeWidget()
 	sent := make(chan string, 4)
@@ -122,6 +143,47 @@ func TestCodeWidgetSpaceTogglesBreak(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetSetBreakInfosNilKeepsMarks(t *testing.T) {
+	w := NewCodeWidget()
+	w.path = "/tmp/a.c"
+	w.rawLines = []string{"a", "b"}
+	w.addLocalBreak(2)
+	w.SetBreakInfos(nil) // failed refresh
+	if !w.hasBreakpoint(2) {
+		t.Fatal("nil SetBreakInfos must keep red mark")
+	}
+	w.SetBreakInfos([]mcp.BreakInfo{}) // real empty
+	if w.hasBreakpoint(2) {
+		t.Fatal("empty SetBreakInfos must clear red mark")
+	}
+}
+
+func TestCodeWidgetBreakWhileRunningInterruptsAndContinues(t *testing.T) {
+	w := NewCodeWidget()
+	sent := make(chan string, 8)
+	w.sess = &fakeSess{sent: sent}
+	st := platform.NewAppState()
+	st.SetInferiorRunning(true)
+	w.state = st
+	w.path = "/home/yair/cgdb-go/hello.c"
+	w.rawLines = []string{"int main() {", "  return 0;", "}"}
+	w.selLine = 2
+
+	ev := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if !w.HandleFocusKey(ev) {
+		t.Fatal("space should be handled")
+	}
+	if got := <-sent; got != "\x03" {
+		t.Fatalf("interrupt=%q", got)
+	}
+	if got := <-sent; got != "break hello.c:2" {
+		t.Fatalf("break=%q", got)
+	}
+	if got := <-sent; got != "continue" {
+		t.Fatalf("continue=%q", got)
+	}
+}
+
 type fakeSess struct {
 	sent chan string
 }
@@ -139,5 +201,8 @@ func (f *fakeSess) WithWrite(_ context.Context, fn func(w core.PTYWriter) error)
 
 type fakePW struct{ f *fakeSess }
 
-func (p fakePW) Send(cmd string) error    { p.f.sent <- cmd; return nil }
-func (p fakePW) SendRaw(raw string) error { return nil }
+func (p fakePW) Send(cmd string) error { p.f.sent <- cmd; return nil }
+func (p fakePW) SendRaw(raw string) error {
+	p.f.sent <- raw
+	return nil
+}

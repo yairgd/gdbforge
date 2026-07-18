@@ -260,7 +260,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget `e`/`d`) hold the write mux.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget `e`/`d`) hold the write mux.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -370,7 +370,9 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 | **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down | Bold selection |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
-| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down | Bold selection (read-only this stage) |
+| **BreakpointWidget** | `j`/`k`, mouse click | Bold blue selection; `e` toggle; `d` delete |
+| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, mouse click | Bold blue selection (read-only this stage) |
+| **OutputWidget** (`:b output`) | `j`/`k` / PgUp/PgDn | Scroll program stdout; `<C-l>` clear |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 

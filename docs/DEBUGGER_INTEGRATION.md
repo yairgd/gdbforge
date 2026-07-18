@@ -163,11 +163,22 @@ GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg`
 
 Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
 
+## Breakpoints while the inferior is running
+
+While the program is in `continue` / `^running`, sync GDB does not process a queued `break` until the target stops. Space (and BreakpointWidget `e`/`d`) therefore:
+
+1. Send Ctrl-C (`\x03`) to interrupt
+2. Send `break` / `clear` / `-break-delete`
+3. Send `continue` so execution resumes and can hit the new breakpoint
+
+`AppState.InferiorRunning` tracks `^running` → `*stopped` for this path.
+
 ### Builtins and keys
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` | `j`/`k` or Up/Down — bold selection; `e` — toggle (see below); `d` — delete |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down — bold selection; `e` — toggle (see below); `d` — delete |
+| **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear |
 | **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **CodeWidget** | `:e file` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — toggle break at cursor line |
@@ -224,6 +235,8 @@ flowchart TD
 | After refresh | If pending → one trailing `-break-list`; else clear running flag |
 
 No `time.Sleep` debounce — coalesce is event-driven (pending flag). Redraw uses `PostEvent(breakpointsUIMsg)` on the UI thread. CodeWidget red marks still come from `OnChange` → `paintCodeBreakmarks` → `SetBreakInfos` (not a separate bus subscriber on the code panes).
+
+Only `=breakpoint-created` / `=breakpoint-deleted` trigger a `-break-list` refresh (not `=breakpoint-modified` hit-count updates during `n`/`continue`).
 
 ### CodeWidget details
 
@@ -326,7 +339,7 @@ GDB MI2 emits several record types:
 
 ### GdbInputState (streaming)
 
-`PushRaw` is called on the **UI thread** for each `GdbOutputMsg` chunk:
+`PushRaw` is called on the **UI thread** for each coalesced `GdbOutputMsg` chunk:
 
 1. Append bytes to `lineBuf`; split on `\n`.
 2. For each complete line, classify the MI record and accumulate an `MiUpdate`.
@@ -377,7 +390,9 @@ InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient (owned) → ptyx
                walking prompt)   MI + Send)
 ```
 
-`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges `Subscribe` → `EventInterrupt(GdbOutputMsg)`; `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
+`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges `Subscribe` → coalesced `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB batches so free-running stdout does not flood the UI thread); `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
+
+Painting stays on the tcell event loop (tcell is not thread-safe). The bridge goroutine only batches bytes before `PostEvent`.
 
 ```mermaid
 sequenceDiagram

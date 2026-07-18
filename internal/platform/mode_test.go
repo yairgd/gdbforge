@@ -3,9 +3,25 @@ package platform
 import "testing"
 
 func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
-	var s AppState
+	s := NewAppState()
 	if s.PTYOwner() != PTYOwnerNone {
 		t.Fatal("default owner")
+	}
+	if !s.EqualAlways() {
+		t.Fatal("equalalways default true")
+	}
+	r := s.DefaultLayoutRatios()
+	if r.Left < 0.66 || r.Left > 0.67 {
+		t.Fatalf("Left default=%v want ~2/3", r.Left)
+	}
+	if r.Output != 0.5 {
+		t.Fatalf("Output default=%v want 1/2", r.Output)
+	}
+	if r.BottomFirst < 0.33 || r.BottomFirst > 0.34 {
+		t.Fatalf("BottomFirst default=%v want ~1/3", r.BottomFirst)
+	}
+	if s.LayoutLeftRatio() != r.Left {
+		t.Fatal("LayoutLeftRatio mirrors DefaultLayoutRatios.Left")
 	}
 	s.WithPTYOwner(PTYOwnerMCP, func() {
 		if s.PTYOwner() != PTYOwnerMCP {
@@ -16,9 +32,25 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 		t.Fatal("owner restored")
 	}
 
+	s.SetEqualAlways(false)
+	if s.EqualAlways() {
+		t.Fatal("noequalalways")
+	}
 	s.SetEqualAlways(true)
 	if !s.EqualAlways() {
 		t.Fatal("equalalways")
+	}
+	s.SetLayoutLeftRatio(0.5)
+	if s.LayoutLeftRatio() != 0.5 {
+		t.Fatal("layoutLeftRatio set")
+	}
+	s.SetLayoutLeftRatio(0.01)
+	if s.LayoutLeftRatio() != 0.1 {
+		t.Fatal("layoutLeftRatio clamp low")
+	}
+	s.SetLayoutLeftRatio(0.99)
+	if s.LayoutLeftRatio() != 0.9 {
+		t.Fatal("layoutLeftRatio clamp high")
 	}
 	s.SetMode(ModeCommand)
 	if s.Mode() != ModeCommand {
@@ -34,4 +66,30 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 		t.Fatal("location")
 	}
 	_ = PTYOwnerApp.String()
+}
+
+func TestAppStateClearOutputAndLayouts(t *testing.T) {
+	s := NewAppState()
+	if !s.ClearOutput() {
+		t.Fatal("clearoutput default true")
+	}
+	s.SetClearOutput(false)
+	if s.ClearOutput() {
+		t.Fatal("noclearoutput")
+	}
+	if !s.HasLayout(LayoutDefault) || s.CurrentLayout() != LayoutDefault {
+		t.Fatal("default layout")
+	}
+	s.RegisterLayout("wide")
+	if !s.HasLayout("wide") {
+		t.Fatal("register layout")
+	}
+	s.RegisterLayout("wide") // idempotent
+	if len(s.Layouts()) != 2 {
+		t.Fatalf("layouts=%v", s.Layouts())
+	}
+	s.SetCurrentLayout("wide")
+	if s.CurrentLayout() != "wide" {
+		t.Fatal("current layout")
+	}
 }

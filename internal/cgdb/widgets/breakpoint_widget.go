@@ -1,10 +1,8 @@
 package widgets
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
@@ -94,6 +92,23 @@ func (w *BreakpointWidget) move(delta int) {
 	w.viewport.EnsureCursorVisible()
 }
 
+// syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
+func (w *BreakpointWidget) syncSelectedFromViewport() {
+	n := len(w.items)
+	if n == 0 {
+		return
+	}
+	line := w.viewport.CursorLine
+	if line < 0 {
+		line = 0
+	}
+	if line >= n {
+		line = n - 1
+	}
+	w.selected = line
+	w.viewport.CursorLine = line
+}
+
 func (w *BreakpointWidget) notifyChange() {
 	if w.OnChange != nil {
 		w.OnChange()
@@ -156,21 +171,7 @@ func breakLoc(it mcp.BreakInfo) string {
 }
 
 func (w *BreakpointWidget) sendMI(cmd string) {
-	if w.sess == nil || cmd == "" {
-		return
-	}
-	send := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = w.sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			return pw.Send(cmd)
-		})
-	}
-	if w.state != nil {
-		w.state.WithPTYOwner(platform.PTYOwnerApp, send)
-	} else {
-		send()
-	}
+	sendGdbCmd(w.sess, w.state, cmd)
 }
 
 // MergeFromGDB syncs live GDB breakpoints into the internal list without
@@ -266,6 +267,7 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
+		w.syncSelectedFromViewport()
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return

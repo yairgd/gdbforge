@@ -204,7 +204,7 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. `NewTabDefaultDebugLayout` builds the default debugger workspace: vertical split with Code over GDB on the left and Breakpoints / Threads / Call stack stacked on the right.
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. `NewTabDefaultDebugLayout` builds the default debugger workspace: vertical split with Code over GDB on the left (**2/3** width via `AppState.LayoutLeftRatio`) and Output / Breakpoints / Threads / Call stack on the right (**1/3**). Within the right column, Output is **1/2** height; the other three panes share the bottom half equally.
 
 ---
 
@@ -286,7 +286,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default layout (`NewTabDefaultDebugLayout`): left Code over GDB; right Breakpoints / Threads / Call stack.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default layout (`NewTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
@@ -297,6 +297,10 @@ The longer-term `:buffer` idea selects which **application model** to display �
 :b breakpoint
 :b threads
 :b callstack
+:b output
+:layout default
+:set clearoutput
+:set noclearoutput
 :e main.c
 :b main.c
 ```
@@ -328,15 +332,15 @@ Each leaf pane in the split tree has a one-row **status band** at local `y = c.H
 
 | State | Appearance |
 |-------|------------|
-| Focused | Styled bar: `▎ {PaneName}` (sky blue on dark slate gray) |
-| Unfocused | Blank row with `tcell.StyleDefault` (terminal default background) |
+| Focused | Styled bar: `▎ {PaneName}` (green insert / blue normal) |
+| Unfocused | Grid row unchanged; gray `{PaneName}` starting at the **4th** character |
 
 **Draw order** (after `BuildLayout`):
 
 1. Widget content (`Draw`)
 2. Clear all pane status rows (`ClearStatusLine`)
 3. Redraw split separators (`redrawGrid`) — restores border glyphs and default style
-4. Paint status bar on the focused pane only (`DrawStatusLine`)
+4. Paint status on **every** leaf (`DrawStatusLine`) — focused bar vs inactive name overlay (no dash fill)
 
 Widgets set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Container widgets (`TabWidget`, `CmdWidget`) use a no-op.
 
@@ -380,7 +384,9 @@ Planned contents:
 |-------|---------|
 | `Mode` | Input mode: Normal / Insert / Command |
 | `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
-| `EqualAlways` | Vim-like: when true, split ratios rebalance to equal on every layout |
+| `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
+| `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
+| `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
 | `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query) |
 | `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
 
@@ -391,7 +397,7 @@ st.SetEqualAlways(true) // :set equalalways
 st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

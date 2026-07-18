@@ -132,6 +132,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
 | `widgets/thread_widget.go` | Builtin `:b threads`; list from `-thread-info` on stop |
 | `widgets/callstack_widget.go` | Builtin `:b callstack`; frames from `-stack-list-frames` on stop |
+| `widgets/output_widget.go` | Builtin `:b output`; inferior stdout (`@` stream); `\n`/`\r`/`\t` |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |

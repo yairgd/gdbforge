@@ -2,6 +2,7 @@ package termui
 
 import (
 	"fmt"
+	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
 )
@@ -27,7 +28,7 @@ func statusBarStyle(active bool) tcell.Style {
 		Bold(false)
 }
 
-// PaintStatusBar renders the pane name on the bottom grid row of c.
+// PaintStatusBar renders the focused pane name on the bottom grid row of c.
 // active selects the insert-mode (green) vs remembered (blue) style.
 func PaintStatusBar(c Canvas, name string, active bool) {
 	if name == "" || c.W() <= 0 || c.H() <= 0 {
@@ -45,6 +46,29 @@ func PaintStatusBar(c Canvas, name string, active bool) {
 			break
 		}
 		c.SetContent(i, row, ch, style)
+	}
+}
+
+// inactiveNameCol is the 0-based column where an unfocused pane name starts
+// (4th character on the status row).
+const inactiveNameCol = 3
+
+// PaintInactiveStatusBar writes the pane name on the status row starting at
+// column 4, without clearing the row so the split grid stays visible.
+func PaintInactiveStatusBar(c Canvas, name string) {
+	if name == "" || c.W() <= 0 || c.H() <= 0 {
+		return
+	}
+	row := StatusLineRow(c)
+	style := tcell.StyleDefault.Foreground(tcell.ColorGray)
+	name = strings.TrimSpace(name)
+	col := inactiveNameCol
+	for _, ch := range name {
+		if col >= c.W() {
+			break
+		}
+		c.SetContent(col, row, ch, style)
+		col++
 	}
 }
 

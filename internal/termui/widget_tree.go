@@ -25,8 +25,9 @@ type WidgetTree struct {
 	// insertActive: true → green status on focus; false → blue (normal mode).
 	insertActive bool
 
-	// equalAlways, when true, rebalances split ratios on every BuildLayout
-	// (Vim 'equalalways'). When false, dragged ratios are preserved.
+	// equalAlways, when true, rebalances split ratios after Split / DeleteFocus
+	// (Vim 'equalalways'). Paint preserves current ratios; dragged sizes stick
+	// until the next structural change.
 	equalAlways bool
 
 	dragSplit        *Node
@@ -43,13 +44,26 @@ func (w *WidgetTree) SetOnResize(fn func()) {
 
 func (w *WidgetTree) SetEqualAlways(v bool) {
 	w.equalAlways = v
-	if v && w.root != nil {
-		ComputeRatios(w.root)
-	}
 }
 
 func (w *WidgetTree) EqualAlways() bool {
 	return w.equalAlways
+}
+
+// Rebalance sets every split Ratio from directional leaf weights (1/N).
+// Used by :set equalalways when the user wants an immediate equalize.
+func (w *WidgetTree) Rebalance() {
+	if w != nil && w.root != nil {
+		ComputeRatios(w.root)
+	}
+}
+
+// Root returns the tree root (for tests / layout inspection).
+func (w *WidgetTree) Root() *Node {
+	if w == nil {
+		return nil
+	}
+	return w.root
 }
 
 func (w *WidgetTree) SetInsertActive(active bool) {
@@ -177,10 +191,10 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
 
 	node.Widget = nil
 
-	// Recompute every split's ratio from directional leaf counts so panes are
-	// evenly sized (1/N per direction), matching the pre-drag layout. buildLayout
-	// still honors node.Ratio, so separator drags remain effective after a split.
-	ComputeRatios(w.root)
+	// When equalalways is on, rebalance to even sizes after the structural change.
+	if w.equalAlways {
+		ComputeRatios(w.root)
+	}
 }
 
 func (l *WidgetTree) HandleEvent(ev tcell.Event) {
@@ -496,8 +510,9 @@ func (t *WidgetTree) DeleteFocus() bool {
 		for t.focus.Type == NodeSplit {
 			t.focus = t.focus.First
 		}
-		// Rebalance remaining panes to even sizes.
-		ComputeRatios(t.root)
+		if t.equalAlways {
+			ComputeRatios(t.root)
+		}
 		return false
 	}
 
@@ -513,8 +528,9 @@ func (t *WidgetTree) DeleteFocus() bool {
 	for t.focus.Type == NodeSplit {
 		t.focus = t.focus.First
 	}
-	// Rebalance remaining panes to even sizes.
-	ComputeRatios(t.root)
+	if t.equalAlways {
+		ComputeRatios(t.root)
+	}
 	return false
 }
 
@@ -543,9 +559,6 @@ func (l *WidgetTree) Draw(c Canvas) {
 	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
 
 	WalkLeaves(l.root, func(n *Node) {
-		if n != l.focus {
-			return
-		}
 		n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
 	})
 }
@@ -614,9 +627,7 @@ func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect)
 }
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
-	if l.equalAlways && l.root != nil {
-		ComputeRatios(l.root)
-	}
+	// Ratios are applied as-is; equalalways rebalances only on Split/DeleteFocus.
 	l.grid = c.grid
 	l.geom = make(map[*Node]layoutGeom)
 	l.buildLayout(l.root, c)

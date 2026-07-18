@@ -66,7 +66,7 @@ func NewTermApp() *TermApp {
 		uiEvents:        make(chan tcell.Event, 100),
 		modeHandlers:    make(ModeKeyHandlers),
 		commandHandlers: make(CommandHandlers),
-		appState:        &platform.AppState{},
+		appState:        platform.NewAppState(),
 	}
 }
 

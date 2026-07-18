@@ -35,6 +35,19 @@ func (o PTYOwner) String() string {
 	}
 }
 
+const LayoutDefault = "default"
+
+// DefaultLayoutRatios holds split shares for NewTabDefaultDebugLayout.
+type DefaultLayoutRatios struct {
+	// Left is the outer vertical First share (Code+GDB column). Default 2/3.
+	Left float64
+	// Output is the right-column First share (Output pane height). Default 1/2.
+	Output float64
+	// BottomFirst is Breakpoints' share of the bottom half of the right column.
+	// Threads/Call stack split the rest equally. Default 1/3.
+	BottomFirst float64
+}
+
 // AppState is the process-global session model: interaction mode, PTY mux
 // owner, layout policy, and debugger source location / file list.
 type AppState struct {
@@ -45,13 +58,42 @@ type AppState struct {
 	// ptyOwner is who currently intends to write the shared debugger/exec PTY.
 	ptyOwner PTYOwner
 
-	// equalAlways mirrors Vim 'equalalways': keep split panes evenly sized
-	// after splits / layout rebuilds (user drag ratios are reset when true).
+	// equalAlways mirrors Vim 'equalalways': rebalance split ratios after
+	// splits / closes (not on every paint). User drag ratios are kept until
+	// the next structural change when true.
 	equalAlways bool
+
+	// defaultLayoutRatios are the preset splits for :layout default.
+	defaultLayoutRatios DefaultLayoutRatios
+
+	// clearOutput mirrors Vim 'clearoutput': clear the Output pane when the
+	// GDB session starts (default true). Stepping (^running) does not clear.
+	clearOutput bool
+
+	// inferiorRunning is true between ^running and the next *stopped / exit.
+	inferiorRunning bool
+
+	layouts       []string
+	currentLayout string
 
 	sourceFiles []string
 	currentFile string
 	currentLine int // 1-based; 0 = unset
+}
+
+// NewAppState returns AppState with Vim-like defaults.
+func NewAppState() *AppState {
+	return &AppState{
+		equalAlways: true,
+		defaultLayoutRatios: DefaultLayoutRatios{
+			Left:        2.0 / 3.0,
+			Output:      1.0 / 2.0,
+			BottomFirst: 1.0 / 3.0,
+		},
+		clearOutput:   true,
+		layouts:       []string{LayoutDefault},
+		currentLayout: LayoutDefault,
+	}
 }
 
 func (a *AppState) Mode() Mode {
@@ -97,6 +139,116 @@ func (a *AppState) EqualAlways() bool {
 func (a *AppState) SetEqualAlways(v bool) {
 	a.mu.Lock()
 	a.equalAlways = v
+	a.mu.Unlock()
+}
+
+func (a *AppState) LayoutLeftRatio() float64 {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.defaultLayoutRatios.Left
+}
+
+// SetLayoutLeftRatio sets the default-layout left column share (clamped to [0.1, 0.9]).
+func (a *AppState) SetLayoutLeftRatio(r float64) {
+	r = clampLayoutRatio(r)
+	a.mu.Lock()
+	a.defaultLayoutRatios.Left = r
+	a.mu.Unlock()
+}
+
+// DefaultLayoutRatios returns the preset splits for :layout default.
+func (a *AppState) DefaultLayoutRatios() DefaultLayoutRatios {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.defaultLayoutRatios
+}
+
+// SetDefaultLayoutRatios replaces the default-layout split presets (each clamped).
+func (a *AppState) SetDefaultLayoutRatios(r DefaultLayoutRatios) {
+	r.Left = clampLayoutRatio(r.Left)
+	r.Output = clampLayoutRatio(r.Output)
+	r.BottomFirst = clampLayoutRatio(r.BottomFirst)
+	a.mu.Lock()
+	a.defaultLayoutRatios = r
+	a.mu.Unlock()
+}
+
+func clampLayoutRatio(r float64) float64 {
+	if r < 0.1 {
+		return 0.1
+	}
+	if r > 0.9 {
+		return 0.9
+	}
+	return r
+}
+
+func (a *AppState) ClearOutput() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.clearOutput
+}
+
+func (a *AppState) SetClearOutput(v bool) {
+	a.mu.Lock()
+	a.clearOutput = v
+	a.mu.Unlock()
+}
+
+func (a *AppState) InferiorRunning() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.inferiorRunning
+}
+
+func (a *AppState) SetInferiorRunning(v bool) {
+	a.mu.Lock()
+	a.inferiorRunning = v
+	a.mu.Unlock()
+}
+
+func (a *AppState) Layouts() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	out := make([]string, len(a.layouts))
+	copy(out, a.layouts)
+	return out
+}
+
+func (a *AppState) RegisterLayout(name string) {
+	if name == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, n := range a.layouts {
+		if n == name {
+			return
+		}
+	}
+	a.layouts = append(a.layouts, name)
+}
+
+func (a *AppState) HasLayout(name string) bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	for _, n := range a.layouts {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *AppState) CurrentLayout() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.currentLayout
+}
+
+func (a *AppState) SetCurrentLayout(name string) {
+	a.mu.Lock()
+	a.currentLayout = name
 	a.mu.Unlock()
 }
 

@@ -126,9 +126,14 @@ func (b *BaseWidget) Start(handler func(Event)) {
 }
 
 func (b *BaseWidget) DrawStatusLine(c Canvas, active bool) {
-	if b.PaneName != "" {
-		PaintStatusBar(c, b.PaneName, active)
+	if b.PaneName == "" {
+		return
 	}
+	if b.focused {
+		PaintStatusBar(c, b.PaneName, active)
+		return
+	}
+	PaintInactiveStatusBar(c, b.PaneName)
 }
 
 // send event into the widget

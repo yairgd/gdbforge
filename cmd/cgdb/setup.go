@@ -26,20 +26,24 @@ func (a *DebuggerApp) InitB() error {
 	if a.gdbWidget != nil {
 		unnamed.SetPTY(a.gdbWidget.Session(), a.State())
 	}
+	a.primaryCode = unnamed
 
 	a.tab = termui.NewTabDefaultDebugLayout(
 		"basic debugger",
 		unnamed,
 		a.gdbWidget,
+		a.outputWidget,
 		a.bpWidget,
 		a.threadWidget,
 		a.callstackWidget,
+		a.State().DefaultLayoutRatios(),
 	)
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	a.tab.FocusWidget(a.gdbWidget)
 	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)
-	a.tab.SetEqualAlways(a.State().EqualAlways())
+	a.State().SetEqualAlways(true)
+	a.tab.SetEqualAlways(true)
 	a.AddWidget(a.tab)
 
 	a.completionBar = termui.NewCompletionBarWidget(a.ctx)

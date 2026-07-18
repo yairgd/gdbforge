@@ -67,6 +67,23 @@ func (w *ThreadWidget) move(delta int) {
 	w.viewport.EnsureCursorVisible()
 }
 
+// syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
+func (w *ThreadWidget) syncSelectedFromViewport() {
+	n := len(w.items)
+	if n == 0 {
+		return
+	}
+	line := w.viewport.CursorLine
+	if line < 0 {
+		line = 0
+	}
+	if line >= n {
+		line = n - 1
+	}
+	w.selected = line
+	w.viewport.CursorLine = line
+}
+
 // SetItems replaces the thread list and rebuilds the viewport.
 func (w *ThreadWidget) SetItems(items []mcp.ThreadInfo) {
 	w.items = append([]mcp.ThreadInfo(nil), items...)
@@ -118,6 +135,7 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
+		w.syncSelectedFromViewport()
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return

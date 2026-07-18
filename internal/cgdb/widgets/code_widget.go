@@ -3,12 +3,10 @@ package widgets
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -170,21 +168,7 @@ func (w *CodeWidget) clearLocalBreak(line int) {
 }
 
 func (w *CodeWidget) sendMI(cmd string) {
-	if w.sess == nil || cmd == "" {
-		return
-	}
-	send := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = w.sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			return pw.Send(cmd)
-		})
-	}
-	if w.state != nil {
-		w.state.WithPTYOwner(platform.PTYOwnerApp, send)
-	} else {
-		send()
-	}
+	sendGdbCmd(w.sess, w.state, cmd)
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.
@@ -230,14 +214,22 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 // SetBreakInfos updates gutter state from -break-list rows for this file.
 // Enabled breakpoints get a red line number; any number on a line is used by
 // Space to delete (toggle off).
+//
+// A nil slice means "no update" (failed refresh) so existing red marks stay.
+// A non-nil empty slice clears marks (GDB truly has no breakpoints for this file).
 func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
+	if items == nil {
+		return
+	}
 	w.bpLines = make(map[int]struct{})
 	w.bpNums = make(map[int][]int)
 	for _, it := range items {
-		if it.Line < 1 || it.Number < 1 {
+		if it.Line < 1 {
 			continue
 		}
-		w.bpNums[it.Line] = append(w.bpNums[it.Line], it.Number)
+		if it.Number > 0 {
+			w.bpNums[it.Line] = append(w.bpNums[it.Line], it.Number)
+		}
 		if it.Enabled {
 			w.bpLines[it.Line] = struct{}{}
 		}
@@ -361,10 +353,27 @@ func (w *CodeWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 	return w.HandleBoundKey(ev)
 }
 
+func (w *CodeWidget) syncSelFromViewport() {
+	n := len(w.rawLines)
+	if n == 0 {
+		return
+	}
+	line := w.viewport.CursorLine + 1
+	if line < 1 {
+		line = 1
+	}
+	if line > n {
+		line = n
+	}
+	w.selLine = line
+}
+
 func (w *CodeWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
+		// Keep the bold blue cursor line in sync with mouse click / drag.
+		w.syncSelFromViewport()
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return

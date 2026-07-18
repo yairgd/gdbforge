@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -20,6 +21,13 @@ type codeRefreshMsg struct {
 type breakpointsUIMsg struct{}
 
 type debugInfoUIMsg struct{}
+
+func (a *DebuggerApp) maybeClearOutput() {
+	if a.outputWidget == nil || !a.State().ClearOutput() {
+		return
+	}
+	a.outputWidget.Clear()
+}
 
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
 // and refreshes Threads / Call stack panes.
@@ -45,6 +53,8 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		w := a.ensureCodeBuffer(file)
 		if w != nil {
 			_ = w.ShowLocation(file, line)
+			// New or replaced buffers start with empty gutters — re-apply known marks.
+			a.paintCodeWidgetBreaks(w, file)
 		}
 		if scr := a.Screen(); scr != nil {
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
@@ -201,13 +211,17 @@ func (a *DebuggerApp) ensureSourceFiles() {
 // refreshBreakpoints queries GDB -break-list and merges into the Breakpoint
 // widget's internal list (disabled rows are preserved), then paints CodeWidgets.
 func (a *DebuggerApp) refreshBreakpoints() {
-	items := a.fetchBreakInfos()
+	items, ok := a.fetchBreakInfos()
+	if !ok {
+		// Incomplete/failed capture — keep existing red marks and BP rows.
+		return
+	}
 	a.applyBreakInfos(items)
 }
 
-func (a *DebuggerApp) fetchBreakInfos() []mcp.BreakInfo {
+func (a *DebuggerApp) fetchBreakInfos() ([]mcp.BreakInfo, bool) {
 	if a.gdbMcp == nil {
-		return nil
+		return nil, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -216,9 +230,14 @@ func (a *DebuggerApp) fetchBreakInfos() []mcp.BreakInfo {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("code").Error(err.Error())
 		}
-		return nil
+		return nil, false
 	}
-	return mcp.ParseBreakList(raw)
+	// Require a real break-list reply. A stale "(gdb)" from "n" used to yield an
+	// empty parse and wipe CodeWidget red marks.
+	if !strings.Contains(raw, "BreakpointTable") && !strings.Contains(raw, "bkpt={") {
+		return nil, false
+	}
+	return mcp.ParseBreakList(raw), true
 }
 
 func (a *DebuggerApp) applyBreakInfos(gdbItems []mcp.BreakInfo) {
@@ -231,18 +250,37 @@ func (a *DebuggerApp) applyBreakInfos(gdbItems []mcp.BreakInfo) {
 
 // paintCodeBreakmarks paints red line numbers from enabled breakpoints only.
 func (a *DebuggerApp) paintCodeBreakmarks(items []mcp.BreakInfo) {
-	if a.fileBuffers == nil {
-		return
-	}
 	var enabled []mcp.BreakInfo
 	for _, it := range items {
 		if it.Enabled {
 			enabled = append(enabled, it)
 		}
 	}
+	seen := make(map[*widgets.CodeWidget]bool)
 	for path, w := range a.fileBuffers {
+		if w == nil {
+			continue
+		}
 		w.SetBreakInfos(breaksForFile(enabled, path))
+		seen[w] = true
 	}
+	if a.primaryCode != nil && !seen[a.primaryCode] {
+		if p := a.primaryCode.Path(); p != "" {
+			a.primaryCode.SetBreakInfos(breaksForFile(enabled, p))
+		}
+	}
+}
+
+// paintCodeWidgetBreaks applies the current enabled BP list to one CodeWidget.
+func (a *DebuggerApp) paintCodeWidgetBreaks(w *widgets.CodeWidget, path string) {
+	if w == nil {
+		return
+	}
+	var enabled []mcp.BreakInfo
+	if a.bpWidget != nil {
+		enabled = a.bpWidget.EnabledBreakInfos()
+	}
+	w.SetBreakInfos(breaksForFile(enabled, path))
 }
 
 func (a *DebuggerApp) onBreakpointListChanged() {
@@ -257,7 +295,7 @@ func (a *DebuggerApp) onBreakpointListChanged() {
 
 func breaksForFile(items []mcp.BreakInfo, path string) []mcp.BreakInfo {
 	base := filepath.Base(path)
-	var out []mcp.BreakInfo
+	out := make([]mcp.BreakInfo, 0)
 	for _, it := range items {
 		if it.File == path || filepath.Base(it.File) == base {
 			out = append(out, it)

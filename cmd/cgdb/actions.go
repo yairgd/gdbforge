@@ -110,6 +110,9 @@ func (app *DebuggerApp) SetEqualAlwaysOn(args ...any) {
 	app.State().SetEqualAlways(true)
 	if app.tab != nil {
 		app.tab.SetEqualAlways(true)
+		if tree := app.tab.ActiveTree(); tree != nil {
+			tree.Rebalance()
+		}
 	}
 	app.RequestFrame()
 }
@@ -120,6 +123,14 @@ func (app *DebuggerApp) SetEqualAlwaysOff(args ...any) {
 		app.tab.SetEqualAlways(false)
 	}
 	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetClearOutputOn(args ...any) {
+	app.State().SetClearOutput(true)
+}
+
+func (app *DebuggerApp) SetClearOutputOff(args ...any) {
+	app.State().SetClearOutput(false)
 }
 
 // OnAI runs an in-app LLM question against the live GDB session (:AI … / :ai …).

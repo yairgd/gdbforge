@@ -106,8 +106,9 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		out.PromptReady = true
 
 	case strings.HasPrefix(line, "=breakpoint-created"),
-		strings.HasPrefix(line, "=breakpoint-deleted"),
-		strings.HasPrefix(line, "=breakpoint-modified"):
+		strings.HasPrefix(line, "=breakpoint-deleted"):
+		// Structural changes only. Ignore =breakpoint-modified (hit counts on
+		// "n"/continue) — those raced -break-list and desynced the widgets.
 		out.BreakpointsChanged = true
 
 	default:

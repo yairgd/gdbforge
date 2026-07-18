@@ -92,8 +92,10 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │   └── info
 │       ├── registers → Action: ShowRegisters
 │       └── threads   → Action: ShowThreads
-├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/exec or open file)
+├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
 ├── e <file>      → Action: OnEditFile (open/create per-file CodeWidget)
+├── layout <name> → Action: OnLayout (apply named workspace; default)
+├── set           → equalalways | noequalalways | clearoutput | noclearoutput
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -270,10 +272,12 @@ Vim-like buffers use the same pattern:
 
 | Command | Handler | Behavior |
 |---------|---------|----------|
-| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
+| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
 | `:e file` | `LeafRest("e", OnEditFile)` | Resolve against `SourceFiles`/disk; **create** a CodeWidget named after the file if needed; show it |
+| `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace layout (`default` today). |
+| `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
 
-Default layout is Code over GDB (left) and Breakpoints / Threads / Call stack (right). Logger is `:b logger` only. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+Default layout is Code over GDB (left, **2/3** width) and Output / Breakpoints / Threads / Call stack (right). Program stdout is also `:b output`. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

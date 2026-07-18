@@ -190,17 +190,24 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	switch data := ev.Data().(type) {
 	case core.GdbOutputMsg:
-		if a.miLog != nil {
+		// Avoid per-line file logging during free-run floods (major TUI lag).
+		if a.miLog != nil && !a.State().InferiorRunning() {
 			for _, line := range strings.Split(data.Data, "\n") {
 				a.miLog.Info(line)
 			}
 			if data.Err != nil {
 				a.miLog.Error(data.Err.Error())
 			}
+		} else if a.miLog != nil && data.Err != nil {
+			a.miLog.Error(data.Err.Error())
 		}
 		if a.gdbWidget != nil {
 			a.gdbWidget.HandleEvent(ev)
 		}
+		if a.outputWidget != nil && data.Data != "" {
+			a.outputWidget.AppendPty(data.Data)
+		}
+		// No RequestFrame: Run() already redraws after this interrupt.
 	case core.ExecOutputMsg:
 		if a.execWidget != nil {
 			a.execWidget.HandleEvent(ev)
