@@ -209,6 +209,18 @@ func (app *DebuggerApp) OnRun(args ...any) {
 	w.SetOnClose(func() {
 		client.Close()
 	})
+	w.SetOnDismiss(func() {
+		if app.execClient != nil {
+			app.execClient.Close()
+			app.execClient = nil
+		}
+		app.execWidget = nil
+		if app.builtins != nil {
+			delete(app.builtins, "exec")
+		}
+		app.JumpBack()
+		app.RequestFrame()
+	})
 	ch, _ := client.Subscribe()
 	w.StartExecUIBridge(app.Screen(), ch)
 	app.execWidget = w

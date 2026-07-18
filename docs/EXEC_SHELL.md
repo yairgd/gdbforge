@@ -11,7 +11,7 @@ cgdb-go can open an **external PTY session** in the focused pane, similar to Vim
 | Command | Effect |
 |---------|--------|
 | `:!bash` | Start `bash` on a PTY; show **Exec** widget in the focused pane |
-| `:!ls` | Same for `ls` (short-lived; pane stays after exit) |
+| `:!ls` | Same for `ls` (short-lived; after exit, **any key** returns to the previous widget) |
 | `:!ssh user@host` | Same for any argv |
 | `:b exec` | Re-show the last Exec widget (if still registered) |
 | `:b gdb` / `:b about` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b output` | Swap other built-in views into the focused pane |
@@ -115,7 +115,8 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 ## Lifecycle notes
 
 - Each `:!…` **restarts** the exec session (closes previous `ExecClient`).
-- When the PTY process exits, the **Exec pane stays open** (no auto-close).
+- When the PTY process exits (or Ctrl-D closes it), the Exec pane shows  
+  `[exec] process exited — press any key to return`, then **any key** runs `JumpBack` to the previous widget and clears the `exec` builtin.
 - App exit / last-pane `:quit` still closes `execClient` if present (`DebuggerApp.Close`, `Quit`).
 
 ---

@@ -1,6 +1,10 @@
 package widgets
 
-import "testing"
+import (
+	"testing"
+
+	tcell "github.com/gdamore/tcell/v2"
+)
 
 func TestExecPushRawKeepsLivePrompt(t *testing.T) {
 	w := NewExecWidget(nil)
@@ -35,5 +39,25 @@ func TestExecCROverwritesPending(t *testing.T) {
 	}
 	if !w.console.LivePrompt() {
 		t.Fatal("expected live prompt")
+	}
+}
+
+func TestExecDismissAfterSessionEnded(t *testing.T) {
+	w := NewExecWidget(nil)
+	dismissed := false
+	w.SetOnDismiss(func() { dismissed = true })
+
+	w.HandleEvent(tcell.NewEventInterrupt(execSessionEnded))
+	if !w.Ended() {
+		t.Fatal("expected ended after session-ended interrupt")
+	}
+	last := w.console.Buffer().Line(w.console.Buffer().NumLines() - 1)
+	if last == "" || last[:6] != "[exec]" {
+		t.Fatalf("hint line=%q", last)
+	}
+
+	w.HandleEvent(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	if !dismissed {
+		t.Fatal("expected dismiss on key after exit")
 	}
 }
