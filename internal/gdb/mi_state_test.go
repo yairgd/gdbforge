@@ -48,3 +48,20 @@ func TestPushRawStopped(t *testing.T) {
 		t.Fatalf("file/line=%q %d", u.Stopped.File, u.Stopped.Line)
 	}
 }
+
+func TestPushRawBreakpointNotify(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw(`=breakpoint-created,bkpt={number="1",type="breakpoint"}` + "\n")
+	if !u.BreakpointsChanged {
+		t.Fatal("expected BreakpointsChanged for =breakpoint-created")
+	}
+	u = st.PushRaw(`=breakpoint-modified,bkpt={number="1",enabled="n"}` + "\n")
+	if !u.BreakpointsChanged {
+		t.Fatal("expected BreakpointsChanged for =breakpoint-modified")
+	}
+	u = st.PushRaw(`=breakpoint-deleted,id="1"` + "\n")
+	if !u.BreakpointsChanged {
+		t.Fatal("expected BreakpointsChanged for =breakpoint-deleted")
+	}
+}
+

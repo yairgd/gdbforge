@@ -47,6 +47,10 @@ type Viewport struct {
 	// LineStyle optionally colors a full buffer line before selection reverse.
 	LineStyle func(line string) tcell.Style
 
+	// RowStyle is like LineStyle but also receives the 0-based buffer line index.
+	// When set, it takes precedence over LineStyle.
+	RowStyle func(lineIdx int, line string) tcell.Style
+
 	// ANSI enables per-cell ANSI/SGR rendering (OSC/CSI sequences are not drawn).
 	ANSI bool
 
@@ -115,7 +119,9 @@ func (v *Viewport) Draw(c Canvas) {
 
 		full := v.Buffer.Line(line)
 		lineStyle := style
-		if v.LineStyle != nil {
+		if v.RowStyle != nil {
+			lineStyle = v.RowStyle(line, full)
+		} else if v.LineStyle != nil {
 			lineStyle = v.LineStyle(full)
 		}
 
@@ -713,7 +719,15 @@ func (v *Viewport) End() {
 	}
 
 	v.CursorLine = last
-	v.Top = last
+	h := v.height
+	if h <= 0 {
+		h = 20
+	}
+	maxTop := 0
+	if last >= h {
+		maxTop = last - h + 1
+	}
+	v.Top = maxTop
 }
 
 func (v *Viewport) Center(line int, pageHeight int) {
@@ -723,6 +737,9 @@ func (v *Viewport) Center(line int, pageHeight int) {
 	}
 
 	v.CursorLine = line
+	if pageHeight <= 0 {
+		pageHeight = 20
+	}
 
 	v.Top = line - pageHeight/2
 	if v.Top < 0 {
@@ -730,9 +747,34 @@ func (v *Viewport) Center(line int, pageHeight int) {
 	}
 
 	last := v.Buffer.NumLines() - 1
-	if v.Top > last {
-		v.Top = last
+	if last < 0 {
+		return
 	}
+	maxTop := 0
+	if last >= pageHeight {
+		maxTop = last - pageHeight + 1
+	}
+	if v.Top > maxTop {
+		v.Top = maxTop
+	}
+}
+
+// Height returns the last canvas height seen in Draw (0 before first paint).
+func (v *Viewport) Height() int { return v.height }
+
+// Width returns the last canvas width seen in Draw (0 before first paint).
+func (v *Viewport) Width() int { return v.width }
+
+// EnsureCursorVisible scrolls so CursorLine is on-screen using the last Draw size.
+func (v *Viewport) EnsureCursorVisible() {
+	w, h := v.width, v.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 20
+	}
+	v.EnsureVisible(w, h)
 }
 
 func (v *Viewport) clampCursorCol() {
@@ -759,14 +801,6 @@ func (v *Viewport) EnsureVisible(width, height int) {
 		v.Top = v.CursorLine - height + 1
 	}
 
-	if v.CursorCol < v.Left {
-		v.Left = v.CursorCol
-	}
-
-	if v.CursorCol >= v.Left+width {
-		v.Left = v.CursorCol - width + 1
-	}
-
 	if v.Buffer == nil {
 		return
 	}
@@ -785,5 +819,32 @@ func (v *Viewport) EnsureVisible(width, height int) {
 	}
 	if v.Top < 0 {
 		v.Top = 0
+	}
+
+	// Horizontal scroll. In ANSI mode CursorCol is a byte offset into the
+	// escape-laden string, while Left is a visible-cell skip count — mixing
+	// them scrolls the view past all text (blank pane). Keep Left in visible
+	// cells only, and clamp so we never skip the whole line.
+	if v.ANSI {
+		vis := VisibleANSIWidth(v.Buffer.Line(v.CursorLine))
+		if v.Left < 0 {
+			v.Left = 0
+		}
+		if vis <= width {
+			v.Left = 0
+		} else if v.Left > vis-width {
+			v.Left = vis - width
+		}
+		return
+	}
+
+	if v.CursorCol < v.Left {
+		v.Left = v.CursorCol
+	}
+	if v.CursorCol >= v.Left+width {
+		v.Left = v.CursorCol - width + 1
+	}
+	if v.Left < 0 {
+		v.Left = 0
 	}
 }

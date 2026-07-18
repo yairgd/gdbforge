@@ -3,16 +3,20 @@ package widgets
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -22,18 +26,25 @@ const (
 	pcGutterPad = "   "
 )
 
-// CodeWidget is a passive scrollable source view (About-style Viewport).
-// It does not talk to GDB; the app calls ShowLocation on stops / :e.
-// Each open file gets its own instance (PaneName = basename).
+// CodeWidget is a scrollable source view. The app calls ShowLocation on stops / :e.
+// When focused: Up/Down move a bold cursor line; Space toggles a breakpoint
+// (insert if none, -break-delete if present) via the shared GDB PTY.
+// Red marks and the Breakpoint list refresh from MI =breakpoint-* notifies.
 type CodeWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
 
+	sess  core.Session
+	state *platform.AppState
+
 	path     string
-	pcLine   int // 1-based
+	pcLine   int // 1-based program counter
+	selLine  int // 1-based cursor / bold line
 	rawLines []string
 	hiLines  []string // chroma ANSI lines (same length as rawLines)
+	bpLines  map[int]struct{} // enabled breakpoints → red line numbers
+	bpNums   map[int][]int    // line → GDB breakpoint numbers (any state)
 }
 
 func NewCodeWidget() *CodeWidget {
@@ -49,26 +60,131 @@ func NewCodeWidget() *CodeWidget {
 		viewport:   vp,
 		buf:        buf,
 	}
-	vp.LineStyle = w.lineStyle
+	vp.RowStyle = w.rowStyle
 	w.initKeyBindings()
 	return w
 }
 
-func (w *CodeWidget) initKeyBindings() {
-	w.BindKeyFunc("scroll-up", func(args ...any) { w.viewport.ScrollLineUp() }, "<Up>", "k")
-	w.BindKeyFunc("scroll-down", func(args ...any) { w.viewport.ScrollLineDown() }, "<Down>", "j")
-	w.BindKeyFunc("page-up", func(args ...any) { w.viewport.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.viewport.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
-	w.BindKeyFunc("home", func(args ...any) { w.viewport.ScrollHome() }, "<Home>", "g")
-	w.BindKeyFunc("end", func(args ...any) { w.viewport.ScrollEnd() }, "<End>", "G")
+// SetPTY wires the shared GDB session for Space → -break-insert / clear.
+func (w *CodeWidget) SetPTY(sess core.Session, state *platform.AppState) {
+	w.sess = sess
+	w.state = state
 }
 
-func (w *CodeWidget) lineStyle(line string) tcell.Style {
-	plain := termui.StripANSI(line)
-	if strings.HasPrefix(strings.TrimLeft(plain, " "), pcMarker) || strings.HasPrefix(plain, pcMarker) {
-		return tcell.StyleDefault.Background(tcell.ColorDarkSlateGray)
+func (w *CodeWidget) initKeyBindings() {
+	w.BindKeyFunc("sel-up", func(args ...any) { w.moveSel(-1) }, "<Up>", "k")
+	w.BindKeyFunc("sel-down", func(args ...any) { w.moveSel(1) }, "<Down>", "j")
+	w.BindKeyFunc("page-up", func(args ...any) { w.moveSel(-10) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.moveSel(10) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { w.moveSelTo(1) }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { w.moveSelTo(len(w.rawLines)) }, "<End>", "G")
+	w.BindKeyFunc("break-toggle", func(args ...any) { w.breakAtSel() }, " ")
+}
+
+func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
+	st := tcell.StyleDefault
+	ln := lineIdx + 1
+	if ln == w.pcLine {
+		st = st.Background(tcell.ColorDarkSlateGray)
 	}
-	return tcell.StyleDefault
+	if ln == w.selLine && w.Focused() {
+		st = st.Bold(true)
+		if ln != w.pcLine {
+			st = st.Background(tcell.ColorDarkBlue)
+		}
+	}
+	_ = line
+	return st
+}
+
+func (w *CodeWidget) moveSel(delta int) {
+	n := len(w.rawLines)
+	if n == 0 {
+		return
+	}
+	if w.selLine < 1 {
+		w.selLine = 1
+	}
+	w.moveSelTo(w.selLine + delta)
+}
+
+func (w *CodeWidget) moveSelTo(line int) {
+	n := len(w.rawLines)
+	if n == 0 {
+		return
+	}
+	if line < 1 {
+		line = 1
+	}
+	if line > n {
+		line = n
+	}
+	w.selLine = line
+	w.viewport.CursorLine = line - 1
+	w.viewport.CursorCol = 0
+	w.viewport.Left = 0
+	w.viewport.EnsureCursorVisible()
+}
+
+func (w *CodeWidget) breakAtSel() {
+	if w.path == "" || len(w.rawLines) == 0 {
+		return
+	}
+	if w.selLine < 1 {
+		w.selLine = 1
+	}
+	if w.selLine > len(w.rawLines) {
+		w.selLine = len(w.rawLines)
+	}
+	// Basename matches how GDB resolves source (and pending locations).
+	loc := fmt.Sprintf("%s:%d", filepath.Base(w.path), w.selLine)
+	if w.lineHasBreak(w.selLine) {
+		// clear removes all breakpoints at this source location.
+		w.sendMI("clear " + loc)
+		w.clearLocalBreak(w.selLine)
+		return
+	}
+	w.sendMI("break " + loc)
+	w.addLocalBreak(w.selLine)
+}
+
+func (w *CodeWidget) lineHasBreak(line int) bool {
+	if w.hasBreakpoint(line) {
+		return true
+	}
+	return len(w.bpNums[line]) > 0
+}
+
+func (w *CodeWidget) addLocalBreak(line int) {
+	if w.bpLines == nil {
+		w.bpLines = make(map[int]struct{})
+	}
+	w.bpLines[line] = struct{}{}
+	w.rebuildBuffer()
+}
+
+func (w *CodeWidget) clearLocalBreak(line int) {
+	delete(w.bpLines, line)
+	delete(w.bpNums, line)
+	w.rebuildBuffer()
+}
+
+func (w *CodeWidget) sendMI(cmd string) {
+	if w.sess == nil || cmd == "" {
+		return
+	}
+	send := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = w.sess.WithWrite(ctx, func(pw core.PTYWriter) error {
+			return pw.Send(cmd)
+		})
+	}
+	if w.state != nil {
+		w.state.WithPTYOwner(platform.PTYOwnerApp, send)
+	} else {
+		send()
+	}
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.
@@ -91,6 +207,7 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 		w.hiLines = highlightLines(path, lines)
 	}
 	w.pcLine = line
+	w.selLine = line
 	w.rebuildBuffer()
 
 	idx := line - 1
@@ -100,8 +217,55 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	if n := len(w.rawLines); n > 0 && idx >= n {
 		idx = n - 1
 	}
-	w.viewport.Center(idx, 20)
+	w.viewport.Left = 0
+	w.viewport.CursorCol = 0
+	pageH := w.viewport.Height()
+	if pageH <= 0 {
+		pageH = 20
+	}
+	w.viewport.Center(idx, pageH)
 	return nil
+}
+
+// SetBreakInfos updates gutter state from -break-list rows for this file.
+// Enabled breakpoints get a red line number; any number on a line is used by
+// Space to delete (toggle off).
+func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
+	w.bpLines = make(map[int]struct{})
+	w.bpNums = make(map[int][]int)
+	for _, it := range items {
+		if it.Line < 1 || it.Number < 1 {
+			continue
+		}
+		w.bpNums[it.Line] = append(w.bpNums[it.Line], it.Number)
+		if it.Enabled {
+			w.bpLines[it.Line] = struct{}{}
+		}
+	}
+	if w.path != "" || len(w.rawLines) > 0 {
+		w.rebuildBuffer()
+	}
+}
+
+// SetBreakpointLines marks enabled breakpoint lines (tests / simple callers).
+func (w *CodeWidget) SetBreakpointLines(lines []int) {
+	items := make([]mcp.BreakInfo, 0, len(lines))
+	for i, ln := range lines {
+		if ln > 0 {
+			items = append(items, mcp.BreakInfo{
+				Number:  i + 1,
+				Line:    ln,
+				Enabled: true,
+				File:    w.path,
+			})
+		}
+	}
+	w.SetBreakInfos(items)
+}
+
+func (w *CodeWidget) hasBreakpoint(line int) bool {
+	_, ok := w.bpLines[line]
+	return ok
 }
 
 func (w *CodeWidget) rebuildBuffer() {
@@ -116,12 +280,22 @@ func (w *CodeWidget) rebuildBuffer() {
 		if i < len(w.hiLines) {
 			src = w.hiLines[i]
 		}
-		gutter := fmt.Sprintf("%s \x1b[38;5;244m%4d\x1b[0m\x1b[38;5;240m│\x1b[0m ", markANSI, ln)
+		num := fmt.Sprintf("%4d", ln)
+		var numANSI string
+		if w.hasBreakpoint(ln) {
+			// Red background, white bold digits.
+			numANSI = "\x1b[48;5;196;38;5;231;1m" + num + "\x1b[0m"
+		} else {
+			numANSI = "\x1b[38;5;244m" + num + "\x1b[0m"
+		}
+		gutter := fmt.Sprintf("%s %s\x1b[38;5;240m│\x1b[0m ", markANSI, numANSI)
 		w.buf.AppendLine(gutter + src)
 	}
 	if len(w.rawLines) == 0 {
 		w.buf.AppendLine(fmt.Sprintf("%s (empty file)", pcGutterPad))
 	}
+	// ANSI lines are long in bytes; never keep a stale horizontal skip.
+	w.viewport.Left = 0
 }
 
 func highlightLines(path string, lines []string) []string {
@@ -201,7 +375,7 @@ func (w *CodeWidget) HandleEvent(ev tcell.Event) {
 
 func (w *CodeWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(focused)
+	w.viewport.SetCursorVisible(false)
 }
 
 func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {
@@ -216,8 +390,9 @@ func (w *CodeWidget) Viewport() *termui.Viewport {
 	return w.viewport
 }
 
-func (w *CodeWidget) Path() string { return w.path }
-func (w *CodeWidget) PCLine() int  { return w.pcLine }
+func (w *CodeWidget) Path() string    { return w.path }
+func (w *CodeWidget) PCLine() int     { return w.pcLine }
+func (w *CodeWidget) SelLine() int    { return w.selLine }
 func (w *CodeWidget) LinesForTest() []string {
 	n := w.buf.NumLines()
 	out := make([]string, n)

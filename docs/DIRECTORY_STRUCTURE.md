@@ -128,7 +128,8 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | Path | Responsibility |
 |------|----------------|
 | `mode_manager.go` | (removed — use `platform.AppState`) |
-| `widgets/code_widget.go` | Per-file source view (`:e` / `:b`; PaneName = basename) |
+| `widgets/code_widget.go` | Per-file source (`:e` / `:b`); `━━▶` PC; Space break toggle; red BP marks |
+| `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
@@ -140,6 +141,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | File | Responsibility |
 |------|----------------|
 | `gdb_service.go` | `GdbMcpService` — `GdbCommand` under `WithWrite` + output capture |
+| `break_list.go` | Parse `-break-list` / pending BPs into `BreakInfo` |
 | `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with `gdb_command` tool |
 
 ## internal/ptyx

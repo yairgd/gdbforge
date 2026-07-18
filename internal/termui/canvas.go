@@ -120,7 +120,9 @@ func (c Canvas) DrawHorizontalLocal(
 }
 
 func (c Canvas) ClearLine(localY int, style tcell.Style) {
-	c.grid.ClearLine(c.ScreenY(localY), style)
+	// Only clear this canvas's columns — a full-grid clear would wipe sibling
+	// panes after :vs / nested splits.
+	c.ClearLineRange(localY, 0, c.W(), style)
 }
 
 func (c Canvas) ShowCursor(localX, localY int) {

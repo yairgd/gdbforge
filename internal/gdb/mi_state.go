@@ -7,11 +7,12 @@ import (
 
 // MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
 type MiUpdate struct {
-	DisplayLines []string
-	PromptReady  bool
-	State        GdbState
-	ErrorMsg     string
-	Stopped      *MiStopMsg
+	DisplayLines         []string
+	PromptReady          bool
+	State                GdbState
+	ErrorMsg             string
+	Stopped              *MiStopMsg
+	BreakpointsChanged   bool
 }
 
 // GdbInputState splits PTY chunks into MI lines and streams display updates.
@@ -103,8 +104,13 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 	case line == "(gdb)":
 		out.PromptReady = true
 
+	case strings.HasPrefix(line, "=breakpoint-created"),
+		strings.HasPrefix(line, "=breakpoint-deleted"),
+		strings.HasPrefix(line, "=breakpoint-modified"):
+		out.BreakpointsChanged = true
+
 	default:
-		// notify (=...), other async, or partial — ignore for display
+		// other notify (=...), async, or partial — ignore for display
 	}
 }
 

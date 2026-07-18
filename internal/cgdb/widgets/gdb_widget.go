@@ -21,6 +21,7 @@ type GDBWidget struct {
 	gdbInputState gdb.GdbInputState
 	appState      *platform.AppState
 	onStopped     func(*gdb.MiStopMsg)
+	onBreakpoints func()
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
@@ -68,6 +69,11 @@ func (m *GDBWidget) SetAppState(s *platform.AppState) {
 // SetOnStopped registers a callback invoked on *stopped (breakpoint / step).
 func (m *GDBWidget) SetOnStopped(fn func(*gdb.MiStopMsg)) {
 	m.onStopped = fn
+}
+
+// SetOnBreakpointsChanged registers a callback for =breakpoint-created/deleted/modified.
+func (m *GDBWidget) SetOnBreakpointsChanged(fn func()) {
+	m.onBreakpoints = fn
 }
 
 // Session exposes the owned debugger for external APIs (e.g. MCP).
@@ -224,6 +230,9 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 	}
 	if upd.Stopped != nil {
 		m.handleStop(upd.Stopped)
+	}
+	if upd.BreakpointsChanged && m.onBreakpoints != nil {
+		m.onBreakpoints()
 	}
 }
 

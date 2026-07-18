@@ -24,6 +24,9 @@ func (a *DebuggerApp) ensureCodeBuffer(path string) *widgets.CodeWidget {
 	w := widgets.NewCodeWidget()
 	w.PaneName = filepath.Base(path)
 	w.SetClipboard(a.ClipboardIO())
+	if a.gdbWidget != nil {
+		w.SetPTY(a.gdbWidget.Session(), a.State())
+	}
 	a.fileBuffers[path] = w
 	return w
 }
@@ -181,6 +184,7 @@ func (a *DebuggerApp) OnEditFile(args ...any) {
 		}
 		return
 	}
+	a.scheduleBreakpointRefresh()
 	_ = a.swapFocusedWidget(w)
 	a.RequestFrame()
 }

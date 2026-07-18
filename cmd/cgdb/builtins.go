@@ -29,10 +29,18 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.SetAppState(a.State())
 	a.gdbWidget.SetOnStopped(a.onGdbStopped)
+	a.gdbWidget.SetOnBreakpointsChanged(a.onBreakpointsChanged)
 	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
 
+	a.bpWidget = widgets.NewBreakpointWidget()
+	a.bpWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("breakpoint", a.bpWidget)
+
 	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
+	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
+	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())
+	a.bpWidget.OnChange = a.onBreakpointListChanged
 	return nil
 }
 

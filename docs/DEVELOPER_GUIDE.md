@@ -123,7 +123,7 @@ GDB path (target):
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
 | **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
-| **AppState** | `platform.AppState` — Mode, PTYOwner (ui/mcp), EqualAlways |
+| **AppState** | `platform.AppState` — Mode, PTYOwner (ui/mcp/app), EqualAlways |
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |

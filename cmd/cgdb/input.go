@@ -213,6 +213,8 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	case codeRefreshMsg:
 		a.applyCodeStop(data.widget)
 		a.RequestFrame()
+	case breakpointsUIMsg:
+		a.RequestFrame()
 	default:
 		if a.gdbWidget != nil {
 			a.gdbWidget.HandleEvent(ev)

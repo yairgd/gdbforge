@@ -37,7 +37,8 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Partial | **Normal + Command** via `platform.AppState`; PTYOwner + EqualAlways |
-| `CodeWidget` | Working | Viewport source view; `-->` on PC line after stop |
+| `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
+| `BreakpointWidget` | Working | `:b breakpoint`; internal list; `e`/`d`; syncs with GDB + CodeWidget |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Working | Owns `GDBClient`/`Session`; ConsolePane + streaming MI |
 | `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |
@@ -74,7 +75,7 @@ gantt
         Diff rendering              :m3, 2025-09, 2025-12
     section Debugger
         GDB session config          :m4, 2025-06, 2025-08
-        Breakpoint/source sync      :m5, 2025-08, 2025-11
+        Breakpoint/source sync      :done, m5, 2025-08, 2025-11
         OpenOCD adapter             :m6, 2026-01, 2026-06
     section UX
         Interaction modes           :m7, 2025-08, 2025-10
@@ -118,10 +119,10 @@ Dates are indicative — adjust as development progresses.
 | Feature | Description |
 |---------|-------------|
 | Session configuration | Target binary, args, working dir |
-| Source view | File loading, PC line highlight |
-| Breakpoint pane | List/sync with GDB |
+| Source view | **Done** — file load, `━━▶` PC, Chroma, Space toggle |
+| Breakpoint pane | **Done** — `:b breakpoint`; `e`/`d`; GDB + CodeWidget sync |
 | Register / memory panes | Basic data display |
-| `*stopped` handling | Update UI state on stop events |
+| `*stopped` handling | **Partial** — PC + file buffer update |
 | Separate console/target streams | Route `@` vs `~` to panes |
 
 ### M4 — Commands and modes

@@ -109,10 +109,11 @@ classDiagram
 | `InputLine` | Single-line editor + readline history |
 | `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
 | `GDBWidget` | Owns GDB `Session` (`ptyx`); wires `ConsolePane` to MI |
-| `CodeWidget` | Source Viewport; jumps to stop location with `-->` marker |
+| `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space toggles break; red BP marks |
+| `BreakpointWidget` | Builtin `:b breakpoint`; owns list; `e`/`d`; drives CodeWidget marks |
 | `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
 
-**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md).
+**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b exec`, …), **per-file CodeWidgets** (`:e file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 **Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `fileBuffers` (keyed by path; PaneName = basename).
 
@@ -531,9 +532,9 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Prototype — random background, title stub |
 | `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
-| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source Viewport; `━━▶` PC marker; `:e` / `:b` |
+| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
+| `BreakpointWidget` | `internal/cgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
 | `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
 | `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |

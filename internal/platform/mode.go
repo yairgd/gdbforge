@@ -19,7 +19,7 @@ const (
 	PTYOwnerNone PTYOwner = iota
 	PTYOwnerUI              // GDB / Exec console submit
 	PTYOwnerMCP             // GdbMcpService / :AI tools
-	PTYOwnerApp             // App silent MI queries (file list, etc.)
+	PTYOwnerApp             // Silent MI: BreakpointWidget, -break-list, file list, …
 )
 
 func (o PTYOwner) String() string {

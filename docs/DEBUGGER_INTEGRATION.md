@@ -11,6 +11,7 @@ cgdb-go connects to debug targets through **backend adapters** that implement `c
 - [Integration overview](#integration-overview)
 - [Debugger interface](#debugger-interface)
 - [PTY mux](#pty-mux)
+- [Breakpoints and source sync](#breakpoints-and-source-sync)
 - [GDB integration](#gdb-integration)
 - [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
@@ -135,13 +136,13 @@ Writers (`PTYOwner` on `AppState`):
 |-------|-----|---------------|
 | `ui` | GDB / Exec console submit | Yes |
 | `mcp` | `:AI` / `GdbCommand` | Suppressed in GDBWidget |
-| `app` | Silent MI (`Query`, e.g. file list) | Suppressed in GDBWidget |
+| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d** | Suppressed in GDBWidget |
 
 ```mermaid
 flowchart LR
   UI["GDBWidget PTYOwnerUI"]
   MCP["GdbMcpService PTYOwnerMCP"]
-  App["App Query PTYOwnerApp"]
+  App["App / Code / BP widget PTYOwnerApp"]
   Lock["write lock"]
   UI --> Lock
   MCP --> Lock
@@ -154,7 +155,73 @@ flowchart LR
 
 GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
 
-**Session model on AppState:** `SourceFiles`, `CurrentFile` / `CurrentLine` (updated on `*stopped`). Each open source file has its own CodeWidget (`:e filename`); `:b filename` switches among open file buffers and builtins (`about`, `logger`, `gdb`, `exec`). Stops show `-->` on the PC line and swap that file’s buffer into focus.
+**Session model on AppState:** `SourceFiles`, `CurrentFile` / `CurrentLine` (updated on `*stopped`). Each open source file has its own CodeWidget (`:e filename`); `:b filename` switches among open file buffers and builtins (`about`, `logger`, `gdb`, `breakpoint`, `exec`). Stops show `━━▶` on the PC line and update that file’s buffer without stealing GDB focus when another CodeWidget leaf exists.
+
+---
+
+## Breakpoints and source sync
+
+Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP through MI notifies and a small set of app callbacks (not a full EventBus model yet).
+
+### Builtins and keys
+
+| Surface | How to open | Keys |
+|---------|-------------|------|
+| **BreakpointWidget** | `:b breakpoint` | `j`/`k` or Up/Down — bold selection; `e` — toggle (see below); `d` — delete |
+| **CodeWidget** | `:e file` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — toggle break at cursor line |
+
+Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
+
+### Ownership of the list
+
+`BreakpointWidget` owns an **internal list**:
+
+| Action | Internal list | GDB | CodeWidget red marks |
+|--------|---------------|-----|----------------------|
+| **e** while enabled | Row stays, `Enabled=false` | `-break-delete` (removed from GDB) | Cleared for that line |
+| **e** while disabled | Row stays, `Enabled=true` | `break file:line` (re-inserted) | Restored |
+| **d** | Row removed | Deleted if it was in GDB | Cleared |
+| External `b` / Space / MCP | Merged via `MergeFromGDB` | As GDB reports | Enabled rows only |
+
+Disabled rows are **kept** across `-break-list` refresh (they are intentionally absent from GDB). `MergeFromGDB` updates numbers for live breakpoints and drops enabled rows that vanished elsewhere.
+
+### Callback chain
+
+Wired in `cmd/cgdb/builtins.go`:
+
+| Hook | Handler |
+|------|---------|
+| `GDBWidget.SetOnBreakpointsChanged` | `onBreakpointsChanged` |
+| `GdbMcpService.OnBreakpointsChanged` | `onBreakpointsChanged` (MCP backup when output contains `=breakpoint-`) |
+| `BreakpointWidget.OnChange` | `onBreakpointListChanged` → `paintCodeBreakmarks` |
+
+```mermaid
+flowchart TD
+  MI["MI =breakpoint-created/deleted/modified"] --> GW["GDBWidget.onBreakpoints"]
+  MCP["MCP GdbCommand"] --> MCPCB["OnBreakpointsChanged"]
+  GW --> OBC["onBreakpointsChanged"]
+  MCPCB --> OBC
+  OBC --> REF["scheduleBreakpointRefresh → -break-list"]
+  REF --> MERGE["bpWidget.MergeFromGDB"]
+  BP["bpWidget e/d"] --> OC["bpWidget.OnChange"]
+  MERGE --> OC
+  OC --> PAINT["onBreakpointListChanged → paintCodeBreakmarks"]
+  PAINT --> CW["CodeWidget.SetBreakInfos"]
+  CODE["CodeWidget Space"] --> PTY["PTYOwnerApp break/clear"]
+  PTY --> MI
+```
+
+`BreakpointsChangedMsg` is also published on `platform.EventBus` after refresh; CodeWidget does **not** subscribe — red marks are updated only via `OnChange` → `paintCodeBreakmarks` → `SetBreakInfos`.
+
+### CodeWidget details
+
+- Syntax highlight via Chroma (`terminal256`); line numbers; breakpoint lines use a red number background.
+- PC line: `━━▶` + dark slate row background.
+- Cursor line (when focused): bold + dark blue (unless it is the PC line).
+- Space uses basename locations (`break hello.c:23` / `clear hello.c:23`) under `PTYOwnerApp`.
+- Horizontal scroll in ANSI mode uses visible columns (not raw byte offsets) so panes stay readable after `:vs`.
+
+PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` tells GDBWidget when to suppress console paint.
 
 ---
 

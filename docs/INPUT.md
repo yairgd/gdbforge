@@ -253,14 +253,14 @@ const (
     ModeCommand
 )
 
-type PTYOwner int // none | ui | mcp — who holds PTY write intent
+type PTYOwner int // none | ui | mcp | app — who holds PTY write intent
 
 type AppState struct {
     // mode, ptyOwner, equalAlways (mutex-protected)
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`. PTY owner is set while the console or `:AI`/MCP holds the write mux.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget `e`/`d`) hold the write mux.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -354,9 +354,24 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux and `:AI`.
 |-----|--------|--------|
 | `:` | Enter command mode | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
+| `Ctrl+O` | Jump back after `:b` / `:e` / `:!` | Implemented |
 | `Ctrl+D` | Quit | Implemented (`TermApp`) |
 | `Tab` / `Shift-Tab` | Cycle focus | Planned |
 | `1-9` | Switch tab | Planned |
+
+### Focused pane (widget keys)
+
+Keys reach the focused leaf when not consumed by the trie / command mode:
+
+| Widget | Key | Action |
+|--------|-----|--------|
+| **CodeWidget** | `j`/`k` or Up/Down | Move bold cursor line |
+| **CodeWidget** | **Space** | Toggle breakpoint at cursor (`break`/`clear`) |
+| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down | Bold selection |
+| **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
+| **BreakpointWidget** | `d` | Delete from list and GDB |
+
+Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ### Focus mode (planned)
 

@@ -23,6 +23,9 @@ func (a *DebuggerApp) InitB() error {
 	unnamed := widgets.NewCodeWidget()
 	unnamed.PaneName = "[No Name]"
 	unnamed.SetClipboard(a.ClipboardIO())
+	if a.gdbWidget != nil {
+		unnamed.SetPTY(a.gdbWidget.Session(), a.State())
+	}
 
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",

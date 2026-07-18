@@ -286,7 +286,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default panes are `[No Name]` | GDB.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default panes are `[No Name]` | GDB.
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
@@ -294,6 +294,7 @@ The longer-term `:buffer` idea selects which **application model** to display �
 :b about
 :b logger
 :b gdb
+:b breakpoint
 :e main.c
 :b main.c
 ```
@@ -301,11 +302,9 @@ The longer-term `:buffer` idea selects which **application model** to display �
 Future model names (aspirational):
 
 ```text
-:buffer breakpoints
 :buffer threads
 :buffer registers
 :buffer memory
-:buffer console
 ```
 
 **Related window commands** (same model-binding semantics):
@@ -391,7 +390,7 @@ st.SetEqualAlways(true) // :set equalalways
 st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `-->` on the PC line.
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

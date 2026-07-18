@@ -77,6 +77,9 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 	w := widgets.NewCodeWidget()
 	w.PaneName = "[No Name]"
 	w.SetClipboard(app.ClipboardIO())
+	if app.gdbWidget != nil {
+		w.SetPTY(app.gdbWidget.Session(), app.State())
+	}
 	app.tab.VerticalSplit(w)
 	app.RequestRedraw()
 }

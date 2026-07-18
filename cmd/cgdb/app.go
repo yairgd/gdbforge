@@ -1,6 +1,8 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/core"
@@ -49,6 +51,11 @@ type DebuggerApp struct {
 
 	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
 	fileBuffers map[string]*widgets.CodeWidget
+
+	bpWidget           *widgets.BreakpointWidget
+	bpRefreshMu        sync.Mutex
+	bpRefreshRunning   bool
+	bpRefreshPending   bool
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {

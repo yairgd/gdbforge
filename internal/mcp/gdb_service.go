@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	defaultCaptureIdle = 250 * time.Millisecond
+	defaultCaptureIdle = 80 * time.Millisecond
 	defaultCaptureMax  = 2 * time.Second
-	defaultDrainWait   = 50 * time.Millisecond
+	defaultDrainWait   = 20 * time.Millisecond
 )
 
 // GdbMcpService exposes GDB tools over a shared core.Session (same process
@@ -23,6 +23,11 @@ type GdbMcpService struct {
 
 	captureIdle time.Duration
 	captureMax  time.Duration
+
+	// OnBreakpointsChanged is invoked after a command whose PTY output
+	// includes =breakpoint-* (created/deleted/modified). Lets the UI refresh
+	// even if a Subscribe fan-out chunk was dropped.
+	OnBreakpointsChanged func()
 }
 
 func NewGdbMcpService(sess core.Session, state *platform.AppState) *GdbMcpService {
@@ -81,7 +86,14 @@ func (s *GdbMcpService) query(ctx context.Context, command string, owner platfor
 	} else {
 		err = run()
 	}
-	return out.String(), err
+	raw := out.String()
+	// Only MCP (not silent App -break-list) may re-notify: App queries must not
+	// re-enter onBreakpointsChanged or they flood the PTY write lock.
+	if err == nil && owner == platform.PTYOwnerMCP && s.OnBreakpointsChanged != nil &&
+		strings.Contains(raw, "=breakpoint-") {
+		s.OnBreakpointsChanged()
+	}
+	return raw, err
 }
 
 func drain(ch <-chan core.PtyOutputMsg, wait time.Duration) {
@@ -128,6 +140,11 @@ func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Buil
 			}
 			if msg.Data != "" {
 				out.WriteString(msg.Data)
+				// MI prompt ends the reply — don't wait for idle timeout (was
+				// 250ms per -break-list and froze the console under load).
+				if strings.Contains(msg.Data, "(gdb)") {
+					return
+				}
 				resetIdle()
 			}
 		}
