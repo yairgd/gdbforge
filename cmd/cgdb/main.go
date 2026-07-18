@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/yairgd/cgdb-go/internal/gdb"
 )
 
 func main() {
@@ -19,18 +17,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	client, outputChan, err := gdb.NewGDBClient(cfg.GDBPath, cfg.Prog, cfg.ProgArgs...)
+	app, err := NewDebuggerApp(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start gdb: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to start debugger: %v\n", err)
 		os.Exit(1)
 	}
-	defer client.Close()
-
-	app := NewDebuggerApp(cfg, client, outputChan)
-	defer func() {
-		if app.execClient != nil {
-			app.execClient.Close()
-		}
-	}()
+	defer app.Close()
 	app.Run()
 }

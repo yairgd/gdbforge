@@ -108,7 +108,7 @@ classDiagram
 |------|------|
 | `InputLine` | Single-line editor + readline history |
 | `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
-| `GDBWidget` | Wires `ConsolePane` to GDB MI / `Debugger` |
+| `GDBWidget` | Wires `ConsolePane` to owned GDB MI session (`core.Session`) |
 | `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (plain PTY + ANSI) |
 
 **Built-in views** (`:edit about`, `:edit gdb`, `:edit exec`, …) and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md).

@@ -10,13 +10,21 @@ import (
 )
 
 // GDBWidget is a ConsolePane wired to a GDB MI session (native REPL look).
+// It owns the GDBClient lifetime: create via NewGDBWidget, start the UI
+// bridge with Start, tear down with Close.
 type GDBWidget struct {
 	console       *termui.ConsolePane
-	Debugger      core.Debugger
+	client        *gdb.GDBClient
+	outputChan    <-chan core.GdbOutputMsg
 	gdbInputState gdb.GdbInputState
 }
 
-func NewGDBWidget(dbg core.Debugger) *GDBWidget {
+func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
+	client, outputChan, err := gdb.NewGDBClient(gdbPath, prog, args...)
+	if err != nil {
+		return nil, err
+	}
+
 	console := termui.NewConsolePane("GDB")
 	console.Prompt = "(gdb) "
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
@@ -24,14 +32,15 @@ func NewGDBWidget(dbg core.Debugger) *GDBWidget {
 
 	w := &GDBWidget{
 		console:       console,
-		Debugger:      dbg,
+		client:        client,
+		outputChan:    outputChan,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
 
 	console.OnSubmit = w.onSubmit
 	console.OnInterrupt = w.onInterrupt
 	console.OnEOF = w.onEOF
-	return w
+	return w, nil
 }
 
 func gdbLineStyle(line string) tcell.Style {
@@ -45,23 +54,33 @@ func gdbLineStyle(line string) tcell.Style {
 	return st
 }
 
-func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {
-	m.console.SetClipboard(io)
+// Session exposes the owned debugger for external APIs (e.g. MCP).
+func (m *GDBWidget) Session() core.Session {
+	return m.client
 }
 
-func (m *GDBWidget) StartGdbUIBridge(
-	screen tcell.Screen,
-	outputChan <-chan core.GdbOutputMsg,
-) {
-	if screen == nil {
+func (m *GDBWidget) Start(screen tcell.Screen) {
+	if screen == nil || m.outputChan == nil {
 		return
 	}
+	ch := m.outputChan
 	go func() {
-		for msg := range outputChan {
+		for msg := range ch {
 			_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
 		}
 		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 	}()
+}
+
+func (m *GDBWidget) Close() {
+	if m.client != nil {
+		m.client.Close()
+		m.client = nil
+	}
+}
+
+func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {
+	m.console.SetClipboard(io)
 }
 
 func (m *GDBWidget) Clear() {
@@ -81,7 +100,7 @@ func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
 }
 
 func (m *GDBWidget) onSubmit(raw string) {
-	if m.Debugger == nil {
+	if m.client == nil {
 		return
 	}
 	cmd := raw
@@ -91,23 +110,23 @@ func (m *GDBWidget) onSubmit(raw string) {
 	if cmd != "" {
 		m.console.Input().PushHistory(cmd)
 		m.console.EchoSubmit(cmd)
-		_ = m.Debugger.Send(cmd)
+		_ = m.client.Send(cmd)
 	} else {
-		_ = m.Debugger.Send("")
+		_ = m.client.Send("")
 	}
 	m.console.Input().Clear()
 	m.console.FollowTailAndScroll()
 }
 
 func (m *GDBWidget) onInterrupt() {
-	if m.Debugger != nil {
-		_ = m.Debugger.SendRaw("\x03")
+	if m.client != nil {
+		_ = m.client.SendRaw("\x03")
 	}
 }
 
 func (m *GDBWidget) onEOF() {
-	if m.Debugger != nil {
-		_ = m.Debugger.Send("q")
+	if m.client != nil {
+		_ = m.client.Send("q")
 	}
 }
 

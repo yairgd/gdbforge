@@ -2,23 +2,27 @@ package main
 
 import (
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
 // initBuiltins creates singleton built-in views once at startup.
 // Adding a new page: construct it here, registerBuiltin(name, w), and add
 // Cmd(name, a.showBuiltin(name)) under Group("edit") in ExapData.
-func (a *DebuggerApp) initBuiltins(outputChan <-chan core.GdbOutputMsg) {
+func (a *DebuggerApp) initBuiltins() error {
 	a.builtins = make(map[string]termui.Widget)
 
 	a.aboutWidget = widgets.NewAboutWidget()
 	a.registerBuiltin("about", a.aboutWidget)
 
-	a.gdbWidget = widgets.NewGDBWidget(a.gdbClient)
+	gdbWidget, err := widgets.NewGDBWidget(a.cfg.GDBPath, a.cfg.Prog, a.cfg.ProgArgs...)
+	if err != nil {
+		return err
+	}
+	a.gdbWidget = gdbWidget
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
-	a.gdbWidget.StartGdbUIBridge(a.Screen(), outputChan)
+	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
+	return nil
 }
 
 func (a *DebuggerApp) registerBuiltin(name string, w termui.Widget) {

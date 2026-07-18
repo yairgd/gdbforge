@@ -89,12 +89,7 @@ func (app *DebuggerApp) ClearFocus(args ...any) {
 
 func (app *DebuggerApp) Quit(args ...any) {
 	if app.tab.DeleteFocus() {
-		if app.gdbClient != nil {
-			app.gdbClient.Close()
-		}
-		if app.execClient != nil {
-			app.execClient.Close()
-		}
+		app.Close()
 		app.Exit()
 	}
 	app.RequestRedraw()

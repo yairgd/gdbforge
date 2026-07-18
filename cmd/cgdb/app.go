@@ -5,7 +5,6 @@ import (
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/execcli"
-	"github.com/yairgd/cgdb-go/internal/gdb"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -32,7 +31,6 @@ type DebuggerApp struct {
 	miLog     *platform.NamedLogger
 
 	cfg       SessionConfig
-	gdbClient *gdb.GDBClient
 	gdbWidget *widgets.GDBWidget
 
 	execClient *execcli.ExecClient
@@ -47,15 +45,34 @@ type DebuggerApp struct {
 	aboutWidget *widgets.AboutWidget
 }
 
-func NewDebuggerApp(cfg SessionConfig, client *gdb.GDBClient, outputChan <-chan core.GdbOutputMsg) *DebuggerApp {
-	dbg := &DebuggerApp{
-		cfg:       cfg,
-		gdbClient: client,
-	}
+func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
+	dbg := &DebuggerApp{cfg: cfg}
 	dbg.TermApp = termui.NewTermApp()
 	dbg.TermApp.Api = dbg
 	dbg.commandReg = commands.NewCommandRegistry()
-	dbg.InitB(outputChan)
+	if err := dbg.InitB(); err != nil {
+		dbg.Close()
+		return nil, err
+	}
 	dbg.HandleResize()
-	return dbg
+	return dbg, nil
+}
+
+// GDB returns the owned GDB session for external APIs (e.g. MCP).
+func (a *DebuggerApp) GDB() core.Session {
+	if a.gdbWidget == nil {
+		return nil
+	}
+	return a.gdbWidget.Session()
+}
+
+// Close tears down owned debugger/exec sessions.
+func (a *DebuggerApp) Close() {
+	if a.gdbWidget != nil {
+		a.gdbWidget.Close()
+	}
+	if a.execClient != nil {
+		a.execClient.Close()
+		a.execClient = nil
+	}
 }

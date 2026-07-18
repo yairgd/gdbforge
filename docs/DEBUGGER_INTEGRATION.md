@@ -72,17 +72,25 @@ type Debugger interface {
     Send(cmd string) error
     SendRaw(raw string) error
 }
+
+// Session is a Debugger that owns process lifetime (Close).
+// External APIs (e.g. MCP) should use Session, not a concrete backend type.
+type Session interface {
+    Debugger
+    Close()
+}
 ```
 
 Minimal by design — sends commands to the backend. Responses arrive asynchronously via channels/events, not as return values.
 
 **Design rationale:** MI2 and GDB CLI are streaming protocols. Blocking `Send` → response would deadlock when async `*stopped` records arrive mid-command. The interface reflects fire-and-forget command submission.
 
+**Ownership:** `GDBWidget` creates and owns the `GDBClient` (`NewGDBWidget` → `Start` → `Close`). `DebuggerApp` does not hold a concrete client; external APIs use `app.GDB() core.Session`.
+
 Future extensions (separate interfaces):
 
 | Interface | Purpose |
 |-----------|---------|
-| `DebuggerSession` | Attach/detach, symbol loading |
 | `BreakpointManager` | Add/remove/list breakpoints |
 | `RegisterReader` | Read register sets |
 | `MemoryReader` | Read/write memory |
@@ -194,15 +202,15 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 
 ## GDBWidget bridge
 
-`GDBWidget` is a thin adapter over shared termui REPL pieces:
+`GDBWidget` owns the GDB session and is a thin adapter over shared termui REPL pieces:
 
 ```text
-InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient
-(edit/hist)   (scrollback +     (MI + Send)
-               walking prompt)
+InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient (owned)
+(edit/hist)   (scrollback +     (create/Start/Close,
+               walking prompt)   MI + Send)
 ```
 
-Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
+`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges PTY output to `EventInterrupt`; `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
 
 ```mermaid
 sequenceDiagram
@@ -229,7 +237,7 @@ sequenceDiagram
 |-----------|------|------|
 | `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
 | `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
-| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | `OnSubmit`/`OnInterrupt`/`OnEOF` → Debugger; MI → AppendLines |
+| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit`/`OnInterrupt`/`OnEOF` → Send; MI → AppendLines |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
 
 ### Console layout (walking prompt)

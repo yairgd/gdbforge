@@ -1,12 +1,11 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
+func (a *DebuggerApp) InitB() error {
 	a.ctx = platform.NewAppContext()
 
 	fileSink, err := platform.NewFileSink("cgdb.log")
@@ -20,7 +19,9 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 	logWidget.Events = a.Events()
 	logWidget.SetClipboard(a.ClipboardIO())
 
-	a.initBuiltins(outputChan)
+	if err := a.initBuiltins(); err != nil {
+		return err
+	}
 
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",
@@ -45,4 +46,5 @@ func (a *DebuggerApp) InitB(outputChan <-chan core.GdbOutputMsg) {
 
 	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
 	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)
+	return nil
 }
