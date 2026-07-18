@@ -359,8 +359,9 @@ Current behavior:
 | Mode | Terminal keys routed to |
 |------|-------------------------|
 | `ModeNormal` | Key bindings (partial match) + `TabWidget` → focused leaf |
-| `ModeInsert` | Focused leaf widget |
+| `ModeInsert` | Focused leaf widget (e.g. GDB console) |
 | `ModeCommand` | `CmdWidget` only |
+| `ModeCompletion` | `CompletionBarWidget` wildmenu (Esc → `ModeCommand`) |
 
 **Planned behavior** (see [INPUT.md](INPUT.md)):
 

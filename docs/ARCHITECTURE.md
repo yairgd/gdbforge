@@ -774,7 +774,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Service → bus → model | GDB events update models, not widgets directly | Partial — `ptyx` Subscribe + `EventInterrupt`; MCP uses `Session` |
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` |
 | Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both in `internal/core` today |
-| Root layout | TabBar + Workspace + CmdLine | Flat widget list; `HandleResize` assigns tab + cmd line rects |
+| Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects; overlays draw only when active |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `WidgetTree` / `TabWidget` implemented |
 | CmdLine | Global `:` command input | `CmdWidget` on bottom row (`H-1`); mode routing in `DebuggerApp` |

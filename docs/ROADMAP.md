@@ -31,7 +31,7 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | `Canvas` / `Rect` | Done | Local coordinates |
 | `Grid` / `Cell` borders | Done | Unicode box drawing |
 | `TermApp` event loop | Done | Poll, draw, flush |
-| Root layout (TabBar/Workspace/CmdLine) | Partial | Flat widget list; `HandleResize` places cmd line at `H-1` |
+| Root layout (Tab / CompletionBar / CmdLine) | Done | Flat `AddWidget` chrome; completion overlays status row only when active |
 | `TabWidget` | Stub | Single tab, no header; `NewTabTwoHozSplitWins` does not yet wire second widget |
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |

@@ -48,10 +48,10 @@ flowchart TB
     subgraph ui ["UI layer"]
         CmdW["CmdWidget"]
         Bus["platform.EventBus"]
-        LogW["LoggerWidget"]
+        Bar["CompletionBarWidget"]
         CmdW --> Parser
         CmdW -->|"Publish CompletionMsg"| Bus
-        Bus -->|"Subscribe"| LogW
+        Bus -->|"Subscribe"| Bar
     end
 
     Parser -->|"references"| Registry
@@ -287,18 +287,16 @@ sequenceDiagram
     participant CmdW as CmdWidget
     participant Parser as CommandParser
     participant Bus as platform.EventBus
-    participant LogW as LoggerWidget
+    participant Bar as CompletionBarWidget
     participant Tree as CommandNode tree
 
     User->>CmdW: Tab
     CmdW->>Parser: Sync(text, cursor)
     Parser->>Tree: replay tokens, Accept on spaces
-    CmdW->>Parser: Suggestions()
-    Parser->>Tree: current.Complete(token)
-    Tree-->>Parser: []*CommandNode
-    Parser-->>CmdW: suggestions
+    CmdW->>Parser: SuggestionNames()
+    Parser-->>CmdW: names
     CmdW->>Bus: Publish(CompletionMsg)
-    Bus->>LogW: showCompletion → log.Info
+    Bus->>Bar: onCompletion / show wildmenu
 
     User->>CmdW: Enter
     CmdW->>Parser: Parse(line)
@@ -338,6 +336,8 @@ type CompletionMsg struct {
 | Keys | `ModeCompletion` | Left/Right/Up/Down cycle; Esc → `ModeCommand`; Enter applies token |
 
 Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is TermApp chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
+
+**Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddWidget` + `HandleResize` rect + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 

@@ -80,9 +80,10 @@ sequenceDiagram
 ### Dispatch (current)
 
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
-2. `AppApi.HandleResize` — assign top-level widget rects (tab = full height; cmd line at row `H-1`).
+2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** then to `TabWidget`.
+   - **`ModeInsert`** — focused pane (e.g. GDB console); Esc → normal.
    - **`ModeCommand`** — all keys go to `CmdWidget`.
    - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
 
@@ -97,19 +98,21 @@ flowchart TB
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
+    Comp["CompletionBarWidget"]
 
     Poll --> TermHandler
     TermHandler -->|"EventKey"| HandleKey --> Router
     TermHandler -->|"EventResize"| HandleResize
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
-    Router -->|"ModeNormal · colon"| Cmd
+    Router -->|"ModeInsert"| Tab
     Router -->|"ModeCommand"| Cmd
+    Router -->|"ModeCompletion"| Comp
 ```
 
 *Source: [`diagrams/input_routing.mermaid`](diagrams/input_routing.mermaid)*
 
-**Gap:** `ModeFocus` / `ModeInsert` are defined but not wired. Tab still receives keys in normal mode alongside the trie; focus-aware routing inside the workspace is partial (`WidgetTree.focus` exists, no global focus mode yet).
+**Gap:** focus-aware routing inside the workspace is partial (`WidgetTree.focus` exists). Insert mode is wired for the focused console pane.
 
 ### Widget-level handling
 
@@ -297,7 +300,7 @@ flowchart LR
 Flow:
 
 1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/cgdb/input.go`).
-2. User types `:window left`, presses **Tab** → parser `Sync` + `Suggestions` → `Publish(CompletionMsg)`; `LoggerWidget` (or a popup) subscribes.
+2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; `CompletionBarWidget` shows the wildmenu and app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
 4. Tree is built at startup via DSL in `ExapData()` (`cmd/cgdb/command_tree.go`).
 

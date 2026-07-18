@@ -85,7 +85,8 @@ task build
 | File | Responsibility |
 |------|----------------|
 | `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers |
-| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID`, `CmdUnknown` |
+| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID` |
+| `completion_bar.go` | Wildmenu chrome row (`ModeCompletion`); draw-only-when-active |
 | `cmd_widget.go` | Global `:` command line (`CommandParser`, publishes completions) |
 | `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
 | `widget.go` | `Widget` interface |

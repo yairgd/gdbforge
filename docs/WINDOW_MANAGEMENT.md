@@ -64,15 +64,31 @@ graph TB
 - Tabs always remain visible regardless of pane layout.
 - The command line is a stable anchor (like Vim's `:` line).
 - Workspace resize math is isolated — only the middle band changes height on terminal resize.
+- Optional chrome overlays (wildmenu, future search/message bars) share the same TermApp layer — **no popup compositor**.
 
-**Current gap:** `TermApp` registers widgets in a flat slice rather than a structured `RootLayout`. **`DebuggerApp.HandleResize`** assigns rects today:
+**TermApp chrome** is a flat `AddWidget` list. **`DebuggerApp.HandleResize`** assigns rects today (`cmd/cgdb/setup.go` order = index order):
 
 ```go
-w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))       // TabWidget (workspace)
-w[1].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))     // CmdWidget (bottom row)
+// setup: AddWidget(tab), AddWidget(completionBar), AddWidget(cmdWidget)
+w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))       // TabWidget (workspace; insets H-2 internally)
+w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))     // CompletionBarWidget (overlay row)
+w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))     // CmdWidget (: line)
 ```
 
-Called on startup (`NewDebuggerApp`) and on every `EventResize`. Migration path: introduce `RootWidget` that owns the three bands internally.
+`TermApp.Draw` paints in that order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
+
+Called on startup (`NewDebuggerApp`) and on every `EventResize`.
+
+### Extending chrome (no popup layer)
+
+Reuse the same pattern for future overlays (search bar, confirm strip, message line):
+
+1. `AddWidget` a chrome widget at TermApp level (same event/draw layer as tab + cmdline).
+2. Give it a rect in `HandleResize` (document the slot; avoid magic indexes).
+3. Own keys with a `platform.Mode` (like `ModeCompletion`) or forward when `Active()`.
+4. `Draw` only when needed so idle overlays do not cover status lines.
+
+Do **not** introduce a separate popup/z-order system for one-line chrome.
 
 ---
 

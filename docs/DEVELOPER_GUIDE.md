@@ -197,7 +197,7 @@ sequenceDiagram
 | **Init** | `NewTermApp` | Opens screen, enables mouse |
 | **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size |
 | **Register widgets** | `AddWidget` | Appends to widget slice |
-| **Initial layout** | `HandleResize()` in `NewDebuggerApp` | Tab rect + cmd line at row `H-1` |
+| **Initial layout** | `HandleResize()` in `NewDebuggerApp` | Tab + completion bar (`H-2`) + cmdline (`H-1`) |
 | **Run** | `Run` | Blocks until `Ctrl+D` |
 | **Close** | `Close` / defer | Restores terminal |
 
@@ -416,7 +416,7 @@ Always update docs when changing architecture-visible behavior.
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
-| Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + EventBus |
+| Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/cgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
