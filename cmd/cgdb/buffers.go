@@ -184,7 +184,7 @@ func (a *DebuggerApp) OnEditFile(args ...any) {
 		}
 		return
 	}
-	a.scheduleBreakpointRefresh()
+	a.onBreakpointsChanged()
 	_ = a.swapFocusedWidget(w)
 	a.RequestFrame()
 }

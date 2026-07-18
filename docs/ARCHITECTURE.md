@@ -496,7 +496,7 @@ Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (MI 
 flowchart TB
     subgraph Input["Input paths"]
         User["User keyboard / mouse"]
-        Async["Async sources · GDB PTY, timers"]
+        Async["Async sources · GDB PTY"]
     end
 
     subgraph TermApp["TermApp event loop"]
@@ -534,7 +534,14 @@ flowchart TB
 
 **Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the `TermApp` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/cgdb/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
 
-Typed app notifications (e.g. tab completions) use **`platform.EventBus`** (`Subscribe` / `Publish`) so UI consumers can register without constructor injection.
+Typed app notifications use **`platform.EventBus`** (`Subscribe` / `Publish`) so producers and consumers wire without constructor injection:
+
+| Message | Publisher | Subscriber |
+|---------|-----------|------------|
+| `CompletionMsg` | `CmdWidget` (Tab) | `CompletionBarWidget` |
+| `BreakpointsChangedMsg` | `onBreakpointsChanged` (MI / MCP / `:e`) | `DebuggerApp.onBreakpointsChangedMsg` → coalesced `-break-list` |
+
+Breakpoint sync details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 Terminal input routing (modes, trie, widget dispatch) is also centralized in **`DebuggerApp`**, keeping `TermApp` a generic event loop and draw orchestrator.
 
@@ -653,7 +660,7 @@ flowchart TB
         CmdW["CmdWidget"]
         GDB["GDB backend / goroutines"]
         Widgets["Other widgets"]
-        Future["Plugins / timers · planned"]
+        Future["Plugins · planned"]
     end
 
     subgraph Bus["termui event bus"]

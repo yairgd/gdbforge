@@ -340,7 +340,7 @@ Bridge path:
 
 Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
 
-See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux and `:AI`.
+See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux, `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
 
 **Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 

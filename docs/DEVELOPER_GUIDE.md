@@ -245,6 +245,7 @@ a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
 a.cmdWidget.Events = a.Events()
 a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+// initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
 5. Build the command tree with the DSL in `ExapData()` (`cmd/cgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
@@ -417,6 +418,7 @@ Always update docs when changing architecture-visible behavior.
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
+| Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/cgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |

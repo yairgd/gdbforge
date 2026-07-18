@@ -43,16 +43,19 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	}()
 }
 
-// onBreakpointsChanged is the single sync point for breakpoint UI:
-// GDB console (PTYOwnerUI), BreakpointWidget (PTYOwnerApp), and MCP
-// (PTYOwnerMCP) all end up here via MI =breakpoint-*.
+// onBreakpointsChanged publishes a bus event; the Subscribe handler coalesces
+// -break-list work. Sources: GDB console, BreakpointWidget, MCP (=breakpoint-*).
 func (a *DebuggerApp) onBreakpointsChanged() {
-	a.scheduleBreakpointRefresh()
+	if a.ctx.Bus == nil {
+		return
+	}
+	platform.Publish(a.ctx.Bus, termui.BreakpointsChangedMsg{})
 }
 
-// scheduleBreakpointRefresh coalesces bursts (created + modified + MCP backup)
-// into one in-flight -break-list, with at most one trailing refresh.
-func (a *DebuggerApp) scheduleBreakpointRefresh() {
+// onBreakpointsChangedMsg is the EventBus Subscribe handler for
+// BreakpointsChangedMsg. It coalesces bursts into one in-flight -break-list
+// plus at most one trailing refresh (no timer).
+func (a *DebuggerApp) onBreakpointsChangedMsg(_ termui.BreakpointsChangedMsg) {
 	a.bpRefreshMu.Lock()
 	if a.bpRefreshRunning {
 		a.bpRefreshPending = true
@@ -62,33 +65,26 @@ func (a *DebuggerApp) scheduleBreakpointRefresh() {
 	a.bpRefreshRunning = true
 	a.bpRefreshMu.Unlock()
 
-	go func() {
-		for {
-			time.Sleep(30 * time.Millisecond)
-			a.refreshBreakpoints()
-			a.publishBreakpointsChanged()
-			if scr := a.Screen(); scr != nil {
-				_ = scr.PostEvent(tcell.NewEventInterrupt(breakpointsUIMsg{}))
-			}
-
-			a.bpRefreshMu.Lock()
-			if a.bpRefreshPending {
-				a.bpRefreshPending = false
-				a.bpRefreshMu.Unlock()
-				continue
-			}
-			a.bpRefreshRunning = false
-			a.bpRefreshMu.Unlock()
-			return
-		}
-	}()
+	go a.runBreakpointRefresh()
 }
 
-func (a *DebuggerApp) publishBreakpointsChanged() {
-	if a.ctx.Bus == nil {
+func (a *DebuggerApp) runBreakpointRefresh() {
+	for {
+		a.refreshBreakpoints()
+		if scr := a.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(breakpointsUIMsg{}))
+		}
+
+		a.bpRefreshMu.Lock()
+		if a.bpRefreshPending {
+			a.bpRefreshPending = false
+			a.bpRefreshMu.Unlock()
+			continue
+		}
+		a.bpRefreshRunning = false
+		a.bpRefreshMu.Unlock()
 		return
 	}
-	platform.Publish(a.ctx.Bus, termui.BreakpointsChangedMsg{})
 }
 
 // applyCodeStop refreshes the source view for a stop without stealing focus from

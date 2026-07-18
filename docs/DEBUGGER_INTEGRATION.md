@@ -161,7 +161,7 @@ GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg`
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP through MI notifies and a small set of app callbacks (not a full EventBus model yet).
+Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
 
 ### Builtins and keys
 
@@ -191,8 +191,9 @@ Wired in `cmd/cgdb/builtins.go`:
 
 | Hook | Handler |
 |------|---------|
-| `GDBWidget.SetOnBreakpointsChanged` | `onBreakpointsChanged` |
-| `GdbMcpService.OnBreakpointsChanged` | `onBreakpointsChanged` (MCP backup when output contains `=breakpoint-`) |
+| `GDBWidget.SetOnBreakpointsChanged` | `onBreakpointsChanged` → `Publish(BreakpointsChangedMsg)` |
+| `GdbMcpService.OnBreakpointsChanged` | same |
+| `EventBus` Subscribe | `onBreakpointsChangedMsg` → coalesced `-break-list` |
 | `BreakpointWidget.OnChange` | `onBreakpointListChanged` → `paintCodeBreakmarks` |
 
 ```mermaid
@@ -201,8 +202,9 @@ flowchart TD
   MCP["MCP GdbCommand"] --> MCPCB["OnBreakpointsChanged"]
   GW --> OBC["onBreakpointsChanged"]
   MCPCB --> OBC
-  OBC --> REF["scheduleBreakpointRefresh → -break-list"]
-  REF --> MERGE["bpWidget.MergeFromGDB"]
+  OBC --> BUS["Publish BreakpointsChangedMsg"]
+  BUS --> SUB["Subscribe → coalesce -break-list"]
+  SUB --> MERGE["bpWidget.MergeFromGDB"]
   BP["bpWidget e/d"] --> OC["bpWidget.OnChange"]
   MERGE --> OC
   OC --> PAINT["onBreakpointListChanged → paintCodeBreakmarks"]
@@ -211,7 +213,15 @@ flowchart TD
   PTY --> MI
 ```
 
-`BreakpointsChangedMsg` is also published on `platform.EventBus` after refresh; CodeWidget does **not** subscribe — red marks are updated only via `OnChange` → `paintCodeBreakmarks` → `SetBreakInfos`.
+`DebuggerApp` Subscribes to `BreakpointsChangedMsg` in `initBuiltins` and runs a coalesced `-break-list`:
+
+| State | Behavior |
+|-------|----------|
+| Idle | First publish starts a background `runBreakpointRefresh` |
+| Refresh in flight | Further publishes set `bpRefreshPending` only |
+| After refresh | If pending → one trailing `-break-list`; else clear running flag |
+
+No `time.Sleep` debounce — coalesce is event-driven (pending flag). Redraw uses `PostEvent(breakpointsUIMsg)` on the UI thread. CodeWidget red marks still come from `OnChange` → `paintCodeBreakmarks` → `SetBreakInfos` (not a separate bus subscriber on the code panes).
 
 ### CodeWidget details
 

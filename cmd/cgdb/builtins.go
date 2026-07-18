@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/mcp"
+	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -41,6 +42,9 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
 	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())
 	a.bpWidget.OnChange = a.onBreakpointListChanged
+	if a.ctx.Bus != nil {
+		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
+	}
 	return nil
 }
 

@@ -341,6 +341,8 @@ Single unique match still auto-inserts in `ModeCommand` (no mode switch). The ba
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 
+The same EventBus pattern drives breakpoint refresh: `BreakpointsChangedMsg` (see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync)).
+
 ---
 
 ## Key bindings
@@ -399,7 +401,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
 | `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
-| `internal/termui/event.go` | `CompletionMsg` and other UI events |
+| `internal/termui/event.go` | `CompletionMsg`, `BreakpointsChangedMsg`, and other UI events |
 | `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
 | `internal/termui/logger_widget.go` | Log sink pane |
 | `cmd/cgdb/command_tree.go` | `ExapData` DSL |

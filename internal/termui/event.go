@@ -30,9 +30,9 @@ type CompletionMsg struct {
 
 func (m CompletionMsg) Type() string { return "CompletionMsg" }
 
-// BreakpointsChangedMsg is published when GDB breakpoints are created,
-// deleted, enabled, or disabled — so CodeWidget red marks and the
-// Breakpoint list stay in sync without waiting for the next stop.
+// BreakpointsChangedMsg is published when GDB reports a breakpoint change
+// (=breakpoint-* / MCP). DebuggerApp Subscribes and coalesces a -break-list
+// refresh so CodeWidget marks and the Breakpoint list stay in sync.
 type BreakpointsChangedMsg struct{}
 
 func (m BreakpointsChangedMsg) Type() string { return "BreakpointsChangedMsg" }
