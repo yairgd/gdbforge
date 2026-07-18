@@ -268,6 +268,8 @@ After `Accept()` lands on a rest-args node, `Parse` **stops walking** and stores
 
 Vim-style bang is registered as `LeafRest("!", a.OnRun)` and has an extra Parse/Sync path so `:!ls` (no space) works. Full product docs: [EXEC_SHELL.md](EXEC_SHELL.md).
 
+In-app AI uses the same rest-args pattern: `LeafRest("AI", a.OnAI)` / `LeafRest("ai", a.OnAI)` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#gdbmcpservice-and-in-app-ai).
+
 ---
 
 ## CmdWidget integration

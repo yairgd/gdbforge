@@ -41,7 +41,7 @@ type TermApp struct {
 	mouseY      int
 
 	layoutDirty     bool
-	appState        platform.AppState
+	appState        *platform.AppState
 	modeHandlers    ModeKeyHandlers
 	commandHandlers CommandHandlers
 }
@@ -66,6 +66,7 @@ func NewTermApp() *TermApp {
 		uiEvents:        make(chan tcell.Event, 100),
 		modeHandlers:    make(ModeKeyHandlers),
 		commandHandlers: make(CommandHandlers),
+		appState:        &platform.AppState{},
 	}
 }
 
@@ -78,6 +79,11 @@ func (app *TermApp) Mode() platform.Mode {
 
 func (app *TermApp) SetMode(mode platform.Mode) {
 	app.appState.SetMode(mode)
+}
+
+// State returns the process-global AppState (modes, PTY owner, layout policy).
+func (app *TermApp) State() *platform.AppState {
+	return app.appState
 }
 
 func (app *TermApp) RegisterModeHandler(mode platform.Mode, h KeyHandler) {

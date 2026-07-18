@@ -121,6 +121,19 @@ func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {
 	return false
 }
 
+func (t *TabWidget) SetEqualAlways(v bool) {
+	if tree := t.ActiveTree(); tree != nil {
+		tree.SetEqualAlways(v)
+	}
+}
+
+func (t *TabWidget) EqualAlways() bool {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.EqualAlways()
+	}
+	return false
+}
+
 func (t *TabWidget) SetOnResize(fn func()) {
 	if tree := t.ActiveTree(); tree != nil {
 		tree.SetOnResize(fn)

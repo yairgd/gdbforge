@@ -6,6 +6,16 @@ type Event interface {
 	Type() string
 }
 
+// PtyOutputMsg carries a raw PTY chunk from any ptyx-backed session
+// (GDB, exec/shell, …). Used by core.Session.Subscribe for MCP/REST.
+type PtyOutputMsg struct {
+	Data string
+	Err  error
+}
+
+func (PtyOutputMsg) Type() string { return "PtyOutputMsg" }
+
+// GdbOutputMsg is a UI-routed GDB PTY chunk (EventInterrupt → GDBWidget).
 type GdbOutputMsg struct {
 	Data string
 	Err  error
@@ -13,7 +23,7 @@ type GdbOutputMsg struct {
 
 func (GdbOutputMsg) Type() string { return "GdbOutputMsg" }
 
-// ExecOutputMsg carries raw PTY chunks from an ExecClient session.
+// ExecOutputMsg is a UI-routed exec/shell PTY chunk (EventInterrupt → ExecWidget).
 type ExecOutputMsg struct {
 	Data string
 	Err  error

@@ -1,6 +1,11 @@
 package main
 
 import (
+	"context"
+	"strings"
+	"time"
+
+	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/execcli"
 	"github.com/yairgd/cgdb-go/internal/platform"
@@ -95,6 +100,63 @@ func (app *DebuggerApp) Quit(args ...any) {
 	app.RequestRedraw()
 }
 
+func (app *DebuggerApp) SetEqualAlwaysOn(args ...any) {
+	app.State().SetEqualAlways(true)
+	if app.tab != nil {
+		app.tab.SetEqualAlways(true)
+	}
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetEqualAlwaysOff(args ...any) {
+	app.State().SetEqualAlways(false)
+	if app.tab != nil {
+		app.tab.SetEqualAlways(false)
+	}
+	app.RequestFrame()
+}
+
+// OnAI runs an in-app LLM question against the live GDB session (:AI … / :ai …).
+func (app *DebuggerApp) OnAI(args ...any) {
+	parts := make([]string, 0, len(args))
+	for _, a := range args {
+		s, ok := a.(string)
+		if !ok || s == "" {
+			continue
+		}
+		parts = append(parts, s)
+	}
+	question := strings.TrimSpace(strings.Join(parts, " "))
+	if question == "" || app.gdbMcp == nil {
+		return
+	}
+
+	log := app.ctx.Log.Named("ai")
+	if app.gdbWidget != nil {
+		app.gdbWidget.AppendLines([]string{">>> AI: " + question})
+		app.RequestFrame()
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		answer, err := app.gdbMcp.Ask(ctx, question)
+		if err != nil {
+			log.Error(err.Error())
+			answer = "AI error: " + err.Error()
+		}
+		lines := []string{">>> AI reply:"}
+		for _, line := range strings.Split(answer, "\n") {
+			lines = append(lines, line)
+		}
+		_ = app.Screen().PostEvent(tcell.NewEventInterrupt(aiReplyMsg{lines: lines}))
+	}()
+}
+
+type aiReplyMsg struct {
+	lines []string
+}
+
 // OnRun starts (or restarts) an ExecClient for the given argv and shows ExecWidget
 // in the focused pane. Example: :!bash  or  :!ssh root@192.168.20.50
 func (app *DebuggerApp) OnRun(args ...any) {
@@ -115,7 +177,7 @@ func (app *DebuggerApp) OnRun(args ...any) {
 		app.execClient = nil
 	}
 
-	client, outputChan, err := execcli.NewExecClient(argv)
+	client, err := execcli.NewExecClient(argv)
 	if err != nil {
 		if app.ctx.Log != nil {
 			app.ctx.Log.Named("exec").Error(err.Error())
@@ -130,7 +192,8 @@ func (app *DebuggerApp) OnRun(args ...any) {
 	w.SetOnClose(func() {
 		client.Close()
 	})
-	w.StartExecUIBridge(app.Screen(), outputChan)
+	ch, _ := client.Subscribe()
+	w.StartExecUIBridge(app.Screen(), ch)
 	app.execWidget = w
 	app.registerBuiltin("exec", w)
 

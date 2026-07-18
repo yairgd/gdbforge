@@ -30,6 +30,7 @@ func (a *DebuggerApp) InitB() error {
 	)
 	a.tab.FocusDown()
 	a.tab.SetOnResize(a.RequestFrame)
+	a.tab.SetEqualAlways(a.State().EqualAlways())
 	a.AddWidget(a.tab)
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)

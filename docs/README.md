@@ -21,7 +21,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
-| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, future JTAG / OpenOCD |
+| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua plans, feature panes, automation |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
@@ -39,7 +39,14 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 go run ./cmd/cgdb
 ```
 
-Requires a terminal with UTF-8 support. The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords** via a key trie, and an event bus that dispatches domain events through `HandleCoreEvents`.
+Requires a terminal with UTF-8 support. Optional for `:AI`: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+
+```bash
+go run ./cmd/cgdb -- ./hello
+# then in cgdb:  :AI what breakpoints are set?
+```
+
+The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords**, **`:!` exec panes**, **`:AI` in-app LLM**, and an event bus that dispatches domain events through `HandleCoreEvents`.
 
 ### View documentation in a browser
 

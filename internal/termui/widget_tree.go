@@ -25,6 +25,10 @@ type WidgetTree struct {
 	// insertActive: true → green status on focus; false → blue (normal mode).
 	insertActive bool
 
+	// equalAlways, when true, rebalances split ratios on every BuildLayout
+	// (Vim 'equalalways'). When false, dragged ratios are preserved.
+	equalAlways bool
+
 	dragSplit        *Node
 	onResize         func()
 	grid             *Grid
@@ -35,6 +39,17 @@ type WidgetTree struct {
 
 func (w *WidgetTree) SetOnResize(fn func()) {
 	w.onResize = fn
+}
+
+func (w *WidgetTree) SetEqualAlways(v bool) {
+	w.equalAlways = v
+	if v && w.root != nil {
+		ComputeRatios(w.root)
+	}
+}
+
+func (w *WidgetTree) EqualAlways() bool {
+	return w.equalAlways
 }
 
 func (w *WidgetTree) SetInsertActive(active bool) {
@@ -563,6 +578,9 @@ func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect)
 }
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
+	if l.equalAlways && l.root != nil {
+		ComputeRatios(l.root)
+	}
 	l.grid = c.grid
 	l.geom = make(map[*Node]layoutGeom)
 	l.buildLayout(l.root, c)

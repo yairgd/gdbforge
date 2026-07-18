@@ -78,8 +78,8 @@ classDiagram
     }
 
     class GDBWidget {
-        +ConsolePane *termui.ConsolePane
-        +Debugger core.Debugger
+        +owns GDBClient / Session
+        +ConsolePane
     }
 
     class CmdWidget {
@@ -108,8 +108,8 @@ classDiagram
 |------|------|
 | `InputLine` | Single-line editor + readline history |
 | `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
-| `GDBWidget` | Wires `ConsolePane` to owned GDB MI session (`core.Session`) |
-| `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (plain PTY + ANSI) |
+| `GDBWidget` | Owns GDB `Session` (`ptyx`); wires `ConsolePane` to MI |
+| `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
 
 **Built-in views** (`:edit about`, `:edit gdb`, `:edit exec`, …) and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md).
 

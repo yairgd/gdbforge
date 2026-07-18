@@ -348,6 +348,26 @@ Planned contents:
 
 ---
 
+## Global application state
+
+`TermApp.State()` returns `*platform.AppState` — process-global state for the running session:
+
+| Field | Purpose |
+|-------|---------|
+| `Mode` | Input mode: Normal / Insert / Command |
+| `PTYOwner` | Who currently holds exclusive PTY write intent (`none` / `ui` / `mcp`) |
+| `EqualAlways` | Vim-like: when true, split ratios rebalance to equal on every layout |
+
+```go
+st := app.State()
+st.PTYOwner()           // platform.PTYOwnerUI while console submits
+st.SetEqualAlways(true) // :set equalalways
+```
+
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI/statusline and tools can see who took the mux. Layout: `:set equalalways` / `:set noequalalways`.
+
+---
+
 ## Planned window operations
 
 | Command | Action |

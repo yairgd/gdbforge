@@ -126,19 +126,36 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 | Path | Responsibility |
 |------|----------------|
-| `mode_manager.go` | `AppState`, interaction modes (`ModeNormal`, `ModeCommand`, …) |
+| `mode_manager.go` | (removed — use `platform.AppState`) |
 | `widgets/code_widget.go` | Source view pane |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:edit about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
 
-## internal/execcli
+## internal/mcp
 
-**External process PTY client** (Vim-style `:!` sessions).
+**In-process GDB tool service** for AI / MCP (same Session as the UI).
 
 | File | Responsibility |
 |------|----------------|
-| `exec_client.go` | `ExecClient` — `pty.Start`, read loop, `Send` / `SendRaw` / `SetSize` / `Close` |
+| `gdb_service.go` | `GdbMcpService` — `GdbCommand` under `WithWrite` + output capture |
+| `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with `gdb_command` tool |
+
+## internal/ptyx
+
+**Shared PTY session** used by GDB and exec backends.
+
+| File | Responsibility |
+|------|----------------|
+| `client.go` | `ptyx.Client` — exclusive `WithWrite`, `Subscribe` fan-out, `Send` / `SetSize` / `Close` |
+
+## internal/execcli
+
+**External process PTY client** (Vim-style `:!` sessions) — thin wrapper over `ptyx`.
+
+| File | Responsibility |
+|------|----------------|
+| `exec_client.go` | `ExecClient` embeds `*ptyx.Client`; argv + initial winsize |
 
 See [EXEC_SHELL.md](EXEC_SHELL.md).
 
@@ -162,8 +179,8 @@ Today this package holds shared primitives (`Buffer`, `Viewport`, `Debugger` int
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Backend events (`GdbOutputMsg`, …) — consumed by models |
-| `debugger.go` | `Debugger` interface — service surface for sending commands |
+| `events.go` | Backend events (`PtyOutputMsg`, UI-routed `GdbOutputMsg` / `ExecOutputMsg`, …) |
+| `debugger.go` | `Debugger` / `Session` / `PTYWriter` — send, Subscribe, WithWrite |
 | `buffer.go` | Line-oriented text storage — building block for text-oriented models |
 | `viewport.go` | Scroll window over buffer |
 
@@ -175,16 +192,16 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 
 ## internal/gdb
 
-**GDB MI2 backend.** Talks to GDB via PTY. Parses MI output. Implements `core.Debugger`.
+**GDB MI2 backend.** Thin wrapper over `ptyx`; parses MI. Implements `core.Session`.
 
 | File | Responsibility |
 |------|----------------|
-| `gdb_client.go` | Spawn GDB, PTY I/O, reader goroutine |
+| `gdb_client.go` | `GDBClient` embeds `*ptyx.Client`; MI argv + initial prompt |
 | `mi.go` | MI string decode, field extraction, tab expansion |
 | `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 
-**Rule:** no imports from `termui`. Output reaches UI via `core.GdbOutputMsg` channel + `EventInterrupt`.
+**Rule:** no imports from `termui`. Output reaches UI via `Subscribe` → `GdbOutputMsg` + `EventInterrupt`.
 
 Application orchestration for cgdb-go lives in **`cmd/cgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 

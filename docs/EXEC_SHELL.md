@@ -26,9 +26,9 @@ Bang may be glued or spaced: `:!ls` and `:! ls` both work.
 ```mermaid
 flowchart LR
   Cmd[":!bash"] --> OnRun
-  OnRun --> Client["execcli.ExecClient + PTY"]
+  OnRun --> Client["execcli.ExecClient embeds ptyx.Client"]
   OnRun --> Widget["ExecWidget + ConsolePane"]
-  Client -->|ExecOutputMsg| Bridge["EventInterrupt"]
+  Client -->|PtyOutputMsg| Bridge["EventInterrupt ExecOutputMsg"]
   Bridge --> Widget
   Widget -->|Send / SendRaw| Client
   OnRun --> Jump["push previous widget"]
@@ -38,12 +38,13 @@ flowchart LR
 | Layer | Package / type | Role |
 |-------|----------------|------|
 | Command | `LeafRest("!", OnRun)` | Rest-args leaf; remainder of line → argv |
-| Client | `internal/execcli.ExecClient` | `pty.Start`, read loop, `Send` / `SendRaw` / `SetSize` / `Close` |
-| Event | `core.ExecOutputMsg` | Raw PTY chunks to the UI thread |
+| PTY | `internal/ptyx.Client` | Shared PTY: mutex writes, `Subscribe` fan-out, `SetSize` |
+| Client | `internal/execcli.ExecClient` | Thin wrapper (`*ptyx.Client` + initial winsize) |
+| Event | `core.ExecOutputMsg` | UI-routed PTY chunks to the UI thread |
 | Widget | `widgets.ExecWidget` | Line-oriented ConsolePane + live prompt + ANSI |
 | App | `DebuggerApp.OnRun` | Create client/widget, `swapFocusedWidget`, insert mode |
 
-GDB stays on `gdb.GDBClient` + MI. Exec reuses the same **ConsolePane** REPL shell but has **no MI parser** — plain text + ANSI.
+GDB uses the same `ptyx.Client` via `gdb.GDBClient`. Exec reuses **ConsolePane** but has **no MI parser** — plain text + ANSI.
 
 ---
 
@@ -113,7 +114,7 @@ Example: GDB → `:edit about` → `<C-o>` → GDB again.
 
 - Each `:!…` **restarts** the exec session (closes previous `ExecClient`).
 - When the PTY process exits, the **Exec pane stays open** (no auto-close).
-- App exit / last-pane `:quit` still closes `execClient` if present (`main.go` defer, `Quit`).
+- App exit / last-pane `:quit` still closes `execClient` if present (`DebuggerApp.Close`, `Quit`).
 
 ---
 

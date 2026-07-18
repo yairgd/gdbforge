@@ -43,7 +43,7 @@ cgdb-go is designed for **extensibility**: custom debugger panes, scripted autom
 | Sandboxing | Well-understood coroutine model | Python sandbox harder |
 | cgdb precedent | cgdb uses Tcl — Lua is lighter modern equivalent | Tcl declining in new projects |
 
-**Design decision:** Lua scripts extend **cgdb-go UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Debugger` instead.
+**Design decision:** Lua scripts extend **cgdb-go UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Session` instead.
 
 ---
 
@@ -172,7 +172,7 @@ debugger.send("info registers")
 debugger.on_output(function(text) ... end)
 ```
 
-Maps to `core.Debugger` + output channel.
+Maps to `core.Session` (`Send` / `Subscribe` / `WithWrite`) — same handle used by `:AI` / `GdbMcpService`.
 
 ### UI
 

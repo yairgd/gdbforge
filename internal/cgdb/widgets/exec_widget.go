@@ -51,14 +51,17 @@ func (m *ExecWidget) SetOnClose(fn func()) {
 
 func (m *ExecWidget) StartExecUIBridge(
 	screen tcell.Screen,
-	outputChan <-chan core.ExecOutputMsg,
+	outputChan <-chan core.PtyOutputMsg,
 ) {
 	if screen == nil {
 		return
 	}
 	go func() {
 		for msg := range outputChan {
-			_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
+			_ = screen.PostEvent(tcell.NewEventInterrupt(core.ExecOutputMsg{
+				Data: msg.Data,
+				Err:  msg.Err,
+			}))
 		}
 	}()
 }

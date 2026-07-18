@@ -5,6 +5,7 @@ import (
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/execcli"
+	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -32,6 +33,7 @@ type DebuggerApp struct {
 
 	cfg       SessionConfig
 	gdbWidget *widgets.GDBWidget
+	gdbMcp    *mcp.GdbMcpService
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
@@ -68,6 +70,10 @@ func (a *DebuggerApp) GDB() core.Session {
 
 // Close tears down owned debugger/exec sessions.
 func (a *DebuggerApp) Close() {
+	if a.gdbMcp != nil {
+		a.gdbMcp.Close()
+		a.gdbMcp = nil
+	}
 	if a.gdbWidget != nil {
 		a.gdbWidget.Close()
 	}

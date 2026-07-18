@@ -6,6 +6,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/gdb"
+	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -15,12 +16,14 @@ import (
 type GDBWidget struct {
 	console       *termui.ConsolePane
 	client        *gdb.GDBClient
-	outputChan    <-chan core.GdbOutputMsg
+	outputChan    <-chan core.PtyOutputMsg
+	cancelSub     func()
 	gdbInputState gdb.GdbInputState
+	appState      *platform.AppState
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
-	client, outputChan, err := gdb.NewGDBClient(gdbPath, prog, args...)
+	client, err := gdb.NewGDBClient(gdbPath, prog, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -30,10 +33,12 @@ func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
 	console.LineStyle = gdbLineStyle
 
+	ch, cancel := client.Subscribe()
 	w := &GDBWidget{
 		console:       console,
 		client:        client,
-		outputChan:    outputChan,
+		outputChan:    ch,
+		cancelSub:     cancel,
 		gdbInputState: *gdb.NewGdbInputState(),
 	}
 
@@ -54,7 +59,13 @@ func gdbLineStyle(line string) tcell.Style {
 	return st
 }
 
+// SetAppState wires global app state (PTY owner tracking, etc.).
+func (m *GDBWidget) SetAppState(s *platform.AppState) {
+	m.appState = s
+}
+
 // Session exposes the owned debugger for external APIs (e.g. MCP).
+// Callers may Send and Subscribe; they must not Close while the widget owns it.
 func (m *GDBWidget) Session() core.Session {
 	return m.client
 }
@@ -66,13 +77,20 @@ func (m *GDBWidget) Start(screen tcell.Screen) {
 	ch := m.outputChan
 	go func() {
 		for msg := range ch {
-			_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
+			_ = screen.PostEvent(tcell.NewEventInterrupt(core.GdbOutputMsg{
+				Data: msg.Data,
+				Err:  msg.Err,
+			}))
 		}
 		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 	}()
 }
 
 func (m *GDBWidget) Close() {
+	if m.cancelSub != nil {
+		m.cancelSub()
+		m.cancelSub = nil
+	}
 	if m.client != nil {
 		m.client.Close()
 		m.client = nil
@@ -81,6 +99,14 @@ func (m *GDBWidget) Close() {
 
 func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {
 	m.console.SetClipboard(io)
+}
+
+func (m *GDBWidget) AppendLines(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	m.console.AppendLines(lines)
+	m.console.FollowTailAndScroll()
 }
 
 func (m *GDBWidget) Clear() {
@@ -107,26 +133,47 @@ func (m *GDBWidget) onSubmit(raw string) {
 	if cmd == "" {
 		cmd = m.console.Input().LastHistory()
 	}
+	send := func() {
+		if cmd != "" {
+			_ = m.client.Send(cmd)
+		} else {
+			_ = m.client.Send("")
+		}
+	}
 	if cmd != "" {
 		m.console.Input().PushHistory(cmd)
 		m.console.EchoSubmit(cmd)
-		_ = m.client.Send(cmd)
+	}
+	if m.appState != nil {
+		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
 	} else {
-		_ = m.client.Send("")
+		send()
 	}
 	m.console.Input().Clear()
 	m.console.FollowTailAndScroll()
 }
 
 func (m *GDBWidget) onInterrupt() {
-	if m.client != nil {
-		_ = m.client.SendRaw("\x03")
+	if m.client == nil {
+		return
+	}
+	send := func() { _ = m.client.SendRaw("\x03") }
+	if m.appState != nil {
+		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
+	} else {
+		send()
 	}
 }
 
 func (m *GDBWidget) onEOF() {
-	if m.client != nil {
-		_ = m.client.Send("q")
+	if m.client == nil {
+		return
+	}
+	send := func() { _ = m.client.Send("q") }
+	if m.appState != nil {
+		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
+	} else {
+		send()
 	}
 }
 

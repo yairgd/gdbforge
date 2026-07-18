@@ -36,13 +36,15 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
-| Interaction modes | Partial | **Normal + Command** wired via `cgdb.AppState` |
+| Interaction modes | Partial | **Normal + Command** via `platform.AppState`; PTYOwner + EqualAlways |
 | `CodeWidget` | Prototype | Placeholder draw (random background); `PaneName: "Code"` |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
-| `GDBWidget` | Working | ConsolePane + streaming MI; native `(gdb)` REPL |
-| `ExecWidget` / `:!` | Working | PTY exec panes (`:!bash`); ANSI; jump list `<C-o>` |
+| `GDBWidget` | Working | Owns `GDBClient`/`Session`; ConsolePane + streaming MI |
+| `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |
 | `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript |
-| `GDBClient` MI2 PTY | Working | CLI-configured prog/args; buffered PTY channel |
+| `ptyx.Client` | Working | Shared PTY mux: `WithWrite`, `Subscribe` fan-out |
+| `GDBClient` | Working | Thin MI wrapper over `ptyx`; CLI prog/args |
+| `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
 | Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
 | Focus mode | Not wired | `ModeInsert` / focus routing reserved |

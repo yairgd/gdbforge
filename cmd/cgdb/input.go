@@ -145,6 +145,11 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		if a.execWidget != nil {
 			a.execWidget.HandleEvent(ev)
 		}
+	case aiReplyMsg:
+		if a.gdbWidget != nil {
+			a.gdbWidget.AppendLines(data.lines)
+			a.RequestFrame()
+		}
 	default:
 		if a.gdbWidget != nil {
 			a.gdbWidget.HandleEvent(ev)

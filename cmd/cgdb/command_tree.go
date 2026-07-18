@@ -11,6 +11,8 @@ import (
 //	/ → break  → file, delete
 //	/ → info   → registers, threads
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
+//	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
+//	/ → set → equalalways, noequalalways
 //	/ → edit   → about, gdb, exec  (built-in views)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
@@ -34,6 +36,12 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("threads", a.ShowThreads),
 		).
 		LeafRest("!", a.OnRun).
+		LeafRest("AI", a.OnAI).
+		LeafRest("ai", a.OnAI).
+		Group("set",
+			commands.Cmd("equalalways", a.SetEqualAlwaysOn),
+			commands.Cmd("noequalalways", a.SetEqualAlwaysOff),
+		).
 		Group("edit",
 			commands.Cmd("about", a.showBuiltin("about")),
 			commands.Cmd("gdb", a.showBuiltin("gdb")),

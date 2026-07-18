@@ -49,7 +49,7 @@ Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `in
 
 ```text
 Application startup
-  ├── Services          (GDBClient, …) — talk to external systems
+  ├── Services          (ptyx / GDBClient / GdbMcpService, …) — talk to external systems
   ├── Event bus         (termui.Event channel)
   ├── Models            (CodeModel, BreakpointModel, …) — created once, live until exit
   ├── Logger
@@ -66,7 +66,7 @@ TermApp
   ├── screen tcell.Screen                — poll, lifecycle, Show (owned by TermApp)
   ├── events chan termui.Event           — bus; services and widgets may publish
   ├── DebuggerApp fields
-  │     ├── appState cgdb.AppState         — ModeNormal / ModeCommand / …
+  │     ├── appState *platform.AppState    — Mode, PTYOwner, EqualAlways
   │     ├── trie termui.Trie               — multi-key bindings
   │     ├── tab *TabWidget                 — window manager (split tree)
   │     └── cmdWidget *CmdWidget
@@ -85,21 +85,22 @@ Data flow (target):
   Service → Event Bus → Model → Widget
 
 GDB path (today):
-  GDBClient (goroutine) → EventInterrupt → GDBWidget → ConsolePane
+  ptyx reader → Subscribe fan-out → EventInterrupt(GdbOutputMsg) → GDBWidget → ConsolePane
+  GdbMcpService / :AI → same Session (WithWrite exclusive, Subscribe shared)
 GDB path (target):
-  GDBClient → GdbOutputMsg on bus → Model update → Widget redraw
+  Session → PtyOutputMsg on bus → Model update → Widget redraw
 ```
 
 **Rules:**
 
 - Models are created at startup; widgets are created on demand.
-- Widgets never call services directly — services publish events; models subscribe.
+- Widgets never call services directly — services publish events; models subscribe (target). Today `GDBWidget` owns the GDB `Session`; MCP uses `Session` only.
 - High-rate service output → model state → widget reads model on draw.
 - Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget business logic.
 - App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
 - Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
 - Console editing/layout is shared (`InputLine` / `ConsolePane`); debugger backends only supply protocol glue.
-- Never spawn GDB from widget code — use `core.Debugger` from the app/service layer.
+- PTY writes are exclusive (`WithWrite`); all subscribers see output. Do not spawn a second GDB for AI.
 
 ---
 
@@ -109,7 +110,9 @@ GDB path (target):
 |------|---------|
 | **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events; implements generic widget interfaces (`TextModel`, `GraphModel`, …) |
 | **Widget** | View displaying a model via a small interface; implements `HandleEvent`, `Draw`, and `DrawStatusLine`; no business logic; decides rendering style |
-| **Service** | External-system adapter (e.g. `GDBClient`); produces events; never imports UI |
+| **Service** | External-system adapter (`ptyx` / `GDBClient` / `GdbMcpService`); produces events; never imports UI |
+| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; MCP/AI external API |
+| **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
 | **Grid** | Off-screen `[][]Cell` framebuffer |
@@ -120,7 +123,7 @@ GDB path (target):
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
 | **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
-| **AppState** | `cgdb.AppState` — current interaction mode |
+| **AppState** | `platform.AppState` — Mode, PTYOwner (ui/mcp), EqualAlways |
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |
@@ -314,20 +317,22 @@ Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](R
 
 ```mermaid
 flowchart LR
-    PTY["PTY reader goroutine"]
-    Ch["chan GdbOutputMsg"]
-    Bridge["bridge · PostEvent only"]
+    PTY["ptyx reader"]
+    Fan["Subscribe fan-out"]
+    Bridge["UI bridge · PostEvent"]
     Widget["GDBWidget.HandleEvent"]
     State["GdbInputState.PushRaw"]
     Upd["MiUpdate"]
     Cons["ConsolePane.AppendLines"]
 
-    PTY --> Ch --> Bridge --> Widget --> State --> Upd --> Cons
+    PTY --> Fan --> Bridge --> Widget --> State --> Upd --> Cons
 ```
 
-**Do not** read from the GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
+**Do not** read from a GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
 
-`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. No debounce timer. Console editing/layout lives in `InputLine` / `ConsolePane`; GDBWidget only wires MI and `Debugger`.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. Console editing/layout lives in `InputLine` / `ConsolePane`; GDBWidget wires MI and `Session.Send`.
+
+In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capture). See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md).
 
 ---
 
@@ -336,7 +341,8 @@ flowchart LR
 | Thread | May do |
 |--------|--------|
 | **Main / tcell loop** | HandleEvent, Draw, SetContent, Grid, `PushRaw` / buffer updates |
-| **GDB reader goroutine** | Read PTY, send to `outputChan` |
+| **ptyx reader goroutine** | Read PTY, broadcast to subscribers |
+| **:AI goroutine** | HTTP to LLM; `GdbCommand` / `WithWrite` on Session |
 | **Bridge goroutine** | `range` channel → `PostEvent` only |
 
 **Never:** call `Draw` or `screen.SetContent` from a background goroutine.
@@ -384,7 +390,7 @@ dlv debug ./cmd/docserve -- --port 8765
 |------|------------|
 | New application model | App startup in `cmd/cgdb`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
-| New service / backend | Implement `core.Debugger`, new `internal/<backend>/` |
+| New service / backend | Implement `core.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | `:!` / Exec pane | [EXEC_SHELL.md](EXEC_SHELL.md) |
 | New key chord | `InitKeyBindings()` → `keyBindings.Bind(...)` |

@@ -238,25 +238,25 @@ stateDiagram-v2
 | **Command** | `CmdWidget` | `:` UI commands | **Implemented** |
 | **Search** | TBD | Search prompt (e.g. `/` in source) | Reserved |
 
-Mode state lives in **`internal/cgdb`** (`AppState`), not in `termui`:
+Mode state lives in **`platform.AppState`** on `TermApp` (`State()`):
 
 ```go
-// internal/cgdb/mode_manager.go
+// internal/platform/mode.go
 type Mode int
-
 const (
     ModeNormal Mode = iota
-    ModeCommand
-    ModeSearch
     ModeInsert
+    ModeCommand
 )
 
+type PTYOwner int // none | ui | mcp — who holds PTY write intent
+
 type AppState struct {
-    mode Mode
+    // mode, ptyOwner, equalAlways (mutex-protected)
 }
 ```
 
-`DebuggerApp` owns `appState cgdb.AppState` and switches modes in `HandleKey` and `HandleCoreEvents`. `TermApp` has no knowledge of modes.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`. PTY owner is set while the console or `:AI`/MCP holds the write mux.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -330,12 +330,13 @@ screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 
 Bridge path:
 
-1. PTY reader goroutine → `chan core.GdbOutputMsg`
-2. Bridge goroutine only calls `PostEvent` (never touches widgets)
-3. UI thread `HandleInterrupt` / `GDBWidget.HandleEvent` → `GdbInputState.PushRaw`
-4. Each complete MI line is processed immediately → `MiUpdate` → append display lines
+1. `ptyx` reader → `Subscribe` fan-out → UI bridge `PostEvent(GdbOutputMsg)` (bridge only calls `PostEvent`, never widgets)
+2. UI thread `HandleInterrupt` / `GDBWidget.HandleEvent` → `GdbInputState.PushRaw`
+3. Each complete MI line → `MiUpdate` → `ConsolePane.AppendLines` / prompt attach
 
 Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+
+See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux and `:AI`.
 
 **Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 

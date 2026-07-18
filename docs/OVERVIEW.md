@@ -42,7 +42,7 @@ cgdb-go is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.c
 |------|-------------|
 | **Model-driven UI** | Services → event bus → models → widgets; widgets never talk to services |
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
-| **Backend agnostic** | `core.Debugger` interface; GDB is the first service implementation |
+| **Backend agnostic** | `core.Session` interface; GDB is the first implementation; `:AI` shares the live session |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
 | **Low latency feel** | Off-screen grid; path to diff rendering to minimize I/O |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |

@@ -1,8 +1,8 @@
 # Debugger Integration
 
-cgdb-go connects to debug targets through **backend adapters** that implement `core.Debugger`. The first adapter is **GDB MI2 over a PTY**. Future adapters will cover **OpenOCD**, **JTAG**, and **kernel debugging** workflows.
+cgdb-go connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2 over a shared PTY** (`ptyx`). The same session is used by the GDB console, in-app `:AI`, and future MCP/REST frontends.
 
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [PLUGINS.md](PLUGINS.md)
+**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
 ---
 
@@ -10,7 +10,9 @@ cgdb-go connects to debug targets through **backend adapters** that implement `c
 
 - [Integration overview](#integration-overview)
 - [Debugger interface](#debugger-interface)
+- [PTY mux](#pty-mux)
 - [GDB integration](#gdb-integration)
+- [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
 - [GDBWidget bridge](#gdbwidget-bridge)
 - [Future OpenOCD integration](#future-openocd-integration)
@@ -22,46 +24,59 @@ cgdb-go connects to debug targets through **backend adapters** that implement `c
 
 ## Integration overview
 
-Application data flows **Service → Event Bus → Model → Widget**. The debugger backend is a service; UI panes are widgets bound to models.
+Application data flows **Service → Event Bus → Model → Widget** (target). Today the GDB path is still widget-local via `EventInterrupt`, but ownership and the external API are session-based.
 
 ```mermaid
 flowchart TB
-    subgraph UI["UI · termui"]
-        Widgets["Pane widgets · views"]
+    subgraph UI["UI · termui / widgets"]
+        GDBW["GDBWidget owns client"]
+        Cons["ConsolePane"]
     end
 
     subgraph App["Application · cmd/cgdb"]
-        Models["Domain models"]
+        AI[":AI OnAI"]
+        MCP["GdbMcpService"]
     end
 
     subgraph Domain["Domain · core"]
-        DebuggerIF["Debugger interface"]
-        Events["GdbOutputMsg"]
+        SessIF["Session / Debugger / PTYWriter"]
+        PtyMsg["PtyOutputMsg"]
+        UIMsg["GdbOutputMsg · ExecOutputMsg"]
     end
 
-    subgraph Backend["Service · gdb"]
-        Client["GDBClient"]
+    subgraph PTYLayer["PTY · ptyx"]
+        Pty["ptyx.Client"]
+    end
+
+    subgraph Backend["gdb"]
+        Client["GDBClient embeds ptyx"]
         MI["GdbInputState · MiUpdate"]
-        PTY["PTY I/O"]
     end
 
     subgraph External["External"]
         GDB["GDB --interpreter=mi2"]
-        Target["Debug target"]
+        LLM["Claude / OpenAI API"]
     end
 
-    Widgets --> Models
-    Models --> Events
-    Client --> Events
-    Events --> Models
-    DebuggerIF --> Client
-    Client --> PTY --> GDB --> Target
-    Client --> MI
+    GDBW --> Cons
+    GDBW -->|"owns"| Client
+    Client --> Pty
+    MCP -->|"Session only"| SessIF
+    AI --> MCP
+    AI --> LLM
+    SessIF --> Client
+    Pty -->|"Subscribe fan-out"| PtyMsg
+    PtyMsg -->|"UI bridge"| UIMsg
+    UIMsg --> GDBW
+    Pty --> GDB
+    GDBW --> MI
 ```
 
-*Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
+**Dependency rules:**
 
-**Dependency rule:** `internal/gdb` must not import `internal/termui`. Widgets display models; services implement `core.Debugger` and publish events. Widgets never call `GDBClient` directly.
+- `internal/gdb` and `internal/ptyx` must not import `internal/termui`
+- `GDBWidget` owns the concrete `GDBClient`; app/MCP use `core.Session` via `app.GDB()` / `gdbWidget.Session()`
+- Never `Close()` the session from MCP/AI while the widget owns it
 
 ---
 
@@ -73,19 +88,25 @@ type Debugger interface {
     SendRaw(raw string) error
 }
 
-// Session is a Debugger that owns process lifetime (Close).
-// External APIs (e.g. MCP) should use Session, not a concrete backend type.
+type PTYWriter interface {
+    Send(cmd string) error
+    SendRaw(raw string) error
+}
+
+// Session: lifetime + exclusive write + shared read.
 type Session interface {
     Debugger
     Close()
+    Subscribe() (ch <-chan PtyOutputMsg, cancel func())
+    WithWrite(ctx context.Context, fn func(w PTYWriter) error) error
 }
 ```
 
-Minimal by design — sends commands to the backend. Responses arrive asynchronously via channels/events, not as return values.
+Minimal by design — sends commands to the backend. Responses arrive asynchronously via `Subscribe` / UI events, not as return values from `Send`.
 
-**Design rationale:** MI2 and GDB CLI are streaming protocols. Blocking `Send` → response would deadlock when async `*stopped` records arrive mid-command. The interface reflects fire-and-forget command submission.
+**Design rationale:** MI2 and GDB CLI are streaming protocols. Blocking `Send` → response would deadlock when async `*stopped` records arrive mid-command. `GdbMcpService.GdbCommand` adds a **windowed capture** on a private subscription for tool results (best-effort until tokenized MI waiters).
 
-**Ownership:** `GDBWidget` creates and owns the `GDBClient` (`NewGDBWidget` → `Start` → `Close`). `DebuggerApp` does not hold a concrete client; external APIs use `app.GDB() core.Session`.
+**Ownership:** `GDBWidget` creates and owns the `GDBClient` (`NewGDBWidget` → `Start` → `Close`). `DebuggerApp` holds `gdbMcp` as a peer constructed from `gdbWidget.Session()`. External APIs use `app.GDB() core.Session`.
 
 Future extensions (separate interfaces):
 
@@ -99,47 +120,92 @@ These will emit `core.Event` updates rather than synchronous returns.
 
 ---
 
+## PTY mux
+
+One `ptmx` (`ptyx.Client`). Two rules:
+
+| Direction | Rule |
+|-----------|------|
+| **Write** | **Exclusive** — `WithWrite` / `Send` / `SendRaw` share one mutex; only UI or MCP holds it at a time |
+| **Read** | **Shared** — every `Subscribe()` channel receives the same chunks |
+
+```mermaid
+flowchart LR
+  UI["GDBWidget Send"]
+  MCP["GdbCommand"]
+  Lock["write lock"]
+  UI --> Lock
+  MCP --> Lock
+  Lock --> PTMX["ptmx"]
+  PTMX --> Fan["broadcast"]
+  Fan --> ChUI["UI Subscribe"]
+  Fan --> ChMCP["MCP Subscribe"]
+```
+
+GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
+
+---
+
 ## GDB integration
 
 ### Client startup
 
-`gdb.NewGDBClient()` (`gdb_client.go`):
+`gdb.NewGDBClient()` wraps `ptyx.Client` (`gdb_client.go` / `ptyx/client.go`):
 
-1. Spawns `gdb --interpreter=mi2 <target>`.
-2. Starts PTY via `creack/pty`.
-3. Sets raw terminal mode on PTY (no echo, non-canonical).
-4. Starts reader goroutine → `core.GdbOutputMsg` channel.
-5. Sends initial newline to trigger prompt.
+1. Builds `gdb --interpreter=mi2 <target>` argv.
+2. `ptyx.New` — PTY, raw mode, reader fan-out.
+3. Sends initial newline to trigger prompt.
 
 ```go
-cmd := exec.Command("gdb", "--interpreter=mi2", "hello")
-ptmx, err := pty.Start(cmd)
+argv := []string{"gdb", "--interpreter=mi2", "hello"}
+pty, err := ptyx.New(argv, ptyx.Options{})
 ```
 
-**Current limitation:** target binary hardcoded as `"hello"`. Will move to session configuration.
+**Current limitation:** reply correlation (tokenized MI → waiter) is not built yet — `GdbCommand` uses idle/max window capture on the raw stream.
 
 ### Send paths
 
 | Method | Use |
 |--------|-----|
-| `Send(cmd)` | Append `\n`, send CLI/MI command |
-| `SendRaw(raw)` | Send raw bytes (SIGINT, arrow keys) |
+| `Send(cmd)` | Append `\n`, send CLI/MI command (takes write lock) |
+| `SendRaw(raw)` | Send raw bytes (SIGINT, …) under write lock |
+| `WithWrite(ctx, fn)` | Hold write lock for multi-step MCP capture |
 
 ### Output path
 
-Reader goroutine:
-
 ```go
-for {
-    n, err := c.ptmx.Read(buf)
-    if n > 0 {
-        output <- core.GdbOutputMsg{Data: string(data)}
-    }
-    // ...
+ch, cancel := client.Subscribe()
+defer cancel()
+for msg := range ch {
+    // UI posts EventInterrupt(GdbOutputMsg); MCP/AI parse the same stream
 }
 ```
 
-Channel closes on EOF/error → `GDBWidget` receives `"gdb-exit"` interrupt.
+`Close()` (or `cancel`) closes subscription channels → `GDBWidget` receives `"gdb-exit"` when its subscription ends.
+
+---
+
+## GdbMcpService and in-app AI
+
+Same process as the TUI (required for one debug context).
+
+| Piece | Role |
+|-------|------|
+| `internal/mcp/gdb_service.go` | Tool core: `GdbCommand` under `WithWrite` + Subscribe capture |
+| `internal/mcp/agent.go` | LLM tool loop (Anthropic or OpenAI) |
+| `:AI` / `:ai` | Rest-args colon command → `OnAI` → `Ask` in a goroutine |
+
+```text
+:AI why is there a memory leak
+  → GdbMcpService.Ask
+  → LLM may call gdb_command("info leak") / "b main" / …
+  → same Session as the GDB pane (exclusive write, shared read)
+  → answer appended to GDB console
+```
+
+**Env:** `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; optional `CGDB_AI_MODEL`.
+
+**Do not** use stdio MCP inside the TUI process (keyboard owns stdin). Optional TCP MCP for external hosts can expose the same tools later; in-app `:AI` is the primary door.
 
 ---
 
@@ -205,12 +271,12 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 `GDBWidget` owns the GDB session and is a thin adapter over shared termui REPL pieces:
 
 ```text
-InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient (owned)
+InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient (owned) → ptyx
 (edit/hist)   (scrollback +     (create/Start/Close,
                walking prompt)   MI + Send)
 ```
 
-`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges PTY output to `EventInterrupt`; `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
+`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges `Subscribe` → `EventInterrupt(GdbOutputMsg)`; `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
 
 ```mermaid
 sequenceDiagram
@@ -237,8 +303,9 @@ sequenceDiagram
 |-----------|------|------|
 | `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
 | `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
-| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit`/`OnInterrupt`/`OnEOF` → Send; MI → AppendLines |
+| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
+| `ptyx.Client` | `ptyx/client.go` | Shared PTY mux |
 
 ### Console layout (walking prompt)
 
@@ -270,13 +337,13 @@ Planned adapter: `internal/openocd` (not yet created).
 |--------|------|
 | Transport | TCP telnet or pipe to `openocd` process |
 | Protocol | TCL commands + event text (not MI2) |
-| Interface | Same `core.Debugger` for send; adapter translates |
+| Interface | Same `core.Session` for send/subscribe; adapter translates |
 | UI impact | None — new backend package only |
 
 ```mermaid
 flowchart LR
     UI["termui"]
-    Core["core.Debugger"]
+    Core["core.Session"]
     GDB["gdb.GDBClient"]
     OOCD["openocd.Client · planned"]
 
@@ -285,7 +352,7 @@ flowchart LR
     Core --> OOCD
 ```
 
-**Design decision:** OpenOCD is a **separate backend**, not a GDB wrapper. Some workflows may use both (OpenOCD for flash/reset, GDB for symbols) — session orchestration belongs in `internal/core/session.go`.
+**Design decision:** OpenOCD is a **separate backend**, not a GDB wrapper. Some workflows may use both (OpenOCD for flash/reset, GDB for symbols) — session orchestration belongs in app/`core`.
 
 ---
 
@@ -333,13 +400,16 @@ Planned backend options:
 |------------|--------|
 | Backends never import `termui` | Testability, headless automation |
 | Async-only responses | MI2 / OpenOCD are streaming |
-| Parse in backend layer | Widgets display buffers, not raw MI |
-| Session config outside widgets | Target binary, ports, symbols in `core/session` |
+| Exclusive PTY write / shared read | UI + AI share one `ptmx` safely |
+| Parse MI in gdb layer | Widgets display buffers, not raw protocol |
+| Session config outside MCP | Target binary/args from CLI; AI uses live session |
+| Same-process AI | One debug context for manual + `:AI` |
 
 ---
 
 ## Related documentation
 
+- [EXEC_SHELL.md](EXEC_SHELL.md) — `:!` exec panes (same `ptyx`)
 - [INPUT.md](INPUT.md) — GDB key forwarding
 - [PLUGINS.md](PLUGINS.md) — custom debugger panes
 - [ROADMAP.md](ROADMAP.md) — backend milestones

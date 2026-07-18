@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -20,8 +21,11 @@ func (a *DebuggerApp) initBuiltins() error {
 	}
 	a.gdbWidget = gdbWidget
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
+	a.gdbWidget.SetAppState(a.State())
 	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
+
+	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
 	return nil
 }
 

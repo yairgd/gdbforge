@@ -36,7 +36,7 @@ Wiring happens **above** `termui`:
 |-------|------|
 | `internal/termui` | Generic terminal UI framework — window manager, layout, rendering |
 | `internal/cgdb` | App state (`AppState`, modes) + debugger widgets (views) |
-| `cmd/cgdb` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, and `gdb` |
+| `cmd/cgdb` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, `gdb`, `ptyx`, `mcp` |
 
 Services, models, and widgets are wired in **`cmd/cgdb`**. Data flows Service → Event Bus → Model → Widget; `termui` never imports services or models directly.
 
@@ -49,7 +49,7 @@ Module path: `github.com/yairgd/cgdb-go`
 | Dependency | Used by | Purpose |
 |------------|---------|---------|
 | [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/termui`, `internal/cgdb/widgets` | Terminal screen, input, styles |
-| [`github.com/creack/pty`](https://github.com/creack/pty) | `internal/gdb` | Pseudo-terminal for GDB MI2 I/O |
+| [`github.com/creack/pty`](https://github.com/creack/pty) | `internal/ptyx` | Pseudo-terminal for GDB and `:!` exec I/O |
 
 **No third-party runtime deps:** `cmd/docserve` uses the Go standard library only.
 
@@ -69,31 +69,44 @@ Run `go mod graph` or `go list -m all` for exact versions and transitive modules
 ```mermaid
 flowchart BT
     tcell["gdamore/tcell/v2"]
-    pty["creack/pty"]
+    ptyLib["creack/pty"]
 
     termui["internal/termui"]
     cgdb_pkg["internal/cgdb"]
     widgets["internal/cgdb/widgets"]
     core["internal/core"]
+    ptyx["internal/ptyx"]
     gdb["internal/gdb"]
+    execcli["internal/execcli"]
+    mcp["internal/mcp"]
     cgdb_cmd["cmd/cgdb"]
     docserve["cmd/docserve"]
 
     termui --> tcell
     widgets --> termui
     widgets --> core
+    widgets --> gdb
+    ptyx --> core
+    ptyx --> ptyLib
     gdb --> core
-    gdb --> pty
+    gdb --> ptyx
+    execcli --> core
+    execcli --> ptyx
+    mcp --> core
 
     cgdb_cmd --> termui
     cgdb_cmd --> cgdb_pkg
     cgdb_cmd --> widgets
     cgdb_cmd --> core
     cgdb_cmd --> gdb
+    cgdb_cmd --> execcli
+    cgdb_cmd --> mcp
 
     docserve --> stdlib["Go stdlib only"]
 
     gdb -.->|"must NOT import"| termui
+    ptyx -.->|"must NOT import"| termui
+    mcp -.->|"must NOT import"| termui
     core -.->|"must NOT import"| termui
     termui -.->|"must NOT import"| core
 ```
@@ -104,15 +117,18 @@ flowchart BT
 
 | Package | May import | Must not import |
 |---------|------------|-----------------|
-| **`internal/termui`** | stdlib, `tcell` | `core`, `gdb`, other UI libs |
-| **`internal/core`** | stdlib | `termui`, `tcell`, `gdb` |
-| **`internal/gdb`** | stdlib, `creack/pty`, `core` | `termui`, `tcell` |
-| **`internal/cgdb/widgets`** | `termui`, `core`, stdlib | — (debugger panes) |
+| **`internal/termui`** | stdlib, `tcell` | `core`, `gdb`, `ptyx`, other UI libs |
+| **`internal/core`** | stdlib | `termui`, `tcell`, `gdb`, `ptyx` |
+| **`internal/ptyx`** | stdlib, `creack/pty`, `core` | `termui`, `tcell` |
+| **`internal/gdb`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
+| **`internal/execcli`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
+| **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb` |
+| **`internal/cgdb/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
 | **`internal/cgdb`** | stdlib only | `termui`, `gdb` — app state / modes |
-| **`cmd/cgdb`** | `termui`, `cgdb`, `cgdb/widgets`, `core`, `gdb` | — (composition root) |
+| **`cmd/cgdb`** | `termui`, `cgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
-**Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`**, not in **`termui`**.
+**Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`** / **`ptyx`** / **`mcp`**, not in **`termui`**.
 
 ---
 
@@ -120,7 +136,7 @@ flowchart BT
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`cgdb`** | `cmd/cgdb` | `termui`, `cgdb/widgets`, `core`, `gdb`, `tcell`, `pty` |
+| **`cgdb`** | `cmd/cgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
 | **`docserve`** | `cmd/docserve` | stdlib only |
 
 Build all commands: `task build` or `go build ./cmd/...`.
@@ -133,13 +149,15 @@ These import directions are **architectural violations** — do not add them:
 
 ```text
 core   ──X──>  termui | tcell
+ptyx   ──X──>  termui | tcell
 gdb    ──X──>  termui | tcell
-termui ──X──>  core | gdb
+mcp    ──X──>  termui | tcell | gdb
+termui ──X──>  core | gdb | ptyx
 ```
 
 **Why:** debugger backends and domain logic must stay UI-agnostic so you can swap tcell for another renderer, add a web UI, or run GDB I/O in tests without a terminal.
 
-**How data crosses the boundary:** channels and event structs in `core` (e.g. `GdbOutputMsg`), consumed by `cmd/cgdb` or widgets — not by importing `core` from `termui`.
+**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/cgdb` or widgets — not by importing `core` from `termui`.
 
 ---
 
@@ -152,8 +170,8 @@ Exact import lists change as code evolves. Regenerate them with:
 go list -m all
 
 # Per-package imports
-for pkg in ./internal/termui ./internal/core ./internal/gdb \
-           ./internal/cgdb/widgets ./cmd/cgdb ./cmd/docserve; do
+for pkg in ./internal/termui ./internal/core ./internal/ptyx ./internal/gdb \
+           ./internal/execcli ./internal/mcp ./internal/cgdb/widgets ./cmd/cgdb ./cmd/docserve; do
   echo "=== $pkg ==="
   go list -f '{{join .Imports "\n"}}' $pkg | sort -u
 done
