@@ -124,30 +124,36 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 		case tcell.KeyTAB:
 			c.syncParser()
-			suggestions := c.parser.Suggestions()
+			names := c.parser.SuggestionNames()
+			token := c.parser.CurrentToken()
+			restArgs := c.parser.CurrentIsRestArgs()
 
-			names := make([]string, len(suggestions))
-			for i, node := range suggestions {
-				names[i] = node.Name
-			}
 			if c.Ctx.Bus != nil {
 				platform.Publish(c.Ctx.Bus, CompletionMsg{
 					Input: c.text,
-					Token: c.parser.CurrentToken(),
+					Token: token,
 					Names: names,
 				})
 			}
 
+			if len(names) != 1 {
+				return
+			}
+
+			c.replaceToken(names[0])
+			if restArgs {
+				return
+			}
+			// Unique tree match: add a trailing space when the command takes more input.
+			suggestions := c.parser.Suggestions()
 			if len(suggestions) == 1 {
 				node := suggestions[0]
-				c.replaceToken(node.Name)
 				children, _ := node.Complete("")
-				if len(children) > 0 {
+				if len(children) > 0 || node.RestArgs {
 					c.text += " "
 					c.cursor = len([]rune(c.text))
 				}
 			}
-
 			return
 
 		case tcell.KeyEnter:

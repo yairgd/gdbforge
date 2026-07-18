@@ -4,16 +4,16 @@ import (
 	"github.com/yairgd/cgdb-go/internal/commands"
 )
 
-// ExapData builds the example command hierarchy on commandReg.Root:
+// ExapData builds the command hierarchy on commandReg.Root:
 //
 //	/ → window → left, right, up, down
-//	/ → window → break → file, delete
-//	/ → break  → file, delete
-//	/ → info   → registers, threads
+//	/ → gdb → break → file, delete
+//	/ → gdb → info → registers, threads
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
 //	/ → set → equalalways, noequalalways
-//	/ → edit   → about, gdb, exec  (built-in views)
+//	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
+//	/ → e <file>   (edit/open source file as a CodeWidget named after the file)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
@@ -22,18 +22,16 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("right", a.OnFocusRight),
 			commands.Cmd("up", a.OnFocusUp),
 			commands.Cmd("down", a.OnFocusDown),
+		).
+		Group("gdb",
 			commands.Group("break",
 				commands.Cmd("file", a.BreakFile),
 				commands.Cmd("delete", a.DeleteBreakpoint),
 			),
-		).
-		Group("break",
-			commands.Cmd("file", a.BreakFile),
-			commands.Cmd("delete", a.DeleteBreakpoint),
-		).
-		Group("info",
-			commands.Cmd("registers", a.ShowRegisters),
-			commands.Cmd("threads", a.ShowThreads),
+			commands.Group("info",
+				commands.Cmd("registers", a.ShowRegisters),
+				commands.Cmd("threads", a.ShowThreads),
+			),
 		).
 		LeafRest("!", a.OnRun).
 		LeafRest("AI", a.OnAI).
@@ -42,11 +40,8 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("equalalways", a.SetEqualAlwaysOn),
 			commands.Cmd("noequalalways", a.SetEqualAlwaysOff),
 		).
-		Group("edit",
-			commands.Cmd("about", a.showBuiltin("about")),
-			commands.Cmd("gdb", a.showBuiltin("gdb")),
-			commands.Cmd("exec", a.showBuiltin("exec")),
-		).
+		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
+		LeafRest("e", a.OnEditFile).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
 		Leaf("clear", a.ClearFocus).

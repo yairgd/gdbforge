@@ -7,13 +7,19 @@ import (
 )
 
 // initBuiltins creates singleton built-in views once at startup.
-// Adding a new page: construct it here, registerBuiltin(name, w), and add
-// Cmd(name, a.showBuiltin(name)) under Group("edit") in ExapData.
+// Adding a new page: construct it here, registerBuiltin(name, w).
+// Show with :b name (OnBuffer). Source files use :e filename (per-file CodeWidget).
 func (a *DebuggerApp) initBuiltins() error {
 	a.builtins = make(map[string]termui.Widget)
+	a.fileBuffers = make(map[string]*widgets.CodeWidget)
 
 	a.aboutWidget = widgets.NewAboutWidget()
 	a.registerBuiltin("about", a.aboutWidget)
+
+	logWidget := termui.NewLoggerWidget(a.ctx)
+	logWidget.Events = a.Events()
+	logWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("logger", logWidget)
 
 	gdbWidget, err := widgets.NewGDBWidget(a.cfg.GDBPath, a.cfg.Prog, a.cfg.ProgArgs...)
 	if err != nil {
@@ -22,6 +28,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget = gdbWidget
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.SetAppState(a.State())
+	a.gdbWidget.SetOnStopped(a.onGdbStopped)
 	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
 
@@ -34,20 +41,6 @@ func (a *DebuggerApp) registerBuiltin(name string, w termui.Widget) {
 		a.builtins = make(map[string]termui.Widget)
 	}
 	a.builtins[name] = w
-}
-
-// showBuiltin returns a command action that replaces the focused window's
-// widget with the named singleton. No split, no new instance, no disk I/O.
-func (a *DebuggerApp) showBuiltin(name string) func(args ...any) {
-	return func(args ...any) {
-		w := a.builtins[name]
-		if w == nil || a.tab == nil {
-			return
-		}
-		if a.swapFocusedWidget(w) {
-			a.RequestFrame()
-		}
-	}
 }
 
 const widgetJumpMax = 32

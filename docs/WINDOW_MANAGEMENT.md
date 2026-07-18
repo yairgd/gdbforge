@@ -270,19 +270,27 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-The `:buffer` command selects which **application model** to display — it does not open a text file.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default panes are `[No Name]` | GDB.
+
+The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
 ```text
-:buffer code
+:b about
+:b logger
+:b gdb
+:e main.c
+:b main.c
+```
+
+Future model names (aspirational):
+
+```text
 :buffer breakpoints
 :buffer threads
 :buffer registers
 :buffer memory
 :buffer console
-:buffer logger
 ```
-
-Each name corresponds to a model declared at application startup. Running `:buffer` creates (or activates) a widget bound to that model in the focused window, or replaces the focused pane's view.
 
 **Related window commands** (same model-binding semantics):
 
@@ -355,16 +363,19 @@ Planned contents:
 | Field | Purpose |
 |-------|---------|
 | `Mode` | Input mode: Normal / Insert / Command |
-| `PTYOwner` | Who currently holds exclusive PTY write intent (`none` / `ui` / `mcp`) |
+| `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal on every layout |
+| `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query) |
+| `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
 
 ```go
 st := app.State()
-st.PTYOwner()           // platform.PTYOwnerUI while console submits
+st.PTYOwner()           // platform.PTYOwnerApp during silent file-list Query
 st.SetEqualAlways(true) // :set equalalways
+st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI/statusline and tools can see who took the mux. Layout: `:set equalalways` / `:set noequalalways`.
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `-->` on the PC line.
 
 ---
 

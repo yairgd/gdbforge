@@ -39,12 +39,15 @@ type DebuggerApp struct {
 	execWidget *widgets.ExecWidget
 
 	// widgetJump is a Vim-style jump list of prior widgets in the focused pane
-	// (pushed on :edit / :! swaps; Ctrl-O pops).
+	// (pushed on :b / :e / :! swaps; Ctrl-O pops).
 	widgetJump []termui.Widget
 
-	// builtins are singleton views created once at startup (:edit about, :edit gdb, …).
+	// builtins are singleton views created once at startup (:b about, :b gdb, …).
 	builtins    map[string]termui.Widget
 	aboutWidget *widgets.AboutWidget
+
+	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
+	fileBuffers map[string]*widgets.CodeWidget
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {

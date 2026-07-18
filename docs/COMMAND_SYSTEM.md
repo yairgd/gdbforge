@@ -84,22 +84,16 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │   ├── left      → Action: OnFocusLeft
 │   ├── right     → Action: OnFocusRight
 │   ├── up        → Action: OnFocusUp
-│   ├── down      → Action: OnFocusDown
-│   └── break
-│       ├── file  → Action: BreakFile
-│       └── delete → Action: DeleteBreakpoint
-├── break
-│   ├── file      → Action: BreakFile
-│   └── delete    → Action: DeleteBreakpoint
-├── info
-│   ├── registers → Action: ShowRegisters
-│   └── threads   → Action: ShowThreads
-├── run
-│   ├── start
-│   └── stop
-├── edit
-│   ├── about     → Action: showBuiltin("about")
-│   └── gdb       → Action: showBuiltin("gdb")
+│   └── down      → Action: OnFocusDown
+├── gdb
+│   ├── break
+│   │   ├── file  → Action: BreakFile
+│   │   └── delete → Action: DeleteBreakpoint
+│   └── info
+│       ├── registers → Action: ShowRegisters
+│       └── threads   → Action: ShowThreads
+├── b <name>      → Action: OnBuffer (builtin or open file buffer)
+├── e <file>      → Action: OnEditFile (open/create per-file CodeWidget)
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -119,7 +113,7 @@ Children are stored in a **trie** (key-sequence trie reused for name lookup) so 
 
 | Node kind | `Action` | `Children` | Example |
 |-----------|----------|------------|---------|
-| Container | `nil` | non-empty | `window`, `break`, `info` |
+| Container | `nil` | non-empty | `window`, `gdb`, `break` |
 | Leaf | set | may be empty | `left`, `delete`, `registers` |
 
 ---
@@ -216,14 +210,16 @@ func (a *DebuggerApp) ExapData() {
             commands.Cmd("right", a.OnFocusRight),
             commands.Cmd("up", a.OnFocusUp),
             commands.Cmd("down", a.OnFocusDown),
+        ).
+        Group("gdb",
             commands.Group("break",
                 commands.Cmd("file", a.BreakFile),
                 commands.Cmd("delete", a.DeleteBreakpoint),
             ),
-        ).
-        Group("break",
-            commands.Cmd("file", a.BreakFile),
-            commands.Cmd("delete", a.DeleteBreakpoint),
+            commands.Group("info",
+                commands.Cmd("registers", a.ShowRegisters),
+                commands.Cmd("threads", a.ShowThreads),
+            ),
         ).
         // ...
 }
@@ -269,6 +265,15 @@ After `Accept()` lands on a rest-args node, `Parse` **stops walking** and stores
 Vim-style bang is registered as `LeafRest("!", a.OnRun)` and has an extra Parse/Sync path so `:!ls` (no space) works. Full product docs: [EXEC_SHELL.md](EXEC_SHELL.md).
 
 In-app AI uses the same rest-args pattern: `LeafRest("AI", a.OnAI)` / `LeafRest("ai", a.OnAI)` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#gdbmcpservice-and-in-app-ai).
+
+Vim-like buffers use the same pattern:
+
+| Command | Handler | Behavior |
+|---------|---------|----------|
+| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
+| `:e file` | `LeafRest("e", OnEditFile)` | Resolve against `SourceFiles`/disk; **create** a CodeWidget named after the file if needed; show it |
+
+Default layout is `[No Name]` CodeWidget | GDB. Logger is `:b logger` only.
 
 ---
 
@@ -362,7 +367,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-A key binding can invoke the same handler as a colon command (`OnFocusLeft`) without sharing the parser — both are wired at init time in the application. `<C-o>` restores the previous pane widget after `:edit` / `:!` swaps — see [EXEC_SHELL.md](EXEC_SHELL.md).
+A key binding can invoke the same handler as a colon command (`OnFocusLeft`) without sharing the parser — both are wired at init time in the application. `<C-o>` restores the previous pane widget after `:b` / `:e` / `:!` swaps — see [EXEC_SHELL.md](EXEC_SHELL.md).
 
 ---
 

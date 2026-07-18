@@ -150,6 +150,9 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.gdbWidget.AppendLines(data.lines)
 			a.RequestFrame()
 		}
+	case codeRefreshMsg:
+		a.applyCodeStop(data.widget)
+		a.RequestFrame()
 	default:
 		if a.gdbWidget != nil {
 			a.gdbWidget.HandleEvent(ev)

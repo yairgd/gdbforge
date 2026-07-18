@@ -136,7 +136,7 @@ When the GDB pane is focused (insert):
 | `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
 
-**Normal mode:** `<C-o>` jumps back to the previous widget after `:edit` / `:!` (see [EXEC_SHELL.md](EXEC_SHELL.md)).
+**Normal mode:** `<C-o>` jumps back to the previous widget after `:b` / `:e` / `:!` (see [EXEC_SHELL.md](EXEC_SHELL.md)).
 
 The `(gdb)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Look stays a native GDB session (not chat labels).
 
@@ -310,12 +310,12 @@ Older docs described a flat `termui.AutoCompleter` + `CommandID` + `SubmitMsg` p
 |----------|----------|----------|
 | Model / window | `:buffer code`, `:buffer breakpoints`, `:vs`, `:split`, `:close` | Window manager binds widget to existing model — **partial** (`:vs` / `:split` wired) |
 | Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
-| Debugger | `:break`, `:continue`, `:step` | `HandleCoreEvents` → service layer (planned) |
+| Debugger | `:gdb break`, `:gdb info registers` | Colon tree under `gdb`; GDB CLI still typed in the GDB pane |
 | UI | `:quit` | `HandleCoreEvents` → `app.Exit()` (implemented) |
 
 The `:buffer <name>` command displays an application model, not a file. Each `<name>` must be declared at startup (e.g. `code`, `breakpoints`, `console`). There is no `:attach` command — all models exist from initialization. See [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
 
-**Design decision:** UI commands and GDB CLI commands share familiar syntax (`:break main`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to services, or exit.
+**Design decision:** UI commands and GDB CLI commands share familiar ideas (`:gdb break file`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to services, or exit.
 
 ---
 

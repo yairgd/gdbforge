@@ -126,16 +126,26 @@ One `ptmx` (`ptyx.Client`). Two rules:
 
 | Direction | Rule |
 |-----------|------|
-| **Write** | **Exclusive** — `WithWrite` / `Send` / `SendRaw` share one mutex; only UI or MCP holds it at a time |
+| **Write** | **Exclusive** — `WithWrite` / `Send` / `SendRaw` share one mutex; only one of UI / MCP / App holds it at a time |
 | **Read** | **Shared** — every `Subscribe()` channel receives the same chunks |
+
+Writers (`PTYOwner` on `AppState`):
+
+| Owner | Who | Console paint |
+|-------|-----|---------------|
+| `ui` | GDB / Exec console submit | Yes |
+| `mcp` | `:AI` / `GdbCommand` | Suppressed in GDBWidget |
+| `app` | Silent MI (`Query`, e.g. file list) | Suppressed in GDBWidget |
 
 ```mermaid
 flowchart LR
-  UI["GDBWidget Send"]
-  MCP["GdbCommand"]
+  UI["GDBWidget PTYOwnerUI"]
+  MCP["GdbMcpService PTYOwnerMCP"]
+  App["App Query PTYOwnerApp"]
   Lock["write lock"]
   UI --> Lock
   MCP --> Lock
+  App --> Lock
   Lock --> PTMX["ptmx"]
   PTMX --> Fan["broadcast"]
   Fan --> ChUI["UI Subscribe"]
@@ -143,6 +153,8 @@ flowchart LR
 ```
 
 GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
+
+**Session model on AppState:** `SourceFiles`, `CurrentFile` / `CurrentLine` (updated on `*stopped`). Each open source file has its own CodeWidget (`:e filename`); `:b filename` switches among open file buffers and builtins (`about`, `logger`, `gdb`, `exec`). Stops show `-->` on the PC line and swap that file’s buffer into focus.
 
 ---
 

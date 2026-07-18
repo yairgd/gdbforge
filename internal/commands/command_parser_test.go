@@ -101,17 +101,46 @@ func TestCommandParserSyncSuggestions(t *testing.T) {
 	p.Sync("win", 3)
 	suggestions := p.Suggestions()
 	if len(suggestions) != 1 || suggestions[0].Name != "window" {
-		t.Fatalf("root suggestions = %#v, want [window]", names(suggestions))
+		t.Fatalf("root suggestions = %#v, want [window]", nodeNames(suggestions))
 	}
 
 	p.Sync("window l", 8)
 	suggestions = p.Suggestions()
 	if len(suggestions) != 1 || suggestions[0].Name != "left" {
-		t.Fatalf("window suggestions = %#v, want [left]", names(suggestions))
+		t.Fatalf("window suggestions = %#v, want [left]", nodeNames(suggestions))
 	}
 }
 
-func names(nodes []*CommandNode) []string {
+func TestSuggestionNamesRestArgsComplete(t *testing.T) {
+	reg := NewCommandRegistry()
+	reg.Root.LeafRestComplete("b", func(args ...any) {}, func(prefix string) []string {
+		var out []string
+		for _, n := range []string{"about", "logger", "gdb", "main.c"} {
+			if prefix == "" || (len(n) >= len(prefix) && n[:len(prefix)] == prefix) {
+				out = append(out, n)
+			}
+		}
+		return out
+	})
+
+	p := NewCommandParser(reg)
+	p.Sync("b ", 2)
+	if !p.CurrentIsRestArgs() {
+		t.Fatal("expected rest-args on b")
+	}
+	got := p.SuggestionNames()
+	if len(got) != 4 {
+		t.Fatalf("names=%v", got)
+	}
+
+	p.Sync("b lo", 4)
+	got = p.SuggestionNames()
+	if len(got) != 1 || got[0] != "logger" {
+		t.Fatalf("names=%v, want [logger]", got)
+	}
+}
+
+func nodeNames(nodes []*CommandNode) []string {
 	out := make([]string, len(nodes))
 	for i, n := range nodes {
 		out[i] = n.Name

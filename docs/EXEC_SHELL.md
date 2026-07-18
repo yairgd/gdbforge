@@ -13,8 +13,10 @@ cgdb-go can open an **external PTY session** in the focused pane, similar to Vim
 | `:!bash` | Start `bash` on a PTY; show **Exec** widget in the focused pane |
 | `:!ls` | Same for `ls` (short-lived; pane stays after exit) |
 | `:!ssh user@host` | Same for any argv |
-| `:edit exec` | Re-show the last Exec widget (if still registered) |
-| `:edit gdb` / `:edit about` | Swap other built-in views into the focused pane |
+| `:b exec` | Re-show the last Exec widget (if still registered) |
+| `:b gdb` / `:b about` / `:b logger` | Swap other built-in views into the focused pane |
+| `:e file.c` | Open (or reuse) a CodeWidget named after the file |
+| `:b file.c` | Switch to an already-open file buffer |
 | `<C-o>` (normal mode) | Jump back to the **previous widget** in this pane (Vim-style jump list) |
 
 Bang may be glued or spaced: `:!ls` and `:! ls` both work.
@@ -50,7 +52,7 @@ GDB uses the same `ptyx.Client` via `gdb.GDBClient`. Exec reuses **ConsolePane**
 
 ## Rest-args (`LeafRest` / `RestArgs`)
 
-Normal colon commands walk **every** token as a tree child (`:edit about`). That cannot parse `:!ssh root@host`.
+Normal colon commands walk **every** token as a tree child (`:set equalalways`). That cannot parse `:!ssh root@host`.
 
 A **rest-args** leaf (`RestArgs == true`) means: after accepting this node, **stop walking the tree** and pass remaining tokens to `Action`.
 
@@ -98,7 +100,7 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 
 ## Jump list (`Ctrl-O`)
 
-`DebuggerApp.swapFocusedWidget` pushes the outgoing widget before `:edit` / `:!` swaps.
+`DebuggerApp.swapFocusedWidget` pushes the outgoing widget before `:b` / `:e` / `:!` swaps.
 
 | API | Role |
 |-----|------|
@@ -106,7 +108,7 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 | `JumpBack` | Pop and `ReplaceFocusedWidget` without pushing |
 | Binding | `<C-o>` in `cmd/cgdb/keybindings.go` (normal mode) |
 
-Example: GDB → `:edit about` → `<C-o>` → GDB again.
+Example: GDB → `:b about` → `<C-o>` → GDB again.
 
 ---
 

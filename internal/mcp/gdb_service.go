@@ -38,8 +38,19 @@ func NewGdbMcpService(sess core.Session, state *platform.AppState) *GdbMcpServic
 func (s *GdbMcpService) Close() {}
 
 // GdbCommand sends a GDB/MI command under the exclusive write lock and
-// returns captured PTY output (also visible to UI subscribers).
+// returns captured PTY output (also visible to UI subscribers unless the
+// GDBWidget suppresses display for non-UI owners).
 func (s *GdbMcpService) GdbCommand(ctx context.Context, command string) (string, error) {
+	return s.query(ctx, command, platform.PTYOwnerMCP)
+}
+
+// Query runs a silent app MI command (PTYOwnerApp). The GDB console should
+// not paint these replies while App owns the write path.
+func (s *GdbMcpService) Query(ctx context.Context, command string) (string, error) {
+	return s.query(ctx, command, platform.PTYOwnerApp)
+}
+
+func (s *GdbMcpService) query(ctx context.Context, command string, owner platform.PTYOwner) (string, error) {
 	if s == nil || s.sess == nil {
 		return "", context.Canceled
 	}
@@ -64,7 +75,7 @@ func (s *GdbMcpService) GdbCommand(ctx context.Context, command string) (string,
 	}
 	var err error
 	if s.state != nil {
-		s.state.WithPTYOwner(platform.PTYOwnerMCP, func() {
+		s.state.WithPTYOwner(owner, func() {
 			err = run()
 		})
 	} else {

@@ -95,6 +95,27 @@ func (w *WidgetTree) ReplaceFocusedWidget(widget Widget) bool {
 	return true
 }
 
+// ReplaceMatchingLeafWidget sets widget on the first non-focused leaf for which
+// match returns true. Used to update a source pane without stealing focus from
+// the GDB console. Returns false if no matching leaf is found.
+func (w *WidgetTree) ReplaceMatchingLeafWidget(widget Widget, match func(Widget) bool) bool {
+	if widget == nil || match == nil {
+		return false
+	}
+	focus := w.FocusedLeaf()
+	for _, leaf := range CollectLeaves(w.root) {
+		if leaf == focus {
+			continue
+		}
+		if !match(leaf.Widget) {
+			continue
+		}
+		leaf.SetWidget(widget)
+		return true
+	}
+	return false
+}
+
 func NewWidgetTree(newWidget Widget) *WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: nil}
 

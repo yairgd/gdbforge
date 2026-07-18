@@ -20,6 +20,7 @@ type GDBWidget struct {
 	cancelSub     func()
 	gdbInputState gdb.GdbInputState
 	appState      *platform.AppState
+	onStopped     func(*gdb.MiStopMsg)
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
@@ -62,6 +63,11 @@ func gdbLineStyle(line string) tcell.Style {
 // SetAppState wires global app state (PTY owner tracking, etc.).
 func (m *GDBWidget) SetAppState(s *platform.AppState) {
 	m.appState = s
+}
+
+// SetOnStopped registers a callback invoked on *stopped (breakpoint / step).
+func (m *GDBWidget) SetOnStopped(fn func(*gdb.MiStopMsg)) {
+	m.onStopped = fn
 }
 
 // Session exposes the owned debugger for external APIs (e.g. MCP).
@@ -182,22 +188,39 @@ func (m *GDBWidget) handleStop(stop *gdb.MiStopMsg) {
 		return
 	}
 	switch stop.Reason {
-	case "breakpoint-hit":
-	case "end-stepping-range":
+	case "breakpoint-hit", "end-stepping-range", "function-finished", "location-reached":
+		if m.onStopped != nil {
+			m.onStopped(stop)
+		}
 	case "exited-normally":
 	}
 }
 
+func (m *GDBWidget) silentOwner() bool {
+	if m.appState == nil {
+		return false
+	}
+	switch m.appState.PTYOwner() {
+	case platform.PTYOwnerApp, platform.PTYOwnerMCP:
+		return true
+	default:
+		return false
+	}
+}
+
 func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
-	if len(upd.DisplayLines) > 0 {
-		m.console.AppendLines(upd.DisplayLines)
-		m.console.StripTrailingBarePrompt()
-	}
-	if upd.PromptReady {
-		m.console.EnsureLivePrompt()
-	}
-	if len(upd.DisplayLines) > 0 || upd.PromptReady {
-		m.console.FollowTailAndScroll()
+	silent := m.silentOwner()
+	if !silent {
+		if len(upd.DisplayLines) > 0 {
+			m.console.AppendLines(upd.DisplayLines)
+			m.console.StripTrailingBarePrompt()
+		}
+		if upd.PromptReady {
+			m.console.EnsureLivePrompt()
+		}
+		if len(upd.DisplayLines) > 0 || upd.PromptReady {
+			m.console.FollowTailAndScroll()
+		}
 	}
 	if upd.Stopped != nil {
 		m.handleStop(upd.Stopped)

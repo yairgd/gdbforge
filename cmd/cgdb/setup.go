@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -15,17 +16,17 @@ func (a *DebuggerApp) InitB() error {
 	a.ctx.Log.AddSink(fileSink)
 	a.miLog = a.ctx.Log.Named("gdb-mi")
 
-	logWidget := termui.NewLoggerWidget(a.ctx)
-	logWidget.Events = a.Events()
-	logWidget.SetClipboard(a.ClipboardIO())
-
 	if err := a.initBuiltins(); err != nil {
 		return err
 	}
 
+	unnamed := widgets.NewCodeWidget()
+	unnamed.PaneName = "[No Name]"
+	unnamed.SetClipboard(a.ClipboardIO())
+
 	a.tab = termui.NewTabTwoHozSplitWins(
 		"basic debugger",
-		logWidget,
+		unnamed,
 		a.gdbWidget,
 	)
 	a.tab.FocusDown()

@@ -389,7 +389,7 @@ dlv debug ./cmd/docserve -- --port 8765
 | Task | Start here |
 |------|------------|
 | New application model | App startup in `cmd/cgdb`; subscribe to event bus |
-| New debugger pane | Model + widget pair; register model at startup; widget via `:buffer` / layout |
+| New debugger pane | Model + widget pair; register builtin in `initBuiltins` or open via `:e` / layout |
 | New service / backend | Implement `core.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | `:!` / Exec pane | [EXEC_SHELL.md](EXEC_SHELL.md) |

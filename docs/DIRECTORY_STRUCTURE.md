@@ -127,8 +127,8 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | Path | Responsibility |
 |------|----------------|
 | `mode_manager.go` | (removed — use `platform.AppState`) |
-| `widgets/code_widget.go` | Source view pane |
-| `widgets/about_widget.go` | Built-in About page (singleton via `:edit about`) |
+| `widgets/code_widget.go` | Per-file source view (`:e` / `:b`; PaneName = basename) |
+| `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
 

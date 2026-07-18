@@ -24,4 +24,14 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.Mode() != ModeCommand {
 		t.Fatal("mode")
 	}
+
+	s.SetSourceFiles([]string{"/a.c", "/b.c"})
+	if len(s.SourceFiles()) != 2 {
+		t.Fatal("source files")
+	}
+	s.SetCurrentLocation("/a.c", 42)
+	if s.CurrentFile() != "/a.c" || s.CurrentLine() != 42 {
+		t.Fatal("location")
+	}
+	_ = PTYOwnerApp.String()
 }

@@ -72,6 +72,31 @@ func (p *CommandParser) Suggestions() []*CommandNode {
 	return list
 }
 
+// SuggestionNames returns tab-completion names for the current token.
+// Rest-args leaves use CompleteArgs when set; otherwise tree children.
+func (p *CommandParser) SuggestionNames() []string {
+	if p.current == nil {
+		return nil
+	}
+	if p.current.RestArgs {
+		if p.current.CompleteArgs == nil {
+			return nil
+		}
+		return p.current.CompleteArgs(p.token)
+	}
+	list, _ := p.current.Complete(p.token)
+	names := make([]string, len(list))
+	for i, n := range list {
+		names[i] = n.Name
+	}
+	return names
+}
+
+// CurrentIsRestArgs reports whether the parser is on a rest-args leaf.
+func (p *CommandParser) CurrentIsRestArgs() bool {
+	return p.current != nil && p.current.RestArgs
+}
+
 func (p *CommandParser) Accept() error {
 	list, ok := p.current.Complete(p.token)
 	if !ok || len(list) != 1 {

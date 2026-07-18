@@ -18,6 +18,7 @@ const (
 	PTYOwnerNone PTYOwner = iota
 	PTYOwnerUI              // GDB / Exec console submit
 	PTYOwnerMCP             // GdbMcpService / :AI tools
+	PTYOwnerApp             // App silent MI queries (file list, etc.)
 )
 
 func (o PTYOwner) String() string {
@@ -26,13 +27,15 @@ func (o PTYOwner) String() string {
 		return "ui"
 	case PTYOwnerMCP:
 		return "mcp"
+	case PTYOwnerApp:
+		return "app"
 	default:
 		return "none"
 	}
 }
 
-// AppState is the process-global interaction and system state for a TermApp
-// session: input mode, who owns the PTY write path, and layout policy.
+// AppState is the process-global session model: interaction mode, PTY mux
+// owner, layout policy, and debugger source location / file list.
 type AppState struct {
 	mu sync.RWMutex
 
@@ -44,6 +47,10 @@ type AppState struct {
 	// equalAlways mirrors Vim 'equalalways': keep split panes evenly sized
 	// after splits / layout rebuilds (user drag ratios are reset when true).
 	equalAlways bool
+
+	sourceFiles []string
+	currentFile string
+	currentLine int // 1-based; 0 = unset
 }
 
 func (a *AppState) Mode() Mode {
@@ -89,5 +96,39 @@ func (a *AppState) EqualAlways() bool {
 func (a *AppState) SetEqualAlways(v bool) {
 	a.mu.Lock()
 	a.equalAlways = v
+	a.mu.Unlock()
+}
+
+func (a *AppState) SourceFiles() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	out := make([]string, len(a.sourceFiles))
+	copy(out, a.sourceFiles)
+	return out
+}
+
+func (a *AppState) SetSourceFiles(files []string) {
+	a.mu.Lock()
+	a.sourceFiles = append([]string(nil), files...)
+	a.mu.Unlock()
+}
+
+func (a *AppState) CurrentFile() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.currentFile
+}
+
+func (a *AppState) CurrentLine() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.currentLine
+}
+
+// SetCurrentLocation sets the PC / stop file (1-based line).
+func (a *AppState) SetCurrentLocation(file string, line int) {
+	a.mu.Lock()
+	a.currentFile = file
+	a.currentLine = line
 	a.mu.Unlock()
 }

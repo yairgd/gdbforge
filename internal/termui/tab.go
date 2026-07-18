@@ -121,6 +121,14 @@ func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {
 	return false
 }
 
+// ReplaceMatchingLeafWidget replaces a non-focused leaf matching match (see WidgetTree).
+func (t *TabWidget) ReplaceMatchingLeafWidget(w Widget, match func(Widget) bool) bool {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.ReplaceMatchingLeafWidget(w, match)
+	}
+	return false
+}
+
 func (t *TabWidget) SetEqualAlways(v bool) {
 	if tree := t.ActiveTree(); tree != nil {
 		tree.SetEqualAlways(v)

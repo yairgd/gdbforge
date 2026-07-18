@@ -1,6 +1,7 @@
 package gdb
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -87,6 +88,15 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		stop := MiStopMsg{
 			Reason:   ExtractMIField(line, "reason"),
 			ThreadId: ExtractMIField(line, "thread-id"),
+			File:     ExtractMIField(line, "fullname"),
+		}
+		if stop.File == "" {
+			stop.File = ExtractMIField(line, "file")
+		}
+		if ln := ExtractMIField(line, "line"); ln != "" {
+			if n, err := strconv.Atoi(ln); err == nil {
+				stop.Line = n
+			}
 		}
 		out.Stopped = &stop
 

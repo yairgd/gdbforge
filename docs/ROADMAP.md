@@ -37,7 +37,7 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Partial | **Normal + Command** via `platform.AppState`; PTYOwner + EqualAlways |
-| `CodeWidget` | Prototype | Placeholder draw (random background); `PaneName: "Code"` |
+| `CodeWidget` | Working | Viewport source view; `-->` on PC line after stop |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Working | Owns `GDBClient`/`Session`; ConsolePane + streaming MI |
 | `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |

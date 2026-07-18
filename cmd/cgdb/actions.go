@@ -74,7 +74,10 @@ func (app *DebuggerApp) SplitHorizontal(args ...any) {
 }
 
 func (app *DebuggerApp) SplitVertical(args ...any) {
-	app.tab.VerticalSplit(widgets.NewCodeWidget())
+	w := widgets.NewCodeWidget()
+	w.PaneName = "[No Name]"
+	w.SetClipboard(app.ClipboardIO())
+	app.tab.VerticalSplit(w)
 	app.RequestRedraw()
 }
 

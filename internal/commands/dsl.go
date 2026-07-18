@@ -14,6 +14,13 @@ func CmdRest(name string, action func(args ...any)) *CommandNode {
 	return n
 }
 
+// CmdRestComplete is CmdRest with a dynamic rest-arg completer (Tab after the command).
+func CmdRestComplete(name string, action func(args ...any), complete func(prefix string) []string) *CommandNode {
+	n := CmdRest(name, action)
+	n.CompleteArgs = complete
+	return n
+}
+
 // Group builds a container node and attaches the given children to it.
 // The returned node is not inserted into a parent until passed to a parent Group
 // or CommandNode.Group.
@@ -41,5 +48,11 @@ func (n *CommandNode) Leaf(name string, action func(args ...any)) *CommandNode {
 // LeafRest inserts a rest-args leaf into n and returns n so siblings can be chained.
 func (n *CommandNode) LeafRest(name string, action func(args ...any)) *CommandNode {
 	n.Insert(CmdRest(name, action))
+	return n
+}
+
+// LeafRestComplete inserts a rest-args leaf with dynamic Tab completions.
+func (n *CommandNode) LeafRestComplete(name string, action func(args ...any), complete func(prefix string) []string) *CommandNode {
+	n.Insert(CmdRestComplete(name, action, complete))
 	return n
 }

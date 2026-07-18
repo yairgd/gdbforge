@@ -40,8 +40,11 @@ func TestPushRawErrorSurfacesMsg(t *testing.T) {
 
 func TestPushRawStopped(t *testing.T) {
 	st := NewGdbInputState()
-	u := st.PushRaw(`*stopped,reason="breakpoint-hit",thread-id="1"` + "\n")
+	u := st.PushRaw(`*stopped,reason="breakpoint-hit",thread-id="1",frame={fullname="/tmp/hello.c",line="12"}` + "\n")
 	if u.Stopped == nil || u.Stopped.Reason != "breakpoint-hit" || u.Stopped.ThreadId != "1" {
 		t.Fatalf("stopped=%+v", u.Stopped)
+	}
+	if u.Stopped.File != "/tmp/hello.c" || u.Stopped.Line != 12 {
+		t.Fatalf("file/line=%q %d", u.Stopped.File, u.Stopped.Line)
 	}
 }
