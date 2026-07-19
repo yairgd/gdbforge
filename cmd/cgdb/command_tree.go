@@ -15,7 +15,7 @@ import (
 //	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
 //	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
 //	          markcolor, markdimcolor, breakcolor, breakdisabledcolor
-//	/ → layout <name>  (apply named workspace layout)
+//	/ → layout <name>  (default | panels | classic)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
 //	/ → vs, split, clear, quit

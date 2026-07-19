@@ -61,8 +61,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.fileListWidget.SetAppState(a.State())
 	a.fileListWidget.OnOpen = a.openSourcePath
 
-	a.State().RegisterLayout(platform.LayoutDefault)
-	a.State().SetCurrentLayout(platform.LayoutDefault)
+	a.registerLayouts()
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged

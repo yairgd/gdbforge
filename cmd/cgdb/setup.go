@@ -26,16 +26,7 @@ func (a *DebuggerApp) InitB() error {
 	a.wireCodeWidget(unnamed)
 	a.primaryCode = unnamed
 
-	a.tab = newTabDefaultDebugLayout(
-		"basic debugger",
-		unnamed,
-		a.gdbWidget,
-		a.outputWidget,
-		a.bpWidget,
-		a.threadWidget,
-		a.callstackWidget,
-		a.State().DefaultLayoutRatios(),
-	)
+	a.tab = a.newStartupTab(unnamed)
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	a.tab.FocusWidget(a.gdbWidget)
 	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))

@@ -68,6 +68,8 @@ cgdb-go/
 | `keybindings.go` | `InitKeyBindings` |
 | `actions.go` | Command action methods (focus, split, quit, …) |
 | `input.go` | Mode key handlers, mouse, resize |
+| `layout.go` | `:layout` apply / completions; wires `internal/cgdb/layout` builders |
+| `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
 | `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
@@ -127,11 +129,14 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/cgdb
 
-**cgdb-go application layer** — app state and debugger-specific widgets.
+**cgdb-go application layer** — layout builders and debugger-specific widgets.
 
 | Path | Responsibility |
 |------|----------------|
-| `mode_manager.go` | (removed — use `platform.AppState`) |
+| `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
+| `layout/default.go` | Multi-pane: Code/GDB left; Output / BP / Threads / Callstack right |
+| `layout/panels.go` | Code/GDB left; Output over (Threads\|Callstack) over Breakpoints |
+| `layout/classic.go` | Original cgdb: full-width Code over GDB |
 | `widgets/code_widget.go` | Per-file source (`:e` / `:b`); `━━▶` PC; Space break toggle; red BP marks |
 | `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
 | `widgets/thread_widget.go` | Builtin `:b threads`; list from `-thread-info` on stop |

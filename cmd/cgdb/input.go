@@ -28,7 +28,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		a.onEscape()
 		return true
 	}
-	if a.handleCodeGlobalKey(ev) {
+	if a.currentLayoutBehavior().HandleNormalKey(a, ev) {
 		return true
 	}
 	if isCopyKey(ev) {

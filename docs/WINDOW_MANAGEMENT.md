@@ -204,7 +204,15 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. The default debugger workspace is built in `cmd/cgdb` (`newTabDefaultDebugLayout`): vertical split with Code over GDB on the left (**2/3** width via `AppState.LayoutLeftRatio`) and Output / Breakpoints / Threads / Call stack on the right (**1/3**). Within the right column, Output is **1/2** height; the other three panes share the bottom half equally.
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. Debugger workspaces live in `internal/cgdb/layout` and are applied with `:layout <name>`:
+
+| Layout | Tree |
+|--------|------|
+| **`panels`** (startup) | Left Code/GDB **2/3**; right Output **1/2**; bottom half = (Threads \| Callstack) **2/3** over Breakpoints **1/3** |
+| **`default`** | Left Code/GDB **2/3**; right Output / Breakpoints / Threads / Call stack (`DefaultLayoutRatios`) |
+| **`classic`** | Full-width Code over GDB (original cgdb) |
+
+Per-layout normal-mode key policy is registered in `cmd/cgdb/layout_behavior.go` (not in TermUI Tab).
 
 ---
 
@@ -287,7 +295,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Default layout (`cmd/cgdb` `newTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic` (`internal/cgdb/layout`).
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
@@ -300,6 +308,8 @@ The longer-term `:buffer` idea selects which **application model** to display �
 :b callstack
 :b output
 :layout default
+:layout panels
+:layout classic
 :set clearoutput
 :set noclearoutput
 :edit
@@ -409,7 +419,7 @@ st.SetEqualAlways(true) // :set equalalways
 st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic when listen-print is off (`:set nogdblistenprint`; default paints). Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic when listen-print is off (`:set nogdblistenprint`; default paints). Layout: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

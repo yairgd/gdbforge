@@ -94,7 +94,7 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │       └── threads   → Action: ShowThreads
 ├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
 ├── edit [name]   → Action: OnEdit (picker, or open file; unique prefix :e)
-├── layout <name> → Action: OnLayout (apply named workspace; default)
+├── layout <name> → Action: OnLayout (default | panels | classic)
 ├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | esctocode | noesctocode | breakmain | nobreakmain | gdblistenprint | nogdblistenprint | markcolor <name> | markdimcolor <name> | breakcolor <name> | breakdisabledcolor <name>
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
@@ -274,7 +274,7 @@ Vim-like buffers use the same pattern:
 |---------|---------|----------|
 | `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
 | `:edit` / `:edit name` | `LeafRestComplete("edit", OnEdit, editCompletions)` | No args: project source picker (FileListWidget). With a name: open that source CodeWidget. **`:e`** is the unique prefix of `:edit` (same command). **Tab** lists `SourceFiles` full paths. Does **not** pollute `:b`. |
-| `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace layout (`default` today). |
+| `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace: **`panels`** (startup), **`default`** (six-pane), **`classic`** (Code over GDB). Builders in `internal/cgdb/layout`. Bare `:layout` re-applies **panels**. |
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc restores the last non-Code/non-GDB pane when one was focused, otherwise focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
@@ -285,7 +285,7 @@ Vim-like buffers use the same pattern:
 | `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |
 | `:set breakdisabledcolor <name>` | `CmdRest` under `set` | Disabled breakpoint background (default **yellow**). |
 
-Default layout is Code over GDB (left, **2/3** width) and Output / Breakpoints / Threads / Call stack (right). Program stdout is also `:b output`. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+Startup **`panels`** layout: Code over GDB (left, **2/3**); right Output (top half) and (Threads\|Callstack) over Breakpoints (bottom half). **`default`** is the six-pane workspace; **`classic`** is full-width Code/GDB. Program stdout is also `:b output`. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 
