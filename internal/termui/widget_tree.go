@@ -109,6 +109,58 @@ func (w *WidgetTree) FocusWidget(widget Widget) bool {
 	return false
 }
 
+// FocusLeaf sets focus to leaf if it belongs to this tree.
+func (w *WidgetTree) FocusLeaf(leaf *Node) bool {
+	if w == nil || leaf == nil || leaf.Type != NodeLeaf {
+		return false
+	}
+	for _, n := range CollectLeaves(w.root) {
+		if n == leaf {
+			w.focus = leaf
+			return true
+		}
+	}
+	return false
+}
+
+// FindLeaf returns the first leaf for which match returns true.
+func (w *WidgetTree) FindLeaf(match func(Widget) bool) *Node {
+	if w == nil || match == nil {
+		return nil
+	}
+	for _, leaf := range CollectLeaves(w.root) {
+		if match(leaf.Widget) {
+			return leaf
+		}
+	}
+	return nil
+}
+
+// TopLeftLeaf returns the leaf nearest the top-left of the layout.
+// Before geometry exists, returns the first DFS leaf (left/top in default trees).
+func (w *WidgetTree) TopLeftLeaf() *Node {
+	if w == nil {
+		return nil
+	}
+	leaves := CollectLeaves(w.root)
+	if len(leaves) == 0 {
+		return nil
+	}
+	best := leaves[0]
+	bestR := w.leafRect(best)
+	if bestR.W() == 0 && bestR.H() == 0 {
+		return best
+	}
+	for _, n := range leaves[1:] {
+		r := w.leafRect(n)
+		if r.Y() < bestR.Y() || (r.Y() == bestR.Y() && r.X() < bestR.X()) {
+			best = n
+			bestR = r
+		}
+	}
+	return best
+}
+
 // ReplaceFocusedWidget swaps the widget on the focused leaf in O(1).
 // Tree structure and geometry are unchanged. Returns false if there is no leaf
 // or widget is nil.

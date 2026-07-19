@@ -82,8 +82,8 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **`ModeNormal`** — `:` enters command mode; other keys go through the **Trie** then to `TabWidget`.
-   - **`ModeInsert`** — focused pane (e.g. GDB console); Esc → normal.
+   - **`ModeNormal`** — `:` enters command mode; **Esc** focuses the CodeWidget leaf (or places one top-left); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/n/s** are global (code / GDB); other keys go through the **Trie** then the focused widget.
+   - **`ModeInsert`** — GDB console (after `i`); Esc → normal + focus CodeWidget leaf.
    - **`ModeCommand`** — all keys go to `CmdWidget`.
    - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
 
@@ -352,9 +352,15 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux, `:AI`, and E
 
 | Key | Action | Status |
 |-----|--------|--------|
+| `Esc` | Focus CodeWidget leaf (or place on top-left if none) | Implemented |
+| `i` | Focus GDB leaf (remembered) and enter insert mode | Implemented |
+| `Up` / `Down` | Move CodeWidget cursor line (global) | Implemented |
+| `Space` | Toggle breakpoint at CodeWidget cursor (global) | Implemented |
+| `n` | GDB `next` | Implemented |
+| `s` | GDB `step` | Implemented |
 | `:` | Enter command mode | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
-| `Ctrl+O` | Jump back after `:b` / `:e` / `:!` | Implemented |
+| `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |
 | `Ctrl+D` | Quit | Implemented (`TermApp`) |
 | `Tab` / `Shift-Tab` | Cycle focus | Planned |
 | `1-9` | Switch tab | Planned |

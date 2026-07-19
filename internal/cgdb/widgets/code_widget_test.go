@@ -184,6 +184,63 @@ func TestCodeWidgetBreakWhileRunningInterruptsAndContinues(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetClearWhileRunningDoesNotContinueByDefault(t *testing.T) {
+	w := NewCodeWidget()
+	sent := make(chan string, 8)
+	w.sess = &fakeSess{sent: sent}
+	st := platform.NewAppState()
+	st.SetInferiorRunning(true)
+	w.state = st
+	w.path = "/home/yair/cgdb-go/hello.c"
+	w.rawLines = []string{"int main() {", "  return 0;", "}"}
+	w.selLine = 2
+	w.addLocalBreak(2)
+
+	ev := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if !w.HandleFocusKey(ev) {
+		t.Fatal("space should be handled")
+	}
+	if got := <-sent; got != "\x03" {
+		t.Fatalf("interrupt=%q", got)
+	}
+	if got := <-sent; got != "clear hello.c:2" {
+		t.Fatalf("clear=%q", got)
+	}
+	select {
+	case got := <-sent:
+		t.Fatalf("unexpected send after clear: %q", got)
+	default:
+	}
+}
+
+func TestCodeWidgetClearWhileRunningContinuesWhenEnabled(t *testing.T) {
+	w := NewCodeWidget()
+	sent := make(chan string, 8)
+	w.sess = &fakeSess{sent: sent}
+	st := platform.NewAppState()
+	st.SetInferiorRunning(true)
+	st.SetContinueAfterClear(true)
+	w.state = st
+	w.path = "/home/yair/cgdb-go/hello.c"
+	w.rawLines = []string{"int main() {", "  return 0;", "}"}
+	w.selLine = 2
+	w.addLocalBreak(2)
+
+	ev := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if !w.HandleFocusKey(ev) {
+		t.Fatal("space should be handled")
+	}
+	if got := <-sent; got != "\x03" {
+		t.Fatalf("interrupt=%q", got)
+	}
+	if got := <-sent; got != "clear hello.c:2" {
+		t.Fatalf("clear=%q", got)
+	}
+	if got := <-sent; got != "continue" {
+		t.Fatalf("continue=%q", got)
+	}
+}
+
 type fakeSess struct {
 	sent chan string
 }

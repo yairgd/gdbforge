@@ -11,9 +11,7 @@ import (
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEscape {
-		a.tab.SetInsertActive(false)
-		a.SetMode(platform.ModeNormal)
-		a.RequestRedraw()
+		a.activateCodePane()
 		return true
 	}
 	a.tab.HandleEvent(ev)
@@ -21,6 +19,13 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyEscape {
+		a.activateCodePane()
+		return true
+	}
+	if a.handleCodeGlobalKey(ev) {
+		return true
+	}
 	if isCopyKey(ev) {
 		a.tab.HandleEvent(ev)
 		return true
@@ -34,7 +39,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		return true
 	}
 	if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
-		a.EnterInsertMode()
+		a.activateGdbInsertMode()
 		return true
 	}
 	if key, ok := platform.KeyFromEvent(ev); ok {
@@ -56,6 +61,41 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		}
 	}
 	return true
+}
+
+// handleCodeGlobalKey routes Up/Down/Space/n/s to the active CodeWidget / GDB
+// regardless of which pane is focused.
+func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if cw := a.activeCodeWidget(); cw != nil {
+			cw.MoveSel(-1)
+			a.RequestFrame()
+			return true
+		}
+	case tcell.KeyDown:
+		if cw := a.activeCodeWidget(); cw != nil {
+			cw.MoveSel(1)
+			a.RequestFrame()
+			return true
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case ' ':
+			if cw := a.activeCodeWidget(); cw != nil {
+				cw.BreakAtSel()
+				a.RequestFrame()
+				return true
+			}
+		case 'n':
+			a.sendGdbExec("next")
+			return true
+		case 's':
+			a.sendGdbExec("step")
+			return true
+		}
+	}
+	return false
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {

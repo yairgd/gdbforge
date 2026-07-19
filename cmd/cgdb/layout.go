@@ -68,6 +68,8 @@ func (a *DebuggerApp) applyDefaultLayout() {
 	a.State().SetEqualAlways(true)
 	a.tab.SetEqualAlways(true)
 	a.tab.FocusWidget(a.gdbWidget)
+	a.codeLeaf = a.tab.FindLeaf(isCodeWidget)
+	a.gdbLeaf = a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget })
 	a.EnterInsertMode()
 }
 

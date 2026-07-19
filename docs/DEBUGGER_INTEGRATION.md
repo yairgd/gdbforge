@@ -169,9 +169,10 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 
 1. Send Ctrl-C (`\x03`) to interrupt
 2. Send `break` / `clear` / `-break-delete`
-3. Send `continue` so execution resumes and can hit the new breakpoint
+3. On **insert** (`break`): send `continue` so execution can hit the new breakpoint
+4. On **remove** (`clear` / `-break-delete`): send `continue` only if `:set continueafterclear` (default **off** — stay stopped)
 
-`AppState.InferiorRunning` tracks `^running` → `*stopped` for this path.
+`AppState.InferiorRunning` tracks `^running` → `*stopped` for this path. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
 
 ### Builtins and keys
 
@@ -181,7 +182,7 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 | **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear |
 | **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
-| **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter / mouse click — close list, open CodeWidget |
+| **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
 | **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — toggle break at cursor line |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).

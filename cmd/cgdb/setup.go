@@ -40,6 +40,8 @@ func (a *DebuggerApp) InitB() error {
 	)
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	a.tab.FocusWidget(a.gdbWidget)
+	a.codeLeaf = a.tab.FindLeaf(isCodeWidget)
+	a.gdbLeaf = a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget })
 	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)

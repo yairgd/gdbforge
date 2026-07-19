@@ -75,6 +75,11 @@ type AppState struct {
 	// GDB session starts (default true). Stepping (^running) does not clear.
 	clearOutput bool
 
+	// continueAfterClear: when the inferior is running and a breakpoint is
+	// removed (clear / -break-delete), interrupt then optionally resume.
+	// Default false — stay stopped after removing a breakpoint.
+	continueAfterClear bool
+
 	// inferiorRunning is true between ^running and the next *stopped / exit.
 	inferiorRunning bool
 
@@ -202,6 +207,18 @@ func (a *AppState) ClearOutput() bool {
 func (a *AppState) SetClearOutput(v bool) {
 	a.mu.Lock()
 	a.clearOutput = v
+	a.mu.Unlock()
+}
+
+func (a *AppState) ContinueAfterClear() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.continueAfterClear
+}
+
+func (a *AppState) SetContinueAfterClear(v bool) {
+	a.mu.Lock()
+	a.continueAfterClear = v
 	a.mu.Unlock()
 }
 

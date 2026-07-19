@@ -79,6 +79,12 @@ func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.breakAtSel() }, " ")
 }
 
+// MoveSel moves the bold cursor line by delta (exported for app-level normal-mode keys).
+func (w *CodeWidget) MoveSel(delta int) { w.moveSel(delta) }
+
+// BreakAtSel toggles a breakpoint on the selected line (exported for global Space).
+func (w *CodeWidget) BreakAtSel() { w.breakAtSel() }
+
 func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	ln := lineIdx + 1

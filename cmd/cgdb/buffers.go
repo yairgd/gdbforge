@@ -212,23 +212,22 @@ func (a *DebuggerApp) openSourcePath(path string) {
 	a.RequestFrame()
 }
 
-// editCompletions returns dynamic :edit Tab candidates (SourceFiles basenames).
+// editCompletions returns dynamic :edit Tab candidates (SourceFiles full paths).
 func (a *DebuggerApp) editCompletions(prefix string) []string {
 	seen := make(map[string]struct{})
 	var names []string
 	for _, f := range a.State().SourceFiles() {
-		base := filepath.Base(f)
-		if base == "" {
+		if f == "" {
 			continue
 		}
-		if prefix != "" && !strings.HasPrefix(base, prefix) {
+		if prefix != "" && !strings.HasPrefix(f, prefix) && !strings.HasPrefix(filepath.Base(f), prefix) {
 			continue
 		}
-		if _, ok := seen[base]; ok {
+		if _, ok := seen[f]; ok {
 			continue
 		}
-		seen[base] = struct{}{}
-		names = append(names, base)
+		seen[f] = struct{}{}
+		names = append(names, f)
 	}
 	sort.Strings(names)
 	return names

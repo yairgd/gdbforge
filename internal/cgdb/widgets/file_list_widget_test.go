@@ -14,7 +14,7 @@ func TestFileListWidgetSetItems(t *testing.T) {
 	}
 	w.SetItems([]string{"/tmp/a.c", "/proj/b.c"})
 	lines := w.LinesForTest()
-	if len(lines) != 2 || lines[0] != "a.c" || lines[1] != "b.c" {
+	if len(lines) != 2 || lines[0] != "/tmp/a.c" || lines[1] != "/proj/b.c" {
 		t.Fatalf("lines=%v", lines)
 	}
 }
@@ -32,18 +32,35 @@ func TestFileListWidgetOpenEnter(t *testing.T) {
 	}
 }
 
-func TestFileListWidgetMouseSyncAndOpen(t *testing.T) {
+func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
 	w := NewFileListWidget()
 	w.SetFocused(true)
 	w.SetItems([]string{"/tmp/a.c", "/tmp/b.c"})
 	var opened string
 	w.OnOpen = func(path string) { opened = path }
+
+	// First click on row 1: select only.
 	w.viewport.CursorLine = 1
-	w.syncSelectedFromViewport()
+	prev := w.selected
+	line := w.clampLine(w.viewport.CursorLine)
+	w.selected = line
+	if line == prev {
+		w.openSelected()
+	}
 	if w.Selected() != 1 {
 		t.Fatalf("selected=%d", w.Selected())
 	}
-	w.openSelected()
+	if opened != "" {
+		t.Fatalf("first click must not open, got %q", opened)
+	}
+
+	// Second click on same row: open.
+	prev = w.selected
+	line = w.clampLine(w.viewport.CursorLine)
+	w.selected = line
+	if line == prev {
+		w.openSelected()
+	}
 	if opened != "/tmp/b.c" {
 		t.Fatalf("opened=%q", opened)
 	}

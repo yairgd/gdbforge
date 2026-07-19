@@ -130,6 +130,30 @@ func (t *TabWidget) FocusWidget(w Widget) bool {
 	return false
 }
 
+// FocusLeaf focuses a leaf node in the active tree.
+func (t *TabWidget) FocusLeaf(leaf *Node) bool {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.FocusLeaf(leaf)
+	}
+	return false
+}
+
+// FindLeaf returns the first active-tree leaf matching match.
+func (t *TabWidget) FindLeaf(match func(Widget) bool) *Node {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.FindLeaf(match)
+	}
+	return nil
+}
+
+// TopLeftLeaf returns the top-left leaf of the active tree.
+func (t *TabWidget) TopLeftLeaf() *Node {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.TopLeftLeaf()
+	}
+	return nil
+}
+
 // ReplaceFocusedWidget replaces the widget shown in the focused window.
 // Does not split, create panes, or change tree geometry.
 func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {

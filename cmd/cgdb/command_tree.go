@@ -11,7 +11,8 @@ import (
 //	/ → gdb → info → registers, threads
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
-//	/ → set → equalalways, noequalalways, clearoutput, noclearoutput, markcolor
+//	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
+//	          continueafterclear, nocontinueafterclear, markcolor
 //	/ → layout <name>  (apply named workspace layout)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
@@ -42,6 +43,8 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("noequalalways", a.SetEqualAlwaysOff),
 			commands.Cmd("clearoutput", a.SetClearOutputOn),
 			commands.Cmd("noclearoutput", a.SetClearOutputOff),
+			commands.Cmd("continueafterclear", a.SetContinueAfterClearOn),
+			commands.Cmd("nocontinueafterclear", a.SetContinueAfterClearOff),
 			commands.CmdRest("markcolor", a.SetMarkColor),
 		).
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).

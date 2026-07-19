@@ -94,6 +94,17 @@ func TestAppStateClearOutputAndLayouts(t *testing.T) {
 	if s.ClearOutput() {
 		t.Fatal("noclearoutput")
 	}
+	if s.ContinueAfterClear() {
+		t.Fatal("continueafterclear default false")
+	}
+	s.SetContinueAfterClear(true)
+	if !s.ContinueAfterClear() {
+		t.Fatal("continueafterclear on")
+	}
+	s.SetContinueAfterClear(false)
+	if s.ContinueAfterClear() {
+		t.Fatal("nocontinueafterclear")
+	}
 	if !s.HasLayout(LayoutDefault) || s.CurrentLayout() != LayoutDefault {
 		t.Fatal("default layout")
 	}

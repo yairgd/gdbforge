@@ -48,3 +48,29 @@ func TestReplaceFocusedWidgetNil(t *testing.T) {
 		t.Fatal("widget should be unchanged")
 	}
 }
+
+func TestTopLeftLeafAndFindLeaf(t *testing.T) {
+	code := &stubPane{id: "code"}
+	gdb := &stubPane{id: "gdb"}
+	out := &stubPane{id: "out"}
+	tree := NewWidgetTree(code)
+	tree.SetEqualAlways(true)
+	tree.Split(Vertical, out)
+	tree.FocusWidget(code)
+	tree.Split(Horizontal, gdb)
+
+	topLeft := tree.TopLeftLeaf()
+	if topLeft == nil || topLeft.GetWidget() != code {
+		t.Fatalf("top-left=%v want code", topLeft)
+	}
+	found := tree.FindLeaf(func(w Widget) bool {
+		s, ok := w.(*stubPane)
+		return ok && s.id == "gdb"
+	})
+	if found == nil || found.GetWidget() != gdb {
+		t.Fatal("FindLeaf gdb")
+	}
+	if !tree.FocusLeaf(found) || tree.FocusedWidget() != gdb {
+		t.Fatal("FocusLeaf gdb")
+	}
+}

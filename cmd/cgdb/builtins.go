@@ -94,6 +94,7 @@ func (a *DebuggerApp) swapFocusedWidget(w termui.Widget) bool {
 	if prev != nil {
 		a.pushWidgetJump(prev)
 	}
+	a.rememberCodeLeafFromFocus()
 	return true
 }
 

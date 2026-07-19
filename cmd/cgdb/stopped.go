@@ -181,12 +181,16 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 		if cw != w {
 			_ = a.tab.ReplaceFocusedWidget(w)
 		}
+		a.rememberCodeLeafFromFocus()
 		return
 	}
-	_ = a.tab.ReplaceMatchingLeafWidget(w, func(x termui.Widget) bool {
+	if a.tab.ReplaceMatchingLeafWidget(w, func(x termui.Widget) bool {
 		_, ok := x.(*widgets.CodeWidget)
 		return ok
-	})
+	}) {
+		a.codeLeaf = a.tab.FindLeaf(isCodeWidget)
+		return
+	}
 }
 
 func (a *DebuggerApp) ensureSourceFiles() {

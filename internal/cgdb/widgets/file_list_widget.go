@@ -1,14 +1,13 @@
 package widgets
 
 import (
-	"path/filepath"
-
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-// FileListWidget shows GDB project source files (j/k selection; Enter/click opens).
+// FileListWidget shows GDB project source files (j/k selection; Enter opens).
+// Mouse: first click selects (blue mark); second click on the marked row opens.
 type FileListWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -81,18 +80,25 @@ func (w *FileListWidget) move(delta int) {
 	w.viewport.EnsureCursorVisible()
 }
 
-func (w *FileListWidget) syncSelectedFromViewport() {
+func (w *FileListWidget) clampLine(line int) int {
 	n := len(w.paths)
 	if n == 0 {
-		return
+		return 0
 	}
-	line := w.viewport.CursorLine
 	if line < 0 {
-		line = 0
+		return 0
 	}
 	if line >= n {
-		line = n - 1
+		return n - 1
 	}
+	return line
+}
+
+func (w *FileListWidget) syncSelectedFromViewport() {
+	if len(w.paths) == 0 {
+		return
+	}
+	line := w.clampLine(w.viewport.CursorLine)
 	w.selected = line
 	w.viewport.CursorLine = line
 }
@@ -128,7 +134,7 @@ func (w *FileListWidget) rebuild() {
 		return
 	}
 	for _, p := range w.paths {
-		w.buf.AppendLine(filepath.Base(p))
+		w.buf.AppendLine(p)
 	}
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
@@ -142,9 +148,17 @@ func (w *FileListWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *FileListWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		if e.Buttons()&tcell.ButtonPrimary == 0 {
+			w.viewport.HandleEvent(e)
+			return
+		}
+		prev := w.selected
 		w.viewport.HandleEvent(e)
-		w.syncSelectedFromViewport()
-		if e.Buttons()&tcell.ButtonPrimary != 0 {
+		line := w.clampLine(w.viewport.CursorLine)
+		w.selected = line
+		w.viewport.CursorLine = line
+		// Open only on a second click when the blue mark is already on this row.
+		if line == prev {
 			w.openSelected()
 		}
 	case *tcell.EventKey:
