@@ -1,0 +1,186 @@
+package widgets
+
+import (
+	"path/filepath"
+
+	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/cgdb-go/internal/termui"
+)
+
+// FileListWidget shows GDB project source files (j/k selection; Enter/click opens).
+type FileListWidget struct {
+	termui.BaseWidget
+	viewport *termui.Viewport
+	buf      *platform.Buffer
+	state    *platform.AppState
+
+	paths    []string
+	selected int
+
+	// OnOpen is called with the full path when the user activates a row.
+	OnOpen func(path string)
+}
+
+func NewFileListWidget() *FileListWidget {
+	buf := platform.NewBuffer()
+	vp := termui.NewViewport(buf)
+	vp.SetFollowTail(false)
+	vp.SetReadOnly(true)
+	vp.SetCursorVisible(false)
+
+	w := &FileListWidget{
+		BaseWidget: termui.BaseWidget{PaneName: "Files"},
+		viewport:   vp,
+		buf:        buf,
+	}
+	vp.RowStyle = w.rowStyle
+	w.initKeyBindings()
+	w.rebuild()
+	return w
+}
+
+func (w *FileListWidget) SetAppState(st *platform.AppState) {
+	w.state = st
+}
+
+func (w *FileListWidget) initKeyBindings() {
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>")
+}
+
+func (w *FileListWidget) markColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MarkColor()
+	}
+	return tcell.ColorBlue
+}
+
+func (w *FileListWidget) rowStyle(lineIdx int, line string) tcell.Style {
+	st := tcell.StyleDefault
+	if len(w.paths) == 0 {
+		return st.Foreground(tcell.ColorGray)
+	}
+	if lineIdx == w.selected && w.Focused() {
+		return st.Bold(true).Background(w.markColor())
+	}
+	_ = line
+	return st
+}
+
+func (w *FileListWidget) move(delta int) {
+	n := len(w.paths)
+	if n == 0 {
+		return
+	}
+	w.selected = (w.selected + delta%n + n) % n
+	w.viewport.CursorLine = w.selected
+	w.viewport.CursorCol = 0
+	w.viewport.Left = 0
+	w.viewport.EnsureCursorVisible()
+}
+
+func (w *FileListWidget) syncSelectedFromViewport() {
+	n := len(w.paths)
+	if n == 0 {
+		return
+	}
+	line := w.viewport.CursorLine
+	if line < 0 {
+		line = 0
+	}
+	if line >= n {
+		line = n - 1
+	}
+	w.selected = line
+	w.viewport.CursorLine = line
+}
+
+func (w *FileListWidget) openSelected() {
+	if len(w.paths) == 0 || w.OnOpen == nil {
+		return
+	}
+	if w.selected < 0 || w.selected >= len(w.paths) {
+		return
+	}
+	w.OnOpen(w.paths[w.selected])
+}
+
+// SetItems replaces the file list and rebuilds the viewport.
+func (w *FileListWidget) SetItems(paths []string) {
+	w.paths = append([]string(nil), paths...)
+	if w.selected >= len(w.paths) {
+		w.selected = len(w.paths) - 1
+	}
+	if w.selected < 0 {
+		w.selected = 0
+	}
+	w.rebuild()
+}
+
+func (w *FileListWidget) rebuild() {
+	w.buf.Clear()
+	w.viewport.Left = 0
+	if len(w.paths) == 0 {
+		w.buf.AppendLine("no files")
+		w.viewport.CursorLine = 0
+		return
+	}
+	for _, p := range w.paths {
+		w.buf.AppendLine(filepath.Base(p))
+	}
+	w.viewport.CursorLine = w.selected
+	w.viewport.CursorCol = 0
+	w.viewport.EnsureCursorVisible()
+}
+
+func (w *FileListWidget) HandleFocusKey(ev *tcell.EventKey) bool {
+	return w.HandleBoundKey(ev)
+}
+
+func (w *FileListWidget) HandleEvent(ev tcell.Event) {
+	switch e := ev.(type) {
+	case *tcell.EventMouse:
+		w.viewport.HandleEvent(e)
+		w.syncSelectedFromViewport()
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			w.openSelected()
+		}
+	case *tcell.EventKey:
+		if w.HandleBoundKey(e) {
+			return
+		}
+		w.viewport.HandleEvent(e)
+	}
+}
+
+func (w *FileListWidget) SetFocused(focused bool) {
+	w.BaseWidget.SetFocused(focused)
+	w.viewport.SetCursorVisible(false)
+}
+
+func (w *FileListWidget) SetClipboard(io termui.ClipboardIO) {
+	w.viewport.SetClipboard(io)
+}
+
+func (w *FileListWidget) Draw(c termui.Canvas) {
+	w.viewport.Draw(c)
+}
+
+func (w *FileListWidget) Paths() []string {
+	return append([]string(nil), w.paths...)
+}
+
+func (w *FileListWidget) Selected() int {
+	return w.selected
+}
+
+func (w *FileListWidget) LinesForTest() []string {
+	n := w.buf.NumLines()
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = w.buf.Line(i)
+	}
+	return out
+}

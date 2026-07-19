@@ -1,6 +1,10 @@
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	tcell "github.com/gdamore/tcell/v2"
+)
 
 func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	s := NewAppState()
@@ -64,6 +68,19 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	s.SetCurrentLocation("/a.c", 42)
 	if s.CurrentFile() != "/a.c" || s.CurrentLine() != 42 {
 		t.Fatal("location")
+	}
+	if s.MarkColor() != tcell.ColorBlue {
+		t.Fatal("markcolor default blue")
+	}
+	s.SetMarkColor(tcell.ColorNavy)
+	if s.MarkColor() != tcell.ColorNavy {
+		t.Fatal("markcolor set")
+	}
+	if c, ok := ParseColorName("darkblue"); !ok || c != tcell.ColorDarkBlue {
+		t.Fatal("ParseColorName darkblue")
+	}
+	if _, ok := ParseColorName("notaColor"); ok {
+		t.Fatal("ParseColorName unknown")
 	}
 	_ = PTYOwnerApp.String()
 }

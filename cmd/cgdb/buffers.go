@@ -156,10 +156,24 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 	}
 }
 
-// OnEditFile opens (or reuses) a per-file CodeWidget and shows it (:e filename).
-func (a *DebuggerApp) OnEditFile(args ...any) {
+// OnEdit opens the project file list (:edit) or a source file (:edit name).
+// Unique prefix :e also resolves here (no separate :e leaf).
+func (a *DebuggerApp) OnEdit(args ...any) {
 	name := joinCmdArgs(args)
-	if name == "" || a.tab == nil {
+	if a.tab == nil {
+		return
+	}
+	if name == "" {
+		if a.fileListWidget == nil {
+			return
+		}
+		a.ensureSourceFiles()
+		if files := a.State().SourceFiles(); len(files) > 0 {
+			a.fileListWidget.SetItems(files)
+		}
+		if a.swapFocusedWidget(a.fileListWidget) {
+			a.RequestFrame()
+		}
 		return
 	}
 	a.ensureSourceFiles()
@@ -168,6 +182,15 @@ func (a *DebuggerApp) OnEditFile(args ...any) {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("edit").Error("file not found: " + name)
 		}
+		return
+	}
+	a.openSourcePath(path)
+}
+
+// openSourcePath shows path in a CodeWidget, replacing the focused pane
+// (used by :edit <name> and FileListWidget selection).
+func (a *DebuggerApp) openSourcePath(path string) {
+	if path == "" || a.tab == nil {
 		return
 	}
 	w := a.ensureCodeBuffer(path)
@@ -187,4 +210,26 @@ func (a *DebuggerApp) OnEditFile(args ...any) {
 	a.onBreakpointsChanged()
 	_ = a.swapFocusedWidget(w)
 	a.RequestFrame()
+}
+
+// editCompletions returns dynamic :edit Tab candidates (SourceFiles basenames).
+func (a *DebuggerApp) editCompletions(prefix string) []string {
+	seen := make(map[string]struct{})
+	var names []string
+	for _, f := range a.State().SourceFiles() {
+		base := filepath.Base(f)
+		if base == "" {
+			continue
+		}
+		if prefix != "" && !strings.HasPrefix(base, prefix) {
+			continue
+		}
+		if _, ok := seen[base]; ok {
+			continue
+		}
+		seen[base] = struct{}{}
+		names = append(names, base)
+	}
+	sort.Strings(names)
+	return names
 }

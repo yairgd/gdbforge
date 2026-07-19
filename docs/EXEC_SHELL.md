@@ -15,7 +15,7 @@ cgdb-go can open an **external PTY session** in the focused pane, similar to Vim
 | `:!ssh user@host` | Same for any argv |
 | `:b exec` | Re-show the last Exec widget (if still registered) |
 | `:b gdb` / `:b about` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b output` | Swap other built-in views into the focused pane |
-| `:e file.c` | Open (or reuse) a CodeWidget named after the file |
+| `:edit` / `:edit file.c` | Project source picker, or open a source file (`:e` = unique prefix) |
 | `:b file.c` | Switch to an already-open file buffer |
 | `<C-o>` (normal mode) | Jump back to the **previous widget** in this pane (Vim-style jump list) |
 

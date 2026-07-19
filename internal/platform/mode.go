@@ -1,6 +1,11 @@
 package platform
 
-import "sync"
+import (
+	"strings"
+	"sync"
+
+	tcell "github.com/gdamore/tcell/v2"
+)
 
 type Mode int
 
@@ -79,6 +84,10 @@ type AppState struct {
 	sourceFiles []string
 	currentFile string
 	currentLine int // 1-based; 0 = unset
+
+	// markColor is the selected-row background for list pickers (e.g. :edit).
+	// Default blue; change with :set markcolor <name>.
+	markColor tcell.Color
 }
 
 // NewAppState returns AppState with Vim-like defaults.
@@ -93,6 +102,7 @@ func NewAppState() *AppState {
 		clearOutput:   true,
 		layouts:       []string{LayoutDefault},
 		currentLayout: LayoutDefault,
+		markColor:     tcell.ColorBlue,
 	}
 }
 
@@ -284,4 +294,49 @@ func (a *AppState) SetCurrentLocation(file string, line int) {
 	a.currentFile = file
 	a.currentLine = line
 	a.mu.Unlock()
+}
+
+func (a *AppState) MarkColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.markColor == tcell.ColorDefault {
+		return tcell.ColorBlue
+	}
+	return a.markColor
+}
+
+func (a *AppState) SetMarkColor(c tcell.Color) {
+	a.mu.Lock()
+	a.markColor = c
+	a.mu.Unlock()
+}
+
+// ParseColorName maps a user color name to a tcell.Color (case-insensitive).
+func ParseColorName(name string) (tcell.Color, bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "blue":
+		return tcell.ColorBlue, true
+	case "darkblue":
+		return tcell.ColorDarkBlue, true
+	case "navy":
+		return tcell.ColorNavy, true
+	case "black":
+		return tcell.ColorBlack, true
+	case "gray", "grey":
+		return tcell.ColorGray, true
+	case "white":
+		return tcell.ColorWhite, true
+	case "red":
+		return tcell.ColorRed, true
+	case "green":
+		return tcell.ColorGreen, true
+	case "yellow":
+		return tcell.ColorYellow, true
+	case "cyan", "aqua":
+		return tcell.ColorAqua, true
+	case "magenta":
+		return tcell.ColorPurple, true
+	default:
+		return tcell.ColorDefault, false
+	}
 }

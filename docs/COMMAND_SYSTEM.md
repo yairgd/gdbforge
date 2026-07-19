@@ -93,9 +93,9 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │       ├── registers → Action: ShowRegisters
 │       └── threads   → Action: ShowThreads
 ├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
-├── e <file>      → Action: OnEditFile (open/create per-file CodeWidget)
+├── edit [name]   → Action: OnEdit (picker, or open file; unique prefix :e)
 ├── layout <name> → Action: OnLayout (apply named workspace; default)
-├── set           → equalalways | noequalalways | clearoutput | noclearoutput
+├── set           → equalalways | noequalalways | clearoutput | noclearoutput | markcolor <name>
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -273,9 +273,10 @@ Vim-like buffers use the same pattern:
 | Command | Handler | Behavior |
 |---------|---------|----------|
 | `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
-| `:e file` | `LeafRest("e", OnEditFile)` | Resolve against `SourceFiles`/disk; **create** a CodeWidget named after the file if needed; show it |
+| `:edit` / `:edit name` | `LeafRestComplete("edit", OnEdit, editCompletions)` | No args: project source picker (FileListWidget). With a name: open that source CodeWidget. **`:e`** is the unique prefix of `:edit` (same command). **Tab** lists `SourceFiles` basenames. Does **not** pollute `:b`. |
 | `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace layout (`default` today). |
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
+| `:set markcolor <name>` | `CmdRest` under `set` | Selected-row color for the file picker (default **blue**). |
 
 Default layout is Code over GDB (left, **2/3** width) and Output / Breakpoints / Threads / Call stack (right). Program stdout is also `:b output`. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 

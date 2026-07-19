@@ -11,10 +11,10 @@ import (
 //	/ → gdb → info → registers, threads
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
-//	/ → set → equalalways, noequalalways, clearoutput, noclearoutput
+//	/ → set → equalalways, noequalalways, clearoutput, noclearoutput, markcolor
 //	/ → layout <name>  (apply named workspace layout)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
-//	/ → e <file>   (edit/open source file as a CodeWidget named after the file)
+//	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
@@ -42,10 +42,11 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("noequalalways", a.SetEqualAlwaysOff),
 			commands.Cmd("clearoutput", a.SetClearOutputOn),
 			commands.Cmd("noclearoutput", a.SetClearOutputOff),
+			commands.CmdRest("markcolor", a.SetMarkColor),
 		).
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
 		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
-		LeafRest("e", a.OnEditFile).
+		LeafRestComplete("edit", a.OnEdit, a.editCompletions).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
 		Leaf("clear", a.ClearFocus).

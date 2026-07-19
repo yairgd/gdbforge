@@ -190,7 +190,7 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 }
 
 func (a *DebuggerApp) ensureSourceFiles() {
-	if len(a.State().SourceFiles()) > 0 || a.gdbMcp == nil {
+	if a.gdbMcp == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -205,6 +205,9 @@ func (a *DebuggerApp) ensureSourceFiles() {
 	files := mcp.ParseSourceFileList(raw)
 	if len(files) > 0 {
 		a.State().SetSourceFiles(files)
+		if a.fileListWidget != nil {
+			a.fileListWidget.SetItems(files)
+		}
 	}
 }
 

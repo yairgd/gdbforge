@@ -140,6 +140,45 @@ func TestSuggestionNamesRestArgsComplete(t *testing.T) {
 	}
 }
 
+func TestCommandParserUniquePrefixEdit(t *testing.T) {
+	reg := NewCommandRegistry()
+	var gotArgs []string
+	reg.Root.LeafRestComplete("edit", func(args ...any) {
+		gotArgs = make([]string, len(args))
+		for i, a := range args {
+			gotArgs[i] = a.(string)
+		}
+	}, nil)
+
+	p := NewCommandParser(reg)
+	if err := p.Parse("e"); err != nil {
+		t.Fatalf("Parse e: %v", err)
+	}
+	if p.Current() == nil || p.Current().Name != "edit" {
+		t.Fatalf("current=%v, want edit", p.Current())
+	}
+	if err := p.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(gotArgs) != 0 {
+		t.Fatalf("args=%v, want empty", gotArgs)
+	}
+
+	gotArgs = nil
+	if err := p.Parse("e main.c"); err != nil {
+		t.Fatalf("Parse e main.c: %v", err)
+	}
+	if !reflect.DeepEqual(p.Args(), []string{"main.c"}) {
+		t.Fatalf("Args=%v", p.Args())
+	}
+	if err := p.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !reflect.DeepEqual(gotArgs, []string{"main.c"}) {
+		t.Fatalf("gotArgs=%v", gotArgs)
+	}
+}
+
 func nodeNames(nodes []*CommandNode) []string {
 	out := make([]string, len(nodes))
 	for i, n := range nodes {

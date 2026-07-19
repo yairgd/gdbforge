@@ -56,6 +56,7 @@ type DebuggerApp struct {
 	threadWidget       *widgets.ThreadWidget
 	callstackWidget    *widgets.CallStackWidget
 	outputWidget       *widgets.OutputWidget
+	fileListWidget     *widgets.FileListWidget
 	primaryCode        *widgets.CodeWidget
 	bpRefreshMu        sync.Mutex
 	bpRefreshRunning   bool

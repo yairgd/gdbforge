@@ -286,7 +286,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:e file` opens a per-file source buffer. Default layout (`NewTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Default layout (`NewTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
@@ -301,8 +301,10 @@ The longer-term `:buffer` idea selects which **application model** to display �
 :layout default
 :set clearoutput
 :set noclearoutput
-:e main.c
+:edit
+:edit main.c
 :b main.c
+:set markcolor darkblue
 ```
 
 Future model names (aspirational):
@@ -387,7 +389,8 @@ Planned contents:
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
-| `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query) |
+| `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query on each stop) |
+| `MarkColor` | File-picker selection background (`:set markcolor`; default blue) |
 | `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
 
 ```go
@@ -397,7 +400,7 @@ st.SetEqualAlways(true) // :set equalalways
 st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:e filename` opens a per-file CodeWidget (PaneName = basename); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

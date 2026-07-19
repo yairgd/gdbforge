@@ -9,7 +9,7 @@ import (
 
 // initBuiltins creates singleton built-in views once at startup.
 // Adding a new page: construct it here, registerBuiltin(name, w).
-// Show with :b name (OnBuffer). Source files use :e filename (per-file CodeWidget).
+// Show with :b name (OnBuffer). Source files use :edit filename (per-file CodeWidget).
 func (a *DebuggerApp) initBuiltins() error {
 	a.builtins = make(map[string]termui.Widget)
 	a.fileBuffers = make(map[string]*widgets.CodeWidget)
@@ -50,6 +50,11 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("callstack", a.callstackWidget)
+
+	a.fileListWidget = widgets.NewFileListWidget()
+	a.fileListWidget.SetClipboard(a.ClipboardIO())
+	a.fileListWidget.SetAppState(a.State())
+	a.fileListWidget.OnOpen = a.openSourcePath
 
 	a.State().RegisterLayout(platform.LayoutDefault)
 	a.State().SetCurrentLayout(platform.LayoutDefault)

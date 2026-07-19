@@ -133,6 +133,22 @@ func (app *DebuggerApp) SetClearOutputOff(args ...any) {
 	app.State().SetClearOutput(false)
 }
 
+func (app *DebuggerApp) SetMarkColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown markcolor: " + name)
+		}
+		return
+	}
+	app.State().SetMarkColor(c)
+	app.RequestFrame()
+}
+
 // OnAI runs an in-app LLM question against the live GDB session (:AI … / :ai …).
 func (app *DebuggerApp) OnAI(args ...any) {
 	parts := make([]string, 0, len(args))
