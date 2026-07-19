@@ -50,8 +50,8 @@ func (s *GdbMcpService) GdbCommand(ctx context.Context, command string) (string,
 }
 
 // Query runs an app MI command (PTYOwnerApp) for exclusive write tracking.
-// Unlike MCP, App ownership does not suppress GDB console paint (so stop
-// refreshes do not hide ~ / (gdb) output from a concurrent UI command).
+// GDB console paint for App/MCP replies is controlled by AppState.GdbListenPrint
+// (default off — listener traffic is silent in the GDB widget).
 func (s *GdbMcpService) Query(ctx context.Context, command string) (string, error) {
 	return s.query(ctx, command, platform.PTYOwnerApp)
 }

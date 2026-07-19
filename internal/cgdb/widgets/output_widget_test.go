@@ -1,6 +1,9 @@
 package widgets
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestOutputWidgetTargetStream(t *testing.T) {
 	w := NewOutputWidget()
@@ -66,6 +69,16 @@ func TestOutputWidgetClearKeepsRunning(t *testing.T) {
 	lines := w.LinesForTest()
 	if len(lines) != 1 || lines[0] != "after clear" {
 		t.Fatalf("after clear while running: %v", lines)
+	}
+}
+
+func TestOutputWidgetKeepsANSIEsc(t *testing.T) {
+	w := NewOutputWidget()
+	// MI target stream with octal ESC (033) for ANSI red.
+	w.AppendPty("@\"\\033[31mred\\033[0m\\n\"\n")
+	lines := w.LinesForTest()
+	if len(lines) != 1 || !strings.Contains(lines[0], "\x1b[31m") || !strings.Contains(lines[0], "red") {
+		t.Fatalf("want ANSI kept in buffer: %q", lines)
 	}
 }
 

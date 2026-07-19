@@ -49,6 +49,11 @@ type CodeWidget struct {
 	bpLines    map[int]struct{} // enabled breakpoints → breakColor bg
 	bpDisabled map[int]struct{} // disabled breakpoints → breakDisabledColor bg
 	bpNums     map[int][]int    // line → GDB breakpoint numbers (any state)
+
+	// unavailable: source path cannot be shown (missing file, .so without sources).
+	unavailable      bool
+	unavailablePath  string
+	unavailableExtra string // optional func / line hint under the path
 }
 
 func NewCodeWidget() *CodeWidget {
@@ -210,7 +215,8 @@ func (w *CodeWidget) sendMI(cmd string) {
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.
-// line is 1-based.
+// line is 1-based. If the source is missing or is a shared library without sources,
+// shows a centered "not available" placeholder instead of returning an error.
 func (w *CodeWidget) ShowLocation(path string, line int) error {
 	if path == "" {
 		return fmt.Errorf("empty path")
@@ -219,11 +225,20 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 		line = 1
 	}
 
-	if path != w.path {
+	if isSharedLibPath(path) {
+		w.ShowUnavailable(path, fmt.Sprintf("line %d", line))
+		return nil
+	}
+
+	if path != w.path || w.unavailable {
 		lines, err := readSourceLines(path)
 		if err != nil {
-			return err
+			w.ShowUnavailable(path, fmt.Sprintf("line %d", line))
+			return nil
 		}
+		w.unavailable = false
+		w.unavailablePath = ""
+		w.unavailableExtra = ""
 		w.path = path
 		w.rawLines = lines
 		w.hiLines = highlightLines(path, lines)
@@ -247,6 +262,33 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	}
 	w.viewport.Center(idx, pageH)
 	return nil
+}
+
+// ShowUnavailable clears source and shows a centered "not available" message
+// with path (and optional extra detail) in the middle of the pane.
+func (w *CodeWidget) ShowUnavailable(path, extra string) {
+	w.unavailable = true
+	w.unavailablePath = path
+	w.unavailableExtra = extra
+	w.path = path
+	w.rawLines = nil
+	w.hiLines = nil
+	w.pcLine = 0
+	w.selLine = 0
+	w.bpLines = nil
+	w.bpDisabled = nil
+	w.bpNums = nil
+	if path != "" {
+		w.PaneName = filepath.Base(path)
+	}
+	w.buf.Clear()
+	w.viewport.Left = 0
+	w.viewport.Top = 0
+}
+
+func isSharedLibPath(path string) bool {
+	base := filepath.Base(path)
+	return strings.Contains(base, ".so")
 }
 
 // SetBreakInfos updates gutter state from breakpoint rows for this file.
@@ -336,6 +378,9 @@ func (w *CodeWidget) RebuildBuffer() {
 }
 
 func (w *CodeWidget) rebuildBuffer() {
+	if w.unavailable {
+		return
+	}
 	w.buf.Clear()
 	for i, text := range w.rawLines {
 		ln := i + 1
@@ -469,16 +514,70 @@ func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {
 }
 
 func (w *CodeWidget) Draw(c termui.Canvas) {
+	if w.unavailable {
+		w.drawUnavailable(c)
+		return
+	}
 	w.viewport.Draw(c)
+}
+
+func (w *CodeWidget) drawUnavailable(c termui.Canvas) {
+	h, width := c.H(), c.W()
+	if h <= 0 || width <= 0 {
+		return
+	}
+	for y := 0; y < h; y++ {
+		c.ClearLine(y, tcell.StyleDefault)
+	}
+	title := "not available"
+	path := w.unavailablePath
+	extra := w.unavailableExtra
+	nLines := 2
+	if extra != "" {
+		nLines = 3
+	}
+	startY := (h - nLines) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	titleStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Bold(true)
+	pathStyle := tcell.StyleDefault.Foreground(tcell.ColorGray)
+	drawCentered(c, startY, width, title, titleStyle)
+	if startY+1 < h {
+		drawCentered(c, startY+1, width, path, pathStyle)
+	}
+	if extra != "" && startY+2 < h {
+		drawCentered(c, startY+2, width, extra, pathStyle)
+	}
+}
+
+func drawCentered(c termui.Canvas, y, width int, text string, st tcell.Style) {
+	if text == "" || width <= 0 {
+		return
+	}
+	runes := []rune(text)
+	if len(runes) > width {
+		runes = runes[:width]
+	}
+	x := (width - len(runes)) / 2
+	if x < 0 {
+		x = 0
+	}
+	for i, ch := range runes {
+		c.SetContent(x+i, y, ch, st)
+	}
 }
 
 func (w *CodeWidget) Viewport() *termui.Viewport {
 	return w.viewport
 }
 
-func (w *CodeWidget) Path() string    { return w.path }
-func (w *CodeWidget) PCLine() int     { return w.pcLine }
-func (w *CodeWidget) SelLine() int    { return w.selLine }
+func (w *CodeWidget) Path() string { return w.path }
+func (w *CodeWidget) PCLine() int  { return w.pcLine }
+func (w *CodeWidget) SelLine() int { return w.selLine }
+func (w *CodeWidget) Unavailable() bool {
+	return w.unavailable
+}
 func (w *CodeWidget) LinesForTest() []string {
 	n := w.buf.NumLines()
 	out := make([]string, n)

@@ -260,7 +260,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies are hidden in the GDB console unless `:set gdblistenprint`.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -374,12 +374,11 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 |--------|-----|--------|
 | **CodeWidget** | `e` | Enable/disable breakpoint at cursor (yellow when disabled; same as BreakpointWidget `e`) |
 | **CodeWidget** | **Space** | Insert/remove breakpoint at cursor line |
-| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down | Bold selection |
+| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down, Enter / click | Bold selection; show CodeWidget at that BP |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
-| **BreakpointWidget** | `j`/`k`, mouse click | Bold blue selection; `e` toggle; `d` delete |
-| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, mouse click | Bold blue selection (read-only this stage) |
-| **OutputWidget** (`:b output`) | `j`/`k` / PgUp/PgDn | Scroll program stdout; `<C-l>` clear |
+| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse click | Bold selection; Up/Down/Enter/click switches thread (`thread ID`) / frame (`frame N`) and updates CodeWidget `━━▶` (or centered **not available** + path for missing / `.so` sources) |
+| **OutputWidget** (`:b output`) | `j`/`k` / PgUp/PgDn | Scroll program stdout (read-only ConsolePane + ANSI); `<C-l>` clear |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 

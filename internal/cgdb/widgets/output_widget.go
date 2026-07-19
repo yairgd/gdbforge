@@ -13,12 +13,13 @@ import (
 const outputTabWidth = 8
 
 // OutputWidget shows inferior (program) stdout with terminal-like
-// \n / \r / \t handling. GDB may deliver that as @"..." target-stream
-// records and/or as raw PTY text while the inferior is running.
+// \n / \r / \t handling and ANSI colors. Built on a read-only ConsolePane
+// (same scrollback path as GDB/Exec). GDB may deliver that as @"..." target-
+// stream records and/or as raw PTY text while the inferior is running.
 type OutputWidget struct {
 	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
+	console *termui.ConsolePane
+	buf     *platform.Buffer
 
 	miBuf           string // incomplete record across PTY chunks
 	inferiorRunning bool
@@ -27,16 +28,15 @@ type OutputWidget struct {
 }
 
 func NewOutputWidget() *OutputWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(true)
-	vp.SetReadOnly(true)
-	vp.SetCursorVisible(false)
+	console := termui.NewConsolePane("Output")
+	console.Prompt = ""
+	console.SetANSI(true)
+	console.SetInputEnabled(false)
 
 	w := &OutputWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "Output"},
-		viewport:   vp,
-		buf:        buf,
+		console:    console,
+		buf:        console.Buffer(),
 	}
 	w.initKeyBindings()
 	w.ensureCurLine()
@@ -44,12 +44,13 @@ func NewOutputWidget() *OutputWidget {
 }
 
 func (w *OutputWidget) initKeyBindings() {
-	w.BindKeyFunc("scroll-up", func(args ...any) { w.viewport.ScrollLineUp() }, "<Up>", "k")
-	w.BindKeyFunc("scroll-down", func(args ...any) { w.viewport.ScrollLineDown() }, "<Down>", "j")
-	w.BindKeyFunc("page-up", func(args ...any) { w.viewport.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.viewport.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
-	w.BindKeyFunc("home", func(args ...any) { w.viewport.ScrollHome() }, "<Home>", "g")
-	w.BindKeyFunc("end", func(args ...any) { w.viewport.ScrollEnd() }, "<End>", "G")
+	vp := w.console.Viewport()
+	w.BindKeyFunc("scroll-up", func(args ...any) { vp.ScrollLineUp() }, "<Up>", "k")
+	w.BindKeyFunc("scroll-down", func(args ...any) { vp.ScrollLineDown() }, "<Down>", "j")
+	w.BindKeyFunc("page-up", func(args ...any) { vp.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { vp.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { vp.ScrollHome() }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { vp.ScrollEnd() }, "<End>", "G")
 	w.BindKeyFunc("clear", func(args ...any) { w.Clear() }, "<C-l>")
 }
 
@@ -68,9 +69,7 @@ func (w *OutputWidget) AppendPty(data string) {
 		w.miBuf = w.miBuf[i+1:]
 		w.consumeRecord(line)
 	}
-	if w.viewport.FollowTail() {
-		w.viewport.ScrollToBottom()
-	}
+	w.console.FollowTailAndScroll()
 }
 
 // AppendRaw is an alias for AppendPty.
@@ -164,8 +163,11 @@ func (w *OutputWidget) writeTarget(text string) {
 			for i := 0; i < spaces; i++ {
 				w.putRune(' ')
 			}
+		case '\x1b':
+			// Keep ESC so Viewport ANSI mode can colorize SGR sequences.
+			w.putRune(r)
 		default:
-			if unicode.IsControl(r) && r != '\t' {
+			if unicode.IsControl(r) {
 				continue
 			}
 			w.putRune(r)
@@ -210,15 +212,10 @@ func (w *OutputWidget) Clear() {
 	w.miBuf = ""
 	w.cur = w.cur[:0]
 	w.col = 0
-	if w.buf != nil {
-		w.buf.Clear()
-	}
+	w.console.Clear()
 	w.ensureCurLine()
 	w.syncCurLine()
-	if w.viewport != nil {
-		w.viewport.SetFollowTail(true)
-		w.viewport.ScrollToBottom()
-	}
+	w.console.FollowTailAndScroll()
 }
 
 func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
@@ -227,27 +224,29 @@ func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 
 func (w *OutputWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
-	case *tcell.EventMouse:
-		w.viewport.HandleEvent(e)
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
-		w.viewport.HandleEvent(e)
 	}
+	w.console.HandleEvent(ev)
 }
 
 func (w *OutputWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
+	w.console.SetFocused(focused)
 }
 
 func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
+	w.console.SetClipboard(io)
 }
 
 func (w *OutputWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
+	w.console.Draw(c)
+}
+
+func (w *OutputWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	w.console.DrawStatusLine(c, active)
 }
 
 func (w *OutputWidget) LinesForTest() []string {

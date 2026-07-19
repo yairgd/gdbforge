@@ -270,26 +270,25 @@ func (m *GDBWidget) handleStop(stop *gdb.MiStopMsg) {
 		return
 	}
 	switch stop.Reason {
-	case "breakpoint-hit", "end-stepping-range", "function-finished", "location-reached":
+	case "exited-normally", "exited", "exited-signalled":
+		// Inferior is gone — no threads/stack refresh.
+		return
+	default:
+		// breakpoint-hit, end-stepping-range, signal-received (Ctrl-C), …
 		if m.onStopped != nil {
 			m.onStopped(stop)
 		}
-	case "exited-normally":
 	}
 }
 
-// silentOwner is true when MCP holds the PTY write path so :AI / tool
-// traffic does not paint the GDB console.
-//
-// PTYOwnerApp must NOT suppress paint: stop-driven Queries (-thread-info,
-// -stack-list-frames, -break-list) overlap the UI response to commands like
-// "n", and suppressing would drop ~console / (gdb) lines while CodeWidget
-// still updates from *stopped.
+// silentOwner is true when the GDB console should not paint PTY DisplayLines:
+// App/MCP (listener) traffic, sticky after those writes. UI submit clears
+// sticky silence. :set gdblistenprint paints listener replies too.
 func (m *GDBWidget) silentOwner() bool {
 	if m.appState == nil {
 		return false
 	}
-	return m.appState.PTYOwner() == platform.PTYOwnerMCP
+	return m.appState.SuppressGdbConsole()
 }
 
 func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {

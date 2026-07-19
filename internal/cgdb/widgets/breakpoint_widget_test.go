@@ -138,6 +138,29 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	}
 }
 
+func TestBreakpointWidgetActivateOnMove(t *testing.T) {
+	w := NewBreakpointWidget()
+	w.SetFocused(true)
+	w.MergeFromGDB([]mcp.BreakInfo{
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
+		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
+	})
+	var got mcp.BreakInfo
+	w.OnActivate = func(bp mcp.BreakInfo) { got = bp }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("down")
+	}
+	if got.Number != 2 || got.Line != 20 {
+		t.Fatalf("activated=%v", got)
+	}
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("enter")
+	}
+	if got.Number != 2 {
+		t.Fatalf("enter activated=%v", got)
+	}
+}
+
 type bpFakeSess struct {
 	sent chan string
 }

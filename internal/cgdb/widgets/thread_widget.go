@@ -10,7 +10,8 @@ import (
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-// ThreadWidget shows GDB threads (read-only list; j/k selection).
+// ThreadWidget shows GDB threads (j/k / Up/Down selection; same keys, Enter,
+// and mouse click activate the selected thread).
 type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -18,6 +19,9 @@ type ThreadWidget struct {
 
 	items    []mcp.ThreadInfo
 	selected int
+
+	// OnActivate is called when the user activates a thread (Up/Down/j/k, Enter, or click).
+	OnActivate func(mcp.ThreadInfo)
 }
 
 func NewThreadWidget() *ThreadWidget {
@@ -41,6 +45,7 @@ func NewThreadWidget() *ThreadWidget {
 func (w *ThreadWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 }
 
 func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
@@ -65,6 +70,7 @@ func (w *ThreadWidget) move(delta int) {
 	w.viewport.CursorCol = 0
 	w.viewport.Left = 0
 	w.viewport.EnsureCursorVisible()
+	w.activateSelected()
 }
 
 // syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
@@ -82,6 +88,16 @@ func (w *ThreadWidget) syncSelectedFromViewport() {
 	}
 	w.selected = line
 	w.viewport.CursorLine = line
+}
+
+func (w *ThreadWidget) activateSelected() {
+	if w.OnActivate == nil || len(w.items) == 0 {
+		return
+	}
+	if w.selected < 0 || w.selected >= len(w.items) {
+		return
+	}
+	w.OnActivate(w.items[w.selected])
 }
 
 // SetItems replaces the thread list and rebuilds the viewport.
@@ -135,7 +151,10 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
-		w.syncSelectedFromViewport()
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			w.syncSelectedFromViewport()
+			w.activateSelected()
+		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
@@ -156,6 +175,8 @@ func (w *ThreadWidget) SetClipboard(io termui.ClipboardIO) {
 func (w *ThreadWidget) Draw(c termui.Canvas) {
 	w.viewport.Draw(c)
 }
+
+func (w *ThreadWidget) Selected() int { return w.selected }
 
 func (w *ThreadWidget) Items() []mcp.ThreadInfo {
 	return append([]mcp.ThreadInfo(nil), w.items...)

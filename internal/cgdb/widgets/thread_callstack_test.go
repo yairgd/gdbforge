@@ -3,6 +3,7 @@ package widgets
 import (
 	"testing"
 
+	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/mcp"
 )
 
@@ -33,6 +34,76 @@ func TestCallStackWidgetSetItems(t *testing.T) {
 	lines := w.LinesForTest()
 	if len(lines) != 2 || lines[0] != "0  main  hello.c:12" {
 		t.Fatalf("lines=%v", lines)
+	}
+}
+
+func TestThreadWidgetActivateEnter(t *testing.T) {
+	w := NewThreadWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.ThreadInfo{
+		{ID: "1", State: "stopped", Current: true},
+		{ID: "2", State: "running"},
+	})
+	w.selected = 1
+	var got mcp.ThreadInfo
+	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("enter")
+	}
+	if got.ID != "2" {
+		t.Fatalf("activated=%v", got)
+	}
+}
+
+func TestCallStackWidgetActivateEnter(t *testing.T) {
+	w := NewCallStackWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main", File: "a.c", Line: 1},
+		{Level: 1, Func: "foo", File: "b.c", Line: 2},
+	})
+	w.selected = 1
+	var got mcp.StackFrame
+	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("enter")
+	}
+	if got.Level != 1 || got.Func != "foo" {
+		t.Fatalf("activated=%v", got)
+	}
+}
+
+func TestCallStackWidgetActivateOnMove(t *testing.T) {
+	w := NewCallStackWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main", File: "a.c", Line: 1},
+		{Level: 1, Func: "foo", File: "b.c", Line: 2},
+	})
+	var got mcp.StackFrame
+	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("down")
+	}
+	if got.Level != 1 || got.Func != "foo" {
+		t.Fatalf("activated=%v", got)
+	}
+}
+
+func TestThreadWidgetActivateOnMove(t *testing.T) {
+	w := NewThreadWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.ThreadInfo{
+		{ID: "1", State: "stopped", Current: true},
+		{ID: "2", State: "running"},
+	})
+	var got mcp.ThreadInfo
+	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("down")
+	}
+	if got.ID != "2" {
+		t.Fatalf("activated=%v", got)
 	}
 }
 

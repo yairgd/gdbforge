@@ -35,6 +35,26 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.PTYOwner() != PTYOwnerNone {
 		t.Fatal("owner restored")
 	}
+	if !s.SuppressGdbConsole() {
+		t.Fatal("sticky silent after MCP write")
+	}
+	s.WithPTYOwner(PTYOwnerUI, func() {})
+	if s.SuppressGdbConsole() {
+		t.Fatal("UI write clears sticky silent")
+	}
+	s.WithPTYOwner(PTYOwnerApp, func() {
+		if !s.SuppressGdbConsole() {
+			t.Fatal("suppress during App owner")
+		}
+	})
+	if !s.SuppressGdbConsole() {
+		t.Fatal("sticky silent after App write")
+	}
+	s.SetGdbListenPrint(true)
+	if s.SuppressGdbConsole() {
+		t.Fatal("gdblistenprint disables suppress")
+	}
+	s.SetGdbListenPrint(false)
 
 	s.SetEqualAlways(false)
 	if s.EqualAlways() {
@@ -126,6 +146,17 @@ func TestAppStateClearOutputAndLayouts(t *testing.T) {
 	s.SetEscToCode(true)
 	if !s.EscToCode() {
 		t.Fatal("esctocode on")
+	}
+	if !s.BreakMain() {
+		t.Fatal("breakmain default true")
+	}
+	s.SetBreakMain(false)
+	if s.BreakMain() {
+		t.Fatal("nobreakmain")
+	}
+	s.SetBreakMain(true)
+	if !s.BreakMain() {
+		t.Fatal("breakmain on")
 	}
 	if !s.HasLayout(LayoutDefault) || s.CurrentLayout() != LayoutDefault {
 		t.Fatal("default layout")

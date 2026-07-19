@@ -391,6 +391,8 @@ Planned contents:
 | `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
 | `EscToCode` | Esc focuses the CodeWidget leaf (`:set esctocode` / `:set noesctocode`; default **on**) |
+| `BreakMain` | Insert `break main` on GDB session start (`:set breakmain` / `:set nobreakmain`; default **on**) |
+| `GdbListenPrint` | Paint App/MCP replies in the GDB console (`:set gdblistenprint` / `:set nogdblistenprint`; default **off**) |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
 | `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query once when empty) |
@@ -406,7 +408,7 @@ st.SetEqualAlways(true) // :set equalalways
 st.CurrentFile()        // after breakpoint-hit
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic. Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic (default; `:set gdblistenprint` to show). Layout: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:b output`, `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 ---
 

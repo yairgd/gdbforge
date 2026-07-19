@@ -95,7 +95,7 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 ├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
 ├── edit [name]   → Action: OnEdit (picker, or open file; unique prefix :e)
 ├── layout <name> → Action: OnLayout (apply named workspace; default)
-├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | esctocode | noesctocode | markcolor <name> | breakcolor <name> | breakdisabledcolor <name>
+├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | esctocode | noesctocode | breakmain | nobreakmain | gdblistenprint | nogdblistenprint | markcolor <name> | breakcolor <name> | breakdisabledcolor <name>
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -278,6 +278,8 @@ Vim-like buffers use the same pattern:
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
+| `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). `:set breakmain` also inserts immediately if a session is already live. |
+| `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **off**). User-typed console commands always print. |
 | `:set markcolor <name>` | `CmdRest` under `set` | Selected-row color for the file picker (default **blue**). |
 | `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |
 | `:set breakdisabledcolor <name>` | `CmdRest` under `set` | Disabled breakpoint background (default **yellow**). |

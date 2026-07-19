@@ -147,6 +147,23 @@ func (app *DebuggerApp) SetEscToCodeOff(args ...any) {
 	app.State().SetEscToCode(false)
 }
 
+func (app *DebuggerApp) SetBreakMainOn(args ...any) {
+	app.State().SetBreakMain(true)
+	app.maybeBreakMain()
+}
+
+func (app *DebuggerApp) SetBreakMainOff(args ...any) {
+	app.State().SetBreakMain(false)
+}
+
+func (app *DebuggerApp) SetGdbListenPrintOn(args ...any) {
+	app.State().SetGdbListenPrint(true)
+}
+
+func (app *DebuggerApp) SetGdbListenPrintOff(args ...any) {
+	app.State().SetGdbListenPrint(false)
+}
+
 func (app *DebuggerApp) SetMarkColor(args ...any) {
 	name := joinCmdArgs(args)
 	if name == "" {

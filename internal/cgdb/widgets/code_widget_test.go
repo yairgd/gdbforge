@@ -267,6 +267,70 @@ func TestCodeWidgetClearWhileRunningContinuesWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetShowUnavailable(t *testing.T) {
+	w := NewCodeWidget()
+	w.ShowUnavailable("/usr/lib64/libQt5Core.so.5", "QEventLoop::exec  line 602")
+	if !w.Unavailable() {
+		t.Fatal("want Unavailable")
+	}
+	if w.PaneName != "libQt5Core.so.5" {
+		t.Fatalf("PaneName=%q", w.PaneName)
+	}
+	if got := w.LinesForTest(); len(got) != 0 {
+		t.Fatalf("want empty buffer lines, got %v", got)
+	}
+
+	g := termui.NewGrid(40, 10)
+	full := termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 10))
+	w.Draw(full)
+
+	rowText := func(y int) string {
+		var b strings.Builder
+		for x := 0; x < 40; x++ {
+			ch := g.Cells[x][y].Rune
+			if ch == 0 {
+				ch = ' '
+			}
+			b.WriteRune(ch)
+		}
+		return strings.TrimSpace(b.String())
+	}
+	// nLines=3 → startY=(10-3)/2=3
+	title := rowText(3)
+	path := rowText(4)
+	extra := rowText(5)
+	if title != "not available" {
+		t.Fatalf("title=%q", title)
+	}
+	if !strings.Contains(path, "libQt5Core.so.5") {
+		t.Fatalf("path=%q", path)
+	}
+	if !strings.Contains(extra, "QEventLoop::exec") || !strings.Contains(extra, "602") {
+		t.Fatalf("extra=%q", extra)
+	}
+}
+
+func TestCodeWidgetShowLocationSharedLib(t *testing.T) {
+	w := NewCodeWidget()
+	if err := w.ShowLocation("/usr/lib64/libQt5Core.so.5", 602); err != nil {
+		t.Fatal(err)
+	}
+	if !w.Unavailable() {
+		t.Fatal("want Unavailable for .so path")
+	}
+}
+
+func TestCodeWidgetShowLocationMissingFile(t *testing.T) {
+	w := NewCodeWidget()
+	missing := filepath.Join(t.TempDir(), "no-such.c")
+	if err := w.ShowLocation(missing, 10); err != nil {
+		t.Fatal(err)
+	}
+	if !w.Unavailable() {
+		t.Fatal("want Unavailable for missing file")
+	}
+}
+
 type fakeSess struct {
 	sent chan string
 }

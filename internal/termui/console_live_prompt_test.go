@@ -6,6 +6,19 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 )
 
+func TestConsolePaneInputDisabledIgnoresTyping(t *testing.T) {
+	p := NewConsolePane("out")
+	p.SetInputEnabled(false)
+	p.SetANSI(true)
+	if p.InputEnabled() {
+		t.Fatal("expected input disabled")
+	}
+	p.HandleEvent(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	if p.Input().Text() != "" {
+		t.Fatalf("typing should be ignored: %q", p.Input().Text())
+	}
+}
+
 func TestConsolePaneLivePromptAttach(t *testing.T) {
 	p := NewConsolePane("test")
 	p.Prompt = "(gdb) "

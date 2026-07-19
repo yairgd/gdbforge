@@ -13,7 +13,8 @@ import (
 
 // BreakpointWidget owns the breakpoint list shown in the UI.
 //
-//	j/k or Up/Down — bold selection
+//	j/k or Up/Down — bold selection; also jumps CodeWidget to that location
+//	Enter / click — same as Up/Down (show source at breakpoint)
 //	e — toggle: disabled → insert into GDB; enabled → delete from GDB (row stays)
 //	d — remove from list and from GDB
 //
@@ -35,6 +36,8 @@ type BreakpointWidget struct {
 	OnChange func()
 	// OnBreakCmd is invoked after e/d sends a GDB break/clear/delete command.
 	OnBreakCmd func()
+	// OnActivate is called when the user selects a row (Up/Down/j/k, Enter, or click).
+	OnActivate func(mcp.BreakInfo)
 }
 
 func NewBreakpointWidget() *BreakpointWidget {
@@ -64,6 +67,7 @@ func (w *BreakpointWidget) SetPTY(sess core.Session, state *platform.AppState) {
 func (w *BreakpointWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 	w.BindKeyFunc("toggle", func(args ...any) { w.toggleSelected() }, "e")
 	w.BindKeyFunc("delete", func(args ...any) { w.deleteSelected() }, "d")
 }
@@ -112,6 +116,7 @@ func (w *BreakpointWidget) move(delta int) {
 	w.viewport.CursorCol = 0
 	w.viewport.Left = 0
 	w.viewport.EnsureCursorVisible()
+	w.activateSelected()
 }
 
 // syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
@@ -129,6 +134,16 @@ func (w *BreakpointWidget) syncSelectedFromViewport() {
 	}
 	w.selected = line
 	w.viewport.CursorLine = line
+}
+
+func (w *BreakpointWidget) activateSelected() {
+	if w.OnActivate == nil || len(w.items) == 0 {
+		return
+	}
+	if w.selected < 0 || w.selected >= len(w.items) {
+		return
+	}
+	w.OnActivate(w.items[w.selected])
 }
 
 func (w *BreakpointWidget) notifyChange() {
@@ -327,7 +342,10 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
-		w.syncSelectedFromViewport()
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			w.syncSelectedFromViewport()
+			w.activateSelected()
+		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return

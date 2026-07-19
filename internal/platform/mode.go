@@ -104,6 +104,20 @@ type AppState struct {
 	// escToCode: Esc leaves insert and focuses the CodeWidget leaf (default true).
 	// :set esctocode / :set noesctocode.
 	escToCode bool
+
+	// breakMain: insert "break main" when the GDB session starts (default true).
+	// :set breakmain / :set nobreakmain.
+	breakMain bool
+
+	// gdbListenPrint: when true, paint GDB console lines from App/MCP (listener)
+	// traffic. Default false — only GDBWidget-initiated commands paint replies.
+	// :set gdblistenprint / :set nogdblistenprint.
+	gdbListenPrint bool
+
+	// gdbConsoleSilent is sticky: set true on App/MCP WithPTYOwner, cleared on
+	// UI WithPTYOwner. Used with gdbListenPrint to suppress listener paint
+	// after short Send() windows (owner restores to none before replies arrive).
+	gdbConsoleSilent bool
 }
 
 // NewAppState returns AppState with Vim-like defaults.
@@ -122,6 +136,7 @@ func NewAppState() *AppState {
 		breakColor:         tcell.ColorRed,
 		breakDisabledColor: tcell.ColorYellow,
 		escToCode:          true,
+		breakMain:          true,
 	}
 }
 
@@ -150,10 +165,18 @@ func (a *AppState) SetPTYOwner(owner PTYOwner) {
 }
 
 // WithPTYOwner sets owner for the duration of fn, then restores previous.
+// UI ownership clears the sticky console-silent flag; App/MCP set it so
+// async PTY replies after Send are still treated as listener traffic.
 func (a *AppState) WithPTYOwner(owner PTYOwner, fn func()) {
 	a.mu.Lock()
 	prev := a.ptyOwner
 	a.ptyOwner = owner
+	switch owner {
+	case PTYOwnerUI:
+		a.gdbConsoleSilent = false
+	case PTYOwnerApp, PTYOwnerMCP:
+		a.gdbConsoleSilent = true
+	}
 	a.mu.Unlock()
 	defer a.SetPTYOwner(prev)
 	fn()
@@ -247,6 +270,47 @@ func (a *AppState) SetEscToCode(v bool) {
 	a.mu.Lock()
 	a.escToCode = v
 	a.mu.Unlock()
+}
+
+// BreakMain reports whether to insert "break main" on GDB session start (default true).
+func (a *AppState) BreakMain() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.breakMain
+}
+
+func (a *AppState) SetBreakMain(v bool) {
+	a.mu.Lock()
+	a.breakMain = v
+	a.mu.Unlock()
+}
+
+// GdbListenPrint reports whether App/MCP PTY replies paint in the GDB console
+// (default false — listener traffic is silent).
+func (a *AppState) GdbListenPrint() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.gdbListenPrint
+}
+
+func (a *AppState) SetGdbListenPrint(v bool) {
+	a.mu.Lock()
+	a.gdbListenPrint = v
+	a.mu.Unlock()
+}
+
+// SuppressGdbConsole is true when the GDB widget should not paint DisplayLines
+// (listener traffic and sticky silent after App/MCP writes, unless GdbListenPrint).
+func (a *AppState) SuppressGdbConsole() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.gdbListenPrint {
+		return false
+	}
+	if a.ptyOwner == PTYOwnerApp || a.ptyOwner == PTYOwnerMCP {
+		return true
+	}
+	return a.gdbConsoleSilent
 }
 
 func (a *AppState) InferiorRunning() bool {

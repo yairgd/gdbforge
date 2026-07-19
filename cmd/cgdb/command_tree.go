@@ -13,6 +13,7 @@ import (
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
 //	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
 //	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
+//	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
 //	          markcolor, breakcolor, breakdisabledcolor
 //	/ → layout <name>  (apply named workspace layout)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
@@ -48,6 +49,10 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("nocontinueafterclear", a.SetContinueAfterClearOff),
 			commands.Cmd("esctocode", a.SetEscToCodeOn),
 			commands.Cmd("noesctocode", a.SetEscToCodeOff),
+			commands.Cmd("breakmain", a.SetBreakMainOn),
+			commands.Cmd("nobreakmain", a.SetBreakMainOff),
+			commands.Cmd("gdblistenprint", a.SetGdbListenPrintOn),
+			commands.Cmd("nogdblistenprint", a.SetGdbListenPrintOff),
 			commands.CmdRest("markcolor", a.SetMarkColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),
 			commands.CmdRest("breakdisabledcolor", a.SetBreakDisabledColor),

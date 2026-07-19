@@ -134,9 +134,9 @@ Writers (`PTYOwner` on `AppState`):
 
 | Owner | Who | Console paint |
 |-------|-----|---------------|
-| `ui` | GDB / Exec console submit | Yes |
-| `mcp` | `:AI` / `GdbCommand` | Suppressed in GDBWidget |
-| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Not suppressed (MI `^done` rarely paints; must not hide UI `n` / stop console) |
+| `ui` | GDB / Exec console submit | Yes (always) |
+| `mcp` | `:AI` / `GdbCommand` | Silent unless `:set gdblistenprint` |
+| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Silent unless `:set gdblistenprint` |
 
 ```mermaid
 flowchart LR
@@ -155,7 +155,7 @@ flowchart LR
 
 GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
 
-**Session model on AppState:** `SourceFiles` (filled once from `-file-list-exec-source-files` when empty, e.g. first stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
+**Session model on AppState:** `SourceFiles` (filled once from `-file-list-exec-source-files` when empty, e.g. first stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **off**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
 
 ---
 
@@ -178,12 +178,12 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down — bold selection; **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
-| **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear |
-| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
-| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** show CodeWidget at that BP; **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
+| **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear; read-only ConsolePane with ANSI colors |
+| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `thread <id>` + refresh stack + show code; filled on stop |
+| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `frame <level>` + show code; shared libs / missing sources → centered **not available** + path |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
-| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled; same as BreakpointWidget `e`) |
+| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled; same as BreakpointWidget `e`). Missing file or `.so` path: centered **not available** title with the path underneath. |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
 
@@ -248,11 +248,11 @@ Only `=breakpoint-created` / `=breakpoint-deleted` trigger a `-break-list` refre
 - Space uses basename locations (`break hello.c:23` / `clear hello.c:23`) under `PTYOwnerApp`.
 - Horizontal scroll in ANSI mode uses visible columns (not raw byte offsets) so panes stay readable after `:vs`.
 
-PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` tells GDBWidget when to suppress console paint (**MCP only** — App stop Queries must not hide UI console output).
+PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` + sticky silence tell GDBWidget when to suppress console paint for App/MCP listener traffic (default). `:set gdblistenprint` paints those replies too. UI console submit always paints.
 
 ### Threads and call stack on stop
 
-On each qualifying `*stopped`, `DebuggerApp` coalesces (pending flag, no timer):
+On each non-exit `*stopped` (breakpoint, step, **Ctrl-C / `signal-received`**, etc.), `DebuggerApp` coalesces (pending flag, no timer):
 
 1. `Query("-thread-info")` → `ParseThreadInfo` → `ThreadWidget.SetItems`
 2. `Query("-stack-list-frames")` → `ParseStackListFrames` → `CallStackWidget.SetItems`

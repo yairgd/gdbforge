@@ -26,6 +26,10 @@ type ConsolePane struct {
 	// drawn on the same row immediately after that line (GDB/bash/ssh).
 	livePrompt bool
 
+	// inputEnabled controls whether keystrokes edit the InputLine (default true).
+	// Set false for read-only consoles (e.g. program stdout Output pane).
+	inputEnabled bool
+
 	OnSubmit    func(cmd string)
 	OnInterrupt func()
 	OnEOF       func()
@@ -39,12 +43,13 @@ func NewConsolePane(paneName string) *ConsolePane {
 	out.SetCursorVisible(false)
 
 	p := &ConsolePane{
-		BaseWidget:  BaseWidget{PaneName: paneName},
-		out:         out,
-		buf:         buf,
-		input:       NewInputLine(),
-		PromptStyle: tcell.StyleDefault.Foreground(tcell.ColorYellow),
-		TextStyle:   tcell.StyleDefault,
+		BaseWidget:   BaseWidget{PaneName: paneName},
+		out:          out,
+		buf:          buf,
+		input:        NewInputLine(),
+		PromptStyle:  tcell.StyleDefault.Foreground(tcell.ColorYellow),
+		TextStyle:    tcell.StyleDefault,
+		inputEnabled: true,
 	}
 	p.SetCursor(NewNativeCursor())
 	out.LineStyle = func(line string) tcell.Style {
@@ -71,9 +76,27 @@ func (p *ConsolePane) SetANSI(on bool) {
 	p.out.ANSI = on
 }
 
+// SetInputEnabled toggles whether the pane accepts typed input.
+// When false, Draw uses the full height for scrollback (no input row).
+func (p *ConsolePane) SetInputEnabled(on bool) {
+	p.inputEnabled = on
+	if !on {
+		p.livePrompt = false
+	}
+}
+
+// InputEnabled reports whether typed input is accepted.
+func (p *ConsolePane) InputEnabled() bool {
+	return p.inputEnabled
+}
+
 // SetLivePrompt marks whether the last buffer line hosts the input caret
 // (drawn on the same row, after the line's visible end).
 func (p *ConsolePane) SetLivePrompt(on bool) {
+	if !p.inputEnabled {
+		p.livePrompt = false
+		return
+	}
 	p.livePrompt = on
 }
 
@@ -219,7 +242,7 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 		p.out.HandleEvent(e)
 
 	case *tcell.EventKey:
-		if isPasteKey(e) {
+		if p.inputEnabled && isPasteKey(e) {
 			p.pasteIntoInput()
 			return
 		}
@@ -228,6 +251,9 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 		}
 		if isConsoleClipboardKey(e) {
 			p.out.HandleEvent(e)
+			return
+		}
+		if !p.inputEnabled {
 			return
 		}
 		if e.Key() == tcell.KeyBackspace {
@@ -239,6 +265,9 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 		}
 
 	case *tcell.EventClipboard:
+		if !p.inputEnabled {
+			return
+		}
 		if data := e.Data(); len(data) > 0 {
 			p.pasteText(string(data))
 		}
@@ -295,6 +324,11 @@ func (p *ConsolePane) Draw(c Canvas) {
 	}
 	h := c.H()
 	if h < 1 {
+		return
+	}
+
+	if !p.inputEnabled {
+		p.out.Draw(c)
 		return
 	}
 

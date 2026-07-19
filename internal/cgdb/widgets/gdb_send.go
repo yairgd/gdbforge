@@ -9,13 +9,13 @@ import (
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
-// sendGdbCmd writes a GDB CLI/MI command on the shared PTY.
+// SendGdbCmd writes a GDB CLI/MI command on the shared PTY.
 //
 // While the inferior is running, sync GDB will not process break/clear until
 // interrupted — so we send Ctrl-C, then the command. Inserting a breakpoint
 // always resumes with continue so the new break can be hit. Removing one
 // resumes only when AppState.ContinueAfterClear is set (default off).
-func sendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
+func SendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
 	if sess == nil || cmd == "" {
 		return
 	}
@@ -49,6 +49,10 @@ func sendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
 	} else {
 		send()
 	}
+}
+
+func sendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
+	SendGdbCmd(sess, state, cmd)
 }
 
 func isBreakRemoveCmd(cmd string) bool {

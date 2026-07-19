@@ -38,6 +38,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.outputWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("output", a.outputWidget)
 	a.maybeClearOutput()
+	a.maybeBreakMain()
 
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
@@ -45,10 +46,12 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
+	a.threadWidget.OnActivate = a.onThreadActivate
 	a.registerBuiltin("threads", a.threadWidget)
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
+	a.callstackWidget.OnActivate = a.onCallStackActivate
 	a.registerBuiltin("callstack", a.callstackWidget)
 
 	a.fileListWidget = widgets.NewFileListWidget()
@@ -64,6 +67,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())
 	a.bpWidget.OnChange = a.onBreakpointListChanged
 	a.bpWidget.OnBreakCmd = a.onBreakpointsChanged
+	a.bpWidget.OnActivate = a.onBreakpointActivate
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}

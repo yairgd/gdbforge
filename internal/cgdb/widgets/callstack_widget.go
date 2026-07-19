@@ -10,7 +10,8 @@ import (
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-// CallStackWidget shows GDB stack frames (read-only list; j/k selection).
+// CallStackWidget shows GDB stack frames (j/k / Up/Down selection; same keys,
+// Enter, and mouse click activate the selected frame).
 type CallStackWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -18,6 +19,9 @@ type CallStackWidget struct {
 
 	items    []mcp.StackFrame
 	selected int
+
+	// OnActivate is called when the user activates a frame (Up/Down/j/k, Enter, or click).
+	OnActivate func(mcp.StackFrame)
 }
 
 func NewCallStackWidget() *CallStackWidget {
@@ -41,6 +45,7 @@ func NewCallStackWidget() *CallStackWidget {
 func (w *CallStackWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 }
 
 func (w *CallStackWidget) rowStyle(lineIdx int, line string) tcell.Style {
@@ -65,6 +70,7 @@ func (w *CallStackWidget) move(delta int) {
 	w.viewport.CursorCol = 0
 	w.viewport.Left = 0
 	w.viewport.EnsureCursorVisible()
+	w.activateSelected()
 }
 
 // syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
@@ -82,6 +88,16 @@ func (w *CallStackWidget) syncSelectedFromViewport() {
 	}
 	w.selected = line
 	w.viewport.CursorLine = line
+}
+
+func (w *CallStackWidget) activateSelected() {
+	if w.OnActivate == nil || len(w.items) == 0 {
+		return
+	}
+	if w.selected < 0 || w.selected >= len(w.items) {
+		return
+	}
+	w.OnActivate(w.items[w.selected])
 }
 
 // SetItems replaces the frame list and rebuilds the viewport.
@@ -129,7 +145,10 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		w.viewport.HandleEvent(e)
-		w.syncSelectedFromViewport()
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			w.syncSelectedFromViewport()
+			w.activateSelected()
+		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
@@ -150,6 +169,8 @@ func (w *CallStackWidget) SetClipboard(io termui.ClipboardIO) {
 func (w *CallStackWidget) Draw(c termui.Canvas) {
 	w.viewport.Draw(c)
 }
+
+func (w *CallStackWidget) Selected() int { return w.selected }
 
 func (w *CallStackWidget) Items() []mcp.StackFrame {
 	return append([]mcp.StackFrame(nil), w.items...)

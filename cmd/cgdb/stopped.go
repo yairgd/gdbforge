@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,6 +30,18 @@ func (a *DebuggerApp) maybeClearOutput() {
 	a.outputWidget.Clear()
 }
 
+// maybeBreakMain inserts "break main" when AppState.BreakMain is set (default on).
+func (a *DebuggerApp) maybeBreakMain() {
+	if a.gdbWidget == nil || !a.State().BreakMain() {
+		return
+	}
+	sess := a.gdbWidget.Session()
+	if sess == nil {
+		return
+	}
+	widgets.SendGdbCmd(sess, a.State(), "break main")
+}
+
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
 // and refreshes Threads / Call stack panes.
 func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
@@ -44,6 +57,15 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	a.scheduleDebugInfoRefresh()
 
 	if file == "" {
+		if stop.Func == "" {
+			return
+		}
+		go func() {
+			w := a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", line))
+			if scr := a.Screen(); scr != nil {
+				_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
+			}
+		}()
 		return
 	}
 	go func() {
@@ -52,17 +74,148 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		// Breakpoint list / red marks sync via =breakpoint-* notifies only.
 		// Only paint gutters for a newly created buffer — re-painting an existing
 		// CodeWidget from bpWidget here races Space toggles and stale MergeFromGDB.
-		w, created := a.ensureCodeBuffer(file)
-		if w != nil {
-			_ = w.ShowLocation(file, line)
-			if created {
-				a.paintCodeWidgetBreaks(w, file)
-			}
+		w := a.showCodeAt(file, line)
+		if w != nil && w.Unavailable() {
+			w.ShowUnavailable(file, formatUnavailableExtra(stop.Func, line))
 		}
 		if scr := a.Screen(); scr != nil {
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
 		}
 	}()
+}
+
+// showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters when new.
+// Missing sources / shared libraries show a centered "not available" placeholder.
+func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
+	if file == "" {
+		return nil
+	}
+	w, created := a.ensureCodeBuffer(file)
+	if w == nil {
+		return nil
+	}
+	if line < 1 {
+		line = 1
+	}
+	_ = w.ShowLocation(file, line)
+	a.State().SetCurrentLocation(file, line)
+	if created && !w.Unavailable() {
+		a.paintCodeWidgetBreaks(w, file)
+	}
+	return w
+}
+
+// showCodeUnavailable shows a CodeWidget placeholder when there is no source path
+// (e.g. ??? in libc) using func/detail as the displayed path line.
+func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidget {
+	if label == "" {
+		label = "(unknown)"
+	}
+	key := "unavailable:" + label
+	w, _ := a.ensureCodeBuffer(key)
+	if w == nil {
+		return nil
+	}
+	w.ShowUnavailable(label, extra)
+	w.PaneName = filepath.Base(label)
+	if w.PaneName == "" || w.PaneName == "." {
+		w.PaneName = "unavailable"
+	}
+	return w
+}
+
+// onCallStackActivate selects a stack frame in GDB and shows its source.
+func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
+	if a.gdbWidget == nil {
+		return
+	}
+	sess := a.gdbWidget.Session()
+	if sess == nil {
+		return
+	}
+	widgets.SendGdbCmd(sess, a.State(), fmt.Sprintf("frame %d", fr.Level))
+	var w *widgets.CodeWidget
+	switch {
+	case fr.File != "":
+		w = a.showCodeAt(fr.File, fr.Line)
+		if w != nil && w.Unavailable() {
+			w.ShowUnavailable(fr.File, formatUnavailableExtra(fr.Func, fr.Line))
+		}
+	case fr.Func != "":
+		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
+	}
+	if w != nil {
+		a.applyCodeStop(w)
+	}
+	a.RequestFrame()
+}
+
+// onBreakpointActivate shows the source at the selected breakpoint location.
+func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
+	if bp.File == "" {
+		return
+	}
+	w := a.showCodeAt(bp.File, bp.Line)
+	if w != nil && w.Unavailable() {
+		w.ShowUnavailable(bp.File, formatUnavailableExtra("", bp.Line))
+	}
+	a.applyCodeStop(w)
+	a.RequestFrame()
+}
+
+// onThreadActivate switches GDB to the selected thread, refreshes stack/threads,
+// and shows the current frame source.
+func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
+	if a.gdbWidget == nil || th.ID == "" {
+		return
+	}
+	sess := a.gdbWidget.Session()
+	if sess == nil {
+		return
+	}
+	widgets.SendGdbCmd(sess, a.State(), "thread "+th.ID)
+	a.refreshThreadsAndStack()
+
+	file, line := th.File, th.Line
+	if a.callstackWidget != nil {
+		if frames := a.callstackWidget.Items(); len(frames) > 0 {
+			if frames[0].File != "" {
+				file, line = frames[0].File, frames[0].Line
+			}
+		}
+	}
+	if file != "" {
+		w := a.showCodeAt(file, line)
+		if w != nil && w.Unavailable() {
+			fn := th.Func
+			if a.callstackWidget != nil {
+				if frames := a.callstackWidget.Items(); len(frames) > 0 && frames[0].Func != "" {
+					fn = frames[0].Func
+				}
+			}
+			w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
+		}
+		a.applyCodeStop(w)
+	} else if th.Func != "" {
+		w := a.showCodeUnavailable(th.Func, formatUnavailableExtra("", th.Line))
+		a.applyCodeStop(w)
+	}
+	a.RequestFrame()
+}
+
+// formatUnavailableExtra builds the optional detail line under the path in
+// CodeWidget's centered "not available" placeholder.
+func formatUnavailableExtra(fn string, line int) string {
+	switch {
+	case fn != "" && line > 0:
+		return fmt.Sprintf("%s  line %d", fn, line)
+	case fn != "":
+		return fn
+	case line > 0:
+		return fmt.Sprintf("line %d", line)
+	default:
+		return ""
+	}
 }
 
 // scheduleDebugInfoRefresh coalesces -thread-info / -stack-list-frames on stop.
