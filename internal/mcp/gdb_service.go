@@ -51,7 +51,7 @@ func (s *GdbMcpService) GdbCommand(ctx context.Context, command string) (string,
 
 // Query runs an app MI command (PTYOwnerApp) for exclusive write tracking.
 // GDB console paint for App/MCP replies is controlled by AppState.GdbListenPrint
-// (default off — listener traffic is silent in the GDB widget).
+// (default on; :set nogdblistenprint to silence listener traffic).
 func (s *GdbMcpService) Query(ctx context.Context, command string) (string, error) {
 	return s.query(ctx, command, platform.PTYOwnerApp)
 }

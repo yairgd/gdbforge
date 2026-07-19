@@ -175,11 +175,13 @@ func (l *InputLine) BindKeys(b KeyBinder) {
 	b.BindKeyFunc("kill-word", func(args ...any) { l.KillWord() }, "<C-w>")
 }
 
-// Draw paints prompt + text at (x,y). Returns caret column and the rune under it.
+// Draw paints prompt + text at (x,y). Left-anchored: clip overflow on the right
+// (no horizontal scroll). Returns caret column and the rune under it.
 func (l *InputLine) Draw(c Canvas, x, y int, prompt string, promptStyle, textStyle tcell.Style) (cursorX int, under rune) {
+	width := c.W()
 	promptLen := len(prompt)
 	for i, ch := range prompt {
-		if x+i >= c.W() {
+		if x+i >= width {
 			break
 		}
 		c.SetContent(x+i, y, ch, promptStyle)
@@ -187,7 +189,7 @@ func (l *InputLine) Draw(c Canvas, x, y int, prompt string, promptStyle, textSty
 	under = ' '
 	for i, ch := range l.text {
 		col := x + promptLen + i
-		if col >= c.W() {
+		if col >= width {
 			break
 		}
 		c.SetContent(col, y, ch, textStyle)
@@ -198,5 +200,10 @@ func (l *InputLine) Draw(c Canvas, x, y int, prompt string, promptStyle, textSty
 	if l.cursor < len(l.text) {
 		under = rune(l.text[l.cursor])
 	}
-	return x + promptLen + l.cursor, under
+	cursorX = x + promptLen + l.cursor
+	if width > 0 && cursorX >= width {
+		cursorX = width - 1
+		under = '…'
+	}
+	return cursorX, under
 }

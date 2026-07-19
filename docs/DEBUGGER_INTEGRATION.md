@@ -135,8 +135,8 @@ Writers (`PTYOwner` on `AppState`):
 | Owner | Who | Console paint |
 |-------|-----|---------------|
 | `ui` | GDB / Exec console submit | Yes (always) |
-| `mcp` | `:AI` / `GdbCommand` | Silent unless `:set gdblistenprint` |
-| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Silent unless `:set gdblistenprint` |
+| `mcp` | `:AI` / `GdbCommand` | Painted by default; `:set nogdblistenprint` to silence |
+| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Painted by default; `:set nogdblistenprint` to silence |
 
 ```mermaid
 flowchart LR
@@ -155,13 +155,13 @@ flowchart LR
 
 GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
 
-**Session model on AppState:** `SourceFiles` (filled once from `-file-list-exec-source-files` when empty, e.g. first stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **off**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
+**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
 
 ---
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
+Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/cgdb/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
 
 ## Breakpoints while the inferior is running
 
@@ -248,7 +248,7 @@ Only `=breakpoint-created` / `=breakpoint-deleted` trigger a `-break-list` refre
 - Space uses basename locations (`break hello.c:23` / `clear hello.c:23`) under `PTYOwnerApp`.
 - Horizontal scroll in ANSI mode uses visible columns (not raw byte offsets) so panes stay readable after `:vs`.
 
-PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` + sticky silence tell GDBWidget when to suppress console paint for App/MCP listener traffic (default). `:set gdblistenprint` paints those replies too. UI console submit always paints.
+PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` + sticky silence tell GDBWidget when to suppress console paint for App/MCP listener traffic (`:set nogdblistenprint`). Default is to paint those replies (`gdblistenprint` on). UI console submit always paints.
 
 ### Threads and call stack on stop
 

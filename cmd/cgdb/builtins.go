@@ -91,7 +91,7 @@ func (a *DebuggerApp) swapFocusedWidget(w termui.Widget) bool {
 	if a.tab == nil || w == nil {
 		return false
 	}
-	prev := a.tab.FocusedWidget()
+	prev := a.focusedWidget()
 	if prev == w {
 		return false
 	}

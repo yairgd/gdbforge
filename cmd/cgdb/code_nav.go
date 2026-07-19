@@ -22,10 +22,8 @@ const (
 
 // activeCodeWidget returns the CodeWidget buffer Esc / global keys should drive.
 func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
-	if a.tab != nil {
-		if cw, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); ok && cw != nil {
-			return cw
-		}
+	if cw := a.focusedCode(); cw != nil {
+		return cw
 	}
 	if path := a.State().CurrentFile(); path != "" {
 		if w, _ := a.ensureCodeBuffer(path); w != nil {
@@ -92,10 +90,7 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 // focusIsCodeOrGdb reports whether the focused pane is Code or GDB (or empty).
 // Other panes keep their own Up/Down/Space handling.
 func (a *DebuggerApp) focusIsCodeOrGdb() bool {
-	if a.tab == nil {
-		return true
-	}
-	w := a.tab.FocusedWidget()
+	w := a.focusedWidget()
 	if w == nil {
 		return true
 	}

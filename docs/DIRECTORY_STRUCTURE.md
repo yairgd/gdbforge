@@ -68,6 +68,10 @@ cgdb-go/
 | `keybindings.go` | `InitKeyBindings` |
 | `actions.go` | Command action methods (focus, split, quit, …) |
 | `input.go` | Mode key handlers, mouse, resize |
+| `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
+| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
+| `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
+| `stopped.go` | Stop / breakpoint / thread-stack refresh |
 
 Build all commands:
 
@@ -85,7 +89,7 @@ task build
 | File | Responsibility |
 |------|----------------|
 | `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers |
-| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`, `BreakpointsChangedMsg`), `CommandID` |
+| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID` |
 | `completion_bar.go` | Wildmenu chrome row (`ModeCompletion`); draw-only-when-active |
 | `cmd_widget.go` | Global `:` command line (`CommandParser`, publishes completions) |
 | `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |

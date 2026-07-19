@@ -30,13 +30,6 @@ type CompletionMsg struct {
 
 func (m CompletionMsg) Type() string { return "CompletionMsg" }
 
-// BreakpointsChangedMsg is published when GDB reports a breakpoint change
-// (=breakpoint-* / MCP). DebuggerApp Subscribes and coalesces a -break-list
-// refresh so CodeWidget marks and the Breakpoint list stay in sync.
-type BreakpointsChangedMsg struct{}
-
-func (m BreakpointsChangedMsg) Type() string { return "BreakpointsChangedMsg" }
-
 type BaseEvent struct {
 	Cmd  Command
 	Args []string

@@ -283,7 +283,7 @@ func (m *GDBWidget) handleStop(stop *gdb.MiStopMsg) {
 
 // silentOwner is true when the GDB console should not paint PTY DisplayLines:
 // App/MCP (listener) traffic, sticky after those writes. UI submit clears
-// sticky silence. :set gdblistenprint paints listener replies too.
+// sticky silence. Default gdblistenprint paints listener replies; :set nogdblistenprint hides them.
 func (m *GDBWidget) silentOwner() bool {
 	if m.appState == nil {
 		return false

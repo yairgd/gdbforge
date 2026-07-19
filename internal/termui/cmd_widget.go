@@ -283,20 +283,39 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 }
 
 func (m *CmdWidget) Draw(c Canvas) {
-
 	c.ClearLine(0, tcell.StyleDefault)
 
 	if !m.active {
 		return
 	}
 
-	c.Print(0, 0, tcell.StyleDefault, m.text)
-	under := ' '
-	if m.cursor >= 0 && m.cursor < len(m.text) {
-		under = rune(m.text[m.cursor])
+	// Left-anchored: never horizontal-scroll the cmdline; clip overflow on the right.
+	width := c.W()
+	runes := []rune(m.text)
+	visible := runes
+	if width > 0 && len(runes) > width {
+		if width == 1 {
+			visible = []rune("…")
+		} else {
+			visible = append(append([]rune{}, runes[:width-1]...), '…')
+		}
 	}
-	// Cmd line is active while typing :commands — always show caret.
-	m.Cursor().Paint(c, m.cursor, 0, under)
+	c.Print(0, 0, tcell.StyleDefault, string(visible))
+
+	cur := m.cursor
+	if cur < 0 {
+		cur = 0
+	}
+	under := ' '
+	if cur < len(runes) {
+		under = runes[cur]
+	}
+	paintX := cur
+	if width > 0 && paintX >= width {
+		paintX = width - 1
+		under = '…'
+	}
+	m.Cursor().Paint(c, paintX, 0, under)
 }
 
 func (m *CmdWidget) DrawStatusLine(c Canvas, active bool) {}

@@ -12,7 +12,6 @@ import (
 	"github.com/yairgd/cgdb-go/internal/gdb"
 	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
 type codeRefreshMsg struct {
@@ -287,13 +286,13 @@ func (a *DebuggerApp) onBreakpointsChanged() {
 	if a.ctx.Bus == nil {
 		return
 	}
-	platform.Publish(a.ctx.Bus, termui.BreakpointsChangedMsg{})
+	platform.Publish(a.ctx.Bus, BreakpointsChangedMsg{})
 }
 
 // onBreakpointsChangedMsg is the EventBus Subscribe handler for
 // BreakpointsChangedMsg. It coalesces bursts into one in-flight -break-list
 // plus at most one trailing refresh (no timer).
-func (a *DebuggerApp) onBreakpointsChangedMsg(_ termui.BreakpointsChangedMsg) {
+func (a *DebuggerApp) onBreakpointsChangedMsg(_ BreakpointsChangedMsg) {
 	a.bpRefreshMu.Lock()
 	if a.bpRefreshRunning {
 		a.bpRefreshPending = true
@@ -326,31 +325,31 @@ func (a *DebuggerApp) runBreakpointRefresh() {
 }
 
 // applyCodeStop refreshes the source view for a stop without stealing focus from
-// the GDB console. If the focused pane is already a CodeWidget, switch that pane
+// another pane. If the focused pane is already a CodeWidget, switch that pane
 // to the stop file; otherwise update another visible CodeWidget leaf in place.
 func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
-	focused := a.tab.FocusedWidget()
-	if cw, ok := focused.(*widgets.CodeWidget); ok {
+	if cw := a.focusedCode(); cw != nil {
 		if cw != w {
 			_ = a.tab.ReplaceFocusedWidget(w)
 		}
 		a.rememberCodeLeafFromFocus()
 		return
 	}
-	if a.tab.ReplaceMatchingLeafWidget(w, func(x termui.Widget) bool {
-		_, ok := x.(*widgets.CodeWidget)
-		return ok
-	}) {
+	if a.tab.ReplaceMatchingLeafWidget(w, isCodeWidget) {
 		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
 		return
 	}
 }
 
+// ensureSourceFiles re-queries GDB -file-list-exec-source-files and replaces
+// AppState.SourceFiles when the parse is non-empty. Always refreshes (does not
+// stick to the first cached hit — an early/partial capture used to leave only
+// the current frame's main.cpp in :edit / Tab completions).
 func (a *DebuggerApp) ensureSourceFiles() {
-	if len(a.State().SourceFiles()) > 0 || a.gdbMcp == nil {
+	if a.gdbMcp == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -363,11 +362,12 @@ func (a *DebuggerApp) ensureSourceFiles() {
 		return
 	}
 	files := mcp.ParseSourceFileList(raw)
-	if len(files) > 0 {
-		a.State().SetSourceFiles(files)
-		if a.fileListWidget != nil {
-			a.fileListWidget.SetItems(files)
-		}
+	if len(files) == 0 {
+		return
+	}
+	a.State().SetSourceFiles(files)
+	if a.fileListWidget != nil {
+		a.fileListWidget.SetItems(files)
 	}
 }
 

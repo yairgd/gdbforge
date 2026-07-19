@@ -60,7 +60,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		a.keyBindings.ResetPartial()
 	}
 	// Focused scrollable panes (e.g. Log) handle their bindings without insert mode.
-	if w := a.tab.FocusedWidget(); w != nil {
+	if w := a.focusedWidget(); w != nil {
 		if h, ok := w.(termui.FocusKeyHandler); ok && h.HandleFocusKey(ev) {
 			return true
 		}
@@ -104,12 +104,11 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 			}
 		case 'e':
 			// When the Breakpoint pane is focused, e toggles that row.
-			if _, ok := a.tab.FocusedWidget().(*widgets.BreakpointWidget); ok {
+			if a.focusedIsBreakpoint() {
 				return false
 			}
 			if cw := a.activeCodeWidget(); cw != nil {
-				// Prefer the focused CodeWidget's cursor when it is focused.
-				if focused, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); ok && focused != nil {
+				if focused := a.focusedCode(); focused != nil {
 					cw = focused
 				}
 				a.toggleCodeBreakEnableOn(cw)
@@ -129,10 +128,7 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 // handleInsertCodeStepKey runs GDB next/step when CodeWidget is focused during
 // insert mode (green status). Does not steal n/s from the GDB console.
 func (a *DebuggerApp) handleInsertCodeStepKey(ev *tcell.EventKey) bool {
-	if a.tab == nil {
-		return false
-	}
-	if _, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); !ok {
+	if !a.focusedIsCode() {
 		return false
 	}
 	if ev.Key() != tcell.KeyRune {
@@ -153,7 +149,7 @@ func (a *DebuggerApp) handleInsertCodeStepKey(ev *tcell.EventKey) bool {
 // (same as BreakpointWidget e). Disabled marks stay in the BP list and show yellow.
 func (a *DebuggerApp) toggleCodeBreakEnable() {
 	cw := a.activeCodeWidget()
-	if focused, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); ok && focused != nil {
+	if focused := a.focusedCode(); focused != nil {
 		cw = focused
 	}
 	a.toggleCodeBreakEnableOn(cw)

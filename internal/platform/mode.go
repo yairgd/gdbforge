@@ -113,8 +113,7 @@ type AppState struct {
 	breakMain bool
 
 	// gdbListenPrint: when true, paint GDB console lines from App/MCP (listener)
-	// traffic. Default false — only GDBWidget-initiated commands paint replies.
-	// :set gdblistenprint / :set nogdblistenprint.
+	// traffic. Default true; :set gdblistenprint / :set nogdblistenprint.
 	gdbListenPrint bool
 
 	// gdbConsoleSilent is sticky: set true on App/MCP WithPTYOwner, cleared on
@@ -141,6 +140,7 @@ func NewAppState() *AppState {
 		breakDisabledColor: tcell.ColorYellow,
 		escToCode:          true,
 		breakMain:          true,
+		gdbListenPrint:     true,
 	}
 }
 
@@ -290,7 +290,7 @@ func (a *AppState) SetBreakMain(v bool) {
 }
 
 // GdbListenPrint reports whether App/MCP PTY replies paint in the GDB console
-// (default false — listener traffic is silent).
+// (default true).
 func (a *AppState) GdbListenPrint() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

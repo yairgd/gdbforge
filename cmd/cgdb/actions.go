@@ -93,7 +93,7 @@ func (app *DebuggerApp) EnterInsertMode(args ...any) {
 }
 
 func (app *DebuggerApp) ClearFocus(args ...any) {
-	w := app.tab.FocusedWidget()
+	w := app.focusedWidget()
 	if c, ok := w.(termui.Clearable); ok {
 		c.Clear()
 	}

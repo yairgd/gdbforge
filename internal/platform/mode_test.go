@@ -35,6 +35,11 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.PTYOwner() != PTYOwnerNone {
 		t.Fatal("owner restored")
 	}
+	if !s.GdbListenPrint() {
+		t.Fatal("gdblistenprint default true")
+	}
+	// Sticky silence only suppresses when listen-print is off.
+	s.SetGdbListenPrint(false)
 	if !s.SuppressGdbConsole() {
 		t.Fatal("sticky silent after MCP write")
 	}

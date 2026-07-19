@@ -279,7 +279,7 @@ Vim-like buffers use the same pattern:
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc restores the last non-Code/non-GDB pane when one was focused, otherwise focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
 | `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). `:set breakmain` also inserts immediately if a session is already live. |
-| `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **off**). User-typed console commands always print. |
+| `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **on**). User-typed console commands always print. |
 | `:set markcolor <name>` | `CmdRest` under `set` | Focused selected-row color for list panes / file picker (default **blue**). |
 | `:set markdimcolor <name>` | `CmdRest` under `set` | Unfocused selected-row color for list panes (default **gray**). |
 | `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |
@@ -413,7 +413,8 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
 | `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
-| `internal/termui/event.go` | `CompletionMsg`, `BreakpointsChangedMsg`, and other UI events |
+| `internal/termui/event.go` | `CompletionMsg` and other UI-generic events |
+| `cmd/cgdb/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
 | `internal/termui/logger_widget.go` | Log sink pane |
 | `cmd/cgdb/command_tree.go` | `ExapData` DSL |

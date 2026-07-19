@@ -260,7 +260,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies are hidden in the GDB console unless `:set gdblistenprint`.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
