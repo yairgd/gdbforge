@@ -67,6 +67,32 @@ func TestCodeWidgetBreakpointLineNumberANSI(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetDisabledBreakpointYellow(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.c")
+	src := "int main(void) {\n  return 0;\n}\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := NewCodeWidget()
+	if err := w.ShowLocation(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	w.SetBreakInfos([]mcp.BreakInfo{
+		{Number: 0, Enabled: false, File: path, Line: 2},
+	})
+	lines := w.LinesForTest()
+	if len(lines) < 2 {
+		t.Fatalf("lines=%d", len(lines))
+	}
+	if !strings.Contains(lines[1], "48;5;226") {
+		t.Fatalf("want yellow bg on disabled bp line number, got %q", lines[1])
+	}
+	if strings.Contains(lines[1], "48;5;196") {
+		t.Fatalf("disabled should not use red: %q", lines[1])
+	}
+}
+
 func TestCodeWidgetMoveSel(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.c")

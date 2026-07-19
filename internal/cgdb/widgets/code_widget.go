@@ -24,10 +24,9 @@ const (
 	pcGutterPad = "   "
 )
 
-// CodeWidget is a scrollable source view. The app calls ShowLocation on stops / :e.
-// When focused: Up/Down move a bold cursor line; Space toggles a breakpoint
-// (insert if none, -break-delete if present) via the shared GDB PTY.
-// Red marks and the Breakpoint list refresh from MI =breakpoint-* notifies.
+// CodeWidget is a scrollable source view. The app calls ShowLocation on stops / :edit.
+// When focused: Up/Down move a bold cursor line; Space inserts/removes a breakpoint;
+// e enables/disables (yellow gutter when disabled) like the BreakpointWidget.
 type CodeWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -36,13 +35,20 @@ type CodeWidget struct {
 	sess  core.Session
 	state *platform.AppState
 
+	// onBreakCmd is invoked after Space sends break/clear so the app can
+	// coalesce a -break-list refresh (in addition to MI =breakpoint-* notifies).
+	onBreakCmd func()
+	// onToggleEnable is invoked on "e" (enable/disable at cursor).
+	onToggleEnable func()
+
 	path     string
 	pcLine   int // 1-based program counter
 	selLine  int // 1-based cursor / bold line
 	rawLines []string
 	hiLines  []string // chroma ANSI lines (same length as rawLines)
-	bpLines  map[int]struct{} // enabled breakpoints → red line numbers
-	bpNums   map[int][]int    // line → GDB breakpoint numbers (any state)
+	bpLines    map[int]struct{} // enabled breakpoints → breakColor bg
+	bpDisabled map[int]struct{} // disabled breakpoints → breakDisabledColor bg
+	bpNums     map[int][]int    // line → GDB breakpoint numbers (any state)
 }
 
 func NewCodeWidget() *CodeWidget {
@@ -69,6 +75,16 @@ func (w *CodeWidget) SetPTY(sess core.Session, state *platform.AppState) {
 	w.state = state
 }
 
+// SetOnBreakCmd registers a callback after Space sends break/clear to GDB.
+func (w *CodeWidget) SetOnBreakCmd(fn func()) {
+	w.onBreakCmd = fn
+}
+
+// SetOnToggleEnable registers a callback for "e" (enable/disable at cursor).
+func (w *CodeWidget) SetOnToggleEnable(fn func()) {
+	w.onToggleEnable = fn
+}
+
 func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("sel-up", func(args ...any) { w.moveSel(-1) }, "<Up>", "k")
 	w.BindKeyFunc("sel-down", func(args ...any) { w.moveSel(1) }, "<Down>", "j")
@@ -77,6 +93,11 @@ func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("home", func(args ...any) { w.moveSelTo(1) }, "<Home>", "g")
 	w.BindKeyFunc("end", func(args ...any) { w.moveSelTo(len(w.rawLines)) }, "<End>", "G")
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.breakAtSel() }, " ")
+	w.BindKeyFunc("break-enable-toggle", func(args ...any) {
+		if w.onToggleEnable != nil {
+			w.onToggleEnable()
+		}
+	}, "e")
 }
 
 // MoveSel moves the bold cursor line by delta (exported for app-level normal-mode keys).
@@ -84,6 +105,13 @@ func (w *CodeWidget) MoveSel(delta int) { w.moveSel(delta) }
 
 // BreakAtSel toggles a breakpoint on the selected line (exported for global Space).
 func (w *CodeWidget) BreakAtSel() { w.breakAtSel() }
+
+// ToggleEnableAtSel runs the enable/disable callback (same as BreakpointWidget e).
+func (w *CodeWidget) ToggleEnableAtSel() {
+	if w.onToggleEnable != nil {
+		w.onToggleEnable()
+	}
+}
 
 func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
@@ -169,12 +197,16 @@ func (w *CodeWidget) addLocalBreak(line int) {
 
 func (w *CodeWidget) clearLocalBreak(line int) {
 	delete(w.bpLines, line)
+	delete(w.bpDisabled, line)
 	delete(w.bpNums, line)
 	w.rebuildBuffer()
 }
 
 func (w *CodeWidget) sendMI(cmd string) {
 	sendGdbCmd(w.sess, w.state, cmd)
+	if w.onBreakCmd != nil {
+		w.onBreakCmd()
+	}
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.
@@ -217,17 +249,18 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	return nil
 }
 
-// SetBreakInfos updates gutter state from -break-list rows for this file.
-// Enabled breakpoints get a red line number; any number on a line is used by
-// Space to delete (toggle off).
+// SetBreakInfos updates gutter state from breakpoint rows for this file.
+// Enabled / disabled backgrounds come from AppState BreakColor / BreakDisabledColor.
+// Numbers are used by Space to clear.
 //
-// A nil slice means "no update" (failed refresh) so existing red marks stay.
-// A non-nil empty slice clears marks (GDB truly has no breakpoints for this file).
+// A nil slice means "no update" (failed refresh) so existing marks stay.
+// A non-nil empty slice clears marks (no breakpoints for this file).
 func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
 	if items == nil {
 		return
 	}
 	w.bpLines = make(map[int]struct{})
+	w.bpDisabled = make(map[int]struct{})
 	w.bpNums = make(map[int][]int)
 	for _, it := range items {
 		if it.Line < 1 {
@@ -238,6 +271,8 @@ func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
 		}
 		if it.Enabled {
 			w.bpLines[it.Line] = struct{}{}
+		} else {
+			w.bpDisabled[it.Line] = struct{}{}
 		}
 	}
 	if w.path != "" || len(w.rawLines) > 0 {
@@ -266,6 +301,40 @@ func (w *CodeWidget) hasBreakpoint(line int) bool {
 	return ok
 }
 
+func (w *CodeWidget) hasDisabledBreakpoint(line int) bool {
+	_, ok := w.bpDisabled[line]
+	return ok
+}
+
+// HasEnabledBreak reports whether line has an enabled (red) breakpoint mark.
+func (w *CodeWidget) HasEnabledBreak(line int) bool {
+	return w.hasBreakpoint(line)
+}
+
+// HasDisabledBreak reports whether line has a disabled (yellow) breakpoint mark.
+func (w *CodeWidget) HasDisabledBreak(line int) bool {
+	return w.hasDisabledBreakpoint(line)
+}
+
+func (w *CodeWidget) breakColor() tcell.Color {
+	if w.state != nil {
+		return w.state.BreakColor()
+	}
+	return tcell.ColorRed
+}
+
+func (w *CodeWidget) breakDisabledColor() tcell.Color {
+	if w.state != nil {
+		return w.state.BreakDisabledColor()
+	}
+	return tcell.ColorYellow
+}
+
+// RebuildBuffer refreshes gutter ANSI from current AppState break colors.
+func (w *CodeWidget) RebuildBuffer() {
+	w.rebuildBuffer()
+}
+
 func (w *CodeWidget) rebuildBuffer() {
 	w.buf.Clear()
 	for i, text := range w.rawLines {
@@ -280,10 +349,12 @@ func (w *CodeWidget) rebuildBuffer() {
 		}
 		num := fmt.Sprintf("%4d", ln)
 		var numANSI string
-		if w.hasBreakpoint(ln) {
-			// Red background, white bold digits.
-			numANSI = "\x1b[48;5;196;38;5;231;1m" + num + "\x1b[0m"
-		} else {
+		switch {
+		case w.hasBreakpoint(ln):
+			numANSI = platform.BreakNumberANSI(num, w.breakColor())
+		case w.hasDisabledBreakpoint(ln):
+			numANSI = platform.BreakNumberANSI(num, w.breakDisabledColor())
+		default:
 			numANSI = "\x1b[38;5;244m" + num + "\x1b[0m"
 		}
 		gutter := fmt.Sprintf("%s %s\x1b[38;5;240m│\x1b[0m ", markANSI, numANSI)

@@ -50,11 +50,14 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		a.ensureSourceFiles()
 		// Do not -break-list on every stop: that flooded the PTY and froze input.
 		// Breakpoint list / red marks sync via =breakpoint-* notifies only.
-		w := a.ensureCodeBuffer(file)
+		// Only paint gutters for a newly created buffer — re-painting an existing
+		// CodeWidget from bpWidget here races Space toggles and stale MergeFromGDB.
+		w, created := a.ensureCodeBuffer(file)
 		if w != nil {
 			_ = w.ShowLocation(file, line)
-			// New or replaced buffers start with empty gutters — re-apply known marks.
-			a.paintCodeWidgetBreaks(w, file)
+			if created {
+				a.paintCodeWidgetBreaks(w, file)
+			}
 		}
 		if scr := a.Screen(); scr != nil {
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
@@ -194,7 +197,7 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 }
 
 func (a *DebuggerApp) ensureSourceFiles() {
-	if a.gdbMcp == nil {
+	if len(a.State().SourceFiles()) > 0 || a.gdbMcp == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -255,39 +258,48 @@ func (a *DebuggerApp) applyBreakInfos(gdbItems []mcp.BreakInfo) {
 	a.paintCodeBreakmarks(gdbItems)
 }
 
-// paintCodeBreakmarks paints red line numbers from enabled breakpoints only.
+// paintCodeBreakmarks paints line-number gutters from AppState break colors
+// (enabled / disabled backgrounds).
 func (a *DebuggerApp) paintCodeBreakmarks(items []mcp.BreakInfo) {
-	var enabled []mcp.BreakInfo
-	for _, it := range items {
-		if it.Enabled {
-			enabled = append(enabled, it)
-		}
-	}
 	seen := make(map[*widgets.CodeWidget]bool)
 	for path, w := range a.fileBuffers {
 		if w == nil {
 			continue
 		}
-		w.SetBreakInfos(breaksForFile(enabled, path))
+		w.SetBreakInfos(breaksForFile(items, path))
 		seen[w] = true
 	}
 	if a.primaryCode != nil && !seen[a.primaryCode] {
 		if p := a.primaryCode.Path(); p != "" {
-			a.primaryCode.SetBreakInfos(breaksForFile(enabled, p))
+			a.primaryCode.SetBreakInfos(breaksForFile(items, p))
 		}
 	}
 }
 
-// paintCodeWidgetBreaks applies the current enabled BP list to one CodeWidget.
+func (a *DebuggerApp) rebuildCodeBreakGutters() {
+	seen := make(map[*widgets.CodeWidget]bool)
+	for _, w := range a.fileBuffers {
+		if w == nil {
+			continue
+		}
+		w.RebuildBuffer()
+		seen[w] = true
+	}
+	if a.primaryCode != nil && !seen[a.primaryCode] {
+		a.primaryCode.RebuildBuffer()
+	}
+}
+
+// paintCodeWidgetBreaks applies the current BP list (enabled + disabled) to one CodeWidget.
 func (a *DebuggerApp) paintCodeWidgetBreaks(w *widgets.CodeWidget, path string) {
 	if w == nil {
 		return
 	}
-	var enabled []mcp.BreakInfo
+	var items []mcp.BreakInfo
 	if a.bpWidget != nil {
-		enabled = a.bpWidget.EnabledBreakInfos()
+		items = a.bpWidget.Items()
 	}
-	w.SetBreakInfos(breaksForFile(enabled, path))
+	w.SetBreakInfos(breaksForFile(items, path))
 }
 
 func (a *DebuggerApp) onBreakpointListChanged() {

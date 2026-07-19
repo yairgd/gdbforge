@@ -17,8 +17,9 @@ import (
 //	e — toggle: disabled → insert into GDB; enabled → delete from GDB (row stays)
 //	d — remove from list and from GDB
 //
-// Disabled rows stay in this list but are not present in GDB; CodeWidget red
-// marks follow EnabledBreakInfos() only.
+// Row backgrounds: AppState BreakColor (enabled) / BreakDisabledColor (disabled).
+// Disabled rows stay in this list but are not present in GDB; CodeWidget marks
+// follow EnabledBreakInfos() for red and keep disabled yellow gutters separately.
 type BreakpointWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -32,6 +33,8 @@ type BreakpointWidget struct {
 
 	// OnChange is invoked after the internal list changes (e/d or GDB merge).
 	OnChange func()
+	// OnBreakCmd is invoked after e/d sends a GDB break/clear/delete command.
+	OnBreakCmd func()
 }
 
 func NewBreakpointWidget() *BreakpointWidget {
@@ -73,11 +76,30 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	if lineIdx == w.selected && w.Focused() {
 		return st.Bold(true).Background(tcell.ColorDarkBlue)
 	}
-	if lineIdx >= 0 && lineIdx < len(w.items) && !w.items[lineIdx].Enabled {
-		return st.Foreground(tcell.ColorGray)
+	if lineIdx < 0 || lineIdx >= len(w.items) {
+		return st
+	}
+	it := w.items[lineIdx]
+	bg := w.breakColor()
+	if !it.Enabled {
+		bg = w.breakDisabledColor()
 	}
 	_ = line
-	return st
+	return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
+}
+
+func (w *BreakpointWidget) breakColor() tcell.Color {
+	if w.state != nil {
+		return w.state.BreakColor()
+	}
+	return tcell.ColorRed
+}
+
+func (w *BreakpointWidget) breakDisabledColor() tcell.Color {
+	if w.state != nil {
+		return w.state.BreakDisabledColor()
+	}
+	return tcell.ColorYellow
 }
 
 func (w *BreakpointWidget) move(delta int) {
@@ -166,12 +188,50 @@ func (w *BreakpointWidget) deleteSelected() {
 	w.notifyChange()
 }
 
+// ToggleAtFileLine enables/disables the breakpoint at file:line like e in
+// the BreakpointWidget. If codeHasEnabled and there is no list row yet, inserts
+// an enabled stub then disables it (Space added the mark before MergeFromGDB).
+// Returns false when there is nothing to toggle.
+func (w *BreakpointWidget) ToggleAtFileLine(file string, line int, codeHasEnabled bool) bool {
+	if file == "" || line < 1 {
+		return false
+	}
+	base := filepath.Base(file)
+	idx := -1
+	for i, it := range w.items {
+		if it.Line != line {
+			continue
+		}
+		if it.File == file || filepath.Base(it.File) == base {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		if !codeHasEnabled {
+			return false
+		}
+		w.items = append(w.items, mcp.BreakInfo{
+			File:    file,
+			Line:    line,
+			Enabled: true,
+		})
+		idx = len(w.items) - 1
+	}
+	w.selected = idx
+	w.toggleSelected()
+	return true
+}
+
 func breakLoc(it mcp.BreakInfo) string {
 	return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
 }
 
 func (w *BreakpointWidget) sendMI(cmd string) {
 	sendGdbCmd(w.sess, w.state, cmd)
+	if w.OnBreakCmd != nil {
+		w.OnBreakCmd()
+	}
 }
 
 // MergeFromGDB syncs live GDB breakpoints into the internal list without

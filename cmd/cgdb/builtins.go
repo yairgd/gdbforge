@@ -63,6 +63,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
 	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())
 	a.bpWidget.OnChange = a.onBreakpointListChanged
+	a.bpWidget.OnBreakCmd = a.onBreakpointsChanged
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}

@@ -155,7 +155,7 @@ flowchart LR
 
 GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
 
-**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on every `*stopped`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`). Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins (`about`, `logger`, `gdb`, `breakpoint`, `exec`). `:edit` opens a FileListWidget of project sources; Enter/click replaces it with the chosen CodeWidget. Unique prefix `:e` is the same command. Stops show `━━▶` on the PC line and update that file’s buffer without stealing GDB focus when another CodeWidget leaf exists.
+**Session model on AppState:** `SourceFiles` (filled once from `-file-list-exec-source-files` when empty, e.g. first stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
 
 ---
 
@@ -165,7 +165,7 @@ Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget
 
 ## Breakpoints while the inferior is running
 
-While the program is in `continue` / `^running`, sync GDB does not process a queued `break` until the target stops. Space (and BreakpointWidget `e`/`d`) therefore:
+While the program is in `continue` / `^running`, sync GDB does not process a queued `break` until the target stops. Space (and BreakpointWidget e/`d`) therefore:
 
 1. Send Ctrl-C (`\x03`) to interrupt
 2. Send `break` / `clear` / `-break-delete`
@@ -178,12 +178,12 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down — bold selection; `e` — toggle (see below); `d` — delete |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down — bold selection; **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
 | **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear |
 | **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down — bold selection; filled on stop |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
-| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — toggle break at cursor line |
+| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled; same as BreakpointWidget `e`) |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
 

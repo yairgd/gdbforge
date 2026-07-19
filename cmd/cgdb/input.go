@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -63,7 +64,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 	return true
 }
 
-// handleCodeGlobalKey routes Up/Down/Space/n/s to the active CodeWidget / GDB
+// handleCodeGlobalKey routes Up/Down/Space/e/n/s to the active CodeWidget / GDB
 // regardless of which pane is focused.
 func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 	switch ev.Key() {
@@ -87,6 +88,19 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 				a.RequestFrame()
 				return true
 			}
+		case 'e':
+			// When the Breakpoint pane is focused, e toggles that row.
+			if _, ok := a.tab.FocusedWidget().(*widgets.BreakpointWidget); ok {
+				return false
+			}
+			if cw := a.activeCodeWidget(); cw != nil {
+				// Prefer the focused CodeWidget's cursor when it is focused.
+				if focused, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); ok && focused != nil {
+					cw = focused
+				}
+				a.toggleCodeBreakEnableOn(cw)
+			}
+			return true
 		case 'n':
 			a.sendGdbExec("next")
 			return true
@@ -96,6 +110,31 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 		}
 	}
 	return false
+}
+
+// toggleCodeBreakEnable toggles enable/disable at the active CodeWidget cursor
+// (same as BreakpointWidget e). Disabled marks stay in the BP list and show yellow.
+func (a *DebuggerApp) toggleCodeBreakEnable() {
+	cw := a.activeCodeWidget()
+	if focused, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); ok && focused != nil {
+		cw = focused
+	}
+	a.toggleCodeBreakEnableOn(cw)
+}
+
+func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
+	if cw == nil || a.bpWidget == nil {
+		return
+	}
+	path := cw.Path()
+	line := cw.SelLine()
+	if path == "" || line < 1 {
+		return
+	}
+	// Toggle when listed, or when CodeWidget still shows an enabled mark not yet merged.
+	if a.bpWidget.ToggleAtFileLine(path, line, cw.HasEnabledBreak(line)) {
+		a.RequestFrame()
+	}
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {

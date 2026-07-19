@@ -75,7 +75,7 @@ func (a *DebuggerApp) applyDefaultLayout() {
 
 func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 	if path := a.State().CurrentFile(); path != "" {
-		if w := a.ensureCodeBuffer(path); w != nil {
+		if w, _ := a.ensureCodeBuffer(path); w != nil {
 			return w
 		}
 	}
@@ -85,9 +85,7 @@ func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 	w := widgets.NewCodeWidget()
 	w.PaneName = "[No Name]"
 	w.SetClipboard(a.ClipboardIO())
-	if a.gdbWidget != nil {
-		w.SetPTY(a.gdbWidget.Session(), a.State())
-	}
+	a.wireCodeWidget(w)
 	a.primaryCode = w
 	return w
 }

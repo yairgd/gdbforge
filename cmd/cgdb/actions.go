@@ -77,9 +77,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 	w := widgets.NewCodeWidget()
 	w.PaneName = "[No Name]"
 	w.SetClipboard(app.ClipboardIO())
-	if app.gdbWidget != nil {
-		w.SetPTY(app.gdbWidget.Session(), app.State())
-	}
+	app.wireCodeWidget(w)
 	app.tab.VerticalSplit(w)
 	app.RequestRedraw()
 }
@@ -154,6 +152,40 @@ func (app *DebuggerApp) SetMarkColor(args ...any) {
 		return
 	}
 	app.State().SetMarkColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetBreakColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown breakcolor: " + name)
+		}
+		return
+	}
+	app.State().SetBreakColor(c)
+	app.rebuildCodeBreakGutters()
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetBreakDisabledColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown breakdisabledcolor: " + name)
+		}
+		return
+	}
+	app.State().SetBreakDisabledColor(c)
+	app.rebuildCodeBreakGutters()
 	app.RequestFrame()
 }
 

@@ -93,6 +93,13 @@ type AppState struct {
 	// markColor is the selected-row background for list pickers (e.g. :edit).
 	// Default blue; change with :set markcolor <name>.
 	markColor tcell.Color
+
+	// breakColor is the enabled-breakpoint background (CodeWidget gutter +
+	// BreakpointWidget rows). Default red; :set breakcolor <name>.
+	breakColor tcell.Color
+	// breakDisabledColor is the disabled-breakpoint background. Default yellow;
+	// :set breakdisabledcolor <name>.
+	breakDisabledColor tcell.Color
 }
 
 // NewAppState returns AppState with Vim-like defaults.
@@ -104,10 +111,12 @@ func NewAppState() *AppState {
 			Output:      1.0 / 2.0,
 			BottomFirst: 1.0 / 3.0,
 		},
-		clearOutput:   true,
-		layouts:       []string{LayoutDefault},
-		currentLayout: LayoutDefault,
-		markColor:     tcell.ColorBlue,
+		clearOutput:          true,
+		layouts:              []string{LayoutDefault},
+		currentLayout:        LayoutDefault,
+		markColor:            tcell.ColorBlue,
+		breakColor:           tcell.ColorRed,
+		breakDisabledColor:   tcell.ColorYellow,
 	}
 }
 
@@ -325,6 +334,36 @@ func (a *AppState) MarkColor() tcell.Color {
 func (a *AppState) SetMarkColor(c tcell.Color) {
 	a.mu.Lock()
 	a.markColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) BreakColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.breakColor == tcell.ColorDefault {
+		return tcell.ColorRed
+	}
+	return a.breakColor
+}
+
+func (a *AppState) SetBreakColor(c tcell.Color) {
+	a.mu.Lock()
+	a.breakColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) BreakDisabledColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.breakDisabledColor == tcell.ColorDefault {
+		return tcell.ColorYellow
+	}
+	return a.breakDisabledColor
+}
+
+func (a *AppState) SetBreakDisabledColor(c tcell.Color) {
+	a.mu.Lock()
+	a.breakDisabledColor = c
 	a.mu.Unlock()
 }
 

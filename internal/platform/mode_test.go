@@ -76,6 +76,17 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.MarkColor() != tcell.ColorNavy {
 		t.Fatal("markcolor set")
 	}
+	if s.BreakColor() != tcell.ColorRed {
+		t.Fatal("breakcolor default red")
+	}
+	if s.BreakDisabledColor() != tcell.ColorYellow {
+		t.Fatal("breakdisabledcolor default yellow")
+	}
+	s.SetBreakColor(tcell.ColorPurple)
+	s.SetBreakDisabledColor(tcell.ColorGray)
+	if s.BreakColor() != tcell.ColorPurple || s.BreakDisabledColor() != tcell.ColorGray {
+		t.Fatal("break colors set")
+	}
 	if c, ok := ParseColorName("darkblue"); !ok || c != tcell.ColorDarkBlue {
 		t.Fatal("ParseColorName darkblue")
 	}

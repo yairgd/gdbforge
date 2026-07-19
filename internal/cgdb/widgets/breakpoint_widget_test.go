@@ -7,6 +7,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/mcp"
+	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
 func TestBreakpointWidgetEmptyMessage(t *testing.T) {
@@ -62,6 +63,27 @@ func TestBreakpointWidgetToggleRemovesFromGDBKeepsRow(t *testing.T) {
 	}
 }
 
+func TestBreakpointWidgetToggleAtFileLine(t *testing.T) {
+	w := NewBreakpointWidget()
+	sent := make(chan string, 4)
+	w.sess = &bpFakeSess{sent: sent}
+	w.MergeFromGDB([]mcp.BreakInfo{
+		{Number: 2, Enabled: true, File: "/tmp/a.c", Line: 10},
+	})
+	if !w.ToggleAtFileLine("/tmp/a.c", 10, false) {
+		t.Fatal("toggle")
+	}
+	if got := <-sent; got != "-break-delete 2" {
+		t.Fatalf("cmd=%q", got)
+	}
+	if w.Items()[0].Enabled {
+		t.Fatal("disabled")
+	}
+	if w.ToggleAtFileLine("/tmp/a.c", 99, false) {
+		t.Fatal("expected no-op")
+	}
+}
+
 func TestBreakpointWidgetDeleteRemovesFromList(t *testing.T) {
 	w := NewBreakpointWidget()
 	sent := make(chan string, 2)
@@ -91,6 +113,28 @@ func TestBreakpointWidgetMergeAddsExternal(t *testing.T) {
 	})
 	if len(w.Items()) != 2 {
 		t.Fatalf("items=%v", w.Items())
+	}
+}
+
+func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
+	st := platform.NewAppState()
+	st.SetBreakColor(tcell.ColorPurple)
+	st.SetBreakDisabledColor(tcell.ColorAqua)
+	w := NewBreakpointWidget()
+	w.SetPTY(nil, st)
+	w.items = []mcp.BreakInfo{
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
+		{Number: 2, Enabled: false, File: "/tmp/a.c", Line: 2},
+	}
+	en := w.rowStyle(0, "")
+	_, enBg, _ := en.Decompose()
+	if enBg != tcell.ColorPurple {
+		t.Fatalf("enabled bg=%v want purple", enBg)
+	}
+	dis := w.rowStyle(1, "")
+	_, disBg, _ := dis.Decompose()
+	if disBg != tcell.ColorAqua {
+		t.Fatalf("disabled bg=%v want aqua", disBg)
 	}
 }
 

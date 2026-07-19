@@ -82,7 +82,7 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **`ModeNormal`** — `:` enters command mode; **Esc** focuses the CodeWidget leaf (or places one top-left); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/n/s** are global (code / GDB); other keys go through the **Trie** then the focused widget.
+   - **`ModeNormal`** — `:` enters command mode; **Esc** focuses the CodeWidget leaf (or places one top-left); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s** are global (code / GDB); other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal + focus CodeWidget leaf.
    - **`ModeCommand`** — all keys go to `CmdWidget`.
    - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
@@ -260,7 +260,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget `e`/`d`) hold the write mux.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default`. Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -356,6 +356,7 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux, `:AI`, and E
 | `i` | Focus GDB leaf (remembered) and enter insert mode | Implemented |
 | `Up` / `Down` | Move CodeWidget cursor line (global) | Implemented |
 | `Space` | Toggle breakpoint at CodeWidget cursor (global) | Implemented |
+| `e` | Enable/disable breakpoint at CodeWidget cursor (yellow when disabled) | Implemented |
 | `n` | GDB `next` | Implemented |
 | `s` | GDB `step` | Implemented |
 | `:` | Enter command mode | Implemented |
@@ -371,8 +372,8 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 
 | Widget | Key | Action |
 |--------|-----|--------|
-| **CodeWidget** | `j`/`k` or Up/Down | Move bold cursor line |
-| **CodeWidget** | **Space** | Toggle breakpoint at cursor (`break`/`clear`) |
+| **CodeWidget** | `e` | Enable/disable breakpoint at cursor (yellow when disabled; same as BreakpointWidget `e`) |
+| **CodeWidget** | **Space** | Insert/remove breakpoint at cursor line |
 | **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down | Bold selection |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |

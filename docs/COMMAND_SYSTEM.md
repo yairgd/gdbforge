@@ -95,7 +95,7 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 ├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
 ├── edit [name]   → Action: OnEdit (picker, or open file; unique prefix :e)
 ├── layout <name> → Action: OnLayout (apply named workspace; default)
-├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | markcolor <name>
+├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | markcolor <name> | breakcolor <name> | breakdisabledcolor <name>
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -278,6 +278,8 @@ Vim-like buffers use the same pattern:
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues. |
 | `:set markcolor <name>` | `CmdRest` under `set` | Selected-row color for the file picker (default **blue**). |
+| `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |
+| `:set breakdisabledcolor <name>` | `CmdRest` under `set` | Disabled breakpoint background (default **yellow**). |
 
 Default layout is Code over GDB (left, **2/3** width) and Output / Breakpoints / Threads / Call stack (right). Program stdout is also `:b output`. Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 

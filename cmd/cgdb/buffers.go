@@ -10,25 +10,36 @@ import (
 )
 
 // ensureCodeBuffer returns the CodeWidget for path, creating it if needed.
-// PaneName is the file basename (Vim-style buffer name).
-func (a *DebuggerApp) ensureCodeBuffer(path string) *widgets.CodeWidget {
+// PaneName is the file basename (Vim-style buffer name). created is true when
+// a new widget was allocated (caller may need to paint breakpoint gutters).
+func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, created bool) {
 	if path == "" {
-		return nil
+		return nil, false
 	}
 	if a.fileBuffers == nil {
 		a.fileBuffers = make(map[string]*widgets.CodeWidget)
 	}
-	if w, ok := a.fileBuffers[path]; ok {
-		return w
+	if existing, ok := a.fileBuffers[path]; ok {
+		return existing, false
 	}
-	w := widgets.NewCodeWidget()
+	w = widgets.NewCodeWidget()
 	w.PaneName = filepath.Base(path)
 	w.SetClipboard(a.ClipboardIO())
+	a.wireCodeWidget(w)
+	a.fileBuffers[path] = w
+	return w, true
+}
+
+// wireCodeWidget attaches the shared GDB session and breakpoint-refresh hook.
+func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
+	if w == nil {
+		return
+	}
 	if a.gdbWidget != nil {
 		w.SetPTY(a.gdbWidget.Session(), a.State())
 	}
-	a.fileBuffers[path] = w
-	return w
+	w.SetOnBreakCmd(a.onBreakpointsChanged)
+	w.SetOnToggleEnable(a.toggleCodeBreakEnable)
 }
 
 // findFileBuffer looks up an open file buffer by full path or basename.
@@ -193,7 +204,7 @@ func (a *DebuggerApp) openSourcePath(path string) {
 	if path == "" || a.tab == nil {
 		return
 	}
-	w := a.ensureCodeBuffer(path)
+	w, _ := a.ensureCodeBuffer(path)
 	if w == nil {
 		return
 	}

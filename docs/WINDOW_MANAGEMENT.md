@@ -305,6 +305,8 @@ The longer-term `:buffer` idea selects which **application model** to display â€
 :edit main.c
 :b main.c
 :set markcolor darkblue
+:set breakcolor red
+:set breakdisabledcolor yellow
 ```
 
 Future model names (aspirational):
@@ -389,8 +391,10 @@ Planned contents:
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
-| `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query on each stop) |
+| `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query once when empty) |
 | `MarkColor` | File-picker selection background (`:set markcolor`; default blue) |
+| `BreakColor` | Enabled breakpoint background (`:set breakcolor`; default red) |
+| `BreakDisabledColor` | Disabled breakpoint background (`:set breakdisabledcolor`; default yellow) |
 | `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
 
 ```go
