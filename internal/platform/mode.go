@@ -90,9 +90,12 @@ type AppState struct {
 	currentFile string
 	currentLine int // 1-based; 0 = unset
 
-	// markColor is the selected-row background for list pickers (e.g. :edit).
-	// Default blue; change with :set markcolor <name>.
+	// markColor is the selected-row background for list pickers when focused
+	// (e.g. :edit, callstack, breakpoints). Default blue; :set markcolor <name>.
 	markColor tcell.Color
+	// markDimColor is the selected-row background when the list pane is not
+	// focused. Default gray; :set markdimcolor <name>.
+	markDimColor tcell.Color
 
 	// breakColor is the enabled-breakpoint background (CodeWidget gutter +
 	// BreakpointWidget rows). Default red; :set breakcolor <name>.
@@ -133,6 +136,7 @@ func NewAppState() *AppState {
 		layouts:            []string{LayoutDefault},
 		currentLayout:      LayoutDefault,
 		markColor:          tcell.ColorBlue,
+		markDimColor:       tcell.ColorGray,
 		breakColor:         tcell.ColorRed,
 		breakDisabledColor: tcell.ColorYellow,
 		escToCode:          true,
@@ -416,6 +420,21 @@ func (a *AppState) MarkColor() tcell.Color {
 func (a *AppState) SetMarkColor(c tcell.Color) {
 	a.mu.Lock()
 	a.markColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) MarkDimColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.markDimColor == tcell.ColorDefault {
+		return tcell.ColorGray
+	}
+	return a.markDimColor
+}
+
+func (a *AppState) SetMarkDimColor(c tcell.Color) {
+	a.mu.Lock()
+	a.markDimColor = c
 	a.mu.Unlock()
 }
 

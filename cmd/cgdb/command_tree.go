@@ -14,7 +14,7 @@ import (
 //	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
 //	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
 //	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
-//	          markcolor, breakcolor, breakdisabledcolor
+//	          markcolor, markdimcolor, breakcolor, breakdisabledcolor
 //	/ → layout <name>  (apply named workspace layout)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
@@ -54,6 +54,7 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("gdblistenprint", a.SetGdbListenPrintOn),
 			commands.Cmd("nogdblistenprint", a.SetGdbListenPrintOff),
 			commands.CmdRest("markcolor", a.SetMarkColor),
+			commands.CmdRest("markdimcolor", a.SetMarkDimColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),
 			commands.CmdRest("breakdisabledcolor", a.SetBreakDisabledColor),
 		).

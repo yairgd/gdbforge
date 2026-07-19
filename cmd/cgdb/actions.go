@@ -16,6 +16,7 @@ func (app *DebuggerApp) OnFocusLeft(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("send left command")
 	app.tab.FocusLeft()
+	app.rememberCodeLeafFromFocus()
 }
 
 func (app *DebuggerApp) OnFocusRight(args ...any) {
@@ -23,6 +24,7 @@ func (app *DebuggerApp) OnFocusRight(args ...any) {
 	log.Info("send right command")
 
 	app.tab.FocusRight()
+	app.rememberCodeLeafFromFocus()
 }
 
 func (app *DebuggerApp) OnFocusUp(args ...any) {
@@ -30,6 +32,7 @@ func (app *DebuggerApp) OnFocusUp(args ...any) {
 	log.Info("send up command")
 
 	app.tab.FocusUp()
+	app.rememberCodeLeafFromFocus()
 }
 
 func (app *DebuggerApp) OnFocusDown(args ...any) {
@@ -37,6 +40,7 @@ func (app *DebuggerApp) OnFocusDown(args ...any) {
 	log.Info("send down command")
 
 	app.tab.FocusDown()
+	app.rememberCodeLeafFromFocus()
 }
 
 func (app *DebuggerApp) BreakFile(args ...any) {
@@ -177,6 +181,22 @@ func (app *DebuggerApp) SetMarkColor(args ...any) {
 		return
 	}
 	app.State().SetMarkColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetMarkDimColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown markdimcolor: " + name)
+		}
+		return
+	}
+	app.State().SetMarkDimColor(c)
 	app.RequestFrame()
 }
 

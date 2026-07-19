@@ -16,6 +16,7 @@ type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
+	state    *platform.AppState
 
 	items    []mcp.ThreadInfo
 	selected int
@@ -42,10 +43,29 @@ func NewThreadWidget() *ThreadWidget {
 	return w
 }
 
+// SetAppState wires mark / mark-dim colors for the selection row.
+func (w *ThreadWidget) SetAppState(st *platform.AppState) {
+	w.state = st
+}
+
 func (w *ThreadWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
+}
+
+func (w *ThreadWidget) markColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MarkColor()
+	}
+	return tcell.ColorBlue
+}
+
+func (w *ThreadWidget) markDimColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MarkDimColor()
+	}
+	return tcell.ColorGray
 }
 
 func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
@@ -53,8 +73,13 @@ func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	if len(w.items) == 0 {
 		return st.Foreground(tcell.ColorGray)
 	}
-	if lineIdx == w.selected && w.Focused() {
-		return st.Bold(true).Background(tcell.ColorDarkBlue)
+	if lineIdx == w.selected {
+		bg := w.markDimColor()
+		if w.Focused() {
+			bg = w.markColor()
+		}
+		_ = line
+		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	_ = line
 	return st

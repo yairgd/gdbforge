@@ -69,16 +69,23 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 }
 
 // handleCodeGlobalKey routes Up/Down/Space/e/n/s to the active CodeWidget / GDB
-// regardless of which pane is focused.
+// regardless of which pane is focused — except when a non-code/non-gdb pane is
+// focused: then Up/Down/Space stay with that pane (list selection, etc.).
 func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyUp:
+		if !a.focusIsCodeOrGdb() {
+			return false
+		}
 		if cw := a.activeCodeWidget(); cw != nil {
 			cw.MoveSel(-1)
 			a.RequestFrame()
 			return true
 		}
 	case tcell.KeyDown:
+		if !a.focusIsCodeOrGdb() {
+			return false
+		}
 		if cw := a.activeCodeWidget(); cw != nil {
 			cw.MoveSel(1)
 			a.RequestFrame()
@@ -87,6 +94,9 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 	case tcell.KeyRune:
 		switch ev.Rune() {
 		case ' ':
+			if !a.focusIsCodeOrGdb() {
+				return false
+			}
 			if cw := a.activeCodeWidget(); cw != nil {
 				cw.BreakAtSel()
 				a.RequestFrame()
@@ -249,6 +259,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	if ev.Buttons()&tcell.ButtonPrimary != 0 {
 		x, y := ev.Position()
 		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
+			a.rememberCodeLeafFromFocus()
 			a.EnterInsertMode()
 		}
 	}
@@ -256,6 +267,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
 		x, y := ev.Position()
 		if a.tab.FocusAt(x, y) {
+			a.rememberCodeLeafFromFocus()
 			a.EnterInsertMode()
 		}
 	}

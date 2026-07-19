@@ -46,11 +46,13 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
+	a.threadWidget.SetAppState(a.State())
 	a.threadWidget.OnActivate = a.onThreadActivate
 	a.registerBuiltin("threads", a.threadWidget)
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
+	a.callstackWidget.SetAppState(a.State())
 	a.callstackWidget.OnActivate = a.onCallStackActivate
 	a.registerBuiltin("callstack", a.callstackWidget)
 

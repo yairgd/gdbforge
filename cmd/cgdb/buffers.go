@@ -10,7 +10,8 @@ import (
 )
 
 // ensureCodeBuffer returns the CodeWidget for path, creating it if needed.
-// PaneName is the file basename (Vim-style buffer name). created is true when
+// PaneName is the file basename (Vim-style buffer name for :b); the status
+// line shows the full path via CodeWidget.DrawStatusLine. created is true when
 // a new widget was allocated (caller may need to paint breakpoint gutters).
 func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, created bool) {
 	if path == "" {

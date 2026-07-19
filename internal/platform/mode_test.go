@@ -96,6 +96,13 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.MarkColor() != tcell.ColorNavy {
 		t.Fatal("markcolor set")
 	}
+	if s.MarkDimColor() != tcell.ColorGray {
+		t.Fatal("markdimcolor default gray")
+	}
+	s.SetMarkDimColor(tcell.ColorSilver)
+	if s.MarkDimColor() != tcell.ColorSilver {
+		t.Fatal("markdimcolor set")
+	}
 	if s.BreakColor() != tcell.ColorRed {
 		t.Fatal("breakcolor default red")
 	}

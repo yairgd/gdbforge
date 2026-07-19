@@ -120,17 +120,29 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	st := platform.NewAppState()
 	st.SetBreakColor(tcell.ColorPurple)
 	st.SetBreakDisabledColor(tcell.ColorAqua)
+	st.SetMarkColor(tcell.ColorNavy)
+	st.SetMarkDimColor(tcell.ColorSilver)
 	w := NewBreakpointWidget()
 	w.SetPTY(nil, st)
 	w.items = []mcp.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
 		{Number: 2, Enabled: false, File: "/tmp/a.c", Line: 2},
 	}
-	en := w.rowStyle(0, "")
-	_, enBg, _ := en.Decompose()
-	if enBg != tcell.ColorPurple {
-		t.Fatalf("enabled bg=%v want purple", enBg)
+	w.selected = 0
+
+	// Unfocused selection uses markdimcolor, not breakcolor.
+	sel := w.rowStyle(0, "")
+	_, selBg, _ := sel.Decompose()
+	if selBg != tcell.ColorSilver {
+		t.Fatalf("unfocused selected bg=%v want silver", selBg)
 	}
+	w.SetFocused(true)
+	sel = w.rowStyle(0, "")
+	_, selBg, _ = sel.Decompose()
+	if selBg != tcell.ColorNavy {
+		t.Fatalf("focused selected bg=%v want navy", selBg)
+	}
+
 	dis := w.rowStyle(1, "")
 	_, disBg, _ := dis.Decompose()
 	if disBg != tcell.ColorAqua {

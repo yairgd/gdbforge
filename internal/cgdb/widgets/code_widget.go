@@ -240,6 +240,7 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 		w.unavailablePath = ""
 		w.unavailableExtra = ""
 		w.path = path
+		w.PaneName = filepath.Base(path)
 		w.rawLines = lines
 		w.hiLines = highlightLines(path, lines)
 	}
@@ -511,6 +512,27 @@ func (w *CodeWidget) SetFocused(focused bool) {
 
 func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {
 	w.viewport.SetClipboard(io)
+}
+
+// statusLabel is the status-bar text: full source path when known, else PaneName.
+func (w *CodeWidget) statusLabel() string {
+	if w.path != "" {
+		return w.path
+	}
+	return w.PaneName
+}
+
+// DrawStatusLine shows the full file path on the pane status bar.
+func (w *CodeWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	name := w.statusLabel()
+	if name == "" {
+		return
+	}
+	if w.Focused() {
+		termui.PaintStatusBar(c, name, active)
+		return
+	}
+	termui.PaintInactiveStatusBar(c, name)
 }
 
 func (w *CodeWidget) Draw(c termui.Canvas) {

@@ -77,8 +77,13 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	if len(w.items) == 0 {
 		return st.Foreground(tcell.ColorGray)
 	}
-	if lineIdx == w.selected && w.Focused() {
-		return st.Bold(true).Background(tcell.ColorDarkBlue)
+	if lineIdx == w.selected {
+		bg := w.markDimColor()
+		if w.Focused() {
+			bg = w.markColor()
+		}
+		_ = line
+		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	if lineIdx < 0 || lineIdx >= len(w.items) {
 		return st
@@ -90,6 +95,20 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	}
 	_ = line
 	return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
+}
+
+func (w *BreakpointWidget) markColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MarkColor()
+	}
+	return tcell.ColorBlue
+}
+
+func (w *BreakpointWidget) markDimColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MarkDimColor()
+	}
+	return tcell.ColorGray
 }
 
 func (w *BreakpointWidget) breakColor() tcell.Color {

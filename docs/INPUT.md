@@ -82,8 +82,8 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **`ModeNormal`** — `:` enters command mode; **Esc** focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s** are global (code / GDB); other keys go through the **Trie** then the focused widget.
-   - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ focus CodeWidget leaf when `esctocode`). If a **CodeWidget** is focused (green status), **`n`/`s`** still send GDB `next`/`step`.
+   - **`ModeNormal`** — `:` enters command mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s** are global for Code/GDB; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
+   - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused (green status), **`n`/`s`** still send GDB `next`/`step`.
    - **`ModeCommand`** — all keys go to `CmdWidget`.
    - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
 
@@ -352,7 +352,7 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux, `:AI`, and E
 
 | Key | Action | Status |
 |-----|--------|--------|
-| `Esc` | Focus CodeWidget leaf when `esctocode` (default); else leave insert → normal only | Implemented |
+| `Esc` | Focus last non-Code/non-GDB pane if one was active; else CodeWidget leaf when `esctocode` (default); else leave insert → normal only | Implemented |
 | `i` | Focus GDB leaf (remembered) and enter insert mode | Implemented |
 | `Up` / `Down` | Move CodeWidget cursor line (global) | Implemented |
 | `Space` | Toggle breakpoint at CodeWidget cursor (global) | Implemented |

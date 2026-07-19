@@ -276,6 +276,9 @@ func TestCodeWidgetShowUnavailable(t *testing.T) {
 	if w.PaneName != "libQt5Core.so.5" {
 		t.Fatalf("PaneName=%q", w.PaneName)
 	}
+	if got := w.statusLabel(); got != "/usr/lib64/libQt5Core.so.5" {
+		t.Fatalf("statusLabel=%q", got)
+	}
 	if got := w.LinesForTest(); len(got) != 0 {
 		t.Fatalf("want empty buffer lines, got %v", got)
 	}
@@ -307,6 +310,42 @@ func TestCodeWidgetShowUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(extra, "QEventLoop::exec") || !strings.Contains(extra, "602") {
 		t.Fatalf("extra=%q", extra)
+	}
+}
+
+func TestCodeWidgetStatusLineFullPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.c")
+	if err := os.WriteFile(path, []byte("int main(void) { return 0; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := NewCodeWidget()
+	if err := w.ShowLocation(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.statusLabel(); got != path {
+		t.Fatalf("statusLabel=%q want %q", got, path)
+	}
+	// PaneName stays basename for :b buffer switching.
+	if w.PaneName != "hello.c" {
+		t.Fatalf("PaneName=%q", w.PaneName)
+	}
+
+	g := termui.NewGrid(80, 5)
+	c := termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 80, 4))
+	w.SetFocused(true)
+	w.DrawStatusLine(c, false)
+	var b strings.Builder
+	for x := 0; x < 80; x++ {
+		ch := g.Cells[x][4].Rune
+		if ch == 0 {
+			ch = ' '
+		}
+		b.WriteRune(ch)
+	}
+	got := strings.TrimSpace(b.String())
+	if !strings.Contains(got, path) {
+		t.Fatalf("status bar=%q want full path %q", got, path)
 	}
 }
 

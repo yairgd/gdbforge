@@ -14,6 +14,10 @@ import (
 const (
 	leafMarkCode = "code"
 	leafMarkGDB  = "gdb"
+	// leafMarkLast is the Esc restore target when the user last focused a pane
+	// that is neither Code nor GDB (breakpoints, callstack, …). Focusing Code
+	// clears it; focusing GDB leaves it unchanged.
+	leafMarkLast = "last"
 )
 
 // activeCodeWidget returns the CodeWidget buffer Esc / global keys should drive.
@@ -58,7 +62,9 @@ func (a *DebuggerApp) findCodeLeaf() *termui.Node {
 	return leaf
 }
 
-// rememberCodeLeafFromFocus stores the focused leaf when it shows a CodeWidget.
+// rememberCodeLeafFromFocus updates code/gdb marks and the Esc "last" mark.
+// Non-code/non-gdb focus becomes the Esc restore target; Code clears that
+// target; GDB does not overwrite it (so Esc after `i` can return to e.g. BPs).
 func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	if a.tab == nil {
 		return
@@ -71,12 +77,51 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	if leaf == nil {
 		return
 	}
-	if isCodeWidget(leaf.GetWidget()) {
+	w := leaf.GetWidget()
+	switch {
+	case isCodeWidget(w):
 		a.tab.SetLeafMark(leafMarkCode, leaf)
-	}
-	if leaf.GetWidget() == a.gdbWidget {
+		a.tab.SetLeafMark(leafMarkLast, nil)
+	case w == a.gdbWidget:
 		a.tab.SetLeafMark(leafMarkGDB, leaf)
+	default:
+		a.tab.SetLeafMark(leafMarkLast, leaf)
 	}
+}
+
+// focusIsCodeOrGdb reports whether the focused pane is Code or GDB (or empty).
+// Other panes keep their own Up/Down/Space handling.
+func (a *DebuggerApp) focusIsCodeOrGdb() bool {
+	if a.tab == nil {
+		return true
+	}
+	w := a.tab.FocusedWidget()
+	if w == nil {
+		return true
+	}
+	if isCodeWidget(w) {
+		return true
+	}
+	return w == a.gdbWidget
+}
+
+// activateLastOrCodePane focuses the remembered non-code/non-gdb leaf when
+// still valid; otherwise falls back to the Code pane (EscToCode path).
+func (a *DebuggerApp) activateLastOrCodePane() {
+	if a.tab == nil {
+		return
+	}
+	if leaf := a.tab.LeafMark(leafMarkLast); leaf != nil {
+		w := leaf.GetWidget()
+		if w != nil && !isCodeWidget(w) && w != a.gdbWidget {
+			a.tab.SetInsertActive(false)
+			a.SetMode(platform.ModeNormal)
+			_ = a.tab.FocusLeaf(leaf)
+			a.RequestRedraw()
+			return
+		}
+	}
+	a.activateCodePane()
 }
 
 // findGdbLeaf returns the remembered GDB leaf if it still shows GDB, else any
@@ -137,15 +182,17 @@ func (a *DebuggerApp) activateGdbPane() {
 
 // activateGdbInsertMode focuses the GDB pane then enters insert mode ('i').
 func (a *DebuggerApp) activateGdbInsertMode() {
+	a.rememberCodeLeafFromFocus()
 	a.activateGdbPane()
 	a.EnterInsertMode()
 }
 
 // onEscape leaves insert/normal Esc handling. When AppState.EscToCode is set
-// (default), focuses the CodeWidget leaf; otherwise only leaves insert → normal.
+// (default), focuses the last non-code/non-gdb pane if one was active, else
+// the CodeWidget leaf; otherwise only leaves insert → normal.
 func (a *DebuggerApp) onEscape() {
 	if a.State().EscToCode() {
-		a.activateCodePane()
+		a.activateLastOrCodePane()
 		return
 	}
 	if a.tab != nil {

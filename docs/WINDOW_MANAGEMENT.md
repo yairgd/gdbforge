@@ -210,7 +210,7 @@ What happens:
 
 ## Tab management
 
-Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Debugger roles such as `"code"` / `"gdb"` are mark names chosen by `cmd/cgdb` (Esc / `i` pane restore).
+Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Debugger roles such as `"code"` / `"gdb"` / `"last"` are mark names chosen by `cmd/cgdb` (Esc / `i` pane restore; `"last"` holds a non-Code/non-GDB Esc target).
 
 ```mermaid
 flowchart LR
@@ -390,13 +390,14 @@ Planned contents:
 | `Mode` | Input mode: Normal / Insert / Command |
 | `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
-| `EscToCode` | Esc focuses the CodeWidget leaf (`:set esctocode` / `:set noesctocode`; default **on**) |
+| `EscToCode` | Esc restores last non-Code/non-GDB pane if any, else CodeWidget (`:set esctocode` / `:set noesctocode`; default **on**) |
 | `BreakMain` | Insert `break main` on GDB session start (`:set breakmain` / `:set nobreakmain`; default **on**) |
 | `GdbListenPrint` | Paint App/MCP replies in the GDB console (`:set gdblistenprint` / `:set nogdblistenprint`; default **off**) |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
 | `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query once when empty) |
-| `MarkColor` | File-picker selection background (`:set markcolor`; default blue) |
+| `MarkColor` | Focused list selection background (`:set markcolor`; default blue) |
+| `MarkDimColor` | Unfocused list selection background (`:set markdimcolor`; default gray) |
 | `BreakColor` | Enabled breakpoint background (`:set breakcolor`; default red) |
 | `BreakDisabledColor` | Disabled breakpoint background (`:set breakdisabledcolor`; default yellow) |
 | `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
