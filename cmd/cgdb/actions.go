@@ -139,6 +139,14 @@ func (app *DebuggerApp) SetContinueAfterClearOff(args ...any) {
 	app.State().SetContinueAfterClear(false)
 }
 
+func (app *DebuggerApp) SetEscToCodeOn(args ...any) {
+	app.State().SetEscToCode(true)
+}
+
+func (app *DebuggerApp) SetEscToCodeOff(args ...any) {
+	app.State().SetEscToCode(false)
+}
+
 func (app *DebuggerApp) SetMarkColor(args ...any) {
 	name := joinCmdArgs(args)
 	if name == "" {

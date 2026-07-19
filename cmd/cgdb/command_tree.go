@@ -12,8 +12,8 @@ import (
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
 //	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
-//	          continueafterclear, nocontinueafterclear, markcolor,
-//	          breakcolor, breakdisabledcolor
+//	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
+//	          markcolor, breakcolor, breakdisabledcolor
 //	/ → layout <name>  (apply named workspace layout)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
@@ -46,6 +46,8 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("noclearoutput", a.SetClearOutputOff),
 			commands.Cmd("continueafterclear", a.SetContinueAfterClearOn),
 			commands.Cmd("nocontinueafterclear", a.SetContinueAfterClearOff),
+			commands.Cmd("esctocode", a.SetEscToCodeOn),
+			commands.Cmd("noesctocode", a.SetEscToCodeOff),
 			commands.CmdRest("markcolor", a.SetMarkColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),
 			commands.CmdRest("breakdisabledcolor", a.SetBreakDisabledColor),

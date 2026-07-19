@@ -30,6 +30,9 @@ type WidgetTree struct {
 	// until the next structural change.
 	equalAlways bool
 
+	// leafMarks are named bookmarks onto leaves (role-agnostic; callers choose names).
+	leafMarks map[string]*Node
+
 	dragSplit        *Node
 	onResize         func()
 	grid             *Grid
@@ -134,6 +137,50 @@ func (w *WidgetTree) FindLeaf(match func(Widget) bool) *Node {
 		}
 	}
 	return nil
+}
+
+// SetLeafMark bookmarks leaf under name. Passing a nil leaf clears the mark.
+// No-op if leaf is not a leaf node in this tree.
+func (w *WidgetTree) SetLeafMark(name string, leaf *Node) {
+	if w == nil || name == "" {
+		return
+	}
+	if leaf == nil {
+		if w.leafMarks != nil {
+			delete(w.leafMarks, name)
+		}
+		return
+	}
+	if leaf.Type != NodeLeaf || !w.containsLeaf(leaf) {
+		return
+	}
+	if w.leafMarks == nil {
+		w.leafMarks = make(map[string]*Node)
+	}
+	w.leafMarks[name] = leaf
+}
+
+// LeafMark returns the leaf bookmarked as name, or nil if missing or no longer
+// in this tree (stale marks are cleared).
+func (w *WidgetTree) LeafMark(name string) *Node {
+	if w == nil || name == "" || w.leafMarks == nil {
+		return nil
+	}
+	leaf := w.leafMarks[name]
+	if leaf == nil || leaf.Type != NodeLeaf || !w.containsLeaf(leaf) {
+		delete(w.leafMarks, name)
+		return nil
+	}
+	return leaf
+}
+
+func (w *WidgetTree) containsLeaf(leaf *Node) bool {
+	for _, n := range CollectLeaves(w.root) {
+		if n == leaf {
+			return true
+		}
+	}
+	return false
 }
 
 // TopLeftLeaf returns the leaf nearest the top-left of the layout.

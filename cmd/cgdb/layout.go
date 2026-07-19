@@ -52,7 +52,7 @@ func (a *DebuggerApp) ApplyLayout(name string) {
 
 func (a *DebuggerApp) applyDefaultLayout() {
 	code := a.layoutCodeWidget()
-	tw := termui.NewTabDefaultDebugLayout(
+	tw := newTabDefaultDebugLayout(
 		"basic debugger",
 		code,
 		a.gdbWidget,
@@ -68,8 +68,8 @@ func (a *DebuggerApp) applyDefaultLayout() {
 	a.State().SetEqualAlways(true)
 	a.tab.SetEqualAlways(true)
 	a.tab.FocusWidget(a.gdbWidget)
-	a.codeLeaf = a.tab.FindLeaf(isCodeWidget)
-	a.gdbLeaf = a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget })
+	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
+	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
 }
 

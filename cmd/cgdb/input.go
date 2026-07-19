@@ -12,7 +12,11 @@ import (
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEscape {
-		a.activateCodePane()
+		a.onEscape()
+		return true
+	}
+	// When Code is focused in insert (green status), n/s still step in GDB.
+	if a.handleInsertCodeStepKey(ev) {
 		return true
 	}
 	a.tab.HandleEvent(ev)
@@ -21,7 +25,7 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 
 func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyEscape {
-		a.activateCodePane()
+		a.onEscape()
 		return true
 	}
 	if a.handleCodeGlobalKey(ev) {
@@ -108,6 +112,29 @@ func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
 			a.sendGdbExec("step")
 			return true
 		}
+	}
+	return false
+}
+
+// handleInsertCodeStepKey runs GDB next/step when CodeWidget is focused during
+// insert mode (green status). Does not steal n/s from the GDB console.
+func (a *DebuggerApp) handleInsertCodeStepKey(ev *tcell.EventKey) bool {
+	if a.tab == nil {
+		return false
+	}
+	if _, ok := a.tab.FocusedWidget().(*widgets.CodeWidget); !ok {
+		return false
+	}
+	if ev.Key() != tcell.KeyRune {
+		return false
+	}
+	switch ev.Rune() {
+	case 'n':
+		a.sendGdbExec("next")
+		return true
+	case 's':
+		a.sendGdbExec("step")
+		return true
 	}
 	return false
 }

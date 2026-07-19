@@ -204,13 +204,13 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. `NewTabDefaultDebugLayout` builds the default debugger workspace: vertical split with Code over GDB on the left (**2/3** width via `AppState.LayoutLeftRatio`) and Output / Breakpoints / Threads / Call stack on the right (**1/3**). Within the right column, Output is **1/2** height; the other three panes share the bottom half equally.
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. The default debugger workspace is built in `cmd/cgdb` (`newTabDefaultDebugLayout`): vertical split with Code over GDB on the left (**2/3** width via `AppState.LayoutLeftRatio`) and Output / Breakpoints / Threads / Call stack on the right (**1/3**). Within the right column, Output is **1/2** height; the other three panes share the bottom half equally.
 
 ---
 
 ## Tab management
 
-Each tab owns an independent **`WidgetTree`** (split-tree workspace).
+Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Debugger roles such as `"code"` / `"gdb"` are mark names chosen by `cmd/cgdb` (Esc / `i` pane restore).
 
 ```mermaid
 flowchart LR
@@ -242,6 +242,7 @@ type TabWidget struct {
 |---------|--------|
 | Single tab container | Implemented |
 | Forward events/draw to active tab | Implemented |
+| Named leaf marks on WidgetTree | Implemented |
 | Tab header rendering | Not implemented |
 | Tab switching | Not implemented |
 | Tab close / new tab | Not implemented |
@@ -286,7 +287,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Default layout (`NewTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
+**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Default layout (`cmd/cgdb` `newTabDefaultDebugLayout`): left Code over GDB at **2/3** width; right Output / Breakpoints / Threads / Call stack. Re-apply with `:layout default`.
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
@@ -389,6 +390,7 @@ Planned contents:
 | `Mode` | Input mode: Normal / Insert / Command |
 | `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
+| `EscToCode` | Esc focuses the CodeWidget leaf (`:set esctocode` / `:set noesctocode`; default **on**) |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
 | `SourceFiles` | Paths from `-file-list-exec-source-files` (silent App query once when empty) |

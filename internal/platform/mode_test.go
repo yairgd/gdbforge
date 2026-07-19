@@ -116,6 +116,17 @@ func TestAppStateClearOutputAndLayouts(t *testing.T) {
 	if s.ContinueAfterClear() {
 		t.Fatal("nocontinueafterclear")
 	}
+	if !s.EscToCode() {
+		t.Fatal("esctocode default true")
+	}
+	s.SetEscToCode(false)
+	if s.EscToCode() {
+		t.Fatal("noesctocode")
+	}
+	s.SetEscToCode(true)
+	if !s.EscToCode() {
+		t.Fatal("esctocode on")
+	}
 	if !s.HasLayout(LayoutDefault) || s.CurrentLayout() != LayoutDefault {
 		t.Fatal("default layout")
 	}

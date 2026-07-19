@@ -42,7 +42,7 @@ func (o PTYOwner) String() string {
 
 const LayoutDefault = "default"
 
-// DefaultLayoutRatios holds split shares for NewTabDefaultDebugLayout.
+// DefaultLayoutRatios holds split shares for the default debugger workspace.
 type DefaultLayoutRatios struct {
 	// Left is the outer vertical First share (Code+GDB column). Default 2/3.
 	Left float64
@@ -100,6 +100,10 @@ type AppState struct {
 	// breakDisabledColor is the disabled-breakpoint background. Default yellow;
 	// :set breakdisabledcolor <name>.
 	breakDisabledColor tcell.Color
+
+	// escToCode: Esc leaves insert and focuses the CodeWidget leaf (default true).
+	// :set esctocode / :set noesctocode.
+	escToCode bool
 }
 
 // NewAppState returns AppState with Vim-like defaults.
@@ -111,12 +115,13 @@ func NewAppState() *AppState {
 			Output:      1.0 / 2.0,
 			BottomFirst: 1.0 / 3.0,
 		},
-		clearOutput:          true,
-		layouts:              []string{LayoutDefault},
-		currentLayout:        LayoutDefault,
-		markColor:            tcell.ColorBlue,
-		breakColor:           tcell.ColorRed,
-		breakDisabledColor:   tcell.ColorYellow,
+		clearOutput:        true,
+		layouts:            []string{LayoutDefault},
+		currentLayout:      LayoutDefault,
+		markColor:          tcell.ColorBlue,
+		breakColor:         tcell.ColorRed,
+		breakDisabledColor: tcell.ColorYellow,
+		escToCode:          true,
 	}
 }
 
@@ -228,6 +233,19 @@ func (a *AppState) ContinueAfterClear() bool {
 func (a *AppState) SetContinueAfterClear(v bool) {
 	a.mu.Lock()
 	a.continueAfterClear = v
+	a.mu.Unlock()
+}
+
+// EscToCode reports whether Esc focuses the CodeWidget leaf (default true).
+func (a *AppState) EscToCode() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.escToCode
+}
+
+func (a *AppState) SetEscToCode(v bool) {
+	a.mu.Lock()
+	a.escToCode = v
 	a.mu.Unlock()
 }
 

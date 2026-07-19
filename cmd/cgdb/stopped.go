@@ -191,7 +191,7 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 		_, ok := x.(*widgets.CodeWidget)
 		return ok
 	}) {
-		a.codeLeaf = a.tab.FindLeaf(isCodeWidget)
+		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
 		return
 	}
 }

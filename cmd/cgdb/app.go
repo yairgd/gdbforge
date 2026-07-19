@@ -58,10 +58,6 @@ type DebuggerApp struct {
 	outputWidget       *widgets.OutputWidget
 	fileListWidget     *widgets.FileListWidget
 	primaryCode        *widgets.CodeWidget
-	// codeLeaf is the tree leaf that currently shows (or last showed) a CodeWidget.
-	codeLeaf *termui.Node
-	// gdbLeaf is the tree leaf that currently shows (or last showed) the GDBWidget.
-	gdbLeaf *termui.Node
 	bpRefreshMu        sync.Mutex
 	bpRefreshRunning   bool
 	bpRefreshPending   bool

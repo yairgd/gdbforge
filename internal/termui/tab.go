@@ -2,8 +2,6 @@ package termui
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-
-	"github.com/yairgd/cgdb-go/internal/platform"
 )
 
 //
@@ -146,6 +144,21 @@ func (t *TabWidget) FindLeaf(match func(Widget) bool) *Node {
 	return nil
 }
 
+// SetLeafMark bookmarks a leaf on the active tree (see WidgetTree.SetLeafMark).
+func (t *TabWidget) SetLeafMark(name string, leaf *Node) {
+	if tree := t.ActiveTree(); tree != nil {
+		tree.SetLeafMark(name, leaf)
+	}
+}
+
+// LeafMark returns a named leaf bookmark from the active tree.
+func (t *TabWidget) LeafMark(name string) *Node {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.LeafMark(name)
+	}
+	return nil
+}
+
 // TopLeftLeaf returns the top-left leaf of the active tree.
 func (t *TabWidget) TopLeftLeaf() *Node {
 	if tree := t.ActiveTree(); tree != nil {
@@ -251,74 +264,5 @@ func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 			},
 		},
 		active: 0,
-	}
-}
-
-// NewTabDefaultDebugLayout builds the default debugger workspace:
-//
-//	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
-//	ratios come from AppState.DefaultLayoutRatios (Left, Output, BottomFirst).
-func NewTabDefaultDebugLayout(title string, code, gdb, output, bp, threads, callstack Widget, ratios platform.DefaultLayoutRatios) *TabWidget {
-	ratios.Left = clampRatio(ratios.Left)
-	ratios.Output = clampRatio(ratios.Output)
-	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
-	tree := NewWidgetTree(code)
-	// Temporarily equalize while building the tree so nested panes get even shares.
-	tree.SetEqualAlways(true)
-	tree.Split(Vertical, output)
-	tree.FocusWidget(code)
-	tree.Split(Horizontal, gdb)
-	tree.FocusWidget(output)
-	tree.Split(Horizontal, bp)
-	tree.FocusWidget(bp)
-	tree.Split(Horizontal, threads)
-	tree.FocusWidget(threads)
-	tree.Split(Horizontal, callstack)
-	tree.FocusWidget(gdb)
-	applyDefaultDebugRatios(tree.Root(), ratios)
-	// Caller enables equalalways as policy without wiping the preset ratios.
-	tree.SetEqualAlways(false)
-	return &TabWidget{
-		tabs: []Tab{
-			{
-				Title: title,
-				tree:  tree,
-			},
-		},
-		active: 0,
-	}
-}
-
-func clampRatio(r float64) float64 {
-	if r < 0.1 {
-		return 0.1
-	}
-	if r > 0.9 {
-		return 0.9
-	}
-	return r
-}
-
-// applyDefaultDebugRatios sets outer left/right width and right-column heights
-// from DefaultLayoutRatios (Output share; BottomFirst for Breakpoints in the
-// bottom half; Threads|Call stack split the remainder of that half).
-func applyDefaultDebugRatios(root *Node, ratios platform.DefaultLayoutRatios) {
-	if root == nil || root.Type != NodeSplit || root.Dir != Vertical {
-		return
-	}
-	root.Ratio = ratios.Left
-	right := root.Second // Output over (BP / Threads / Call stack)
-	if right == nil || right.Type != NodeSplit || right.Dir != Horizontal {
-		return
-	}
-	right.Ratio = ratios.Output
-	bottom := right.Second
-	if bottom == nil || bottom.Type != NodeSplit || bottom.Dir != Horizontal {
-		return
-	}
-	bottom.Ratio = ratios.BottomFirst
-	rest := bottom.Second
-	if rest != nil && rest.Type == NodeSplit && rest.Dir == Horizontal {
-		rest.Ratio = 0.5 // Threads | Call stack share the remaining bottom equally
 	}
 }
