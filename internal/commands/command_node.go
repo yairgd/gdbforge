@@ -36,6 +36,9 @@ type CommandNode struct {
 	Children *collections.Trie[*CommandNode]
 	Name     string
 	Action   func(args ...any)
+	// Handled if set is used instead of Action for key dispatch. Return false
+	// to decline the binding (fall through to the next input layer).
+	Handled func() bool
 	// RestArgs means tokens after this node are passed to Action, not walked as children.
 	RestArgs bool
 	// CompleteArgs optionally supplies dynamic rest-arg completions (e.g. :b buffers).
@@ -54,6 +57,14 @@ func NewCommand(name string, action func(args ...any)) *CommandNode {
 	return &CommandNode{
 		Name:   name,
 		Action: action,
+	}
+}
+
+// NewHandledCommand binds a key action that may fall through (return false).
+func NewHandledCommand(name string, handled func() bool) *CommandNode {
+	return &CommandNode{
+		Name:    name,
+		Handled: handled,
 	}
 }
 func (n *CommandNode) Complete(prefix string) ([]*CommandNode, bool) {

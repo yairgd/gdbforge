@@ -180,7 +180,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-In **normal mode** (`cmd/cgdb/input.go`), each key event calls `keyBindings.SearchPartial(key)` before forwarding to the tab.
+In **normal mode** (`cmd/cgdb/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
 
 **Current bindings:**
 

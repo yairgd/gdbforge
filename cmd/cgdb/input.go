@@ -11,12 +11,7 @@ import (
 )
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyEscape {
-		a.onEscape()
-		return true
-	}
-	// When Code is focused in insert (green status), n/s still step in GDB.
-	if a.handleInsertCodeStepKey(ev) {
+	if a.tryKeyBindings(a.insertKeys, ev) {
 		return true
 	}
 	a.tab.HandleEvent(ev)
@@ -24,40 +19,16 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyEscape {
-		a.onEscape()
+	// Layout hook reserved for future layout-specific binds (currently no-op).
+	if a.currentLayoutBehavior().HandleNormalKey(a, ev) {
 		return true
 	}
-	if a.currentLayoutBehavior().HandleNormalKey(a, ev) {
+	if a.tryKeyBindings(a.keyBindings, ev) {
 		return true
 	}
 	if isCopyKey(ev) {
 		a.tab.HandleEvent(ev)
 		return true
-	}
-	if ev.Key() == tcell.KeyRune && ev.Rune() == ':' {
-		if a.completionBar != nil {
-			a.completionBar.Clear()
-		}
-		a.SetMode(platform.ModeCommand)
-		a.cmdWidget.Activate()
-		return true
-	}
-	if ev.Key() == tcell.KeyRune && ev.Rune() == 'i' {
-		a.activateGdbInsertMode()
-		return true
-	}
-	if key, ok := platform.KeyFromEvent(ev); ok {
-		cmd, ok := a.keyBindings.SearchPartial(key)
-		if ok {
-			cmd.Action()
-			return true
-		}
-		if a.keyBindings.InPartial() {
-			return true
-		}
-	} else {
-		a.keyBindings.ResetPartial()
 	}
 	// Focused scrollable panes (e.g. Log) handle their bindings without insert mode.
 	if w := a.focusedWidget(); w != nil {
@@ -66,83 +37,6 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		}
 	}
 	return true
-}
-
-// handleCodeGlobalKey routes Up/Down/Space/e/n/s to the active CodeWidget / GDB
-// regardless of which pane is focused — except when a non-code/non-gdb pane is
-// focused: then Up/Down/Space stay with that pane (list selection, etc.).
-func (a *DebuggerApp) handleCodeGlobalKey(ev *tcell.EventKey) bool {
-	switch ev.Key() {
-	case tcell.KeyUp:
-		if !a.focusIsCodeOrGdb() {
-			return false
-		}
-		if cw := a.activeCodeWidget(); cw != nil {
-			cw.MoveSel(-1)
-			a.RequestFrame()
-			return true
-		}
-	case tcell.KeyDown:
-		if !a.focusIsCodeOrGdb() {
-			return false
-		}
-		if cw := a.activeCodeWidget(); cw != nil {
-			cw.MoveSel(1)
-			a.RequestFrame()
-			return true
-		}
-	case tcell.KeyRune:
-		switch ev.Rune() {
-		case ' ':
-			if !a.focusIsCodeOrGdb() {
-				return false
-			}
-			if cw := a.activeCodeWidget(); cw != nil {
-				cw.BreakAtSel()
-				a.RequestFrame()
-				return true
-			}
-		case 'e':
-			// When the Breakpoint pane is focused, e toggles that row.
-			if a.focusedIsBreakpoint() {
-				return false
-			}
-			if cw := a.activeCodeWidget(); cw != nil {
-				if focused := a.focusedCode(); focused != nil {
-					cw = focused
-				}
-				a.toggleCodeBreakEnableOn(cw)
-			}
-			return true
-		case 'n':
-			a.sendGdbExec("next")
-			return true
-		case 's':
-			a.sendGdbExec("step")
-			return true
-		}
-	}
-	return false
-}
-
-// handleInsertCodeStepKey runs GDB next/step when CodeWidget is focused during
-// insert mode (green status). Does not steal n/s from the GDB console.
-func (a *DebuggerApp) handleInsertCodeStepKey(ev *tcell.EventKey) bool {
-	if !a.focusedIsCode() {
-		return false
-	}
-	if ev.Key() != tcell.KeyRune {
-		return false
-	}
-	switch ev.Rune() {
-	case 'n':
-		a.sendGdbExec("next")
-		return true
-	case 's':
-		a.sendGdbExec("step")
-		return true
-	}
-	return false
 }
 
 // toggleCodeBreakEnable toggles enable/disable at the active CodeWidget cursor
@@ -195,42 +89,15 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 		a.SetMode(platform.ModeCommand)
 		return true
 	}
-
-	switch ev.Key() {
-	case tcell.KeyEscape:
-		a.completionBar.Clear()
-		a.SetMode(platform.ModeCommand)
-		a.RequestFrame()
-		return true
-
-	case tcell.KeyEnter:
-		if name := a.completionBar.Selected(); name != "" {
-			a.cmdWidget.ApplyCompletion(name)
-		}
-		a.completionBar.Clear()
-		a.SetMode(platform.ModeCommand)
-		a.RequestFrame()
-		return true
-
-	case tcell.KeyLeft, tcell.KeyRight, tcell.KeyUp, tcell.KeyDown:
-		a.completionBar.HandleEvent(ev)
-		a.RequestFrame()
-		return true
-
-	case tcell.KeyTAB:
-		// Cycle forward like Right.
-		a.completionBar.HandleEvent(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-		a.RequestFrame()
-		return true
-
-	default:
-		// Printable / Backspace: leave wildmenu and edit the cmdline.
-		a.completionBar.Clear()
-		a.SetMode(platform.ModeCommand)
-		a.cmdWidget.HandleEvent(ev)
-		a.RequestFrame()
+	if a.tryKeyBindings(a.completionKeys, ev) {
 		return true
 	}
+	// Printable / Backspace: leave wildmenu and edit the cmdline.
+	a.completionBar.Clear()
+	a.SetMode(platform.ModeCommand)
+	a.cmdWidget.HandleEvent(ev)
+	a.RequestFrame()
+	return true
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {

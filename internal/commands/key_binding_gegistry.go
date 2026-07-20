@@ -34,15 +34,27 @@ func (k *KeyBindingRegistry) InPartial() bool {
 	return k.trie.InPartial()
 }
 
-// HandleKey advances the binding trie. handled is true when the key
-// completed a binding or is part of an unfinished chord.
-func (k *KeyBindingRegistry) HandleKey(key platform.Key) (cmd *CommandNode, handled bool) {
+// HandleKey advances the binding trie. handled is true when the key matched a
+// binding leaf or is part of an unfinished chord. completed is true when the
+// binding's action ran successfully (Handled returned true, or Action ran).
+// If Handled returns false, completed is false so the caller may fall through
+// even though handled is true (trie advanced / leaf matched).
+func (k *KeyBindingRegistry) HandleKey(key platform.Key) (completed, handled bool) {
 	cmd, ok := k.trie.SearchPartial(key)
 	if ok {
-		return cmd, true
+		if cmd != nil {
+			if cmd.Handled != nil {
+				return cmd.Handled(), true
+			}
+			if cmd.Action != nil {
+				cmd.Action()
+				return true, true
+			}
+		}
+		return true, true
 	}
 	if k.trie.InPartial() {
-		return nil, true
+		return false, true
 	}
-	return nil, false
+	return false, false
 }

@@ -85,7 +85,8 @@ func (b *BaseWidget) BindKeyFunc(name string, action func(args ...any), bindings
 }
 
 // HandleBoundKey tries the widget's key trie. Returns true if the key was
-// consumed (completed binding or unfinished chord).
+// consumed (completed binding or unfinished chord). Handled bindings that
+// return false are not consumed (fall through).
 func (b *BaseWidget) HandleBoundKey(ev *tcell.EventKey) bool {
 	if b.keys == nil {
 		return false
@@ -95,12 +96,12 @@ func (b *BaseWidget) HandleBoundKey(ev *tcell.EventKey) bool {
 		b.keys.ResetPartial()
 		return false
 	}
-	cmd, handled := b.keys.HandleKey(key)
+	completed, handled := b.keys.HandleKey(key)
 	if !handled {
 		return false
 	}
-	if cmd != nil && cmd.Action != nil {
-		cmd.Action()
+	if !completed {
+		return b.keys.InPartial()
 	}
 	return true
 }

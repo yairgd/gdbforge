@@ -40,6 +40,11 @@ func (w *CompletionBarWidget) onCompletion(msg CompletionMsg) {
 	w.start = 0
 }
 
+// MoveSelection steps the wildmenu highlight by delta (wraps).
+func (w *CompletionBarWidget) MoveSelection(delta int) {
+	w.move(delta)
+}
+
 func (w *CompletionBarWidget) move(delta int) {
 	n := len(w.names)
 	if n == 0 {

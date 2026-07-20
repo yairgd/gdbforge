@@ -25,14 +25,16 @@ const (
 
 type DebuggerApp struct {
 	*termui.TermApp
-	commandReg  *commands.CommandRegistry
-	keyBindings *commands.KeyBindingRegistry
+	commandReg     *commands.CommandRegistry
+	keyBindings    *commands.KeyBindingRegistry
+	insertKeys     *commands.KeyBindingRegistry
+	completionKeys *commands.KeyBindingRegistry
 
-	tab            *termui.TabWidget
-	cmdWidget      *termui.CmdWidget
-	completionBar  *termui.CompletionBarWidget
-	ctx            platform.AppContext
-	miLog          *platform.NamedLogger
+	tab           *termui.TabWidget
+	cmdWidget     *termui.CmdWidget
+	completionBar *termui.CompletionBarWidget
+	ctx           platform.AppContext
+	miLog         *platform.NamedLogger
 
 	cfg       SessionConfig
 	gdbWidget *widgets.GDBWidget
@@ -52,18 +54,18 @@ type DebuggerApp struct {
 	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
 	fileBuffers map[string]*widgets.CodeWidget
 
-	bpWidget           *widgets.BreakpointWidget
-	threadWidget       *widgets.ThreadWidget
-	callstackWidget    *widgets.CallStackWidget
-	outputWidget       *widgets.OutputWidget
-	fileListWidget     *widgets.FileListWidget
-	primaryCode        *widgets.CodeWidget
-	bpRefreshMu        sync.Mutex
-	bpRefreshRunning   bool
-	bpRefreshPending   bool
-	debugInfoMu        sync.Mutex
-	debugInfoRunning   bool
-	debugInfoPending   bool
+	bpWidget         *widgets.BreakpointWidget
+	threadWidget     *widgets.ThreadWidget
+	callstackWidget  *widgets.CallStackWidget
+	outputWidget     *widgets.OutputWidget
+	fileListWidget   *widgets.FileListWidget
+	primaryCode      *widgets.CodeWidget
+	bpRefreshMu      sync.Mutex
+	bpRefreshRunning bool
+	bpRefreshPending bool
+	debugInfoMu      sync.Mutex
+	debugInfoRunning bool
+	debugInfoPending bool
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {

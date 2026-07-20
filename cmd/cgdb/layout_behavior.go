@@ -11,13 +11,12 @@ type layoutBehavior interface {
 	HandleNormalKey(a *DebuggerApp, ev *tcell.EventKey) bool
 }
 
-// standardDebugKeys is shared by default / panels / classic: Up/Down/Space go
-// to Code only when focus is Code or GDB; list panes keep their own navigation;
-// e on the Breakpoint pane stays local; n/s always step.
+// standardDebugKeys: debug keys live on the normal-mode key trie
+// (InitKeyBindings). Hook kept for future layout-specific overlays.
 type standardDebugKeys struct{}
 
 func (standardDebugKeys) HandleNormalKey(a *DebuggerApp, ev *tcell.EventKey) bool {
-	return a.handleCodeGlobalKey(ev)
+	return false
 }
 
 func (a *DebuggerApp) currentLayoutBehavior() layoutBehavior {
