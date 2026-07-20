@@ -10,8 +10,8 @@ import (
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-// ThreadWidget shows GDB threads (j/k / Up/Down selection; same keys, Enter,
-// and mouse click activate the selected thread).
+// ThreadWidget shows GDB threads (j/k / Up/Down / mouse wheel selection; same
+// keys, Enter, click, and wheel activate the selected thread).
 type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -21,7 +21,8 @@ type ThreadWidget struct {
 	items    []mcp.ThreadInfo
 	selected int
 
-	// OnActivate is called when the user activates a thread (Up/Down/j/k, Enter, or click).
+	// OnActivate is called when the user activates a thread (Up/Down/j/k,
+	// Enter, click, or mouse wheel).
 	OnActivate func(mcp.ThreadInfo)
 }
 
@@ -175,8 +176,18 @@ func (w *ThreadWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		btns := e.Buttons()
+		// Wheel moves the blue selection and activates like Enter (not view-only scroll).
+		if btns&tcell.WheelUp != 0 {
+			w.move(-1)
+			return
+		}
+		if btns&tcell.WheelDown != 0 {
+			w.move(1)
+			return
+		}
 		w.viewport.HandleEvent(e)
-		if e.Buttons()&tcell.ButtonPrimary != 0 {
+		if btns&tcell.ButtonPrimary != 0 {
 			w.syncSelectedFromViewport()
 			w.activateSelected()
 		}

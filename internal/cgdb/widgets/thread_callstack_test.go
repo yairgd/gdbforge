@@ -107,6 +107,44 @@ func TestThreadWidgetActivateOnMove(t *testing.T) {
 	}
 }
 
+func TestCallStackWidgetWheelActivates(t *testing.T) {
+	w := NewCallStackWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main"},
+		{Level: 1, Func: "foo"},
+	})
+	var got mcp.StackFrame
+	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
+	if w.Selected() != 1 || got.Func != "foo" {
+		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
+	}
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelUp, 0))
+	if w.Selected() != 0 || got.Func != "main" {
+		t.Fatalf("wheel up selected=%d activated=%v", w.Selected(), got)
+	}
+}
+
+func TestThreadWidgetWheelActivates(t *testing.T) {
+	w := NewThreadWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.ThreadInfo{
+		{ID: "1", State: "stopped", Current: true},
+		{ID: "2", State: "running"},
+	})
+	var got mcp.ThreadInfo
+	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
+	if w.Selected() != 1 || got.ID != "2" {
+		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
+	}
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelUp, 0))
+	if w.Selected() != 0 || got.ID != "1" {
+		t.Fatalf("wheel up selected=%d activated=%v", w.Selected(), got)
+	}
+}
+
 func TestListWidgetsMouseSyncSelection(t *testing.T) {
 	bp := NewBreakpointWidget()
 	bp.SetFocused(true)
