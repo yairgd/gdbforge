@@ -2,7 +2,7 @@ package main
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/xgdb/layout"
+	"github.com/yairgd/gdbx/internal/xgdb/layout"
 )
 
 // layoutBehavior is per-layout normal-mode key policy (geometry stays in

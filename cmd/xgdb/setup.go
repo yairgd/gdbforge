@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 func (a *DebuggerApp) InitB() error {

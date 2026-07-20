@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {

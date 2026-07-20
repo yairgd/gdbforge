@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/mcp"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/mcp"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // CallStackWidget shows GDB stack frames (j/k / Up/Down / mouse wheel

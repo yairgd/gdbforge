@@ -2,8 +2,8 @@ package widgets
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // FileListWidget shows GDB project source files (j/k selection; Enter opens).

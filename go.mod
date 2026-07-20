@@ -1,4 +1,4 @@
-module github.com/yairgd/cgdb-go
+module github.com/yairgd/gdbx
 
 go 1.25.5
 

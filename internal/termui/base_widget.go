@@ -2,8 +2,8 @@ package termui
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/commands"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/commands"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 const (

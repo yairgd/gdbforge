@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/creack/pty"
-	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/gdbx/internal/core"
 	"golang.org/x/sys/unix"
 )
 

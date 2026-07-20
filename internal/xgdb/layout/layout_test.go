@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 type stubPane struct {

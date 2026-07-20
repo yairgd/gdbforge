@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/commands"
+	"github.com/yairgd/gdbx/internal/commands"
 )
 
 // ExapData builds the command hierarchy on commandReg.Root:

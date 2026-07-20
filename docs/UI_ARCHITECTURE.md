@@ -1,6 +1,6 @@
 # UI Architecture
 
-This document covers the cgdb-go presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
+This document covers the xGDB presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
 
 **Companion docs:** [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [RENDERING.md](RENDERING.md) · [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -402,7 +402,7 @@ Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`
 
 ## Event handling
 
-cgdb-go separates **terminal events** from **domain events**.
+xGDB separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|

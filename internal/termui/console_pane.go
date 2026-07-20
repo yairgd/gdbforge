@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 // ConsolePane is a natural REPL transcript: scrollback + walking prompt + InputLine.

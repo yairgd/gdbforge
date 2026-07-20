@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // DefaultSpec builds the multi-pane default workspace.

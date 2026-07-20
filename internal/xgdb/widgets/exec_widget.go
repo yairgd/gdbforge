@@ -2,8 +2,8 @@ package widgets
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // ExecWidget is a ConsolePane wired to an ExecClient PTY session.

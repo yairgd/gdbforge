@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/gdbx/internal/core"
 )
 
 func TestCoalesceGdbOutputBatchesChunks(t *testing.T) {

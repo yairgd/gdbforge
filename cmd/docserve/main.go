@@ -1,4 +1,4 @@
-// Command docserve serves cgdb-go documentation as HTML with Markdown and Mermaid rendering.
+// Command docserve serves xGDB documentation as HTML with Markdown and Mermaid rendering.
 //
 // Local HTTP server:
 //
@@ -7,7 +7,7 @@
 //
 // Static export (GitHub Pages):
 //
-//	go run ./cmd/docserve --export _site --base /cgdb-go/ --site-origin https://USER.github.io
+//	go run ./cmd/docserve --export _site --base /gdbx/ --site-origin https://USER.github.io
 //
 // Preview exported site:
 //
@@ -33,7 +33,7 @@ func main() {
 	port := flag.Int("port", 8765, "listen port")
 	strictPort := flag.Bool("strict-port", false, "exit if port is already in use")
 	exportDir := flag.String("export", "", "write static site to directory and exit")
-	basePath := flag.String("base", "/", "URL base path for static export (e.g. /cgdb-go/)")
+	basePath := flag.String("base", "/", "URL base path for static export (e.g. /gdbx/)")
 	siteOrigin := flag.String("site-origin", "", "absolute site origin for SEO (e.g. https://user.github.io)")
 	serveStatic := flag.String("serve-static", "", "serve a previously exported static directory")
 	flag.Parse()
@@ -78,7 +78,7 @@ func runDocServer(host string, port int, strict bool, srv *docServer) {
 	}
 
 	addr := fmt.Sprintf("http://%s:%d/", host, boundPort)
-	log.Printf("cgdb-go docs: %s", addr)
+	log.Printf("xGDB docs: %s", addr)
 	for _, name := range srv.listDocPages() {
 		if name == "README.md" {
 			continue

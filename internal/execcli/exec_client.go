@@ -1,8 +1,8 @@
 package execcli
 
 import (
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/ptyx"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/ptyx"
 )
 
 // ExecClient runs an arbitrary command attached to a PTY.

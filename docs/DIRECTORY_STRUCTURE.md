@@ -1,6 +1,6 @@
 # Directory Structure
 
-This document maps the **cgdb-go** repository packages to their responsibilities.
+This document maps the **xGDB** repository packages to their responsibilities.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEPENDENCIES.md](DEPENDENCIES.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
@@ -13,7 +13,7 @@ This document maps the **cgdb-go** repository packages to their responsibilities
 - [internal/termui](#internaltermui)
 - [internal/core](#internalcore)
 - [internal/gdb](#internalgdb)
-- [internal/xgdb](#internalcgdb)
+- [internal/xgdb](#internalxgdb)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
 - [What belongs where](#what-belongs-where)
@@ -23,9 +23,9 @@ This document maps the **cgdb-go** repository packages to their responsibilities
 ## Repository tree
 
 ```text
-cgdb-go/
+gdbx/
 ├── cmd/
-│   ├── cgdb/              # cgdb-go debugger prototype
+│   ├── xgdb/              # xGDB debugger app
 │   ├── docserve/          # Documentation HTTP server
 │   └── dbug/              # (removed — was a dev helper)
 ├── internal/
@@ -33,20 +33,20 @@ cgdb-go/
 │   ├── commands/          # Command tree, parser, DSL, key bindings ★
 │   ├── collections/       # Shared trie (keys + command children) ★
 │   ├── platform/          # Buffer, Logger, AppContext ★
-│   ├── cgdb/              # App layer: modes, app state ★
-│   │   ├── mode_manager.go
+│   ├── xgdb/              # App layer: layouts + debugger widgets ★
+│   │   ├── layout/
 │   │   └── widgets/
 │   ├── core/              # UI-agnostic domain logic ★
 │   ├── gdb/               # GDB MI2 backend ★
 │   ├── playground/        # Experiments (not production)
 │   └── tests/
-├── docs/                  # cgdb-go documentation ★
+├── docs/                  # xGDB documentation ★
 ├── go.mod
 ├── Taskfile.yml
 └── CONTRIBUTING.md
 ```
 
-★ = primary cgdb-go packages
+★ = primary xGDB packages
 
 ---
 
@@ -54,7 +54,7 @@ cgdb-go/
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/xgdb/` | `cgdb` | **cgdb-go** debugger app (`package main`, split across files) |
+| `cmd/xgdb/` | `xgdb` | **xGDB** debugger app (`package main`, split across files) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 
 ### `cmd/xgdb` layout
@@ -86,7 +86,7 @@ task build
 
 ## internal/termui
 
-**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/xgdb/widgets`.
+**xGDB TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/xgdb/widgets`.
 
 | File | Responsibility |
 |------|----------------|
@@ -129,7 +129,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/xgdb
 
-**cgdb-go application layer** — layout builders and debugger-specific widgets.
+**xGDB application layer** — layout builders and debugger-specific widgets.
 
 | Path | Responsibility |
 |------|----------------|
@@ -222,7 +222,7 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 
 **Rule:** no imports from `termui`. Output reaches UI via `Subscribe` → `GdbOutputMsg` + `EventInterrupt`.
 
-Application orchestration for cgdb-go lives in **`cmd/xgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
+Application orchestration for xGDB lives in **`cmd/xgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 
 ---
 
@@ -260,22 +260,22 @@ Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
 flowchart BT
     tcell["gdamore/tcell"]
     termui["internal/termui"]
-    cgdb_pkg["internal/xgdb"]
+    xgdb_pkg["internal/xgdb"]
     widgets["internal/xgdb/widgets"]
     core["internal/core"]
     gdb["internal/gdb"]
-    cgdb_cmd["cmd/xgdb"]
+    xgdb_cmd["cmd/xgdb"]
 
     termui --> tcell
     widgets --> termui
     widgets --> core
     gdb --> core
 
-    cgdb_cmd --> termui
-    cgdb_cmd --> cgdb_pkg
-    cgdb_cmd --> widgets
-    cgdb_cmd --> core
-    cgdb_cmd --> gdb
+    xgdb_cmd --> termui
+    xgdb_cmd --> xgdb_pkg
+    xgdb_cmd --> widgets
+    xgdb_cmd --> core
+    xgdb_cmd --> gdb
 
     gdb -.->|"must NOT import"| termui
     core -.->|"must NOT import"| termui

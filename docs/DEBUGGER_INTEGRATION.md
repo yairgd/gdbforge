@@ -1,6 +1,6 @@
 # Debugger Integration
 
-cgdb-go connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2 over a shared PTY** (`ptyx`). The same session is used by the GDB console, in-app `:AI`, and future MCP/REST frontends.
+xGDB connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2 over a shared PTY** (`ptyx`). The same session is used by the GDB console, in-app `:AI`, and future MCP/REST frontends.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -423,7 +423,7 @@ sequenceDiagram
 |-----------|------|------|
 | `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
 | `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
-| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
+| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
 | `ptyx.Client` | `ptyx/client.go` | Shared PTY mux |
 
@@ -483,7 +483,7 @@ JTAG debugging may arrive through:
 1. **OpenOCD** as transport (preferred — reuse OpenOCD adapter).
 2. Direct **JTAG library** (e.g., libftdi) for specialized hardware bring-up.
 
-cgdb-go UI would expose:
+xGDB UI would expose:
 
 - Chain scan / device selection pane.
 - TAP state indicator.

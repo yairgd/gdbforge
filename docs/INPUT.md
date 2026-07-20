@@ -1,6 +1,6 @@
 # Input System
 
-cgdb-go handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
+xGDB handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -122,8 +122,8 @@ GDB console keys are handled by shared termui pieces, then GDB-specific callback
 |-------|------|------|
 | `InputLine` | `termui/input_line.go` | Editing + history chords |
 | `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
-| `GDBWidget` | `cgdb/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
-| `ExecWidget` | `cgdb/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
+| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
+| `ExecWidget` | `internal/xgdb/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
 
 When the GDB pane is focused (insert):
 

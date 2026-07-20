@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 const (
@@ -121,7 +121,7 @@ func buildAboutLines(b vcsBuildInfo) []string {
 		"    " + AboutEmail,
 		"",
 		"GitHub:",
-		"    https://github.com/yairgd/newcgdb",
+		"    https://github.com/yairgd/gdbx",
 		"",
 		"Inspired by:",
 		"    cgdb",

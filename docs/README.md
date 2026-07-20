@@ -1,6 +1,6 @@
-# cgdb-go Documentation
+# xGDB Documentation
 
-**cgdb-go** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/xgdb`.
+**xGDB** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/xgdb`.
 
 The project targets a **cgdb-like experience** with a cleaner architecture: application models created at startup, widgets as on-demand views, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer.
 
@@ -123,15 +123,15 @@ Full rationale: [ARCHITECTURE.md](ARCHITECTURE.md#design-principles).
 ## Repository layout (summary)
 
 ```text
-cgdb-go/
+gdbx/
 ├── cmd/
-│   ├── cgdb/          # cgdb-go prototype entry point
+│   ├── xgdb/          # xGDB debugger entry point
 │   └── docserve/      # Documentation HTTP server
 ├── internal/
-│   ├── termui/        # cgdb-go terminal UI (primary)
+│   ├── termui/        # xGDB terminal UI (primary)
 │   ├── core/          # UI-agnostic logic (events, buffers)
 │   ├── gdb/           # GDB MI2 client and parsing
-│   ├── cgdb/          # App state (modes) + debugger panes
+│   ├── xgdb/          # Layouts + debugger panes
 └── docs/              # This documentation tree
 ```
 
@@ -161,4 +161,4 @@ Full tracker: [ROADMAP.md](ROADMAP.md).
 ## Related links
 
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [README.md (project root)](../README.md) — cgdb-go overview
+- [README.md (project root)](../README.md) — xGDB overview

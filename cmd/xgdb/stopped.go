@@ -8,10 +8,10 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/gdb"
-	"github.com/yairgd/cgdb-go/internal/mcp"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/gdb"
+	"github.com/yairgd/gdbx/internal/mcp"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 type codeRefreshMsg struct {

@@ -20,7 +20,7 @@ func TestAboutWidgetCachesStaticContent(t *testing.T) {
 		"0.1.0",
 		"Yair Gadelov",
 		"xGDB: Extreme Tooling Suite",
-		"https://github.com/yairgd/newcgdb",
+		"https://github.com/yairgd/gdbx",
 		"MIT License",
 	} {
 		if !strings.Contains(joined, want) {

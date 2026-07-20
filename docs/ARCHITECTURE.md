@@ -1,8 +1,8 @@
 # Architecture Overview
 
-This document describes the high-level architecture of **cgdb-go**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
+This document describes the high-level architecture of **xGDB**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
 
-**cgdb-go is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
+**xGDB is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -35,19 +35,19 @@ This document describes the high-level architecture of **cgdb-go**: subsystems, 
 
 ## System context
 
-cgdb-go runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
+xGDB runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
 
 ```mermaid
 flowchart LR
     User["Developer"]
     Term["Terminal"]
-    cgdb-go["cgdb-go · TermApp"]
+    xGDB["xGDB · TermApp"]
     GDB["GDB MI2"]
     Target["Debug target"]
 
     User --> Term
-    Term <--> cgdb-go
-    cgdb-go <--> GDB
+    Term <--> xGDB
+    xGDB <--> GDB
     GDB <--> Target
 ```
 
@@ -431,7 +431,7 @@ Widgets display models. Models subscribe to application events. Services never t
 
 ### Input → action → redraw
 
-cgdb-go uses **two parallel event planes**:
+xGDB uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
@@ -549,7 +549,7 @@ Terminal input routing (modes, trie, widget dispatch) is also centralized in **`
 
 ## Design principles
 
-These principles are **non-negotiable** for cgdb-go. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
+These principles are **non-negotiable** for xGDB. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
 
 | # | Principle | Rationale |
 |---|-----------|-----------|

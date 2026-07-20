@@ -31,10 +31,10 @@ func (p pageSEO) absoluteURL() string {
 }
 
 func (p pageSEO) headTags() string {
-	title := html.EscapeString(p.Title + " — cgdb-go Docs")
+	title := html.EscapeString(p.Title + " — xGDB Docs")
 	desc := html.EscapeString(p.Description)
 	if desc == "" {
-		desc = html.EscapeString("cgdb-go documentation: Vim-inspired terminal UI framework and GDB debugger in Go.")
+		desc = html.EscapeString("xGDB documentation: Vim-inspired terminal UI framework and GDB debugger in Go.")
 	}
 
 	var b strings.Builder
@@ -48,7 +48,7 @@ func (p pageSEO) headTags() string {
 		fmt.Fprintf(&b, "  <meta property=\"og:url\" content=\"%s\">\n", html.EscapeString(canon))
 	}
 	fmt.Fprintf(&b, "  <meta property=\"og:type\" content=\"website\">\n")
-	fmt.Fprintf(&b, "  <meta property=\"og:site_name\" content=\"cgdb-go Docs\">\n")
+	fmt.Fprintf(&b, "  <meta property=\"og:site_name\" content=\"xGDB Docs\">\n")
 	fmt.Fprintf(&b, "  <meta property=\"og:title\" content=\"%s\">\n", title)
 	fmt.Fprintf(&b, "  <meta property=\"og:description\" content=\"%s\">\n", desc)
 	fmt.Fprintf(&b, "  <meta name=\"twitter:card\" content=\"summary\">\n")

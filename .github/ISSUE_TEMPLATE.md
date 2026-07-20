@@ -16,7 +16,7 @@ What actually happens?
 
 - OS:
 - Go version:
-- cgdb-go version:
+- xGDB version:
 
 ## Additional Context
 

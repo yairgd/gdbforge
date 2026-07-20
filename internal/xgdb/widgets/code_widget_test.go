@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/mcp"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/mcp"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
@@ -141,7 +141,7 @@ func TestCodeWidgetSpaceTogglesBreak(t *testing.T) {
 	w := NewCodeWidget()
 	sent := make(chan string, 4)
 	w.sess = &fakeSess{sent: sent}
-	w.path = "/home/yair/cgdb-go/hello.c"
+	w.path = "/home/yair/gdbx/hello.c"
 	w.rawLines = []string{"int main() {", "  return 0;", "}"}
 	w.selLine = 2
 
@@ -191,7 +191,7 @@ func TestCodeWidgetBreakWhileRunningInterruptsAndContinues(t *testing.T) {
 	st := platform.NewAppState()
 	st.SetInferiorRunning(true)
 	w.state = st
-	w.path = "/home/yair/cgdb-go/hello.c"
+	w.path = "/home/yair/gdbx/hello.c"
 	w.rawLines = []string{"int main() {", "  return 0;", "}"}
 	w.selLine = 2
 
@@ -217,7 +217,7 @@ func TestCodeWidgetClearWhileRunningDoesNotContinueByDefault(t *testing.T) {
 	st := platform.NewAppState()
 	st.SetInferiorRunning(true)
 	w.state = st
-	w.path = "/home/yair/cgdb-go/hello.c"
+	w.path = "/home/yair/gdbx/hello.c"
 	w.rawLines = []string{"int main() {", "  return 0;", "}"}
 	w.selLine = 2
 	w.addLocalBreak(2)
@@ -247,7 +247,7 @@ func TestCodeWidgetClearWhileRunningContinuesWhenEnabled(t *testing.T) {
 	st.SetInferiorRunning(true)
 	st.SetContinueAfterClear(true)
 	w.state = st
-	w.path = "/home/yair/cgdb-go/hello.c"
+	w.path = "/home/yair/gdbx/hello.c"
 	w.rawLines = []string{"int main() {", "  return 0;", "}"}
 	w.selLine = 2
 	w.addLocalBreak(2)

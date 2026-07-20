@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/ptyx"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/ptyx"
 )
 
 func TestNewGDBClientStartsAndCloses(t *testing.T) {

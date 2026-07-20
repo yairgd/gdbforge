@@ -44,7 +44,7 @@ Services, models, and widgets are wired in **`cmd/xgdb`**. Data flows Service �
 
 ## External dependencies (go.mod)
 
-Module path: `github.com/yairgd/cgdb-go`
+Module path: `github.com/yairgd/gdbx`
 
 | Dependency | Used by | Purpose |
 |------------|---------|---------|
@@ -72,14 +72,14 @@ flowchart BT
     ptyLib["creack/pty"]
 
     termui["internal/termui"]
-    cgdb_pkg["internal/xgdb"]
+    xgdb_pkg["internal/xgdb"]
     widgets["internal/xgdb/widgets"]
     core["internal/core"]
     ptyx["internal/ptyx"]
     gdb["internal/gdb"]
     execcli["internal/execcli"]
     mcp["internal/mcp"]
-    cgdb_cmd["cmd/xgdb"]
+    xgdb_cmd["cmd/xgdb"]
     docserve["cmd/docserve"]
 
     termui --> tcell
@@ -94,13 +94,13 @@ flowchart BT
     execcli --> ptyx
     mcp --> core
 
-    cgdb_cmd --> termui
-    cgdb_cmd --> cgdb_pkg
-    cgdb_cmd --> widgets
-    cgdb_cmd --> core
-    cgdb_cmd --> gdb
-    cgdb_cmd --> execcli
-    cgdb_cmd --> mcp
+    xgdb_cmd --> termui
+    xgdb_cmd --> xgdb_pkg
+    xgdb_cmd --> widgets
+    xgdb_cmd --> core
+    xgdb_cmd --> gdb
+    xgdb_cmd --> execcli
+    xgdb_cmd --> mcp
 
     docserve --> stdlib["Go stdlib only"]
 
@@ -125,7 +125,7 @@ flowchart BT
 | **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb` |
 | **`internal/xgdb/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
 | **`internal/xgdb`** | stdlib only | `termui`, `gdb` — app state / modes |
-| **`cmd/xgdb`** | `termui`, `cgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
+| **`cmd/xgdb`** | `termui`, `xgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
 **Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`** / **`ptyx`** / **`mcp`**, not in **`termui`**.
@@ -136,7 +136,7 @@ flowchart BT
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`cgdb`** | `cmd/xgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
+| **`xgdb`** | `cmd/xgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
 | **`docserve`** | `cmd/docserve` | stdlib only |
 
 Build all commands: `task build` or `go build ./cmd/...`.
@@ -190,4 +190,4 @@ go list -f '{{.ImportPath}} imports {{.Imports}}' ./internal/... ./cmd/...
 - [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) — file layout and package responsibilities
 - [ARCHITECTURE.md](ARCHITECTURE.md) — subsystems and data flow
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB backend and event bridge
-- [OVERVIEW.md](OVERVIEW.md) — why tcell for cgdb-go
+- [OVERVIEW.md](OVERVIEW.md) — why tcell for xGDB

@@ -2,7 +2,7 @@ package termui
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 // CompletionBarWidget is chrome (not a WidgetTree leaf): one row above the

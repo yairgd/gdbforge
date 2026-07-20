@@ -1,6 +1,6 @@
 # Roadmap
 
-This document tracks **current implementation state**, **planned features**, and the **long-term vision** for cgdb-go.
+This document tracks **current implementation state**, **planned features**, and the **long-term vision** for xGDB.
 
 **Companion docs:** [OVERVIEW.md](OVERVIEW.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -19,7 +19,7 @@ This document tracks **current implementation state**, **planned features**, and
 
 ## Current state
 
-cgdb-go is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
+xGDB is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
 
 ### Component status
 
@@ -68,7 +68,7 @@ go run ./cmd/docserve    # documentation browser
 
 ```mermaid
 gantt
-    title cgdb-go roadmap (indicative)
+    title xGDB roadmap (indicative)
     dateFormat YYYY-MM
     section Foundation
         Split tree + Grid           :done, m1, 2025-01, 2025-06
@@ -155,7 +155,7 @@ Dates are indicative — adjust as development progresses.
 
 ## Long-term vision
 
-cgdb-go should become a **terminal debugger platform**:
+xGDB should become a **terminal debugger platform**:
 
 1. **Primary choice** for developers who want cgdb ergonomics with modern extensibility.
 2. **Embedded-first** — OpenOCD/JTAG workflows alongside GDB.

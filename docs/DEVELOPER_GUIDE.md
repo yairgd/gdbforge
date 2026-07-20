@@ -1,6 +1,6 @@
 # Developer Guide
 
-**Audience:** engineers onboarding to cgdb-go, code reviewers, and contributors implementing UI or debugger features.
+**Audience:** engineers onboarding to xGDB, code reviewers, and contributors implementing UI or debugger features.
 
 **Companion docs:** [README.md](README.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -161,7 +161,7 @@ go test ./...       # run tests
 
 See [HOSTING.md](HOSTING.md).
 
-### Run cgdb-go prototype
+### Run xGDB prototype
 
 ```bash
 go run ./cmd/xgdb
@@ -352,7 +352,7 @@ In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capt
 
 ## Debugging with Delve
 
-Debug the cgdb-go prototype:
+Debug the xGDB prototype:
 
 ```bash
 dlv debug ./cmd/xgdb --headless --listen=:2346 --api-version=2

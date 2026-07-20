@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 // SendGdbCmd writes a GDB CLI/MI command on the shared PTY.

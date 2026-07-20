@@ -3,7 +3,7 @@
 package layout
 
 import (
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // Named layouts registered with AppState / :layout.

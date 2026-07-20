@@ -39,7 +39,7 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
-	system := "You are a debugging assistant inside cgdb-go. Use the gdb_command tool to run GDB/MI commands on the live session. Prefer short commands. Explain findings clearly."
+	system := "You are a debugging assistant inside xGDB. Use the gdb_command tool to run GDB/MI commands on the live session. Prefer short commands. Explain findings clearly."
 	tools := []any{
 		map[string]any{
 			"name":        "gdb_command",
@@ -161,7 +161,7 @@ func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) 
 		model = "gpt-4o-mini"
 	}
 	messages := []map[string]any{
-		{"role": "system", "content": "You are a debugging assistant inside cgdb-go. Use gdb_command to run GDB on the live session."},
+		{"role": "system", "content": "You are a debugging assistant inside xGDB. Use gdb_command to run GDB on the live session."},
 		{"role": "user", "content": question},
 	}
 	tools := []map[string]any{{

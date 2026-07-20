@@ -1,7 +1,7 @@
 package core
 
 // Event is the domain event interface for debugger backends.
-// cgdb-go's terminal UI bus uses termui.Event instead.
+// xGDB's terminal UI bus uses termui.Event instead.
 type Event interface {
 	Type() string
 }

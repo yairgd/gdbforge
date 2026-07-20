@@ -1,4 +1,4 @@
-# Hosting cgdb-go Documentation
+# Hosting xGDB Documentation
 
 ## What lives in the repository
 
@@ -20,7 +20,7 @@ After clone:
 
 ```bash
 git clone <repo-url>
-cd cgdb-go
+cd gdbx
 ./docs/serve.sh
 ```
 
@@ -102,7 +102,7 @@ The same viewer works as a static site — no Go runtime on GitHub Pages.
 ### Export locally
 
 ```bash
-go run ./cmd/docserve --export _site --base /cgdb-go/ \
+go run ./cmd/docserve --export _site --base /gdbx/ \
   --site-origin https://YOUR_USER.github.io
 # or:
 task docs:export
@@ -111,7 +111,7 @@ task docs:export
 | Flag | Purpose |
 |------|---------|
 | `--export DIR` | Write static site to `DIR` and exit |
-| `--base PATH` | URL prefix for project Pages (e.g. `/cgdb-go/`) |
+| `--base PATH` | URL prefix for project Pages (e.g. `/gdbx/`) |
 | `--site-origin URL` | Absolute origin for canonical / Open Graph / sitemap (e.g. `https://user.github.io`) |
 | `--serve-static DIR` | Preview a previously exported directory |
 
@@ -146,20 +146,20 @@ _site/
 ### Google Search Console
 
 1. Deploy Pages and open the site URL.
-2. In [Google Search Console](https://search.google.com/search-console), add a URL-prefix property for `https://YOUR_USER.github.io/cgdb-go/`.
+2. In [Google Search Console](https://search.google.com/search-console), add a URL-prefix property for `https://YOUR_USER.github.io/gdbx/`.
 3. Verify (HTML file upload, DNS, or meta tag — HTML file is easiest for project Pages).
-4. Submit `https://YOUR_USER.github.io/cgdb-go/sitemap.xml`.
+4. Submit `https://YOUR_USER.github.io/gdbx/sitemap.xml`.
 
 ### Preview exported site
 
 ```bash
 task docs:preview
 # equivalent:
-go run ./cmd/docserve --export _site --base /cgdb-go/
+go run ./cmd/docserve --export _site --base /gdbx/
 go run ./cmd/docserve --serve-static _site --port 8766
 ```
 
-Open `http://127.0.0.1:8766/cgdb-go/` when previewing with the default project base path.
+Open `http://127.0.0.1:8766/gdbx/` when previewing with the default project base path.
 
 ---
 
@@ -182,15 +182,15 @@ Workflow: `.github/workflows/docs.yml`
 Project site URL:
 
 ```text
-https://<github-user>.github.io/cgdb-go/
+https://<github-user>.github.io/gdbx/
 ```
 
-Replace `cgdb-go` with your repository name.
+Replace `xGDB` with your repository name.
 
 Manual deploy:
 
 ```bash
-go run ./cmd/docserve --export _site --base /cgdb-go/
+go run ./cmd/docserve --export _site --base /gdbx/
 # upload _site/ contents to gh-pages branch or Pages artifact
 ```
 
@@ -213,8 +213,8 @@ GitHub Actions deploys docs automatically (see above).
 Manual artifact:
 
 ```bash
-go run ./cmd/docserve --export _site --base /cgdb-go/
-tar czf cgdb-go-docs.tar.gz _site/
+go run ./cmd/docserve --export _site --base /gdbx/
+tar czf gdbx-docs.tar.gz _site/
 ```
 
 ---

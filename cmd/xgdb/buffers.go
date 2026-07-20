@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // ensureCodeBuffer returns the CodeWidget for path, creating it if needed.

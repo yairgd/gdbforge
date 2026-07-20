@@ -3,13 +3,13 @@ package main
 import (
 	"sync"
 
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/commands"
-	"github.com/yairgd/cgdb-go/internal/core"
-	"github.com/yairgd/cgdb-go/internal/execcli"
-	"github.com/yairgd/cgdb-go/internal/mcp"
-	"github.com/yairgd/cgdb-go/internal/platform"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/commands"
+	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbx/internal/execcli"
+	"github.com/yairgd/gdbx/internal/mcp"
+	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 const (

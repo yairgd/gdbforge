@@ -1,6 +1,6 @@
 package layout
 
-import "github.com/yairgd/cgdb-go/internal/termui"
+import "github.com/yairgd/gdbx/internal/termui"
 
 // ClassicSpec builds the original cgdb view: Code over GDB, full width.
 type ClassicSpec struct{}

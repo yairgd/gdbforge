@@ -1,4 +1,4 @@
-# Contributing to cgdb-go
+# Contributing to xGDB
 
 Thank you for your interest in contributing.
 

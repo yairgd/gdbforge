@@ -3,7 +3,7 @@ package widgets
 import (
 	"testing"
 
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 func TestSendGdbCmdFrameWhileRunningDoesNotContinue(t *testing.T) {

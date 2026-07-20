@@ -33,7 +33,7 @@ func TestConsumeEscapeSGR(t *testing.T) {
 }
 
 func TestConsumeEscapeOSC(t *testing.T) {
-	text := "\x1b]0;yair@localhost cgdb-go\x07rest"
+	text := "\x1b]0;yair@localhost xGDB\x07rest"
 	next, _, ok := consumeEscape(text, 0, tcell.StyleDefault, tcell.StyleDefault)
 	if !ok {
 		t.Fatal("expected OSC consumed")

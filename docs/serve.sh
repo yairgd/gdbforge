@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Serve cgdb-go documentation locally.
+# Serve xGDB documentation locally.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

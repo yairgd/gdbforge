@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/yairgd/cgdb-go/internal/xgdb/layout"
-	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/xgdb/layout"
+	"github.com/yairgd/gdbx/internal/xgdb/widgets"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // OnLayout applies a named workspace layout (:layout panels|default|classic).

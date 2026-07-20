@@ -1,6 +1,6 @@
 package layout
 
-import "github.com/yairgd/cgdb-go/internal/termui"
+import "github.com/yairgd/gdbx/internal/termui"
 
 // Panels ratios: left Code+GDB 2/3; right Output 1/2 over bottom half;
 // bottom half = (Threads | Callstack) 2/3 over Breakpoints 1/3.

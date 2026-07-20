@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/gdbx/internal/core"
 )
 
 type fakeSession struct {

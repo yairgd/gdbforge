@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/commands"
+	"github.com/yairgd/gdbx/internal/commands"
 )
 
 func TestBaseWidgetBindKeyUp(t *testing.T) {

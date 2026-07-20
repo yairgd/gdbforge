@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"github.com/yairgd/cgdb-go/internal/collections"
-	"github.com/yairgd/cgdb-go/internal/platform"
+	"github.com/yairgd/gdbx/internal/collections"
+	"github.com/yairgd/gdbx/internal/platform"
 )
 
 type CommandRegistry struct {

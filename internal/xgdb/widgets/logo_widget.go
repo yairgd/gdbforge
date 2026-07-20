@@ -4,7 +4,7 @@ import (
 	"unicode/utf8"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/termui"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 // LogoWidget shows the xgdb banner in the code leaf until source is opened.

@@ -3,7 +3,7 @@ package ptyx
 import (
 	"testing"
 
-	"github.com/yairgd/cgdb-go/internal/core"
+	"github.com/yairgd/gdbx/internal/core"
 )
 
 func TestFanOutDeliversToMultipleSubscribers(t *testing.T) {
