@@ -44,20 +44,60 @@
 
 Deeper architecture notes live under [docs/](docs/).
 
-## Quick start
+## Install and run (PC)
 
-Requires Go and `gdb` on `PATH`.
+### Requirements
+
+- Linux PC (or similar) with a terminal
+- [Go](https://go.dev/dl/) (module requires a recent Go toolchain)
+- `gdb` and `gcc` on `PATH` (`sudo apt install gdb gcc` on Debian/Ubuntu)
+
+### Download
 
 ```bash
-# from the repository root
-go run ./cmd/xgdb -- ./yourprog
-
-# or build
-go build -o bin/xgdb ./cmd/xgdb
-./bin/xgdb -- ./yourprog
+git clone https://github.com/yairgd/gdbx.git
+cd gdbx
 ```
 
-Open help inside the app with `:help`.
+### Build xGDB
+
+```bash
+go build -o bin/xgdb ./cmd/xgdb
+# or: make build
+```
+
+### Hello world example
+
+Build a tiny C program with debug info and **no** optimization so stepping and breakpoints behave as expected:
+
+```bash
+cat > hello.c <<'EOF'
+#include <stdio.h>
+
+int main(void) {
+    printf("hello, xgdb\n");
+    return 0;
+}
+EOF
+
+gcc -O0 -g -o hello hello.c
+```
+
+Run it under xGDB:
+
+```bash
+./bin/xgdb ./hello
+# or without installing the binary first:
+go run ./cmd/xgdb ./hello
+```
+
+Inside the app: press `i` to type in the GDB console, or use `:` for commands. Open the manual with `:help`. Quit with `:quit` or Ctrl-D.
+
+Optional: pick another GDB binary with `-d`:
+
+```bash
+./bin/xgdb -d /usr/bin/gdb ./hello
+```
 
 ---
 
