@@ -52,6 +52,8 @@ func (w *ThreadWidget) SetAppState(st *platform.AppState) {
 func (w *ThreadWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 }
 
@@ -94,8 +96,7 @@ func (w *ThreadWidget) move(delta int) {
 	w.selected = (w.selected + delta%n + n) % n
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
-	w.viewport.Left = 0
-	w.viewport.EnsureCursorVisible()
+	w.viewport.EnsureLineVisible()
 	w.activateSelected()
 }
 
@@ -166,7 +167,7 @@ func (w *ThreadWidget) rebuild() {
 	}
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
-	w.viewport.EnsureCursorVisible()
+	w.viewport.EnsureLineVisible()
 }
 
 func (w *ThreadWidget) HandleFocusKey(ev *tcell.EventKey) bool {
@@ -226,3 +227,9 @@ func (w *ThreadWidget) LinesForTest() []string {
 	}
 	return out
 }
+
+// ViewportLeftForTest exposes the horizontal scroll offset for unit tests.
+func (w *ThreadWidget) ViewportLeftForTest() int {
+	return w.viewport.Left
+}
+

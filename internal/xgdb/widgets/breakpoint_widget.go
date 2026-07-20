@@ -67,6 +67,8 @@ func (w *BreakpointWidget) SetPTY(sess core.Session, state *platform.AppState) {
 func (w *BreakpointWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 	w.BindKeyFunc("toggle", func(args ...any) { w.toggleSelected() }, "e")
 	w.BindKeyFunc("delete", func(args ...any) { w.deleteSelected() }, "d")
@@ -133,8 +135,7 @@ func (w *BreakpointWidget) move(delta int) {
 	w.selected = (w.selected + delta%n + n) % n
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
-	w.viewport.Left = 0
-	w.viewport.EnsureCursorVisible()
+	w.viewport.EnsureLineVisible()
 	w.activateSelected()
 }
 
@@ -258,7 +259,11 @@ func (w *BreakpointWidget) ToggleAtFileLine(file string, line int, codeHasEnable
 }
 
 func breakLoc(it mcp.BreakInfo) string {
-	return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
+	file := it.File
+	if file == "" {
+		file = "?"
+	}
+	return fmt.Sprintf("%s:%d", file, it.Line)
 }
 
 func (w *BreakpointWidget) sendMI(cmd string) {
@@ -341,11 +346,11 @@ func (w *BreakpointWidget) rebuild() {
 		if it.Enabled {
 			en = "y"
 		}
-		num := "-"
+		num := "  -"
 		if it.Number > 0 {
-			num = fmt.Sprintf("%d", it.Number)
+			num = fmt.Sprintf("%3d", it.Number)
 		}
-		loc := fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
+		loc := breakLoc(it)
 		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s", num, en, loc))
 	}
 	w.viewport.CursorLine = w.selected

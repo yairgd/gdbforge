@@ -46,6 +46,8 @@ func (w *FileListWidget) SetAppState(st *platform.AppState) {
 func (w *FileListWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>")
 }
 
@@ -88,8 +90,7 @@ func (w *FileListWidget) move(delta int) {
 	w.selected = (w.selected + delta%n + n) % n
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
-	w.viewport.Left = 0
-	w.viewport.EnsureCursorVisible()
+	w.viewport.EnsureLineVisible()
 }
 
 func (w *FileListWidget) clampLine(line int) int {

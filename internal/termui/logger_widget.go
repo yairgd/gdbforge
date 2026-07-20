@@ -44,6 +44,8 @@ func NewLoggerWidget(ctx platform.AppContext) *LoggerWidget {
 func (m *LoggerWidget) initKeyBindings() {
 	m.BindKeyFunc("scroll-up", func(args ...any) { m.viewport.ScrollLineUp() }, "<Up>", "k")
 	m.BindKeyFunc("scroll-down", func(args ...any) { m.viewport.ScrollLineDown() }, "<Down>", "j")
+	m.BindKeyFunc("scroll-left", func(args ...any) { m.viewport.ViewScrollColLeft() }, "<Left>")
+	m.BindKeyFunc("scroll-right", func(args ...any) { m.viewport.ViewScrollColRight() }, "<Right>")
 	m.BindKeyFunc("page-up", func(args ...any) { m.viewport.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
 	m.BindKeyFunc("page-down", func(args ...any) { m.viewport.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
 	m.BindKeyFunc("home", func(args ...any) { m.viewport.ScrollHome() }, "<Home>", "g")

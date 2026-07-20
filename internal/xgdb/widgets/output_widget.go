@@ -47,6 +47,8 @@ func (w *OutputWidget) initKeyBindings() {
 	vp := w.console.Viewport()
 	w.BindKeyFunc("scroll-up", func(args ...any) { vp.ScrollLineUp() }, "<Up>", "k")
 	w.BindKeyFunc("scroll-down", func(args ...any) { vp.ScrollLineDown() }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { vp.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { vp.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("page-up", func(args ...any) { vp.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
 	w.BindKeyFunc("page-down", func(args ...any) { vp.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("home", func(args ...any) { vp.ScrollHome() }, "<Home>", "g")

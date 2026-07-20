@@ -5,6 +5,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbx/internal/mcp"
+	"github.com/yairgd/gdbx/internal/termui"
 )
 
 func TestThreadWidgetSetItems(t *testing.T) {
@@ -200,5 +201,42 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 	cs.syncSelectedFromViewport()
 	if cs.selected != 1 {
 		t.Fatalf("callstack selected=%d", cs.selected)
+	}
+}
+
+func TestThreadWidgetHorizontalScrollKeys(t *testing.T) {
+	w := NewThreadWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.ThreadInfo{
+		{ID: "thread-with-a-very-long-identifier-0001", State: "stopped-waiting", File: "/tmp/a.c", Line: 99, Current: true},
+		{ID: "2", State: "running", File: "b.c", Line: 2},
+	})
+	// Establish pane width so ViewScrollColRight can advance Left.
+	g := termui.NewGrid(8, 4)
+	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 8, 4)))
+
+	sel := w.Selected()
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)) {
+		t.Fatal("Right not handled")
+	}
+	if w.ViewportLeftForTest() != 1 {
+		t.Fatalf("Left=%d want 1 (line=%q)", w.ViewportLeftForTest(), w.LinesForTest()[0])
+	}
+	if w.Selected() != sel {
+		t.Fatalf("selection changed from %d to %d", sel, w.Selected())
+	}
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)) {
+		t.Fatal("Left not handled")
+	}
+	if w.ViewportLeftForTest() != 0 {
+		t.Fatalf("Left=%d want 0", w.ViewportLeftForTest())
+	}
+	// Up/Down must not wipe horizontal offset.
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)) {
+		t.Fatal("Right")
+	}
+	_ = w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+	if w.ViewportLeftForTest() != 1 {
+		t.Fatalf("Left reset on move: %d", w.ViewportLeftForTest())
 	}
 }

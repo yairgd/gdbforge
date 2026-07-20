@@ -29,6 +29,9 @@ func TestBreakpointWidgetToggleRemovesFromGDBKeepsRow(t *testing.T) {
 	if len(w.EnabledBreakInfos()) != 1 {
 		t.Fatal("expected one enabled")
 	}
+	if lines := w.LinesForTest(); len(lines) != 1 || lines[0] != "  1  y  /tmp/a.c:10" {
+		t.Fatalf("display=%q", lines)
+	}
 
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)) {
 		t.Fatal("e")
@@ -55,7 +58,7 @@ func TestBreakpointWidgetToggleRemovesFromGDBKeepsRow(t *testing.T) {
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)) {
 		t.Fatal("e re-enable")
 	}
-	if got := <-sent; got != "break a.c:10" {
+	if got := <-sent; got != "break /tmp/a.c:10" {
 		t.Fatalf("reinsert cmd=%q", got)
 	}
 	if !w.Items()[0].Enabled {

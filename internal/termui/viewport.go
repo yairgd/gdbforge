@@ -1,6 +1,8 @@
 package termui
 
 import (
+	"unicode/utf8"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbx/internal/platform"
 )
@@ -241,6 +243,59 @@ func (v *Viewport) ViewScrollLineDown() {
 	v.clampCursorIntoView()
 	v.maybeFollowTail()
 	v.extendSelectionAfterScroll(1)
+}
+
+// lineContentWidth returns how many columns a buffer line occupies for
+// horizontal scrolling (visible ANSI cells, or rune count otherwise).
+func (v *Viewport) lineContentWidth(line string) int {
+	if v.ANSI {
+		return VisibleANSIWidth(line)
+	}
+	return utf8.RuneCountInString(line)
+}
+
+// maxContentWidth is the widest line in the buffer (columns).
+func (v *Viewport) maxContentWidth() int {
+	if v.Buffer == nil {
+		return 0
+	}
+	max := 0
+	n := v.Buffer.NumLines()
+	for i := 0; i < n; i++ {
+		if w := v.lineContentWidth(v.Buffer.Line(i)); w > max {
+			max = w
+		}
+	}
+	return max
+}
+
+// maxLeft is the largest Left such that some content remains visible.
+func (v *Viewport) maxLeft() int {
+	if v.width <= 0 {
+		return 0
+	}
+	max := v.maxContentWidth() - v.width
+	if max < 0 {
+		return 0
+	}
+	return max
+}
+
+// ViewScrollColLeft shifts the viewport one column left (view-only).
+func (v *Viewport) ViewScrollColLeft() {
+	v.leaveFollowTail()
+	if v.Left > 0 {
+		v.Left--
+	}
+}
+
+// ViewScrollColRight shifts the viewport one column right when content is
+// wider than the pane (view-only).
+func (v *Viewport) ViewScrollColRight() {
+	v.leaveFollowTail()
+	if v.Left < v.maxLeft() {
+		v.Left++
+	}
 }
 
 func (v *Viewport) ScrollPageUp(pageSize int) {
@@ -784,6 +839,38 @@ func (v *Viewport) EnsureCursorVisible() {
 		h = 20
 	}
 	v.EnsureVisible(w, h)
+}
+
+// EnsureLineVisible scrolls vertically so CursorLine is on-screen without
+// changing the horizontal offset (for list panes with view-only Left/Right).
+func (v *Viewport) EnsureLineVisible() {
+	h := v.height
+	if h <= 0 {
+		h = 20
+	}
+	if v.CursorLine < v.Top {
+		v.Top = v.CursorLine
+	}
+	if v.CursorLine >= v.Top+h {
+		v.Top = v.CursorLine - h + 1
+	}
+	if v.Buffer == nil {
+		return
+	}
+	last := v.Buffer.NumLines() - 1
+	if last < 0 {
+		return
+	}
+	maxTop := last
+	if last >= h-1 {
+		maxTop = last - h + 1
+	}
+	if v.Top > maxTop {
+		v.Top = maxTop
+	}
+	if v.Top < 0 {
+		v.Top = 0
+	}
 }
 
 func (v *Viewport) clampCursorCol() {
