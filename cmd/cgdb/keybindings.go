@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
+
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
@@ -67,7 +71,7 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"<Down>",
 	)
 	a.keyBindings.Bind(
-		commands.NewHandledCommand("code-break", a.tryCodeBreakAtSel),
+		commands.NewHandledCommand("space-break", a.trySpaceBreak),
 		" ",
 	)
 	a.keyBindings.Bind(
@@ -96,6 +100,10 @@ func (a *DebuggerApp) initInsertKeyBindings() {
 	a.insertKeys.Bind(
 		commands.NewHandledCommand("code-step", a.tryInsertCodeStep),
 		"s",
+	)
+	a.insertKeys.Bind(
+		commands.NewHandledCommand("space-break", a.trySpaceBreak),
+		" ",
 	)
 }
 
@@ -192,6 +200,16 @@ func (a *DebuggerApp) tryCodeBreakAtSel() bool {
 	return false
 }
 
+// trySpaceBreak toggles a breakpoint: Call Stack selection, or Code cursor
+// (same Space behavior as CodeWidget). Falls through for other panes.
+func (a *DebuggerApp) trySpaceBreak() bool {
+	if a.focusedIsCallstack() {
+		a.toggleCallstackBreak()
+		return true
+	}
+	return a.tryCodeBreakAtSel()
+}
+
 func (a *DebuggerApp) tryCodeToggleEnable() bool {
 	if a.focusedIsBreakpoint() {
 		return false
@@ -219,4 +237,48 @@ func (a *DebuggerApp) tryInsertCodeStep() bool {
 	}
 	a.sendGdbExec("step")
 	return true
+}
+
+// toggleCallstackBreak inserts or clears a breakpoint at the selected frame
+// (same toggle semantics as CodeWidget Space).
+func (a *DebuggerApp) toggleCallstackBreak() {
+	cs := a.focusedCallstack()
+	if cs == nil {
+		return
+	}
+	fr, ok := cs.SelectedFrame()
+	if !ok || fr.File == "" || fr.Line < 1 {
+		return
+	}
+	if a.gdbWidget == nil {
+		return
+	}
+	sess := a.gdbWidget.Session()
+	if sess == nil {
+		return
+	}
+	loc := fmt.Sprintf("%s:%d", filepath.Base(fr.File), fr.Line)
+	cmd := "break " + loc
+	if a.hasBreakAt(fr.File, fr.Line) {
+		cmd = "clear " + loc
+	}
+	widgets.SendGdbCmd(sess, a.State(), cmd)
+	a.onBreakpointsChanged()
+	a.RequestFrame()
+}
+
+func (a *DebuggerApp) hasBreakAt(file string, line int) bool {
+	if a.bpWidget == nil || file == "" || line < 1 {
+		return false
+	}
+	base := filepath.Base(file)
+	for _, it := range a.bpWidget.Items() {
+		if it.Line != line {
+			continue
+		}
+		if it.File == file || filepath.Base(it.File) == base {
+			return true
+		}
+	}
+	return false
 }

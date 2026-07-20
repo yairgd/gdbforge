@@ -41,3 +41,17 @@ func (a *DebuggerApp) focusedIsBreakpoint() bool {
 func (a *DebuggerApp) focusedIsCode() bool {
 	return a.focusedCode() != nil
 }
+
+// focusedCallstack returns the focused pane as a CallStackWidget, or nil.
+func (a *DebuggerApp) focusedCallstack() *widgets.CallStackWidget {
+	cs, ok := a.focusedWidget().(*widgets.CallStackWidget)
+	if !ok || cs == nil {
+		return nil
+	}
+	return cs
+}
+
+// focusedIsCallstack reports whether the Call Stack pane has focus.
+func (a *DebuggerApp) focusedIsCallstack() bool {
+	return a.focusedCallstack() != nil
+}

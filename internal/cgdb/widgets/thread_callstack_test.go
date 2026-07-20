@@ -126,6 +126,26 @@ func TestCallStackWidgetWheelActivates(t *testing.T) {
 	}
 }
 
+func TestCallStackWidgetSelectedFrame(t *testing.T) {
+	w := NewCallStackWidget()
+	if _, ok := w.SelectedFrame(); ok {
+		t.Fatal("empty list should have no frame")
+	}
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main", File: "/tmp/a.c", Line: 10},
+		{Level: 1, Func: "foo", File: "/tmp/b.c", Line: 20},
+	})
+	fr, ok := w.SelectedFrame()
+	if !ok || fr.Func != "main" || fr.Line != 10 {
+		t.Fatalf("selected=%v ok=%v", fr, ok)
+	}
+	w.move(1)
+	fr, ok = w.SelectedFrame()
+	if !ok || fr.Func != "foo" || fr.Line != 20 {
+		t.Fatalf("after move selected=%v ok=%v", fr, ok)
+	}
+}
+
 func TestThreadWidgetWheelActivates(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)

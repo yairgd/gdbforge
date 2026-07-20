@@ -208,6 +208,14 @@ func (w *CallStackWidget) Draw(c termui.Canvas) {
 
 func (w *CallStackWidget) Selected() int { return w.selected }
 
+// SelectedFrame returns the highlighted stack frame, or false if none.
+func (w *CallStackWidget) SelectedFrame() (mcp.StackFrame, bool) {
+	if w.selected < 0 || w.selected >= len(w.items) {
+		return mcp.StackFrame{}, false
+	}
+	return w.items[w.selected], true
+}
+
 func (w *CallStackWidget) Items() []mcp.StackFrame {
 	return append([]mcp.StackFrame(nil), w.items...)
 }
