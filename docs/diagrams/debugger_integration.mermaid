@@ -1,17 +1,29 @@
 sequenceDiagram
-    participant UI as GDBWidget
-    participant Cons as ConsolePane
-    participant Core as core.Debugger
+    participant User as User
+    participant GDBPane as GDBWidget
+    participant IOPane as IO console
     participant Client as gdb.GDBClient
-    participant PTY as GDB PTY
+    participant GDBPTY as PTY#1 GDB
+    participant InfPTY as PTY#2 inferior
     participant GDB as GDB MI2
+    participant Prog as Program
 
-    UI->>Cons: OnSubmit / EchoSubmit
-    UI->>Core: Send("break main")
-    Core->>Client: Write PTY
-    Client->>GDB: MI command
-    GDB-->>PTY: ~console / ^done / *stopped
-    PTY-->>Client: Read chunk
-    Client-->>UI: GdbOutputMsg via PostEvent
-    UI->>UI: GdbInputState.PushRaw → MiUpdate
-    UI->>Cons: AppendLines → redraw
+    Note over Client,InfPTY: Startup
+    Client->>GDBPTY: ptyx.New(gdb --interpreter=mi2)
+    Client->>InfPTY: ptyx.OpenTTY()
+    Client->>GDBPTY: -inferior-tty-set /dev/pts/N
+    GDBPTY->>GDB: MI command
+    Note over GDB,Prog: run attaches program to PTY#2 slave
+
+    User->>GDBPane: Enter "break main"
+    GDBPane->>Client: Send (GDB PTY)
+    Client->>GDBPTY: Write
+    GDBPTY->>GDB: CLI/MI
+    GDB-->>GDBPTY: ~ / ^done / *stopped
+    GDBPTY-->>GDBPane: GdbOutputMsg
+
+    User->>IOPane: Enter "hello"
+    IOPane->>InfPTY: Send("hello\n")
+    InfPTY->>Prog: stdin
+    Prog-->>InfPTY: stdout
+    InfPTY-->>IOPane: InferiorOutputMsg

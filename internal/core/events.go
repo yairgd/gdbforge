@@ -1,7 +1,7 @@
 package core
 
 // Event is the domain event interface for debugger backends.
-// xGDB's terminal UI bus uses termui.Event instead.
+// gdbforge's terminal UI bus uses termui.Event instead.
 type Event interface {
 	Type() string
 }
@@ -30,6 +30,15 @@ type ExecOutputMsg struct {
 }
 
 func (ExecOutputMsg) Type() string { return "ExecOutputMsg" }
+
+// InferiorOutputMsg is a UI-routed chunk from the debugged program's PTY
+// (EventInterrupt → IO / OutputWidget), after -inferior-tty-set.
+type InferiorOutputMsg struct {
+	Data string
+	Err  error
+}
+
+func (InferiorOutputMsg) Type() string { return "InferiorOutputMsg" }
 
 type ConsoleOutput struct{ Text string }
 type TargetOutput struct{ Text string }

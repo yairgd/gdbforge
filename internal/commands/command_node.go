@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"github.com/yairgd/gdbx/internal/collections"
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/collections"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 type CommandRegistry struct {

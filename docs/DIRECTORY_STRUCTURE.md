@@ -1,6 +1,6 @@
 # Directory Structure
 
-This document maps the **xGDB** repository packages to their responsibilities.
+This document maps the **gdbforge** repository packages to their responsibilities.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEPENDENCIES.md](DEPENDENCIES.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
@@ -13,7 +13,7 @@ This document maps the **xGDB** repository packages to their responsibilities.
 - [internal/termui](#internaltermui)
 - [internal/core](#internalcore)
 - [internal/gdb](#internalgdb)
-- [internal/xgdb](#internalxgdb)
+- [internal/gdbforge](#internalgdbforge)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
 - [What belongs where](#what-belongs-where)
@@ -23,9 +23,9 @@ This document maps the **xGDB** repository packages to their responsibilities.
 ## Repository tree
 
 ```text
-gdbx/
+gdbforge/
 ├── cmd/
-│   ├── xgdb/              # xGDB debugger app
+│   ├── gdbforge/              # gdbforge debugger app
 │   ├── docserve/          # Documentation HTTP server
 │   └── dbug/              # (removed — was a dev helper)
 ├── internal/
@@ -33,20 +33,20 @@ gdbx/
 │   ├── commands/          # Command tree, parser, DSL, key bindings ★
 │   ├── collections/       # Shared trie (keys + command children) ★
 │   ├── platform/          # Buffer, Logger, AppContext ★
-│   ├── xgdb/              # App layer: layouts + debugger widgets ★
+│   ├── gdbforge/              # App layer: layouts + debugger widgets ★
 │   │   ├── layout/
 │   │   └── widgets/
 │   ├── core/              # UI-agnostic domain logic ★
 │   ├── gdb/               # GDB MI2 backend ★
 │   ├── playground/        # Experiments (not production)
 │   └── tests/
-├── docs/                  # xGDB documentation ★
+├── docs/                  # gdbforge documentation ★
 ├── go.mod
 ├── Taskfile.yml
 └── CONTRIBUTING.md
 ```
 
-★ = primary xGDB packages
+★ = primary gdbforge packages
 
 ---
 
@@ -54,10 +54,10 @@ gdbx/
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/xgdb/` | `xgdb` | **xGDB** debugger app (`package main`, split across files) |
+| `cmd/gdbforge/` | `gdbforge` | **gdbforge** debugger app (`package main`, split across files) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 
-### `cmd/xgdb` layout
+### `cmd/gdbforge` layout
 
 | File | Responsibility |
 |------|----------------|
@@ -68,7 +68,7 @@ gdbx/
 | `keybindings.go` | `InitKeyBindings` |
 | `actions.go` | Command action methods (focus, split, quit, …) |
 | `input.go` | Mode key handlers, mouse, resize |
-| `layout.go` | `:layout` apply / completions; wires `internal/xgdb/layout` builders |
+| `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
 | `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
@@ -86,7 +86,7 @@ task build
 
 ## internal/termui
 
-**xGDB TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/xgdb/widgets`.
+**gdbforge TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/gdbforge/widgets`.
 
 | File | Responsibility |
 |------|----------------|
@@ -127,21 +127,21 @@ task build
 
 See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, `CommandRegistry` = owns, `CommandParser` = navigates).
 
-## internal/xgdb
+## internal/gdbforge
 
-**xGDB application layer** — layout builders and debugger-specific widgets.
+**gdbforge application layer** — layout builders and debugger-specific widgets.
 
 | Path | Responsibility |
 |------|----------------|
 | `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
-| `layout/default.go` | Multi-pane: Code/GDB left; Output / BP / Threads / Callstack right |
-| `layout/panels.go` | Code/GDB left; Output over (Threads\|Callstack) over Breakpoints |
+| `layout/default.go` | Multi-pane: Code/GDB left; IO / BP / Threads / Callstack right |
+| `layout/panels.go` | Code/GDB left; IO over (Threads\|Callstack) over Breakpoints |
 | `layout/classic.go` | Original cgdb: full-width Code over GDB |
 | `widgets/code_widget.go` | Per-file source (`:e` / `:b`); `━━▶` PC; Space break toggle; red BP marks |
 | `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
 | `widgets/thread_widget.go` | Builtin `:b threads`; list from `-thread-info` on stop |
 | `widgets/callstack_widget.go` | Builtin `:b callstack`; frames from `-stack-list-frames` on stop |
-| `widgets/output_widget.go` | Builtin `:b output`; inferior stdout (`@` stream); `\n`/`\r`/`\t` |
+| `widgets/output_widget.go` | Builtin `:b io` (alias `:b output`); inferior stdin/stdout via `ptyx.TTY` |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |
 | `widgets/logo_widget.go` | Startup splash in the code leaf until source loads |
@@ -162,11 +162,12 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/ptyx
 
-**Shared PTY session** used by GDB and exec backends.
+**PTY helpers** for GDB (MI), inferior I/O, and exec backends.
 
 | File | Responsibility |
 |------|----------------|
-| `client.go` | `ptyx.Client` — exclusive `WithWrite`, `Subscribe` fan-out, `Send` / `SetSize` / `Close` |
+| `client.go` | `ptyx.Client` — process PTY: exclusive `WithWrite`, `Subscribe` fan-out, `Send` / `SetSize` / `Close` |
+| `tty.go` | `ptyx.TTY` — bare master/slave for inferior stdin/stdout (`OpenTTY`, slave path for `-inferior-tty-set`) |
 
 ## internal/execcli
 
@@ -178,7 +179,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 See [EXEC_SHELL.md](EXEC_SHELL.md).
 
-`cmd/xgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
+`cmd/gdbforge` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 
 ```mermaid
 flowchart TB
@@ -198,7 +199,7 @@ Today this package holds shared primitives (`Buffer`, `Viewport`, `Debugger` int
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Backend events (`PtyOutputMsg`, UI-routed `GdbOutputMsg` / `ExecOutputMsg`, …) |
+| `events.go` | Backend events (`PtyOutputMsg`, `GdbOutputMsg` / `ExecOutputMsg` / `InferiorOutputMsg`, …) |
 | `debugger.go` | `Debugger` / `Session` / `PTYWriter` — send, Subscribe, WithWrite |
 | `buffer.go` | Line-oriented text storage — building block for text-oriented models |
 | `viewport.go` | Scroll window over buffer |
@@ -211,18 +212,18 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 
 ## internal/gdb
 
-**GDB MI2 backend.** Thin wrapper over `ptyx`; parses MI. Implements `core.Session`.
+**GDB MI2 backend.** Owns GDB PTY + inferior TTY; parses MI. Implements `core.Session`.
 
 | File | Responsibility |
 |------|----------------|
-| `gdb_client.go` | `GDBClient` embeds `*ptyx.Client`; MI argv + initial prompt |
+| `gdb_client.go` | `GDBClient` embeds `*ptyx.Client`, owns `*ptyx.TTY`; sends `-inferior-tty-set` at start |
 | `mi.go` | MI string decode, field extraction, tab expansion |
 | `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 
-**Rule:** no imports from `termui`. Output reaches UI via `Subscribe` → `GdbOutputMsg` + `EventInterrupt`.
+**Rule:** no imports from `termui`. GDB output → `GdbOutputMsg`; inferior stdio → `InferiorOutputMsg` (`EventInterrupt`).
 
-Application orchestration for xGDB lives in **`cmd/xgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
+Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 
 ---
 
@@ -260,22 +261,22 @@ Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
 flowchart BT
     tcell["gdamore/tcell"]
     termui["internal/termui"]
-    xgdb_pkg["internal/xgdb"]
-    widgets["internal/xgdb/widgets"]
+    gdbforge_pkg["internal/gdbforge"]
+    widgets["internal/gdbforge/widgets"]
     core["internal/core"]
     gdb["internal/gdb"]
-    xgdb_cmd["cmd/xgdb"]
+    gdbforge_cmd["cmd/gdbforge"]
 
     termui --> tcell
     widgets --> termui
     widgets --> core
     gdb --> core
 
-    xgdb_cmd --> termui
-    xgdb_cmd --> xgdb_pkg
-    xgdb_cmd --> widgets
-    xgdb_cmd --> core
-    xgdb_cmd --> gdb
+    gdbforge_cmd --> termui
+    gdbforge_cmd --> gdbforge_pkg
+    gdbforge_cmd --> widgets
+    gdbforge_cmd --> core
+    gdbforge_cmd --> gdb
 
     gdb -.->|"must NOT import"| termui
     core -.->|"must NOT import"| termui
@@ -288,19 +289,19 @@ flowchart BT
 
 | Question | Package |
 |----------|---------|
-| Application model (domain state)? | App layer (`cmd/xgdb`, future `internal/xgdb/models/`) |
+| Application model (domain state)? | App layer (`cmd/gdbforge`, future `internal/gdbforge/models/`) |
 | Service (external I/O)? | `gdb` or future backend packages |
 | Split pane layout / window manager? | `termui` |
-| Widget (view of a model)? | `internal/xgdb/widgets` or `termui` |
+| Widget (view of a model)? | `internal/gdbforge/widgets` or `termui` |
 | GDB MI parsing? | `gdb` |
 | Scrollable text storage primitive? | `core` |
-| Key binding in normal mode? | `cmd/xgdb/keybindings.go` + `input.go` |
+| Key binding in normal mode? | `cmd/gdbforge/keybindings.go` + `input.go` |
 | Interaction mode state? | `platform.AppState` via `TermApp` |
 | Spawn/debug external process? | `gdb` (or future backend service) |
 | `:buffer` / model registry? | App startup + `HandleCoreEvents` dispatch |
-| Vim `:` command registry? | `internal/commands` + `cmd/xgdb/command_tree.go` |
+| Vim `:` command registry? | `internal/commands` + `cmd/gdbforge/command_tree.go` |
 | Draw box borders? | `termui` Grid/Cell |
-| Compose services + models + UI? | `cmd/xgdb/setup.go` |
+| Compose services + models + UI? | `cmd/gdbforge/setup.go` |
 
 When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core` or a dedicated model package over `termui`.
 

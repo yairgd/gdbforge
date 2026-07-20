@@ -1,8 +1,8 @@
 package execcli
 
 import (
-	"github.com/yairgd/gdbx/internal/core"
-	"github.com/yairgd/gdbx/internal/ptyx"
+	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
 // ExecClient runs an arbitrary command attached to a PTY.

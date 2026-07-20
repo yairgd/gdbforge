@@ -1,6 +1,6 @@
 # Developer Guide
 
-**Audience:** engineers onboarding to xGDB, code reviewers, and contributors implementing UI or debugger features.
+**Audience:** engineers onboarding to gdbforge, code reviewers, and contributors implementing UI or debugger features.
 
 **Companion docs:** [README.md](README.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -30,14 +30,14 @@
 
 | Order | File | Why |
 |-------|------|-----|
-| 1 | `cmd/xgdb/main.go` → `app.go` → `setup.go` | Entry + app wiring |
+| 1 | `cmd/gdbforge/main.go` → `app.go` → `setup.go` | Entry + app wiring |
 | 2 | `internal/termui/term_app.go` | Event loop, grids, draw flush |
 | 3 | `internal/termui/widget.go` | Widget contract |
 | 4 | `internal/termui/widget_tree.go`, `layout_tree.go` | Split layout |
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
 | 7 | `internal/termui/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
-| 8 | `internal/xgdb/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
+| 8 | `internal/gdbforge/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
 | 9 | `internal/gdb/gdb_client.go` | PTY backend |
 | 10 | `docs/ARCHITECTURE.md` | Big picture |
 
@@ -85,7 +85,8 @@ Data flow (target):
   Service → Event Bus → Model → Widget
 
 GDB path (today):
-  ptyx reader → Subscribe fan-out → EventInterrupt(GdbOutputMsg) → GDBWidget → ConsolePane
+  GDB PTY reader → Subscribe → EventInterrupt(GdbOutputMsg) → GDBWidget → ConsolePane
+  Inferior TTY reader → Subscribe → EventInterrupt(InferiorOutputMsg) → IO (OutputWidget)
   GdbMcpService / :AI → same Session (WithWrite exclusive, Subscribe shared)
 GDB path (target):
   Session → PtyOutputMsg on bus → Model update → Widget redraw
@@ -161,10 +162,10 @@ go test ./...       # run tests
 
 See [HOSTING.md](HOSTING.md).
 
-### Run xGDB prototype
+### Run gdbforge prototype
 
 ```bash
-go run ./cmd/xgdb
+go run ./cmd/gdbforge
 ```
 
 ---
@@ -209,7 +210,7 @@ Widgets are views. Before adding a widget, ensure the corresponding **model** ex
 
 1. Define or use an application model that holds the pane's state.
 
-2. Create `internal/xgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
+2. Create `internal/gdbforge/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
 
 ```go
 type MyWidget struct {
@@ -248,7 +249,7 @@ a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to Completi
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
-5. Build the command tree with the DSL in `ExapData()` (`cmd/xgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
+5. Build the command tree with the DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
 
 6. Handle legacy bus events in the application when needed:
 
@@ -342,7 +343,7 @@ In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capt
 | Thread | May do |
 |--------|--------|
 | **Main / tcell loop** | HandleEvent, Draw, SetContent, Grid, `PushRaw` / buffer updates |
-| **ptyx reader goroutine** | Read PTY, broadcast to subscribers |
+| **ptyx reader goroutine** | Read GDB / exec / inferior PTY, broadcast to subscribers |
 | **:AI goroutine** | HTTP to LLM; `GdbCommand` / `WithWrite` on Session |
 | **Bridge goroutine** | `range` channel → `PostEvent` only |
 
@@ -352,10 +353,10 @@ In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capt
 
 ## Debugging with Delve
 
-Debug the xGDB prototype:
+Debug the gdbforge prototype:
 
 ```bash
-dlv debug ./cmd/xgdb --headless --listen=:2346 --api-version=2
+dlv debug ./cmd/gdbforge --headless --listen=:2346 --api-version=2
 # separate terminal:
 dlv connect :2346
 ```
@@ -389,7 +390,7 @@ dlv debug ./cmd/docserve -- --port 8765
 
 | Task | Start here |
 |------|------------|
-| New application model | App startup in `cmd/xgdb`; subscribe to event bus |
+| New application model | App startup in `cmd/gdbforge`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register builtin in `initBuiltins` or open via `:e` / layout |
 | New service / backend | Implement `core.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
@@ -408,9 +409,9 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/xgdb/app.go` + `input.go` |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
 | Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) |
-| Key-sequence bindings | `internal/commands` + `cmd/xgdb/keybindings.go` |
+| Key-sequence bindings | `internal/commands` + `cmd/gdbforge/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
 | Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `tab.go` |
@@ -419,12 +420,12 @@ Always update docs when changing architecture-visible behavior.
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
-| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/xgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
+| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/gdbforge/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |
 | Debugger events | `core/events.go` |
-| Entry point | `cmd/xgdb/` (`main.go` + companions) |
+| Entry point | `cmd/gdbforge/` (`main.go` + companions) |
 | Docs server | `cmd/docserve/main.go` |
 
 ---

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbx/internal/core"
-	"github.com/yairgd/gdbx/internal/ptyx"
+	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
 func TestNewGDBClientStartsAndCloses(t *testing.T) {
@@ -22,6 +22,10 @@ func TestNewGDBClientStartsAndCloses(t *testing.T) {
 		t.Skipf("gdb/pty unavailable: %v", err)
 	}
 	defer client.Close()
+
+	if client.InferiorTTY() == nil || client.InferiorTTY().SlaveName() == "" {
+		t.Fatal("expected inferior tty after NewGDBClient")
+	}
 
 	ch, cancel := client.Subscribe()
 	defer cancel()

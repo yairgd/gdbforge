@@ -35,20 +35,20 @@ Wiring happens **above** `termui`:
 | Layer | Role |
 |-------|------|
 | `internal/termui` | Generic terminal UI framework — window manager, layout, rendering |
-| `internal/xgdb` | App state (`AppState`, modes) + debugger widgets (views) |
-| `cmd/xgdb` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, `gdb`, `ptyx`, `mcp` |
+| `internal/gdbforge` | App state (`AppState`, modes) + debugger widgets (views) |
+| `cmd/gdbforge` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, `gdb`, `ptyx`, `mcp` |
 
-Services, models, and widgets are wired in **`cmd/xgdb`**. Data flows Service → Event Bus → Model → Widget; `termui` never imports services or models directly.
+Services, models, and widgets are wired in **`cmd/gdbforge`**. Data flows Service → Event Bus → Model → Widget; `termui` never imports services or models directly.
 
 ---
 
 ## External dependencies (go.mod)
 
-Module path: `github.com/yairgd/gdbx`
+Module path: `github.com/yairgd/gdbforge`
 
 | Dependency | Used by | Purpose |
 |------------|---------|---------|
-| [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/termui`, `internal/xgdb/widgets` | Terminal screen, input, styles |
+| [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/termui`, `internal/gdbforge/widgets` | Terminal screen, input, styles |
 | [`github.com/creack/pty`](https://github.com/creack/pty) | `internal/ptyx` | Pseudo-terminal for GDB and `:!` exec I/O |
 
 **No third-party runtime deps:** `cmd/docserve` uses the Go standard library only.
@@ -72,14 +72,14 @@ flowchart BT
     ptyLib["creack/pty"]
 
     termui["internal/termui"]
-    xgdb_pkg["internal/xgdb"]
-    widgets["internal/xgdb/widgets"]
+    gdbforge_pkg["internal/gdbforge"]
+    widgets["internal/gdbforge/widgets"]
     core["internal/core"]
     ptyx["internal/ptyx"]
     gdb["internal/gdb"]
     execcli["internal/execcli"]
     mcp["internal/mcp"]
-    xgdb_cmd["cmd/xgdb"]
+    gdbforge_cmd["cmd/gdbforge"]
     docserve["cmd/docserve"]
 
     termui --> tcell
@@ -94,13 +94,13 @@ flowchart BT
     execcli --> ptyx
     mcp --> core
 
-    xgdb_cmd --> termui
-    xgdb_cmd --> xgdb_pkg
-    xgdb_cmd --> widgets
-    xgdb_cmd --> core
-    xgdb_cmd --> gdb
-    xgdb_cmd --> execcli
-    xgdb_cmd --> mcp
+    gdbforge_cmd --> termui
+    gdbforge_cmd --> gdbforge_pkg
+    gdbforge_cmd --> widgets
+    gdbforge_cmd --> core
+    gdbforge_cmd --> gdb
+    gdbforge_cmd --> execcli
+    gdbforge_cmd --> mcp
 
     docserve --> stdlib["Go stdlib only"]
 
@@ -123,9 +123,9 @@ flowchart BT
 | **`internal/gdb`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
 | **`internal/execcli`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
 | **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb` |
-| **`internal/xgdb/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
-| **`internal/xgdb`** | stdlib only | `termui`, `gdb` — app state / modes |
-| **`cmd/xgdb`** | `termui`, `xgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
+| **`internal/gdbforge/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
+| **`internal/gdbforge`** | stdlib only | `termui`, `gdb` — app state / modes |
+| **`cmd/gdbforge`** | `termui`, `gdbforge`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
 **Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`** / **`ptyx`** / **`mcp`**, not in **`termui`**.
@@ -136,7 +136,7 @@ flowchart BT
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`xgdb`** | `cmd/xgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
+| **`gdbforge`** | `cmd/gdbforge` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
 | **`docserve`** | `cmd/docserve` | stdlib only |
 
 Build all commands: `task build` or `go build ./cmd/...`.
@@ -157,7 +157,7 @@ termui ──X──>  core | gdb | ptyx
 
 **Why:** debugger backends and domain logic must stay UI-agnostic so you can swap tcell for another renderer, add a web UI, or run GDB I/O in tests without a terminal.
 
-**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/xgdb` or widgets — not by importing `core` from `termui`.
+**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/gdbforge` or widgets — not by importing `core` from `termui`.
 
 ---
 
@@ -171,7 +171,7 @@ go list -m all
 
 # Per-package imports
 for pkg in ./internal/termui ./internal/core ./internal/ptyx ./internal/gdb \
-           ./internal/execcli ./internal/mcp ./internal/xgdb/widgets ./cmd/xgdb ./cmd/docserve; do
+           ./internal/execcli ./internal/mcp ./internal/gdbforge/widgets ./cmd/gdbforge ./cmd/docserve; do
   echo "=== $pkg ==="
   go list -f '{{join .Imports "\n"}}' $pkg | sort -u
 done
@@ -190,4 +190,4 @@ go list -f '{{.ImportPath}} imports {{.Imports}}' ./internal/... ./cmd/...
 - [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) — file layout and package responsibilities
 - [ARCHITECTURE.md](ARCHITECTURE.md) — subsystems and data flow
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB backend and event bridge
-- [OVERVIEW.md](OVERVIEW.md) — why tcell for xGDB
+- [OVERVIEW.md](OVERVIEW.md) — why tcell for gdbforge

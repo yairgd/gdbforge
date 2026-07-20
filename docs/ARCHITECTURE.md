@@ -1,8 +1,8 @@
 # Architecture Overview
 
-This document describes the high-level architecture of **xGDB**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
+This document describes the high-level architecture of **gdbforge**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
 
-**xGDB is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
+**gdbforge is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
@@ -35,21 +35,24 @@ This document describes the high-level architecture of **xGDB**: subsystems, bou
 
 ## System context
 
-xGDB runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
+gdbforge runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
 
 ```mermaid
 flowchart LR
     User["Developer"]
     Term["Terminal"]
-    xGDB["xGDB · TermApp"]
+    gdbforge["gdbforge · TermApp"]
     GDB["GDB MI2"]
     Target["Debug target"]
 
     User --> Term
-    Term <--> xGDB
-    xGDB <--> GDB
-    GDB <--> Target
+    Term <--> gdbforge
+    gdbforge <-->|"PTY#1 MI"| GDB
+    gdbforge <-->|"PTY#2 stdio"| Target
+    GDB -.->|"-inferior-tty-set"| Target
 ```
+
+GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
 
 ---
 
@@ -364,7 +367,7 @@ flowchart TB
         Render["Canvas → Grid → tcell"]
     end
 
-    subgraph Application["Application · cmd/xgdb + internal/xgdb"]
+    subgraph Application["Application · cmd/gdbforge + internal/gdbforge"]
         DebuggerApp["DebuggerApp"]
         AppState["AppState · modes"]
         Trie["Trie · key sequences"]
@@ -397,7 +400,7 @@ flowchart TB
 
 | Subsystem | Package | Responsibility |
 |-----------|---------|----------------|
-| **Services** | App layer (`cmd/xgdb`, `internal/gdb`, …) | Communicate with external systems; produce events |
+| **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, …) | Communicate with external systems; produce events |
 | **Event bus** | `termui.Event` channel | Distribute events to models and application dispatch |
 | **Models** | App layer (planned; today partially `core.Buffer`, widget-local state) | Own application state; subscribe to events |
 | **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Layout, widget lifecycle, model-to-widget binding |
@@ -411,9 +414,9 @@ flowchart TB
 | **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
 | **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
-| **Debugger backend** | `ptyx.Client`, `gdb.GDBClient`, `core.Session` | Shared PTY mux; MI2 parsing in gdb |
+| **Debugger backend** | `ptyx.Client`, `ptyx.TTY`, `gdb.GDBClient`, `core.Session` | GDB MI PTY + inferior stdio PTY; MI2 parsing in gdb |
 | **AI / tools** | `mcp.GdbMcpService` | Same-process `:AI` on live Session |
-| **Application shell** | `cmd/xgdb` (`DebuggerApp`) | Composes UI, widgets, GDB, MCP; owns modes, trie, `HandleCoreEvents` |
+| **Application shell** | `cmd/gdbforge` (`DebuggerApp`) | Composes UI, widgets, GDB, MCP; owns modes, trie, `HandleCoreEvents` |
 
 ---
 
@@ -431,7 +434,7 @@ Widgets display models. Models subscribe to application events. Services never t
 
 ### Input → action → redraw
 
-xGDB uses **two parallel event planes**:
+gdbforge uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
@@ -532,7 +535,7 @@ flowchart TB
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the `TermApp` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/xgdb/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the `TermApp` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/gdbforge/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
 
 Typed app notifications use **`platform.EventBus`** (`Subscribe` / `Publish`) so producers and consumers wire without constructor injection:
 
@@ -549,7 +552,7 @@ Terminal input routing (modes, trie, widget dispatch) is also centralized in **`
 
 ## Design principles
 
-These principles are **non-negotiable** for xGDB. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
+These principles are **non-negotiable** for gdbforge. They explain many seemingly verbose abstractions (Canvas, WidgetTree, Grid).
 
 | # | Principle | Rationale |
 |---|-----------|-----------|
@@ -616,7 +619,7 @@ See [TermUI layer](#termui-layer). Owns:
 - Poll/draw loop.
 - Must **not** parse GDB MI records directly — delegates to app widgets that use `internal/gdb`.
 
-### Application (`cmd/xgdb` + `internal/xgdb`)
+### Application (`cmd/gdbforge` + `internal/gdbforge`)
 
 - Declares available models and services at startup.
 - `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns:
@@ -633,16 +636,17 @@ See [TermUI layer](#termui-layer). Owns:
 See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
 
 - **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` PTY / UI events** — `PtyOutputMsg`, `GdbOutputMsg`, `ExecOutputMsg` (`internal/core/events.go`).
-- **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/xgdb`.
+- **`core` PTY / UI events** — `PtyOutputMsg`, `GdbOutputMsg`, `ExecOutputMsg`, `InferiorOutputMsg` (`internal/core/events.go`).
+- **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/gdbforge`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termui`).
 - `Debugger` / `Session` / `PTYWriter` — send API, exclusive write, shared Subscribe.
 
 ### Infrastructure (`internal/ptyx`, `internal/gdb`, `internal/mcp`)
 
-- **`ptyx.Client`** — shared PTY: exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
-- **`gdb.GDBClient`** — thin MI argv wrapper embedding `*ptyx.Client`.
+- **`ptyx.Client`** — process PTY (GDB / exec): exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
+- **`ptyx.TTY`** — bare master/slave PTY for inferior stdin/stdout (`OpenTTY`, `SlaveName`).
+- **`gdb.GDBClient`** — embeds `*ptyx.Client`, owns `*ptyx.TTY`, sends `-inferior-tty-set` at startup.
 - **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on `core.Session`.
 - MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb`.
 
@@ -739,6 +743,7 @@ classDiagram
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
 | `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB/exec/MCP) |
 | `GdbOutputMsg` | UI-routed GDB chunk (`EventInterrupt` → GDBWidget) |
+| `InferiorOutputMsg` | UI-routed inferior PTY chunk (`EventInterrupt` → IO / OutputWidget) |
 
 ### Command IDs and colon commands
 
@@ -756,16 +761,16 @@ Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMod
 ### Wiring (current)
 
 ```go
-// cmd/xgdb/setup.go
+// cmd/gdbforge/setup.go
 a.commandReg = commands.NewCommandRegistry()
-a.ExapData()  // cmd/xgdb/command_tree.go
+a.ExapData()  // cmd/gdbforge/command_tree.go
 
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
 a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 ```
 
-Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/platform/event_bus.go`, `cmd/xgdb/`.
+Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/platform/event_bus.go`, `cmd/gdbforge/`.
 
 ---
 
@@ -793,7 +798,7 @@ The **target** architecture is documented across this tree. The **current** code
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
 | Debugger | `core.Session` + `ptyx`; widget owns GDB; `:AI` peer | Working — [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 
-Entry point: `cmd/xgdb/` (`main.go` + `app.go`, `setup.go`, …).
+Entry point: `cmd/gdbforge/` (`main.go` + `app.go`, `setup.go`, …).
 
 Detailed tracker: [ROADMAP.md](ROADMAP.md).
 

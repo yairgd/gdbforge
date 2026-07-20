@@ -68,13 +68,13 @@ func pageShell(seo pageSEO, bodyAttrs, nav, placeholder string) []byte {
 </head>
 <body %s>
   <header>
-    <h1>xGDB Documentation</h1>
+    <h1>gdbforge Documentation</h1>
     <nav>
       %s
     </nav>
   </header>
   <main id="content">%s</main>
-  <footer>xGDB docs · Markdown + Mermaid via CDN</footer>
+  <footer>gdbforge docs · Markdown + Mermaid via CDN</footer>
   <script src="%s"></script>
 </body>
 </html>`, metaBase, seo.headTags(), cssHref, bodyAttrs, nav, placeholder, jsHref)
@@ -144,7 +144,7 @@ func (s *docServer) diagramsIndexHTML(base string) []byte {
 	}
 	list.WriteString(`</ul></article>`)
 
-	seo := s.seoFor("Diagrams", "Standalone Mermaid architecture diagrams for xGDB.", "/diagrams/", base)
+	seo := s.seoFor("Diagrams", "Standalone Mermaid architecture diagrams for gdbforge.", "/diagrams/", base)
 	return pageShell(seo, attrs, s.navLinks(base), list.String())
 }
 
@@ -160,6 +160,6 @@ func (s *docServer) diagramPageHTML(name, base string) []byte {
 			html.EscapeString(string(src)),
 		)
 	}
-	seo := s.seoFor(name, "Mermaid diagram: "+name+" (xGDB documentation).", "/diagrams/"+name, base)
+	seo := s.seoFor(name, "Mermaid diagram: "+name+" (gdbforge documentation).", "/diagrams/"+name, base)
 	return pageShell(seo, attrs, s.navLinks(base), placeholder)
 }

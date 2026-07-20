@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 func TestLoggerWidgetBindKeyMovesCursorBeforeScroll(t *testing.T) {

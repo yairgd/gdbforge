@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 func TestEnsureVisibleANSIDoesNotBlankFromByteCursorCol(t *testing.T) {

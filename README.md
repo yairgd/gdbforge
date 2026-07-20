@@ -1,16 +1,16 @@
 ```text
-██╗  ██╗ ██████╗ ██████╗ ██████╗
-╚██╗██╔╝██╔════╝ ██╔══██╗██╔══██╗
- ╚███╔╝ ██║  ███╗██║  ██║██████╔╝
- ██╔██╗ ██║   ██║██║  ██║██╔══██╗
-██╔╝ ██╗╚██████╔╝██████╔╝██████╔╝
-╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝
-    >> xGDB: Extreme Tooling Suite <<
+███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+█████╗  ██║   ██║██████╔╝██║  ███╗█████╗
+██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝
+██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+    >> gdbforge: Extreme Tooling Suite <<
 ```
 
-# xGDB
+# gdbforge
 
-**xGDB** is a Vim-inspired multi-pane terminal front-end for GDB. It keeps GDB’s power in the TTY and adds a workspace for source, console, output, threads, call stack, and breakpoints — with modes, a `:` command line, and mouse/clipboard support.
+**gdbforge** is a Vim-inspired multi-pane terminal front-end for GDB. It keeps GDB’s power in the TTY and adds a workspace for source, GDB console, IO (program stdin/stdout), threads, call stack, and breakpoints — with modes, a `:` command line, and mouse/clipboard support.
 
 ## Typical use cases
 
@@ -22,7 +22,7 @@
 ## Demo
 
 <!-- TODO: add screencast GIF or short MP4 -->
-![xGDB demo](docs/media/xgdb-demo.gif)
+![gdbforge demo](docs/media/gdbforge-demo.gif)
 
 ## Problems it solves
 
@@ -35,7 +35,7 @@
 ## What you get
 
 - Named layouts (`:layout panels`, `default`, `classic`) and splits (`:vs` / `:split`)
-- Code (or startup logo), GDB console, Output, Threads, Call Stack, Breakpoints
+- Code (or startup logo), GDB console, IO, Threads, Call Stack, Breakpoints
 - In-app manual: `:help` or `:b help`
 - Space to toggle breakpoints on the Code cursor or Call Stack frame
 - Status colors for insert (green) vs normal (blue)
@@ -55,14 +55,14 @@ Deeper architecture notes live under [docs/](docs/).
 ### Download
 
 ```bash
-git clone https://github.com/yairgd/gdbx.git
-cd gdbx
+git clone https://github.com/yairgd/gdbforge.git
+cd gdbforge
 ```
 
-### Build xGDB
+### Build gdbforge
 
 ```bash
-go build -o bin/xgdb ./cmd/xgdb
+go build -o bin/gdbforge ./cmd/gdbforge
 # or: make build
 ```
 
@@ -75,7 +75,7 @@ cat > hello.c <<'EOF'
 #include <stdio.h>
 
 int main(void) {
-    printf("hello, xgdb\n");
+    printf("hello, gdbforge\n");
     return 0;
 }
 EOF
@@ -83,12 +83,12 @@ EOF
 gcc -O0 -g -o hello hello.c
 ```
 
-Run it under xGDB:
+Run it under gdbforge:
 
 ```bash
-./bin/xgdb ./hello
+./bin/gdbforge ./hello
 # or without installing the binary first:
-go run ./cmd/xgdb ./hello
+go run ./cmd/gdbforge ./hello
 ```
 
 Inside the app: press `i` to type in the GDB console, or use `:` for commands. Open the manual with `:help`. Quit with `:quit` or Ctrl-D.
@@ -96,18 +96,18 @@ Inside the app: press `i` to type in the GDB console, or use `:` for commands. O
 Optional: pick another GDB binary with `-d`:
 
 ```bash
-./bin/xgdb -d /usr/bin/gdb ./hello
+./bin/gdbforge -d /usr/bin/gdb ./hello
 ```
 
 ---
 
 ## User guide
 
-Same content as the in-app manual (`:help` / `:b help`). Keep this section aligned with `buildHelpLines()` in `internal/xgdb/widgets/help_widget.go`.
+Same content as the in-app manual (`:help` / `:b help`). Keep this section aligned with `buildHelpLines()` in `internal/gdbforge/widgets/help_widget.go`.
 
 ### Overview
 
-xgdb (xGDB: Extreme Tooling Suite) is a Vim-inspired terminal debugger built on GDB. The screen is a multi-pane workspace: Code (or logo), GDB console, Output, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
+gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger built on GDB. The screen is a multi-pane workspace: Code (or logo), GDB console, IO, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
 
 **Status line colors:**
 
@@ -162,7 +162,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **Layout**
 
-- `:layout panels` — startup layout (Code|GDB left; Output + Threads|Callstack over Breakpoints)
+- `:layout panels` — startup layout (Code|GDB left; IO + Threads|Callstack over Breakpoints)
 - `:layout default` — six-pane workspace
 - `:layout classic` — full-width Code over GDB
 - `:layout` — re-apply panels
@@ -171,7 +171,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 **Settings (`:set …`)**
 
 - `equalalways` / `noequalalways`
-- `clearoutput` / `noclearoutput` — clear Output pane when GDB session starts (default on)
+- `clearoutput` / `noclearoutput` — clear IO pane when GDB session starts (default on)
 - `continueafterclear` / `nocontinueafterclear` — after removing a BP while running, auto-continue (default off). Inserting a BP while running still auto-continues. `frame`/`thread` commands never auto-continue.
 - `esctocode` / `noesctocode` — Esc restores last pane / Code (default on)
 - `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on)
@@ -195,7 +195,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **Code (or startup logo)**
 
-- Startup shows the xgdb logo until a source file is opened (`*stopped`, `:edit`, or file picker). Then Logo is replaced by Code.
+- Startup shows the gdbforge logo until a source file is opened (`*stopped`, `:edit`, or file picker). Then Logo is replaced by Code.
 - Up/Down or j/k — bold cursor line
 - Space — insert/remove breakpoint at cursor
 - `e` — enable/disable BP (yellow gutter when disabled)
@@ -224,9 +224,12 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - j/k Up/Down Enter click wheel — select frame, send `frame N`, show source (or not-available placeholder)
 - Space — toggle breakpoint at selected frame location
 
-**Output (`:b output`)**
+**IO console (`:b io`, alias `:b output`)**
 
-- Program stdout; j/k PgUp/PgDn scroll; Ctrl-L clear; ANSI colors
+- Program stdin/stdout on a **dedicated PTY** (`ptyx.TTY` + GDB `-inferior-tty-set`); GDB uses a separate MI PTY
+- Type here while the inferior is running; Enter sends to the program
+- PgUp/PgDn scroll; Ctrl-L clear; Ctrl-C / Ctrl-D → program interrupt / EOF; ANSI colors
+- GDB console input never reaches the program — see [docs/DEBUGGER_INTEGRATION.md](docs/DEBUGGER_INTEGRATION.md#inferior-io-dual-pty)
 
 **About (`:b about`)**
 

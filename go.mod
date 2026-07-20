@@ -1,4 +1,4 @@
-module github.com/yairgd/gdbx
+module github.com/yairgd/gdbforge
 
 go 1.25.5
 

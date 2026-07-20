@@ -1,7 +1,7 @@
 package collections
 
 import (
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 type Callback func(args ...any)

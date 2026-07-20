@@ -35,11 +35,11 @@ func (s *GdbMcpService) Ask(ctx context.Context, question string) (string, error
 }
 
 func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question string) (string, error) {
-	model := os.Getenv("CGDB_AI_MODEL")
+	model := os.Getenv("GDBFORGE_AI_MODEL")
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
-	system := "You are a debugging assistant inside xGDB. Use the gdb_command tool to run GDB/MI commands on the live session. Prefer short commands. Explain findings clearly."
+	system := "You are a debugging assistant inside gdbforge. Use the gdb_command tool to run GDB/MI commands on the live session. Prefer short commands. Explain findings clearly."
 	tools := []any{
 		map[string]any{
 			"name":        "gdb_command",
@@ -156,12 +156,12 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 }
 
 func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) (string, error) {
-	model := os.Getenv("CGDB_AI_MODEL")
+	model := os.Getenv("GDBFORGE_AI_MODEL")
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
 	messages := []map[string]any{
-		{"role": "system", "content": "You are a debugging assistant inside xGDB. Use gdb_command to run GDB on the live session."},
+		{"role": "system", "content": "You are a debugging assistant inside gdbforge. Use gdb_command to run GDB on the live session."},
 		{"role": "user", "content": question},
 	}
 	tools := []map[string]any{{

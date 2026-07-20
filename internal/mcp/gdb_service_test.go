@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbforge/internal/core"
 )
 
 type fakeSession struct {

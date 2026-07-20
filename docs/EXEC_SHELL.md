@@ -1,6 +1,6 @@
 # Exec / shell panes (`:!`)
 
-xGDB can open an **external PTY session** in the focused pane, similar to Vim’s `:!` but as a persistent console widget (not a one-shot filter).
+gdbforge can open an **external PTY session** in the focused pane, similar to Vim’s `:!` but as a persistent console widget (not a one-shot filter).
 
 **Companion docs:** [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [INPUT.md](INPUT.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)
 
@@ -14,7 +14,7 @@ xGDB can open an **external PTY session** in the focused pane, similar to Vim’
 | `:!ls` | Same for `ls` (short-lived; after exit, **any key** returns to the previous widget) |
 | `:!ssh user@host` | Same for any argv |
 | `:b exec` | Re-show the last Exec widget (if still registered) |
-| `:b gdb` / `:b about` / `:b help` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b output` | Swap other built-in views into the focused pane |
+| `:b gdb` / `:b about` / `:b help` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b io` / `:b output` | Swap other built-in views into the focused pane |
 | `:edit` / `:edit file.c` | Project source picker, or open a source file (`:e` = unique prefix) |
 | `:b file.c` | Switch to an already-open file buffer |
 | `<C-o>` (normal mode) | Jump back to the **previous widget** in this pane (Vim-style jump list) |
@@ -107,7 +107,7 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 |-----|------|
 | `pushWidgetJump` | Append (dedupe consecutive, cap 32) |
 | `JumpBack` | Pop and `ReplaceFocusedWidget` without pushing |
-| Binding | `<C-o>` in `cmd/xgdb/keybindings.go` (normal mode) |
+| Binding | `<C-o>` in `cmd/gdbforge/keybindings.go` (normal mode) |
 
 Example: GDB → `:b about` → `<C-o>` → GDB again.
 
@@ -126,12 +126,12 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 
 | Path | Responsibility |
 |------|----------------|
-| `cmd/xgdb/command_tree.go` | `LeafRest("!", a.OnRun)` |
-| `cmd/xgdb/actions.go` | `OnRun` |
-| `cmd/xgdb/builtins.go` | `swapFocusedWidget`, `JumpBack` |
-| `cmd/xgdb/keybindings.go` | `<C-o>` |
+| `cmd/gdbforge/command_tree.go` | `LeafRest("!", a.OnRun)` |
+| `cmd/gdbforge/actions.go` | `OnRun` |
+| `cmd/gdbforge/builtins.go` | `swapFocusedWidget`, `JumpBack` |
+| `cmd/gdbforge/keybindings.go` | `<C-o>` |
 | `internal/execcli/exec_client.go` | PTY process I/O |
-| `internal/xgdb/widgets/exec_widget.go` | UI adapter |
+| `internal/gdbforge/widgets/exec_widget.go` | UI adapter |
 | `internal/commands/{dsl,command_parser,command_node}.go` | Rest-args |
 | `internal/termui/console_pane.go` | Live prompt + paste into input |
 | `internal/termui/utf.go` | ANSI draw / strip |

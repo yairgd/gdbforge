@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 func TestViewScrollColClampsAndDraw(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairgd/gdbx/internal/core"
-	"github.com/yairgd/gdbx/internal/platform"
+	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 const (

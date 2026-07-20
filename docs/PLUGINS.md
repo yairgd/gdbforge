@@ -1,6 +1,6 @@
 # Plugin Architecture
 
-xGDB is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
+gdbforge is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
 **Status:** design phase — no Lua runtime is embedded yet.
 
@@ -43,7 +43,7 @@ xGDB is designed for **extensibility**: custom debugger panes, scripted automati
 | Sandboxing | Well-understood coroutine model | Python sandbox harder |
 | cgdb precedent | cgdb uses Tcl — Lua is lighter modern equivalent | Tcl declining in new projects |
 
-**Design decision:** Lua scripts extend **xGDB UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Session` instead.
+**Design decision:** Lua scripts extend **gdbforge UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Session` instead.
 
 ---
 
@@ -81,8 +81,8 @@ Plugins load from:
 
 | Location | Purpose |
 |----------|---------|
-| `~/.config/gdbx/plugins/` | User plugins |
-| `./.xgdb/plugins/` | Project-local plugins |
+| `~/.config/gdbforge/plugins/` | User plugins |
+| `./.gdbforge/plugins/` | Project-local plugins |
 | Built-in `embed` | Shipping default panes |
 
 ---

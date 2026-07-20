@@ -1,4 +1,4 @@
-# Contributing to xGDB
+# Contributing to gdbforge
 
 Thank you for your interest in contributing.
 

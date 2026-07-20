@@ -1,6 +1,6 @@
-# xGDB Documentation
+# gdbforge Documentation
 
-**xGDB** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/xgdb`.
+**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
 
 The project targets a **cgdb-like experience** with a cleaner architecture: application models created at startup, widgets as on-demand views, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer.
 
@@ -21,7 +21,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
-| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans |
+| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua plans, feature panes, automation |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
@@ -36,13 +36,13 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 ### Run the debugger prototype
 
 ```bash
-go run ./cmd/xgdb
+go run ./cmd/gdbforge
 ```
 
 Requires a terminal with UTF-8 support. Optional for `:AI`: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 
 ```bash
-go run ./cmd/xgdb -- ./hello
+go run ./cmd/gdbforge -- ./hello
 # then in cgdb:  :AI what breakpoints are set?
 ```
 
@@ -123,15 +123,15 @@ Full rationale: [ARCHITECTURE.md](ARCHITECTURE.md#design-principles).
 ## Repository layout (summary)
 
 ```text
-gdbx/
+gdbforge/
 ├── cmd/
-│   ├── xgdb/          # xGDB debugger entry point
+│   ├── gdbforge/          # gdbforge debugger entry point
 │   └── docserve/      # Documentation HTTP server
 ├── internal/
-│   ├── termui/        # xGDB terminal UI (primary)
+│   ├── termui/        # gdbforge terminal UI (primary)
 │   ├── core/          # UI-agnostic logic (events, buffers)
 │   ├── gdb/           # GDB MI2 client and parsing
-│   ├── xgdb/          # Layouts + debugger panes
+│   ├── gdbforge/          # Layouts + debugger panes
 └── docs/              # This documentation tree
 ```
 
@@ -161,4 +161,4 @@ Full tracker: [ROADMAP.md](ROADMAP.md).
 ## Related links
 
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [README.md (project root)](../README.md) — xGDB overview
+- [README.md (project root)](../README.md) — gdbforge overview

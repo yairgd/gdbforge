@@ -1,6 +1,6 @@
 # Input System
 
-xGDB handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
+gdbforge handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -122,8 +122,8 @@ GDB console keys are handled by shared termui pieces, then GDB-specific callback
 |-------|------|------|
 | `InputLine` | `termui/input_line.go` | Editing + history chords |
 | `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
-| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
-| `ExecWidget` | `internal/xgdb/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
+| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
 
 When the GDB pane is focused (insert):
 
@@ -173,7 +173,7 @@ On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `Cm
 
 ## Key-sequence bindings
 
-Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/xgdb/keybindings.go`).
+Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/gdbforge/keybindings.go`).
 
 ```go
 func (a *DebuggerApp) InitKeyBindings() {
@@ -185,7 +185,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-In **normal mode** (`cmd/xgdb/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
+In **normal mode** (`cmd/gdbforge/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
 
 **Current bindings:**
 
@@ -265,7 +265,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic` (geometry in `internal/xgdb/layout`; key policy in `layout_behavior.go`). Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic` (geometry in `internal/gdbforge/layout`; key policy in `layout_behavior.go`). IO pane: `:set clearoutput` / `:set noclearoutput` (clears IO on session start). PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -304,10 +304,10 @@ flowchart LR
 
 Flow:
 
-1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/xgdb/input.go`).
+1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/gdbforge/input.go`).
 2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; `CompletionBarWidget` shows the wildmenu and app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
-4. Tree is built at startup via DSL in `ExapData()` (`cmd/xgdb/command_tree.go`).
+4. Tree is built at startup via DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`).
 
 ### Legacy note
 
@@ -345,7 +345,7 @@ Bridge path:
 
 Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
 
-See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for PTY mux, `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
+See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB vs inferior), `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
 
 **Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 
@@ -383,7 +383,7 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
 | **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse click | Bold selection; Up/Down/Enter/click switches thread (`thread ID`) / frame (`frame N`) and updates CodeWidget `━━▶` (or centered **not available** + path for missing / `.so` sources) |
-| **OutputWidget** (`:b output`) | `j`/`k` / PgUp/PgDn | Scroll program stdout (read-only ConsolePane + ANSI); `<C-l>` clear |
+| **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C/D → inferior |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 

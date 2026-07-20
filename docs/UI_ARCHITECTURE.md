@@ -1,6 +1,6 @@
 # UI Architecture
 
-This document covers the xGDB presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
+This document covers the gdbforge presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
 
 **Companion docs:** [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [RENDERING.md](RENDERING.md) · [INPUT.md](INPUT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -113,10 +113,10 @@ classDiagram
 | `BreakpointWidget` | Builtin `:b breakpoint`; owns list; `e`/`d`; drives CodeWidget marks |
 | `ThreadWidget` | Builtin `:b threads`; list refreshed on GDB stop |
 | `CallStackWidget` | Builtin `:b callstack`; frames refreshed on GDB stop |
-| `OutputWidget` | Builtin `:b output`; inferior stdout (`@` stream and raw PTY while running) |
+| `OutputWidget` | Builtin `:b io` (alias `:b output`); inferior stdin/stdout via dedicated PTY |
 | `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
 
-**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b output`, `:b exec`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b io` / `:b output`, `:b exec`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
 **Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `fileBuffers` (keyed by path; PaneName = basename).
 
@@ -358,7 +358,7 @@ Current behavior:
 - **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
 - **Visual focus:** the focused leaf's `DrawStatusLine` paints `▎ {PaneName}` on the pane's bottom status row (see [Layout engine](#layout-engine)).
 
-**Mode-aware routing** (implemented in `cmd/xgdb/input.go`):
+**Mode-aware routing** (implemented in `cmd/gdbforge/input.go`):
 
 | Mode | Terminal keys routed to |
 |------|-------------------------|
@@ -378,7 +378,7 @@ Current behavior:
 
 ## Key-sequence bindings
 
-`commands.KeyBindingRegistry` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns bindings (`cmd/xgdb/keybindings.go`):
+`commands.KeyBindingRegistry` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns bindings (`cmd/gdbforge/keybindings.go`):
 
 ```go
 a.keyBindings.Bind(
@@ -396,13 +396,13 @@ Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) from `platform` key pa
 
 **Design decision:** binding state is per-application, not global — multiple apps or tests can bind independently.
 
-Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`. Wiring: `cmd/xgdb/keybindings.go` + `input.go` (normal mode).
+Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`. Wiring: `cmd/gdbforge/keybindings.go` + `input.go` (normal mode).
 
 ---
 
 ## Event handling
 
-xGDB separates **terminal events** from **domain events**.
+gdbforge separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|
@@ -521,7 +521,7 @@ sequenceDiagram
     Main->>App: Close / Fini
 ```
 
-`AppApi` is implemented by the application (`DebuggerApp` in `cmd/xgdb/`):
+`AppApi` is implemented by the application (`DebuggerApp` in `cmd/gdbforge/`):
 
 - `HandleKey` — mode routing, trie dispatch, widget `HandleEvent`.
 - `HandleResize` — top-level widget rects after `UpdateCanvas`.
@@ -535,14 +535,14 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
-| `CodeWidget` | `internal/xgdb/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | `internal/xgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
-| `ThreadWidget` | `internal/xgdb/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
-| `CallStackWidget` | `internal/xgdb/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
-| `OutputWidget` | `internal/xgdb/widgets/output_widget.go` | `:b output`; program stdout (`printf`), not MI noise |
-| `ExecWidget` | `internal/xgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
-| `AboutWidget` | `internal/xgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
+| `CodeWidget` | `internal/gdbforge/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
+| `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
+| `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
+| `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
+| `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; program stdin/stdout (inferior PTY), not MI noise |
+| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
+| `AboutWidget` | `internal/gdbforge/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |

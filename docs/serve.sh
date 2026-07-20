@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Serve xGDB documentation locally.
+# Serve gdbforge documentation locally.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

@@ -3,7 +3,7 @@ package ptyx
 import (
 	"testing"
 
-	"github.com/yairgd/gdbx/internal/core"
+	"github.com/yairgd/gdbforge/internal/core"
 )
 
 func TestFanOutDeliversToMultipleSubscribers(t *testing.T) {

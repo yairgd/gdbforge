@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/yairgd/gdbx/internal/core"
-	"github.com/yairgd/gdbx/internal/ptyx"
+	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
-// GDBClient is a GDB MI session over a shared PTY client.
+// GDBClient is a GDB MI session over a PTY, plus a separate inferior TTY for
+// the debugged program's stdin/stdout (-inferior-tty-set).
 type GDBClient struct {
 	*ptyx.Client
+	inferior *ptyx.TTY
 }
 
 var _ core.Session = (*GDBClient)(nil)
@@ -34,11 +36,42 @@ func NewGDBClient(gdbPath, prog string, progArgs ...string) (*GDBClient, error) 
 		return nil, fmt.Errorf("find %s: %w", gdbPath, err)
 	}
 
-	pty, err := ptyx.New(argv, ptyx.Options{})
+	gdbPty, err := ptyx.New(argv, ptyx.Options{})
 	if err != nil {
 		return nil, err
 	}
-	c := &GDBClient{Client: pty}
+
+	inf, err := ptyx.OpenTTY()
+	if err != nil {
+		gdbPty.Close()
+		return nil, err
+	}
+
+	c := &GDBClient{Client: gdbPty, inferior: inf}
 	_ = c.Send("")
+	// Route the program's stdio to the inferior PTY before any run/exec.
+	_ = c.Send(fmt.Sprintf("-inferior-tty-set %s", inf.SlaveName()))
 	return c, nil
+}
+
+// InferiorTTY returns the program I/O PTY (master held by gdbforge), or nil.
+func (c *GDBClient) InferiorTTY() *ptyx.TTY {
+	if c == nil {
+		return nil
+	}
+	return c.inferior
+}
+
+// Close tears down the inferior TTY then the GDB PTY session.
+func (c *GDBClient) Close() {
+	if c == nil {
+		return
+	}
+	if c.inferior != nil {
+		c.inferior.Close()
+		c.inferior = nil
+	}
+	if c.Client != nil {
+		c.Client.Close()
+	}
 }

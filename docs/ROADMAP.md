@@ -1,6 +1,6 @@
 # Roadmap
 
-This document tracks **current implementation state**, **planned features**, and the **long-term vision** for xGDB.
+This document tracks **current implementation state**, **planned features**, and the **long-term vision** for gdbforge.
 
 **Companion docs:** [OVERVIEW.md](OVERVIEW.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -19,7 +19,7 @@ This document tracks **current implementation state**, **planned features**, and
 
 ## Current state
 
-xGDB is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
+gdbforge is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
 
 ### Component status
 
@@ -44,7 +44,7 @@ xGDB is an **architecture prototype**, not a production debugger. The split-tree
 | `GDBWidget` | Working | Owns `GDBClient`/`Session`; ConsolePane + streaming MI |
 | `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |
 | `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript |
-| `ptyx.Client` | Working | Shared PTY mux: `WithWrite`, `Subscribe` fan-out |
+| `ptyx.Client` / `ptyx.TTY` | Working | GDB PTY mux + inferior stdio PTY (`-inferior-tty-set`) |
 | `GDBClient` | Working | Thin MI wrapper over `ptyx`; CLI prog/args |
 | `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
@@ -58,7 +58,7 @@ xGDB is an **architecture prototype**, not a production debugger. The split-tree
 ### Runnable today
 
 ```bash
-go run ./cmd/xgdb     # split-pane UI prototype
+go run ./cmd/gdbforge     # split-pane UI prototype
 go run ./cmd/docserve    # documentation browser
 ```
 
@@ -68,7 +68,7 @@ go run ./cmd/docserve    # documentation browser
 
 ```mermaid
 gantt
-    title xGDB roadmap (indicative)
+    title gdbforge roadmap (indicative)
     dateFormat YYYY-MM
     section Foundation
         Split tree + Grid           :done, m1, 2025-01, 2025-06
@@ -124,7 +124,7 @@ Dates are indicative — adjust as development progresses.
 | Breakpoint pane | **Done** — `:b breakpoint`; `e`/`d`; GDB + CodeWidget sync |
 | Register / memory panes | Basic data display |
 | `*stopped` handling | **Partial** — PC + file buffer update |
-| Separate console/target streams | Route `@` vs `~` to panes |
+| Separate console/target streams | **Done** — GDB PTY vs inferior `ptyx.TTY` + IO pane; `@` still accepted as fallback |
 
 ### M4 — Commands and modes
 
@@ -155,7 +155,7 @@ Dates are indicative — adjust as development progresses.
 
 ## Long-term vision
 
-xGDB should become a **terminal debugger platform**:
+gdbforge should become a **terminal debugger platform**:
 
 1. **Primary choice** for developers who want cgdb ergonomics with modern extensibility.
 2. **Embedded-first** — OpenOCD/JTAG workflows alongside GDB.

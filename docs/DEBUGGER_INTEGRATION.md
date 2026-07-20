@@ -1,6 +1,6 @@
 # Debugger Integration
 
-xGDB connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2 over a shared PTY** (`ptyx`). The same session is used by the GDB console, in-app `:AI`, and future MCP/REST frontends.
+gdbforge connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2** (`gdb.GDBClient`): one PTY for GDB/MI, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY` + `-inferior-tty-set`). The GDB session is shared by the GDB console, in-app `:AI`, and future MCP/REST frontends; program I/O goes only through the IO console (`:b io`).
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -11,6 +11,7 @@ xGDB connects to debug targets through **backend adapters** that implement `core
 - [Integration overview](#integration-overview)
 - [Debugger interface](#debugger-interface)
 - [PTY mux](#pty-mux)
+- [Inferior I/O (dual PTY)](#inferior-io-dual-pty)
 - [Breakpoints and source sync](#breakpoints-and-source-sync)
 - [GDB integration](#gdb-integration)
 - [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
@@ -31,10 +32,11 @@ Application data flows **Service → Event Bus → Model → Widget** (target). 
 flowchart TB
     subgraph UI["UI · termui / widgets"]
         GDBW["GDBWidget owns client"]
-        Cons["ConsolePane"]
+        Cons["GDB ConsolePane"]
+        IOW["OutputWidget · IO console"]
     end
 
-    subgraph App["Application · cmd/xgdb"]
+    subgraph App["Application · cmd/gdbforge"]
         AI[":AI OnAI"]
         MCP["GdbMcpService"]
     end
@@ -42,26 +44,31 @@ flowchart TB
     subgraph Domain["Domain · core"]
         SessIF["Session / Debugger / PTYWriter"]
         PtyMsg["PtyOutputMsg"]
-        UIMsg["GdbOutputMsg · ExecOutputMsg"]
+        UIMsg["GdbOutputMsg · ExecOutputMsg · InferiorOutputMsg"]
     end
 
     subgraph PTYLayer["PTY · ptyx"]
-        Pty["ptyx.Client"]
+        Pty["ptyx.Client · GDB MI"]
+        Inf["ptyx.TTY · inferior stdio"]
     end
 
     subgraph Backend["gdb"]
-        Client["GDBClient embeds ptyx"]
+        Client["GDBClient"]
         MI["GdbInputState · MiUpdate"]
     end
 
     subgraph External["External"]
         GDB["GDB --interpreter=mi2"]
+        Prog["Debugged program"]
         LLM["Claude / OpenAI API"]
     end
 
     GDBW --> Cons
     GDBW -->|"owns"| Client
     Client --> Pty
+    Client -->|"-inferior-tty-set"| Inf
+    IOW -->|"stdin Send / stdout Subscribe"| Inf
+    Inf <--> Prog
     MCP -->|"Session only"| SessIF
     AI --> MCP
     AI --> LLM
@@ -69,6 +76,7 @@ flowchart TB
     Pty -->|"Subscribe fan-out"| PtyMsg
     PtyMsg -->|"UI bridge"| UIMsg
     UIMsg --> GDBW
+    UIMsg --> IOW
     Pty --> GDB
     GDBW --> MI
 ```
@@ -123,7 +131,16 @@ These will emit `core.Event` updates rather than synchronous returns.
 
 ## PTY mux
 
-One `ptmx` (`ptyx.Client`). Two rules:
+gdbforge uses **two** PTY roles for a debug session:
+
+| PTY | Type | Role |
+|-----|------|------|
+| **GDB / MI** | `ptyx.Client` | GDB process (`--interpreter=mi2`); commands and MI records |
+| **Inferior / program** | `ptyx.TTY` | Debugged program stdin/stdout; wired with `-inferior-tty-set` |
+
+### GDB PTY (`ptyx.Client`)
+
+One `ptmx` for GDB. Two rules:
 
 | Direction | Rule |
 |-----------|------|
@@ -147,13 +164,66 @@ flowchart LR
   UI --> Lock
   MCP --> Lock
   App --> Lock
-  Lock --> PTMX["ptmx"]
+  Lock --> PTMX["GDB ptmx"]
   PTMX --> Fan["broadcast"]
   Fan --> ChUI["UI Subscribe"]
   Fan --> ChMCP["MCP Subscribe"]
 ```
 
-GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing.
+GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing. Inferior I/O uses a **separate** bridge → `InferiorOutputMsg` (see below).
+
+## Inferior I/O (dual PTY)
+
+There is **no** GDB MI command that writes program stdin. gdbforge allocates a bare PTY (`ptyx.OpenTTY`), keeps the **master** in-process, and tells GDB to attach the inferior to the **slave**:
+
+```text
+gdbforge
+ ├── PTY #1 master  ←→  gdb (MI / CLI)
+ └── PTY #2 master  ←→  program stdin/stdout   ← IO console (:b io)
+         │
+         └── slave path → GDB: -inferior-tty-set /dev/pts/N
+```
+
+| Side | Who holds it | Purpose |
+|------|----------------|---------|
+| Master (PTY #2) | gdbforge (`ptyx.TTY`) | Read program stdout; write program stdin |
+| Slave (PTY #2) | inferior (via GDB) | Program’s terminal |
+
+**Startup** (`gdb.NewGDBClient`):
+
+1. Start GDB on PTY #1 (`ptyx.New`)
+2. `ptyx.OpenTTY()` → PTY #2
+3. Send `-inferior-tty-set <slaveName>` before any `run` / `-exec-run`
+
+**IO console** (`OutputWidget`, pane name **IO**, `:b io`, alias `:b output`):
+
+| Action | Path |
+|--------|------|
+| Program prints | `TTY.Subscribe` → `InferiorOutputMsg` → `AppendInferior` |
+| User types + Enter | `TTY.Send(line)` → program stdin |
+| Ctrl-C / Ctrl-D | `SendRaw("\x03")` / `SendRaw("\x04")` to **inferior** (not GDB) |
+| Pane resize | `TTY.SetSize` |
+
+**Separation rules:**
+
+- GDB console keys go only to the GDB PTY — they never become program stdin
+- IO console keys go only to the inferior PTY — they are not GDB commands
+- When a dedicated inferior TTY is active, raw non-MI text on the GDB PTY is **not** treated as program stdout (fallback shared-TTY path remains for tests / missing TTY)
+
+```mermaid
+flowchart LR
+  subgraph gdbforge
+    GDBPane["GDB pane"]
+    IOPane["IO pane"]
+    M1["PTY#1 master"]
+    M2["PTY#2 master"]
+  end
+  GDBPane --> M1
+  IOPane --> M2
+  M1 --> GDB["gdb"]
+  M2 --> PROG["program"]
+  GDB -.->|"-inferior-tty-set slave"| PROG
+```
 
 **Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
 
@@ -161,7 +231,7 @@ GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg`
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/xgdb/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
+Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/gdbforge/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
 
 ## Breakpoints while the inferior is running
 
@@ -181,7 +251,7 @@ Other App PTY commands (`frame`, `thread`, …) also interrupt when running, but
 | Surface | How to open | Keys |
 |---------|-------------|------|
 | **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** show CodeWidget at that BP; **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
-| **OutputWidget** | `:b output` (default pane, top-right) | `j`/`k` / PgUp/PgDn — scroll; `<C-l>` clear; read-only ConsolePane with ANSI colors |
+| **OutputWidget (IO)** | `:b io` (alias `:b output`; default pane, top-right) | Program stdin/stdout via inferior PTY; type + Enter → stdin; PgUp/PgDn scroll; `<C-l>` clear; Ctrl-C/D → inferior; ANSI |
 | **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `thread <id>` + refresh stack + show code; filled on stop |
 | **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `frame <level>` + show code; shared libs / missing sources → centered **not available** + path |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
@@ -204,7 +274,7 @@ Disabled rows are **kept** across `-break-list` refresh (they are intentionally 
 
 ### Callback chain
 
-Wired in `cmd/xgdb/builtins.go`:
+Wired in `cmd/gdbforge/builtins.go`:
 
 | Hook | Handler |
 |------|---------|
@@ -321,7 +391,7 @@ Same process as the TUI (required for one debug context).
   → answer appended to GDB console
 ```
 
-**Env:** `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; optional `CGDB_AI_MODEL`.
+**Env:** `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; optional `GDBFORGE_AI_MODEL`.
 
 **Do not** use stdio MCP inside the TUI process (keyboard owns stdin). Optional TCP MCP for external hosts can expose the same tools later; in-app `:AI` is the primary door.
 
@@ -423,7 +493,7 @@ sequenceDiagram
 |-----------|------|------|
 | `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
 | `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
-| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
 | `ptyx.Client` | `ptyx/client.go` | Shared PTY mux |
 
@@ -483,7 +553,7 @@ JTAG debugging may arrive through:
 1. **OpenOCD** as transport (preferred — reuse OpenOCD adapter).
 2. Direct **JTAG library** (e.g., libftdi) for specialized hardware bring-up.
 
-xGDB UI would expose:
+gdbforge UI would expose:
 
 - Chain scan / device selection pane.
 - TAP state indicator.
