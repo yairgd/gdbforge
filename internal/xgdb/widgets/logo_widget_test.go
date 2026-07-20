@@ -11,7 +11,7 @@ func TestLogoLines(t *testing.T) {
 		t.Fatalf("too few logo lines: %d", len(lines))
 	}
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "Extreme GDB Tooling Suite") {
+	if !strings.Contains(joined, ">> xGDB: Extreme Tooling Suite <<") {
 		t.Fatal("missing tagline")
 	}
 	if !strings.Contains(joined, "██") {

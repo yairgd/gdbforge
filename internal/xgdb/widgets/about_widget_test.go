@@ -19,7 +19,7 @@ func TestAboutWidgetCachesStaticContent(t *testing.T) {
 		"Version:",
 		"0.1.0",
 		"Yair Gadelov",
-		"Extreme GDB Tooling Suite",
+		"xGDB: Extreme Tooling Suite",
 		"https://github.com/yairgd/newcgdb",
 		"MIT License",
 	} {

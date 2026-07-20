@@ -51,6 +51,8 @@ func helpLineStyle(line string) tcell.Style {
 	return st
 }
 
+// buildHelpLines is the in-app user manual (:help / :b help).
+// Keep the root README.md "User guide" section aligned with this text.
 func buildHelpLines() []string {
 	return []string{
 		"xgdb — user manual",
@@ -62,7 +64,7 @@ func buildHelpLines() []string {
 		"",
 		"=== Overview ===",
 		"",
-		"xgdb (Extreme GDB Tooling Suite) is a Vim-inspired terminal debugger",
+		"xgdb (xGDB: Extreme Tooling Suite) is a Vim-inspired terminal debugger",
 		"built on GDB. The screen is a multi-pane workspace: Code (or logo),",
 		"GDB console, Output, Threads, Call Stack, Breakpoints, plus a global",
 		": command line at the bottom.",

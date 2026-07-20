@@ -28,7 +28,7 @@ func logoLines() []string {
 		"██╔╝ ██╗╚██████╔╝██████╔╝██████╔╝",
 		"╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ",
 		"",
-		"  >> Extreme GDB Tooling Suite <<",
+		"    >> xGDB: Extreme Tooling Suite <<",
 	}
 }
 

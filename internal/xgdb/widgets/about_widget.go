@@ -103,7 +103,7 @@ func buildAboutLines(b vcsBuildInfo) []string {
 	return []string{
 		"xgdb",
 		"",
-		"Extreme GDB Tooling Suite — AI-assisted terminal debugger",
+		"xGDB: Extreme Tooling Suite — AI-assisted terminal debugger",
 		"for Embedded Linux and C/C++ developers.",
 		"",
 		"Version:",
