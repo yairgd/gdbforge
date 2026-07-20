@@ -65,3 +65,14 @@ func TestPushRawBreakpointNotify(t *testing.T) {
 	}
 }
 
+func TestPushRawTargetStreamSeparate(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw("@\"hello\\n\"\n~\"(gdb) \\n\"\n")
+	if len(u.TargetLines) != 1 || u.TargetLines[0] != "hello" {
+		t.Fatalf("TargetLines=%v", u.TargetLines)
+	}
+	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "(gdb) " {
+		t.Fatalf("DisplayLines=%v (console ~ must stay separate from @)", u.DisplayLines)
+	}
+}
+

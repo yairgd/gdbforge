@@ -161,7 +161,12 @@ func (w *OutputWidget) consumeRecord(line string) {
 	}
 
 	if text, ok := decodeTargetStreamLine(trim); ok {
-		w.writeTarget(text)
+		// With a dedicated inferior PTY, IO comes from AppendInferior only.
+		// MI @"..." is legacy — optional paint lives in the GDB console
+		// (:set gdbtargetprint), not here.
+		if !w.separateTTY {
+			w.writeTarget(text)
+		}
 		return
 	}
 

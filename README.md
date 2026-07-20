@@ -176,6 +176,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `esctocode` / `noesctocode` — Esc restores last pane / Code (default on)
 - `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on)
 - `gdblistenprint` / `nogdblistenprint` — paint App/MCP replies in GDB console (default on)
+- `gdbtargetprint` / `nogdbtargetprint` — also paint program stdout in GDB console like a classic terminal (default off); IO pane always uses the inferior PTY
 - `markcolor <name>` — focused list selection (default blue)
 - `markdimcolor <name>` — unfocused selection (default gray)
 - `breakcolor <name>` — enabled BP bg (default red)

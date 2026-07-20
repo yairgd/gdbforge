@@ -38,6 +38,17 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if !s.GdbListenPrint() {
 		t.Fatal("gdblistenprint default true")
 	}
+	if s.GdbTargetPrint() {
+		t.Fatal("gdbtargetprint default false")
+	}
+	s.SetGdbTargetPrint(true)
+	if !s.GdbTargetPrint() {
+		t.Fatal("gdbtargetprint")
+	}
+	s.SetGdbTargetPrint(false)
+	if s.GdbTargetPrint() {
+		t.Fatal("nogdbtargetprint")
+	}
 	// Sticky silence only suppresses when listen-print is off.
 	s.SetGdbListenPrint(false)
 	if !s.SuppressGdbConsole() {

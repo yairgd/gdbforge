@@ -214,6 +214,16 @@ func (m *GDBWidget) AppendLines(lines []string) {
 	m.console.FollowTailAndScroll()
 }
 
+// AppendTargetText paints raw inferior stdout into the GDB console (legacy
+// shared-terminal mode when :set gdbtargetprint is on).
+func (m *GDBWidget) AppendTargetText(text string) {
+	if text == "" {
+		return
+	}
+	m.console.AppendText(text)
+	m.console.FollowTailAndScroll()
+}
+
 func (m *GDBWidget) Clear() {
 	m.console.Clear()
 }
@@ -332,14 +342,18 @@ func (m *GDBWidget) silentOwner() bool {
 func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 	silent := m.silentOwner()
 	if !silent {
-		if len(upd.DisplayLines) > 0 {
-			m.console.AppendLines(upd.DisplayLines)
+		lines := upd.DisplayLines
+		if m.appState != nil && m.appState.GdbTargetPrint() {
+			lines = append(lines, upd.TargetLines...)
+		}
+		if len(lines) > 0 {
+			m.console.AppendLines(lines)
 			m.console.StripTrailingBarePrompt()
 		}
 		if upd.PromptReady {
 			m.console.EnsureLivePrompt()
 		}
-		if len(upd.DisplayLines) > 0 || upd.PromptReady {
+		if len(lines) > 0 || upd.PromptReady {
 			m.console.FollowTailAndScroll()
 		}
 	}

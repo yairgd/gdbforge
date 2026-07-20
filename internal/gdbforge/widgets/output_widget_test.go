@@ -38,6 +38,7 @@ func TestOutputWidgetSeparateTTYIgnoresGdbRaw(t *testing.T) {
 	w.separateTTY = true
 	w.AppendPty("^running\n")
 	w.AppendPty("should not appear from gdb pty\n")
+	w.AppendPty("@\"should not appear from mi\\n\"\n")
 	w.AppendInferior("from inferior\n")
 	lines := w.LinesForTest()
 	if len(lines) != 1 || lines[0] != "from inferior" {

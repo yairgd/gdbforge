@@ -116,6 +116,12 @@ type AppState struct {
 	// traffic. Default true; :set gdblistenprint / :set nogdblistenprint.
 	gdbListenPrint bool
 
+	// gdbTargetPrint: when true, also paint program stdout in the GDB console
+	// (MI @"..." and/or mirrored inferior PTY) so it behaves like a classic
+	// shared GDB terminal. Default false; :set gdbtargetprint / :set nogdbtargetprint.
+	// The IO pane always uses the inferior PTY and never needs this for display.
+	gdbTargetPrint bool
+
 	// gdbConsoleSilent is sticky: set true on App/MCP WithPTYOwner, cleared on
 	// UI WithPTYOwner. Used with gdbListenPrint to suppress listener paint
 	// after short Send() windows (owner restores to none before replies arrive).
@@ -141,6 +147,7 @@ func NewAppState() *AppState {
 		escToCode:          true,
 		breakMain:          true,
 		gdbListenPrint:     true,
+		gdbTargetPrint:     false,
 	}
 }
 
@@ -300,6 +307,20 @@ func (a *AppState) GdbListenPrint() bool {
 func (a *AppState) SetGdbListenPrint(v bool) {
 	a.mu.Lock()
 	a.gdbListenPrint = v
+	a.mu.Unlock()
+}
+
+// GdbTargetPrint reports whether program stdout is also painted in the GDB
+// console (legacy / standard-terminal mode). Default false.
+func (a *AppState) GdbTargetPrint() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.gdbTargetPrint
+}
+
+func (a *AppState) SetGdbTargetPrint(v bool) {
+	a.mu.Lock()
+	a.gdbTargetPrint = v
 	a.mu.Unlock()
 }
 

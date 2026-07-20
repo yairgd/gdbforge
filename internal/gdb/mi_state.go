@@ -7,7 +7,8 @@ import (
 
 // MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
 type MiUpdate struct {
-	DisplayLines         []string
+	DisplayLines         []string // GDB console stream (~) and other UI text
+	TargetLines          []string // inferior target stream (@) — legacy MI path
 	PromptReady          bool
 	State                GdbState
 	ErrorMsg             string
@@ -62,7 +63,8 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		out.DisplayLines = append(out.DisplayLines, decodeStreamPayload(line)...)
 
 	case strings.HasPrefix(line, "@\""):
-		out.DisplayLines = append(out.DisplayLines, decodeStreamPayload(line)...)
+		// Target stream: optional legacy paint in GDB console (:set gdbtargetprint).
+		out.TargetLines = append(out.TargetLines, decodeStreamPayload(line)...)
 
 	case strings.HasPrefix(line, "&\""):
 		// Log stream is usually the CLI echo / noise; the UI already echoes
