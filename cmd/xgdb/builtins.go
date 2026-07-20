@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -16,6 +16,12 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.aboutWidget = widgets.NewAboutWidget()
 	a.registerBuiltin("about", a.aboutWidget)
+
+	a.helpWidget = widgets.NewHelpWidget()
+	a.helpWidget.SetClipboard(a.ClipboardIO())
+	a.registerBuiltin("help", a.helpWidget)
+
+	a.logoWidget = widgets.NewLogoWidget()
 
 	logWidget := termui.NewLoggerWidget(a.ctx)
 	logWidget.Events = a.Events()

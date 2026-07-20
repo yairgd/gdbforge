@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/execcli"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -98,6 +98,16 @@ func (app *DebuggerApp) ClearFocus(args ...any) {
 		c.Clear()
 	}
 	app.RequestFrame()
+}
+
+// OnHelp opens the Viewport user manual in the focused pane (:help).
+func (app *DebuggerApp) OnHelp(args ...any) {
+	if app.helpWidget == nil || app.tab == nil {
+		return
+	}
+	if app.swapFocusedWidget(app.helpWidget) {
+		app.RequestFrame()
+	}
 }
 
 func (app *DebuggerApp) Quit(args ...any) {

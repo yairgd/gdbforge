@@ -1,6 +1,6 @@
 # cgdb-go Documentation
 
-**cgdb-go** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/cgdb`.
+**cgdb-go** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/xgdb`.
 
 The project targets a **cgdb-like experience** with a cleaner architecture: application models created at startup, widgets as on-demand views, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer.
 
@@ -36,13 +36,13 @@ Standalone diagram sources live under [`diagrams/`](diagrams/).
 ### Run the debugger prototype
 
 ```bash
-go run ./cmd/cgdb
+go run ./cmd/xgdb
 ```
 
 Requires a terminal with UTF-8 support. Optional for `:AI`: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 
 ```bash
-go run ./cmd/cgdb -- ./hello
+go run ./cmd/xgdb -- ./hello
 # then in cgdb:  :AI what breakpoints are set?
 ```
 

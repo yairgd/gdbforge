@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
@@ -127,12 +127,37 @@ func isCopyKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
+	x, y := ev.Position()
+	primary := ev.Buttons()&tcell.ButtonPrimary != 0
+	inCmd := a.cmdLineContains(x, y)
+
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
+		// Middle-click paste into the cmdline (Linux terminal convention).
+		if a.cmdWidget != nil && ev.Buttons()&tcell.ButtonMiddle != 0 {
+			a.cmdWidget.HandleEvent(ev)
+			a.RequestFrame()
+			return
+		}
+		if primary && inCmd {
+			a.clickCmdLine(x)
+			return
+		}
+		if primary && !inCmd {
+			// Click outside the cmdline: leave command mode (like Esc), then
+			// fall through so the pane under the pointer can take focus.
+			a.leaveCommandMode()
+		} else {
+			return
+		}
+	}
+
+	if primary && inCmd {
+		a.enterCommandMode()
+		a.clickCmdLine(x)
 		return
 	}
 
-	if ev.Buttons()&tcell.ButtonPrimary != 0 {
-		x, y := ev.Position()
+	if primary {
 		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			a.EnterInsertMode()
@@ -140,7 +165,6 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
-		x, y := ev.Position()
 		if a.tab.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			a.EnterInsertMode()
@@ -148,6 +172,67 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	a.tab.HandleEvent(ev)
+}
+
+// enterCommandMode activates the ':' cmdline (same as pressing ':').
+// Leaves insert-active so the focused pane status is blue, matching Esc then ':'.
+func (a *DebuggerApp) enterCommandMode() {
+	if a.completionBar != nil {
+		a.completionBar.Clear()
+	}
+	if a.tab != nil {
+		a.tab.SetInsertActive(false)
+	}
+	if a.cmdWidget != nil && !a.cmdWidget.Active() {
+		a.cmdWidget.Activate()
+	}
+	a.SetMode(platform.ModeCommand)
+	a.RequestFrame()
+}
+
+// leaveCommandMode exits ':' / wildmenu (same as Esc).
+func (a *DebuggerApp) leaveCommandMode() {
+	if a.completionBar != nil {
+		a.completionBar.Clear()
+	}
+	if a.cmdWidget != nil {
+		a.cmdWidget.Deativate()
+	}
+	a.SetMode(platform.ModeNormal)
+	a.RequestFrame()
+}
+
+func (a *DebuggerApp) cmdLineContains(x, y int) bool {
+	if a.cmdWidget == nil {
+		return false
+	}
+	for _, n := range a.Widgets() {
+		if n.Widget() == a.cmdWidget {
+			return n.Rect().Contains(x, y)
+		}
+	}
+	return false
+}
+
+func (a *DebuggerApp) clickCmdLine(screenX int) {
+	if a.cmdWidget == nil {
+		return
+	}
+	originX := 0
+	for _, n := range a.Widgets() {
+		if n.Widget() == a.cmdWidget {
+			originX = n.Rect().X()
+			break
+		}
+	}
+	if a.Mode() == platform.ModeCompletion {
+		if a.completionBar != nil {
+			a.completionBar.Clear()
+		}
+		a.SetMode(platform.ModeCommand)
+	}
+	a.cmdWidget.SetCursorAtLocalX(screenX - originX)
+	a.RequestFrame()
 }
 
 func (a *DebuggerApp) HandleResize() {
@@ -169,14 +254,7 @@ func (app *DebuggerApp) handleUnknownCommand(_ termui.CommandEvent) bool {
 }
 
 func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
-	if app.completionBar != nil {
-		app.completionBar.Clear()
-	}
-	switch app.Mode() {
-	case platform.ModeCommand, platform.ModeCompletion:
-		app.SetMode(platform.ModeNormal)
-		app.cmdWidget.Deativate()
-	}
+	app.leaveCommandMode()
 	return true
 }
 

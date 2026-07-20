@@ -30,14 +30,14 @@
 
 | Order | File | Why |
 |-------|------|-----|
-| 1 | `cmd/cgdb/main.go` → `app.go` → `setup.go` | Entry + app wiring |
+| 1 | `cmd/xgdb/main.go` → `app.go` → `setup.go` | Entry + app wiring |
 | 2 | `internal/termui/term_app.go` | Event loop, grids, draw flush |
 | 3 | `internal/termui/widget.go` | Widget contract |
 | 4 | `internal/termui/widget_tree.go`, `layout_tree.go` | Split layout |
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
 | 7 | `internal/termui/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
-| 8 | `internal/cgdb/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
+| 8 | `internal/xgdb/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
 | 9 | `internal/gdb/gdb_client.go` | PTY backend |
 | 10 | `docs/ARCHITECTURE.md` | Big picture |
 
@@ -164,7 +164,7 @@ See [HOSTING.md](HOSTING.md).
 ### Run cgdb-go prototype
 
 ```bash
-go run ./cmd/cgdb
+go run ./cmd/xgdb
 ```
 
 ---
@@ -209,7 +209,7 @@ Widgets are views. Before adding a widget, ensure the corresponding **model** ex
 
 1. Define or use an application model that holds the pane's state.
 
-2. Create `internal/cgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
+2. Create `internal/xgdb/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
 
 ```go
 type MyWidget struct {
@@ -248,7 +248,7 @@ a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to Completi
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
-5. Build the command tree with the DSL in `ExapData()` (`cmd/cgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
+5. Build the command tree with the DSL in `ExapData()` (`cmd/xgdb/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
 
 6. Handle legacy bus events in the application when needed:
 
@@ -355,7 +355,7 @@ In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capt
 Debug the cgdb-go prototype:
 
 ```bash
-dlv debug ./cmd/cgdb --headless --listen=:2346 --api-version=2
+dlv debug ./cmd/xgdb --headless --listen=:2346 --api-version=2
 # separate terminal:
 dlv connect :2346
 ```
@@ -389,7 +389,7 @@ dlv debug ./cmd/docserve -- --port 8765
 
 | Task | Start here |
 |------|------------|
-| New application model | App startup in `cmd/cgdb`; subscribe to event bus |
+| New application model | App startup in `cmd/xgdb`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register builtin in `initBuiltins` or open via `:e` / layout |
 | New service / backend | Implement `core.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
@@ -408,9 +408,9 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/cgdb/app.go` + `input.go` |
+| App API / dispatch | `term_app.go` (`AppApi`), `cmd/xgdb/app.go` + `input.go` |
 | Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) |
-| Key-sequence bindings | `internal/commands` + `cmd/cgdb/keybindings.go` |
+| Key-sequence bindings | `internal/commands` + `cmd/xgdb/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
 | Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `tab.go` |
@@ -419,12 +419,12 @@ Always update docs when changing architecture-visible behavior.
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
-| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/cgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
+| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/xgdb/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |
 | Debugger events | `core/events.go` |
-| Entry point | `cmd/cgdb/` (`main.go` + companions) |
+| Entry point | `cmd/xgdb/` (`main.go` + companions) |
 | Docs server | `cmd/docserve/main.go` |
 
 ---

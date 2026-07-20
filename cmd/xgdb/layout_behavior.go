@@ -2,11 +2,11 @@ package main
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb/layout"
+	"github.com/yairgd/cgdb-go/internal/xgdb/layout"
 )
 
 // layoutBehavior is per-layout normal-mode key policy (geometry stays in
-// internal/cgdb/layout; this stays private to DebuggerApp).
+// internal/xgdb/layout; this stays private to DebuggerApp).
 type layoutBehavior interface {
 	HandleNormalKey(a *DebuggerApp, ev *tcell.EventKey) bool
 }

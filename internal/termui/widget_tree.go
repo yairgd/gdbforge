@@ -301,8 +301,9 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 		if l.handleMouse(me) {
 			return
 		}
-		// Wheel over a pane: deliver to that leaf (not only the focused one).
-		if me.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+		// Wheel / middle-click: deliver to the leaf under the pointer
+		// (not only the focused one). Middle-click paste is Linux-terminal style.
+		if me.Buttons()&(tcell.WheelUp|tcell.WheelDown|tcell.ButtonMiddle) != 0 {
 			mx, my := me.Position()
 			for _, n := range CollectLeaves(l.root) {
 				if l.leafRect(n).Contains(mx, my) {

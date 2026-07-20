@@ -13,7 +13,7 @@ This document maps the **cgdb-go** repository packages to their responsibilities
 - [internal/termui](#internaltermui)
 - [internal/core](#internalcore)
 - [internal/gdb](#internalgdb)
-- [internal/cgdb](#internalcgdb)
+- [internal/xgdb](#internalcgdb)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
 - [What belongs where](#what-belongs-where)
@@ -54,10 +54,10 @@ cgdb-go/
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/cgdb/` | `cgdb` | **cgdb-go** debugger app (`package main`, split across files) |
+| `cmd/xgdb/` | `cgdb` | **cgdb-go** debugger app (`package main`, split across files) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 
-### `cmd/cgdb` layout
+### `cmd/xgdb` layout
 
 | File | Responsibility |
 |------|----------------|
@@ -68,7 +68,7 @@ cgdb-go/
 | `keybindings.go` | `InitKeyBindings` |
 | `actions.go` | Command action methods (focus, split, quit, …) |
 | `input.go` | Mode key handlers, mouse, resize |
-| `layout.go` | `:layout` apply / completions; wires `internal/cgdb/layout` builders |
+| `layout.go` | `:layout` apply / completions; wires `internal/xgdb/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
 | `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
@@ -86,7 +86,7 @@ task build
 
 ## internal/termui
 
-**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/cgdb/widgets`.
+**cgdb-go TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/xgdb/widgets`.
 
 | File | Responsibility |
 |------|----------------|
@@ -127,7 +127,7 @@ task build
 
 See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, `CommandRegistry` = owns, `CommandParser` = navigates).
 
-## internal/cgdb
+## internal/xgdb
 
 **cgdb-go application layer** — layout builders and debugger-specific widgets.
 
@@ -143,6 +143,8 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `widgets/callstack_widget.go` | Builtin `:b callstack`; frames from `-stack-list-frames` on stop |
 | `widgets/output_widget.go` | Builtin `:b output`; inferior stdout (`@` stream); `\n`/`\r`/`\t` |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
+| `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |
+| `widgets/logo_widget.go` | Startup splash in the code leaf until source loads |
 | `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
 | `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
 
@@ -176,7 +178,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 See [EXEC_SHELL.md](EXEC_SHELL.md).
 
-`cmd/cgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
+`cmd/xgdb` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
 
 ```mermaid
 flowchart TB
@@ -220,7 +222,7 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 
 **Rule:** no imports from `termui`. Output reaches UI via `Subscribe` → `GdbOutputMsg` + `EventInterrupt`.
 
-Application orchestration for cgdb-go lives in **`cmd/cgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
+Application orchestration for cgdb-go lives in **`cmd/xgdb`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 
 ---
 
@@ -258,11 +260,11 @@ Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
 flowchart BT
     tcell["gdamore/tcell"]
     termui["internal/termui"]
-    cgdb_pkg["internal/cgdb"]
-    widgets["internal/cgdb/widgets"]
+    cgdb_pkg["internal/xgdb"]
+    widgets["internal/xgdb/widgets"]
     core["internal/core"]
     gdb["internal/gdb"]
-    cgdb_cmd["cmd/cgdb"]
+    cgdb_cmd["cmd/xgdb"]
 
     termui --> tcell
     widgets --> termui
@@ -286,19 +288,19 @@ flowchart BT
 
 | Question | Package |
 |----------|---------|
-| Application model (domain state)? | App layer (`cmd/cgdb`, future `internal/cgdb/models/`) |
+| Application model (domain state)? | App layer (`cmd/xgdb`, future `internal/xgdb/models/`) |
 | Service (external I/O)? | `gdb` or future backend packages |
 | Split pane layout / window manager? | `termui` |
-| Widget (view of a model)? | `internal/cgdb/widgets` or `termui` |
+| Widget (view of a model)? | `internal/xgdb/widgets` or `termui` |
 | GDB MI parsing? | `gdb` |
 | Scrollable text storage primitive? | `core` |
-| Key binding in normal mode? | `cmd/cgdb/keybindings.go` + `input.go` |
+| Key binding in normal mode? | `cmd/xgdb/keybindings.go` + `input.go` |
 | Interaction mode state? | `platform.AppState` via `TermApp` |
 | Spawn/debug external process? | `gdb` (or future backend service) |
 | `:buffer` / model registry? | App startup + `HandleCoreEvents` dispatch |
-| Vim `:` command registry? | `internal/commands` + `cmd/cgdb/command_tree.go` |
+| Vim `:` command registry? | `internal/commands` + `cmd/xgdb/command_tree.go` |
 | Draw box borders? | `termui` Grid/Cell |
-| Compose services + models + UI? | `cmd/cgdb/setup.go` |
+| Compose services + models + UI? | `cmd/xgdb/setup.go` |
 
 When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core` or a dedicated model package over `termui`.
 

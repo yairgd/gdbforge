@@ -1,5 +1,5 @@
 // Package layout builds named debugger workspace trees (geometry only).
-// Layout-specific key policy lives in cmd/cgdb, not here.
+// Layout-specific key policy lives in cmd/xgdb, not here.
 package layout
 
 import (

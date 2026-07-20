@@ -11,7 +11,7 @@ func TestAboutWidgetCachesStaticContent(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected about lines")
 	}
-	if lines[0] != "newcgdb" {
+	if lines[0] != "xgdb" {
 		t.Fatalf("title: %q", lines[0])
 	}
 	joined := strings.Join(lines, "\n")
@@ -19,6 +19,7 @@ func TestAboutWidgetCachesStaticContent(t *testing.T) {
 		"Version:",
 		"0.1.0",
 		"Yair Gadelov",
+		"Extreme GDB Tooling Suite",
 		"https://github.com/yairgd/newcgdb",
 		"MIT License",
 	} {

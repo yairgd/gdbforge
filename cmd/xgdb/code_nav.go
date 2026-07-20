@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
-// Named leaf marks on the active WidgetTree (role names live only in cmd/cgdb).
+// Named leaf marks on the active WidgetTree (role names live only in cmd/xgdb).
 const (
 	leafMarkCode = "code"
 	leafMarkGDB  = "gdb"
@@ -46,16 +46,25 @@ func isCodeWidget(w termui.Widget) bool {
 	return ok
 }
 
+// isCodeSlot is the startup code leaf: LogoWidget until source loads, then CodeWidget.
+func isCodeSlot(w termui.Widget) bool {
+	if isCodeWidget(w) {
+		return true
+	}
+	_, ok := w.(*widgets.LogoWidget)
+	return ok
+}
+
 // findCodeLeaf returns the remembered code leaf if still valid, else any leaf
-// currently showing a CodeWidget.
+// currently showing a CodeWidget or LogoWidget.
 func (a *DebuggerApp) findCodeLeaf() *termui.Node {
 	if a.tab == nil {
 		return nil
 	}
-	if leaf := a.tab.LeafMark(leafMarkCode); leaf != nil && isCodeWidget(leaf.GetWidget()) {
+	if leaf := a.tab.LeafMark(leafMarkCode); leaf != nil && isCodeSlot(leaf.GetWidget()) {
 		return leaf
 	}
-	leaf := a.tab.FindLeaf(isCodeWidget)
+	leaf := a.tab.FindLeaf(isCodeSlot)
 	a.tab.SetLeafMark(leafMarkCode, leaf)
 	return leaf
 }
@@ -77,7 +86,7 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	}
 	w := leaf.GetWidget()
 	switch {
-	case isCodeWidget(w):
+	case isCodeSlot(w):
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 		a.tab.SetLeafMark(leafMarkLast, nil)
 	case w == a.gdbWidget:
@@ -87,14 +96,14 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	}
 }
 
-// focusIsCodeOrGdb reports whether the focused pane is Code or GDB (or empty).
+// focusIsCodeOrGdb reports whether the focused pane is Code/Logo or GDB (or empty).
 // Other panes keep their own Up/Down/Space handling.
 func (a *DebuggerApp) focusIsCodeOrGdb() bool {
 	w := a.focusedWidget()
 	if w == nil {
 		return true
 	}
-	if isCodeWidget(w) {
+	if isCodeSlot(w) {
 		return true
 	}
 	return w == a.gdbWidget
@@ -108,7 +117,7 @@ func (a *DebuggerApp) activateLastOrCodePane() {
 	}
 	if leaf := a.tab.LeafMark(leafMarkLast); leaf != nil {
 		w := leaf.GetWidget()
-		if w != nil && !isCodeWidget(w) && w != a.gdbWidget {
+		if w != nil && !isCodeSlot(w) && w != a.gdbWidget {
 			a.tab.SetInsertActive(false)
 			a.SetMode(platform.ModeNormal)
 			_ = a.tab.FocusLeaf(leaf)
@@ -197,21 +206,13 @@ func (a *DebuggerApp) onEscape() {
 	a.RequestRedraw()
 }
 
-// activateCodePane leaves insert mode, focuses the pane that holds a CodeWidget,
-// or places the active CodeWidget on the top-left leaf if none exists.
-// Does not steal the GDB pane when a code pane already exists elsewhere.
+// activateCodePane leaves insert mode and focuses the code slot (Logo or Code).
 func (a *DebuggerApp) activateCodePane() {
 	if a.tab == nil {
 		return
 	}
 	a.tab.SetInsertActive(false)
 	a.SetMode(platform.ModeNormal)
-
-	cw := a.activeCodeWidget()
-	if cw == nil {
-		a.RequestRedraw()
-		return
-	}
 
 	leaf := a.findCodeLeaf()
 	if leaf == nil {
@@ -222,7 +223,7 @@ func (a *DebuggerApp) activateCodePane() {
 		return
 	}
 
-	if leaf.GetWidget() != cw {
+	if cw := a.activeCodeWidget(); cw != nil && leaf.GetWidget() != cw {
 		leaf.SetWidget(cw)
 	}
 	_ = a.tab.FocusLeaf(leaf)

@@ -322,6 +322,15 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		return
 	}
 
+	// Middle-click paste (Linux terminal convention); only inside the pane.
+	if isMiddlePaste(e) {
+		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+			return
+		}
+		v.PasteAtCursor()
+		return
+	}
+
 	if e.Buttons() == tcell.ButtonNone && v.selActive {
 		v.selActive = false
 		if lx >= 0 && ly >= 0 && lx < v.width && ly < v.height {

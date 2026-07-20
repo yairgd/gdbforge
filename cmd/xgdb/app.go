@@ -3,7 +3,7 @@ package main
 import (
 	"sync"
 
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/core"
 	"github.com/yairgd/cgdb-go/internal/execcli"
@@ -50,6 +50,8 @@ type DebuggerApp struct {
 	// builtins are singleton views created once at startup (:b about, :b gdb, …).
 	builtins    map[string]termui.Widget
 	aboutWidget *widgets.AboutWidget
+	helpWidget  *widgets.HelpWidget
+	logoWidget  *widgets.LogoWidget
 
 	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
 	fileBuffers map[string]*widgets.CodeWidget

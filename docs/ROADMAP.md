@@ -58,7 +58,7 @@ cgdb-go is an **architecture prototype**, not a production debugger. The split-t
 ### Runnable today
 
 ```bash
-go run ./cmd/cgdb     # split-pane UI prototype
+go run ./cmd/xgdb     # split-pane UI prototype
 go run ./cmd/docserve    # documentation browser
 ```
 

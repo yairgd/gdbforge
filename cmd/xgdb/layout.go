@@ -3,8 +3,8 @@ package main
 import (
 	"strings"
 
-	"github.com/yairgd/cgdb-go/internal/cgdb/layout"
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/layout"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
@@ -63,7 +63,7 @@ func (a *DebuggerApp) ApplyLayout(name string) {
 }
 
 func (a *DebuggerApp) buildLayoutTab(name string) *termui.TabWidget {
-	code := a.layoutCodeWidget()
+	code := a.layoutCodePane()
 	panes := a.debugPanes(code)
 	switch name {
 	case layout.Default:
@@ -82,10 +82,22 @@ func (a *DebuggerApp) finishLayoutApply(name string) {
 	a.State().SetEqualAlways(true)
 	a.tab.SetEqualAlways(true)
 	a.tab.FocusWidget(a.gdbWidget)
-	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
+	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
 	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
 	a.RequestFrame()
+}
+
+// layoutCodePane returns the widget for the code leaf (source buffer or logo splash).
+func (a *DebuggerApp) layoutCodePane() termui.Widget {
+	if w := a.layoutCodeWidget(); w != nil {
+		return w
+	}
+	if a.logoWidget != nil {
+		return a.logoWidget
+	}
+	a.logoWidget = widgets.NewLogoWidget()
+	return a.logoWidget
 }
 
 func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
@@ -97,12 +109,7 @@ func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 	if a.primaryCode != nil {
 		return a.primaryCode
 	}
-	w := widgets.NewCodeWidget()
-	w.PaneName = "[No Name]"
-	w.SetClipboard(a.ClipboardIO())
-	a.wireCodeWidget(w)
-	a.primaryCode = w
-	return w
+	return nil
 }
 
 // registerLayouts registers named workspace layouts on AppState.

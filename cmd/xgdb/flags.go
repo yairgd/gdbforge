@@ -16,12 +16,12 @@ type SessionConfig struct {
 }
 
 func parseFlags(args []string) (SessionConfig, error) {
-	fs := flag.NewFlagSet("cgdb", flag.ContinueOnError)
+	fs := flag.NewFlagSet("xgdb", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	gdbPath := fs.String("d", "gdb", "path to the gdb binary")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: cgdb [-d gdb] prog [args...]\n")
+		fmt.Fprintf(os.Stderr, "Usage: xgdb [-d gdb] prog [args...]\n")
 		fs.SetOutput(os.Stderr)
 		fs.PrintDefaults()
 	}

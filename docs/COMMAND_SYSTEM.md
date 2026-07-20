@@ -202,7 +202,7 @@ The DSL in `internal/commands/dsl.go` builds the tree declaratively instead of i
 | `(n *CommandNode).Group(name, children...)` | Inserts a group into `n`, returns `n` for chaining |
 | `(n *CommandNode).Leaf` / `LeafRest` | Insert leaf (or rest-args leaf) into `n`, return `n` |
 
-### Example (`DebuggerApp.ExapData` in `cmd/cgdb/command_tree.go`)
+### Example (`DebuggerApp.ExapData` in `cmd/xgdb/command_tree.go`)
 
 ```go
 func (a *DebuggerApp) ExapData() {
@@ -272,11 +272,12 @@ Vim-like buffers use the same pattern:
 
 | Command | Handler | Behavior |
 |---------|---------|----------|
-| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
+| `:help` | `Leaf("help", OnHelp)` | Open the Viewport user manual in the focused pane (same widget as `:b help`). |
+| `:b name` | `LeafRestComplete("b", OnBuffer, bufferCompletions)` | Switch to builtin (`help`, `about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) or an **already open** file CodeWidget. **Tab** lists builtins + open file buffers (dynamic). |
 | `:edit` / `:edit name` | `LeafRestComplete("edit", OnEdit, editCompletions)` | No args: project source picker (FileListWidget). With a name: open that source CodeWidget. **`:e`** is the unique prefix of `:edit` (same command). **Tab** lists `SourceFiles` full paths. Does **not** pollute `:b`. |
-| `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace: **`panels`** (startup), **`default`** (six-pane), **`classic`** (Code over GDB). Builders in `internal/cgdb/layout`. Bare `:layout` re-applies **panels**. |
+| `:layout name` | `LeafRestComplete("layout", OnLayout, layoutCompletions)` | Apply a registered workspace: **`panels`** (startup), **`default`** (six-pane), **`classic`** (Code over GDB). Builders in `internal/xgdb/layout`. Bare `:layout` re-applies **panels**. |
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear Output pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
-| `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues. |
+| `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues; `frame`/`thread` never auto-continue. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc restores the last non-Code/non-GDB pane when one was focused, otherwise focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
 | `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). `:set breakmain` also inserts immediately if a session is already live. |
 | `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **on**). User-typed console commands always print. |
@@ -317,7 +318,7 @@ sequenceDiagram
     Parser->>Tree: current.Action()
 ```
 
-Wiring in `cmd/cgdb/setup.go`:
+Wiring in `cmd/xgdb/setup.go`:
 
 ```go
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
@@ -367,7 +368,7 @@ Key chords use the **same `CommandNode` type** but a **different registry**:
 | Key chords | `KeyBindingRegistry` trie | `SearchPartial(key)` per keypress |
 
 ```go
-// cmd/cgdb/keybindings.go
+// cmd/xgdb/keybindings.go
 func (a *DebuggerApp) InitKeyBindings() {
     a.keyBindings = commands.NewKeyBindingRegistry()
     a.keyBindings.Bind(
@@ -389,13 +390,13 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Colon command (tree)
 
-1. Add a `Cmd` or nested `Group` in `ExapData()` (`cmd/cgdb/command_tree.go`).
-2. Implement the handler on `DebuggerApp` in `cmd/cgdb/actions.go`.
+1. Add a `Cmd` or nested `Group` in `ExapData()` (`cmd/xgdb/command_tree.go`).
+2. Implement the handler on `DebuggerApp` in `cmd/xgdb/actions.go`.
 3. No `CommandID` or `HandleCoreEvents` wiring needed for tree leaves — `Execute()` calls `Action` directly.
 
 ### Key chord
 
-1. Add `a.keyBindings.Bind(…)` in `cmd/cgdb/keybindings.go`.
+1. Add `a.keyBindings.Bind(…)` in `cmd/xgdb/keybindings.go`.
 
 ### Tab completion feedback
 
@@ -414,13 +415,13 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
 | `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
 | `internal/termui/event.go` | `CompletionMsg` and other UI-generic events |
-| `cmd/cgdb/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
+| `cmd/xgdb/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
 | `internal/termui/logger_widget.go` | Log sink pane |
-| `cmd/cgdb/command_tree.go` | `ExapData` DSL |
-| `cmd/cgdb/keybindings.go` | `InitKeyBindings` |
-| `cmd/cgdb/actions.go` | Command action methods |
-| `cmd/cgdb/setup.go` | `InitB` wiring |
+| `cmd/xgdb/command_tree.go` | `ExapData` DSL |
+| `cmd/xgdb/keybindings.go` | `InitKeyBindings` |
+| `cmd/xgdb/actions.go` | Command action methods |
+| `cmd/xgdb/setup.go` | `InitB` wiring |
 
 ---
 

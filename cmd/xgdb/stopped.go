@@ -8,7 +8,7 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/gdb"
 	"github.com/yairgd/cgdb-go/internal/mcp"
 	"github.com/yairgd/cgdb-go/internal/platform"
@@ -85,6 +85,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 
 // showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters when new.
 // Missing sources / shared libraries show a centered "not available" placeholder.
+// Replaces the startup LogoWidget in the code leaf when present.
 func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 	if file == "" {
 		return nil
@@ -101,6 +102,7 @@ func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 	if created && !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
 	}
+	a.placeCodeInSlot(w)
 	return w
 }
 
@@ -120,6 +122,7 @@ func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidg
 	if w.PaneName == "" || w.PaneName == "." {
 		w.PaneName = "unavailable"
 	}
+	a.placeCodeInSlot(w)
 	return w
 }
 
@@ -375,11 +378,17 @@ func (a *DebuggerApp) runBreakpointRefresh() {
 
 // applyCodeStop refreshes the source view for a stop without stealing focus from
 // another pane. If the focused pane is already a CodeWidget, switch that pane
-// to the stop file; otherwise update another visible CodeWidget leaf in place.
+// to the stop file; otherwise update the code-slot leaf (Logo or Code) in place.
 func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
+	a.placeCodeInSlot(w)
+}
+
+// placeCodeInSlot puts w into the code leaf, replacing LogoWidget or an older CodeWidget.
+func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
+	a.primaryCode = w
 	if cw := a.focusedCode(); cw != nil {
 		if cw != w {
 			_ = a.tab.ReplaceFocusedWidget(w)
@@ -387,9 +396,13 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 		a.rememberCodeLeafFromFocus()
 		return
 	}
-	if a.tab.ReplaceMatchingLeafWidget(w, isCodeWidget) {
-		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
+	if _, ok := a.focusedWidget().(*widgets.LogoWidget); ok {
+		_ = a.tab.ReplaceFocusedWidget(w)
+		a.rememberCodeLeafFromFocus()
 		return
+	}
+	if a.tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
+		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
 	}
 }
 

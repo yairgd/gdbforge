@@ -22,6 +22,7 @@ type WidgetNode struct {
 func (w *WidgetNode) SetRect(r Rect) {
 	w.rect = r
 }
+func (w *WidgetNode) Rect() Rect     { return w.rect }
 func (w *WidgetNode) Widget() Widget { return w.widget }
 
 type TermApp struct {
@@ -259,7 +260,16 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		}
 
 	case *tcell.EventClipboard, *tcell.EventPaste:
-		// Deliver to workspace widgets (TabWidget → focused pane / CmdWidget).
+		// Command/completion mode: only the cmdline should receive paste
+		// (GDB may still be the focused tab leaf).
+		if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
+			for i := range a.widgets {
+				if _, ok := a.widgets[i].widget.(*CmdWidget); ok {
+					a.widgets[i].widget.HandleEvent(e)
+				}
+			}
+			return
+		}
 		for i := range a.widgets {
 			a.widgets[i].widget.HandleEvent(e)
 		}

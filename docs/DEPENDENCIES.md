@@ -35,10 +35,10 @@ Wiring happens **above** `termui`:
 | Layer | Role |
 |-------|------|
 | `internal/termui` | Generic terminal UI framework — window manager, layout, rendering |
-| `internal/cgdb` | App state (`AppState`, modes) + debugger widgets (views) |
-| `cmd/cgdb` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, `gdb`, `ptyx`, `mcp` |
+| `internal/xgdb` | App state (`AppState`, modes) + debugger widgets (views) |
+| `cmd/xgdb` | Application startup — services, models, event bus; composes `termui`, widgets, `core`, `gdb`, `ptyx`, `mcp` |
 
-Services, models, and widgets are wired in **`cmd/cgdb`**. Data flows Service → Event Bus → Model → Widget; `termui` never imports services or models directly.
+Services, models, and widgets are wired in **`cmd/xgdb`**. Data flows Service → Event Bus → Model → Widget; `termui` never imports services or models directly.
 
 ---
 
@@ -48,7 +48,7 @@ Module path: `github.com/yairgd/cgdb-go`
 
 | Dependency | Used by | Purpose |
 |------------|---------|---------|
-| [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/termui`, `internal/cgdb/widgets` | Terminal screen, input, styles |
+| [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/termui`, `internal/xgdb/widgets` | Terminal screen, input, styles |
 | [`github.com/creack/pty`](https://github.com/creack/pty) | `internal/ptyx` | Pseudo-terminal for GDB and `:!` exec I/O |
 
 **No third-party runtime deps:** `cmd/docserve` uses the Go standard library only.
@@ -72,14 +72,14 @@ flowchart BT
     ptyLib["creack/pty"]
 
     termui["internal/termui"]
-    cgdb_pkg["internal/cgdb"]
-    widgets["internal/cgdb/widgets"]
+    cgdb_pkg["internal/xgdb"]
+    widgets["internal/xgdb/widgets"]
     core["internal/core"]
     ptyx["internal/ptyx"]
     gdb["internal/gdb"]
     execcli["internal/execcli"]
     mcp["internal/mcp"]
-    cgdb_cmd["cmd/cgdb"]
+    cgdb_cmd["cmd/xgdb"]
     docserve["cmd/docserve"]
 
     termui --> tcell
@@ -123,9 +123,9 @@ flowchart BT
 | **`internal/gdb`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
 | **`internal/execcli`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
 | **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb` |
-| **`internal/cgdb/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
-| **`internal/cgdb`** | stdlib only | `termui`, `gdb` — app state / modes |
-| **`cmd/cgdb`** | `termui`, `cgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
+| **`internal/xgdb/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
+| **`internal/xgdb`** | stdlib only | `termui`, `gdb` — app state / modes |
+| **`cmd/xgdb`** | `termui`, `cgdb`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
 **Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`** / **`ptyx`** / **`mcp`**, not in **`termui`**.
@@ -136,7 +136,7 @@ flowchart BT
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`cgdb`** | `cmd/cgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
+| **`cgdb`** | `cmd/xgdb` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
 | **`docserve`** | `cmd/docserve` | stdlib only |
 
 Build all commands: `task build` or `go build ./cmd/...`.
@@ -157,7 +157,7 @@ termui ──X──>  core | gdb | ptyx
 
 **Why:** debugger backends and domain logic must stay UI-agnostic so you can swap tcell for another renderer, add a web UI, or run GDB I/O in tests without a terminal.
 
-**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/cgdb` or widgets — not by importing `core` from `termui`.
+**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/xgdb` or widgets — not by importing `core` from `termui`.
 
 ---
 
@@ -171,7 +171,7 @@ go list -m all
 
 # Per-package imports
 for pkg in ./internal/termui ./internal/core ./internal/ptyx ./internal/gdb \
-           ./internal/execcli ./internal/mcp ./internal/cgdb/widgets ./cmd/cgdb ./cmd/docserve; do
+           ./internal/execcli ./internal/mcp ./internal/xgdb/widgets ./cmd/xgdb ./cmd/docserve; do
   echo "=== $pkg ==="
   go list -f '{{join .Imports "\n"}}' $pkg | sort -u
 done

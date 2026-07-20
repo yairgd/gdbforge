@@ -239,6 +239,11 @@ func (p *ConsolePane) FollowTailAndScroll() {
 func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		// Middle-click paste into the input line (Linux terminal convention).
+		if p.inputEnabled && isMiddlePaste(e) {
+			p.pasteIntoInput()
+			return
+		}
 		p.out.HandleEvent(e)
 
 	case *tcell.EventKey:
@@ -283,39 +288,7 @@ func (p *ConsolePane) pasteIntoInput() {
 }
 
 func (p *ConsolePane) pasteText(text string) {
-	if text == "" {
-		return
-	}
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\r", "\n")
-	if i := strings.IndexByte(text, '\n'); i >= 0 {
-		text = text[:i]
-	}
-	p.input.InsertText(text)
-}
-
-func isPasteKey(e *tcell.EventKey) bool {
-	if e.Key() == tcell.KeyCtrlV {
-		return true
-	}
-	if e.Modifiers()&tcell.ModCtrl == 0 || e.Key() != tcell.KeyRune {
-		return false
-	}
-	return e.Rune() == 'v' || e.Rune() == 'V'
-}
-
-func isConsoleClipboardKey(e *tcell.EventKey) bool {
-	if e.Key() == tcell.KeyCtrlC || e.Key() == tcell.KeyCtrlX || e.Key() == tcell.KeyCtrlV {
-		return true
-	}
-	if e.Modifiers()&tcell.ModCtrl == 0 || e.Key() != tcell.KeyRune {
-		return false
-	}
-	switch e.Rune() {
-	case 'c', 'C', 'x', 'X', 'v', 'V':
-		return true
-	}
-	return false
+	p.input.InsertText(firstLinePaste(text))
 }
 
 func (p *ConsolePane) Draw(c Canvas) {

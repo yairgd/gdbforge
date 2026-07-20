@@ -18,6 +18,7 @@ import (
 //	/ → layout <name>  (default | panels | classic)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
+//	/ → help         (Viewport user manual)
 //	/ → vs, split, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
@@ -61,6 +62,7 @@ func (a *DebuggerApp) ExapData() {
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
 		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
 		LeafRestComplete("edit", a.OnEdit, a.editCompletions).
+		Leaf("help", a.OnHelp).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
 		Leaf("clear", a.ClearFocus).

@@ -34,7 +34,7 @@ flowchart TB
         Cons["ConsolePane"]
     end
 
-    subgraph App["Application · cmd/cgdb"]
+    subgraph App["Application · cmd/xgdb"]
         AI[":AI OnAI"]
         MCP["GdbMcpService"]
     end
@@ -161,7 +161,7 @@ GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg`
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/cgdb/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
+Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/xgdb/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
 
 ## Breakpoints while the inferior is running
 
@@ -169,8 +169,10 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 
 1. Send Ctrl-C (`\x03`) to interrupt
 2. Send `break` / `clear` / `-break-delete`
-3. On **insert** (`break`): send `continue` so execution can hit the new breakpoint
+3. On **insert** (`break` / `tbreak` / `-break-insert`): send `continue` so execution can hit the new breakpoint
 4. On **remove** (`clear` / `-break-delete`): send `continue` only if `:set continueafterclear` (default **off** — stay stopped)
+
+Other App PTY commands (`frame`, `thread`, …) also interrupt when running, but **do not** auto-`continue` — a surprise resume was resuming the inferior after call-stack / thread clicks.
 
 `AppState.InferiorRunning` tracks `^running` → `*stopped` for this path. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
 
@@ -202,7 +204,7 @@ Disabled rows are **kept** across `-break-list` refresh (they are intentionally 
 
 ### Callback chain
 
-Wired in `cmd/cgdb/builtins.go`:
+Wired in `cmd/xgdb/builtins.go`:
 
 | Hook | Handler |
 |------|---------|

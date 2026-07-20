@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/platform"
 	"github.com/yairgd/cgdb-go/internal/termui"
 )
@@ -9,7 +9,7 @@ import (
 func (a *DebuggerApp) InitB() error {
 	a.ctx = platform.NewAppContext()
 
-	fileSink, err := platform.NewFileSink("cgdb.log")
+	fileSink, err := platform.NewFileSink("xgdb.log")
 	if err != nil {
 		panic(err)
 	}
@@ -20,16 +20,16 @@ func (a *DebuggerApp) InitB() error {
 		return err
 	}
 
-	unnamed := widgets.NewCodeWidget()
-	unnamed.PaneName = "[No Name]"
-	unnamed.SetClipboard(a.ClipboardIO())
-	a.wireCodeWidget(unnamed)
-	a.primaryCode = unnamed
+	logo := a.logoWidget
+	if logo == nil {
+		logo = widgets.NewLogoWidget()
+		a.logoWidget = logo
+	}
 
-	a.tab = a.newStartupTab(unnamed)
+	a.tab = a.newStartupTab(logo)
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	a.tab.FocusWidget(a.gdbWidget)
-	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeWidget))
+	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
 	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)
@@ -44,6 +44,7 @@ func (a *DebuggerApp) InitB() error {
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.Events = a.Events()
+	a.cmdWidget.SetClipboard(a.ClipboardIO())
 	a.AddWidget(a.cmdWidget)
 
 	a.InitKeyBindings()

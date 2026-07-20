@@ -137,6 +137,7 @@ When the GDB pane is focused (insert):
 | `Ctrl+D` | Send `q` to GDB |
 | `Ctrl+L` | Clear scrollback (screen reset — prompt returns to top-left) |
 | `Ctrl+V` | Paste clipboard into the input line |
+| Middle-click | Paste clipboard into the input line (Linux terminal style) |
 | `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
 
@@ -144,7 +145,7 @@ When the GDB pane is focused (insert):
 
 The `(gdb)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Look stays a native GDB session (not chat labels).
 
-Example: `CmdWidget` (`cmd_widget.go`):
+Example: `CmdWidget` (`cmd_widget.go`) — uses the same `ClipboardIO` bridge as Viewport / ConsolePane:
 
 | Key | Action |
 |-----|--------|
@@ -152,6 +153,8 @@ Example: `CmdWidget` (`cmd_widget.go`):
 | `Up` / `Down` | History navigation |
 | `Tab` | Complete command name |
 | `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
+| `Ctrl+V` / middle-click | Paste clipboard into the cmdline (first line only) |
+| `Ctrl+C` / `Ctrl+X` | Copy / cut text after `:` |
 | Rune / editing keys | Insert, move cursor |
 
 Command mode entry and exit:
@@ -159,6 +162,8 @@ Command mode entry and exit:
 | Key | Handler | Action |
 |-----|---------|--------|
 | `:` | `HandleKey` in normal mode | `SetMode(ModeCommand)`, `CmdWidget.Activate()` |
+| Click cmdline | `HandleMouse` | Same as `:` (enter command mode); sets caret from click column |
+| Click outside cmdline (command mode) | `HandleMouse` | Leave command mode (like Esc), then focus the pane under the pointer |
 | `Esc` | `CmdWidget` → `SubmitMsg{CmdID: CmdExitMode}` | `HandleCoreEvents` resets mode, deactivates widget |
 | `Enter` | `HandleKey` after submit | `SetMode(ModeNormal)`, `CmdWidget.Deativate()` |
 
@@ -168,7 +173,7 @@ On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `Cm
 
 ## Key-sequence bindings
 
-Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/cgdb/keybindings.go`).
+Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/xgdb/keybindings.go`).
 
 ```go
 func (a *DebuggerApp) InitKeyBindings() {
@@ -180,7 +185,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-In **normal mode** (`cmd/cgdb/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
+In **normal mode** (`cmd/xgdb/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
 
 **Current bindings:**
 
@@ -260,7 +265,7 @@ type AppState struct {
 }
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic` (geometry in `internal/cgdb/layout`; key policy in `layout_behavior.go`). Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
+`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic` (geometry in `internal/xgdb/layout`; key policy in `layout_behavior.go`). Output: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
@@ -299,10 +304,10 @@ flowchart LR
 
 Flow:
 
-1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/cgdb/input.go`).
+1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/xgdb/input.go`).
 2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; `CompletionBarWidget` shows the wildmenu and app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
-4. Tree is built at startup via DSL in `ExapData()` (`cmd/cgdb/command_tree.go`).
+4. Tree is built at startup via DSL in `ExapData()` (`cmd/xgdb/command_tree.go`).
 
 ### Legacy note
 

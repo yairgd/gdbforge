@@ -14,7 +14,7 @@ cgdb-go can open an **external PTY session** in the focused pane, similar to Vim
 | `:!ls` | Same for `ls` (short-lived; after exit, **any key** returns to the previous widget) |
 | `:!ssh user@host` | Same for any argv |
 | `:b exec` | Re-show the last Exec widget (if still registered) |
-| `:b gdb` / `:b about` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b output` | Swap other built-in views into the focused pane |
+| `:b gdb` / `:b about` / `:b help` / `:b logger` / `:b breakpoint` / `:b threads` / `:b callstack` / `:b output` | Swap other built-in views into the focused pane |
 | `:edit` / `:edit file.c` | Project source picker, or open a source file (`:e` = unique prefix) |
 | `:b file.c` | Switch to an already-open file buffer |
 | `<C-o>` (normal mode) | Jump back to the **previous widget** in this pane (Vim-style jump list) |
@@ -93,8 +93,9 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 | Action | Behavior |
 |--------|----------|
 | Mouse drag + `Ctrl-C` | Copy selection from scrollback (ANSI stripped) |
-| `Ctrl-V` | Paste into the **input line** (viewport is read-only) |
-| `EventClipboard` | Forwarded by `TermApp` to focused widgets |
+| `Ctrl-V` | Paste into the **input line** or **`:` cmdline** (viewport is read-only) |
+| Middle-click | Paste into the input under the pointer (Linux terminal style) |
+| `EventClipboard` | In command mode → `CmdWidget` only; otherwise → workspace widgets |
 
 ---
 
@@ -106,7 +107,7 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 |-----|------|
 | `pushWidgetJump` | Append (dedupe consecutive, cap 32) |
 | `JumpBack` | Pop and `ReplaceFocusedWidget` without pushing |
-| Binding | `<C-o>` in `cmd/cgdb/keybindings.go` (normal mode) |
+| Binding | `<C-o>` in `cmd/xgdb/keybindings.go` (normal mode) |
 
 Example: GDB → `:b about` → `<C-o>` → GDB again.
 
@@ -125,12 +126,12 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 
 | Path | Responsibility |
 |------|----------------|
-| `cmd/cgdb/command_tree.go` | `LeafRest("!", a.OnRun)` |
-| `cmd/cgdb/actions.go` | `OnRun` |
-| `cmd/cgdb/builtins.go` | `swapFocusedWidget`, `JumpBack` |
-| `cmd/cgdb/keybindings.go` | `<C-o>` |
+| `cmd/xgdb/command_tree.go` | `LeafRest("!", a.OnRun)` |
+| `cmd/xgdb/actions.go` | `OnRun` |
+| `cmd/xgdb/builtins.go` | `swapFocusedWidget`, `JumpBack` |
+| `cmd/xgdb/keybindings.go` | `<C-o>` |
 | `internal/execcli/exec_client.go` | PTY process I/O |
-| `internal/cgdb/widgets/exec_widget.go` | UI adapter |
+| `internal/xgdb/widgets/exec_widget.go` | UI adapter |
 | `internal/commands/{dsl,command_parser,command_node}.go` | Rest-args |
 | `internal/termui/console_pane.go` | Live prompt + paste into input |
 | `internal/termui/utf.go` | ANSI draw / strip |

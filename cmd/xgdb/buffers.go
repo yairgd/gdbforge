@@ -6,7 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/termui"
 )
 
 // ensureCodeBuffer returns the CodeWidget for path, creating it if needed.
@@ -220,8 +221,13 @@ func (a *DebuggerApp) openSourcePath(path string) {
 		return
 	}
 	a.onBreakpointsChanged()
-	_ = a.swapFocusedWidget(w)
-	a.RequestFrame()
+	a.primaryCode = w
+	if a.swapFocusedWidget(w) {
+		if leaf := a.tab.FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
+			a.tab.SetLeafMark(leafMarkCode, leaf)
+		}
+		a.RequestFrame()
+	}
 }
 
 // editCompletions returns dynamic :edit Tab candidates (SourceFiles full paths).

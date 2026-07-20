@@ -1,5 +1,5 @@
 # -------- Config --------
-APP_NAME := cgdb
+APP_NAME := xgdb
 BIN_DIR  := bin
 
 # Detect all commands inside cmd/
@@ -12,11 +12,11 @@ all: build
 
 GOFILES := $(shell find . -name '*.go')
 
-$(BIN_DIR)/cgdb: $(GOFILES)
+$(BIN_DIR)/xgdb: $(GOFILES)
 	@mkdir -p $(BIN_DIR)
-	go build -gcflags="all=-N -l" -o $@ ./cmd/cgdb 
+	go build -gcflags="all=-N -l" -o $@ ./cmd/xgdb 
 
-build: $(BIN_DIR)/cgdb
+build: $(BIN_DIR)/xgdb
 	
 # -------- Build --------
 .PHONY: build1
@@ -31,12 +31,12 @@ build1:
 # -------- Run --------
 .PHONY: run
 run:
-	go run ./cmd/cgdb ./hello
+	go run ./cmd/xgdb ./hello
 
 # -------- Debug Dlv --------
 .PHONY: debug
 debug:
-	dlv debug ./cmd/cgdb --headless --listen=:2345 --api-version=2
+	dlv debug ./cmd/xgdb --headless --listen=:2345 --api-version=2
 
 # -------- Test --------
 .PHONY: test
@@ -62,9 +62,9 @@ clean:
 .PHONY: build-linux
 build-linux:
 	@mkdir -p $(BIN_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/cgdb-linux ./cmd/cgdb
+	GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/xgdb-linux ./cmd/xgdb
 
 .PHONY: build-mac
 build-mac:
 	@mkdir -p $(BIN_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/cgdb-mac ./cmd/cgdb
+	GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/xgdb-mac ./cmd/xgdb

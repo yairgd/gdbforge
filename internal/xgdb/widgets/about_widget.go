@@ -48,7 +48,7 @@ func NewAboutWidget() *AboutWidget {
 
 func aboutLineStyle(line string) tcell.Style {
 	st := tcell.StyleDefault
-	if line == "newcgdb" {
+	if line == "xgdb" {
 		return st.Foreground(tcell.ColorYellow).Bold(true)
 	}
 	if strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " ") {
@@ -101,10 +101,10 @@ func readVCSBuildInfo() vcsBuildInfo {
 
 func buildAboutLines(b vcsBuildInfo) []string {
 	return []string{
-		"newcgdb",
+		"xgdb",
 		"",
-		"AI-assisted terminal debugger for Embedded Linux and C/C++",
-		"developers.",
+		"Extreme GDB Tooling Suite — AI-assisted terminal debugger",
+		"for Embedded Linux and C/C++ developers.",
 		"",
 		"Version:",
 		"    " + aboutProductVersion,

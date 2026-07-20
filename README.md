@@ -3,7 +3,7 @@
 **cgdb-go** is a Vim-inspired terminal application framework in Go, with a **GDB debugger** as its first application. It provides a composable split-pane workspace, a `termui` framework (tcell), service-driven domain models, and a `:` command line where `:buffer` selects which model to display.
 
 ```bash
-go run ./cmd/cgdb
+go run ./cmd/xgdb
 ```
 
 Module: `github.com/yairgd/cgdb-go`
@@ -16,10 +16,10 @@ Documentation: [docs/README.md](docs/README.md) · local server: `./docs/serve.s
 
 ```text
 cgdb-go/
-├── cmd/cgdb/           # Debugger application (main, app, setup, input, …)
+├── cmd/xgdb/           # Debugger application (main, app, setup, input, …)
 ├── cmd/docserve/       # Documentation server
 ├── internal/termui/    # TUI framework (standalone-ready)
-├── internal/cgdb/      # App-specific debugger widgets
+├── internal/xgdb/      # App-specific debugger widgets
 ├── internal/commands/  # Colon-command tree, parser, key bindings
 ├── internal/platform/  # EventBus, Logger, AppContext
 ├── internal/core/      # Domain: buffers, debugger interface, events
@@ -38,7 +38,7 @@ The debugger app can be debugged using Delve in headless mode.
 From the project root:
 
 ```bash
-dlv debug ./cmd/cgdb --headless --listen=:2346 --api-version=2
+dlv debug ./cmd/xgdb --headless --listen=:2346 --api-version=2
 ```
 
 ### 2. Connect to the debugger

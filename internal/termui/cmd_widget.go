@@ -12,11 +12,12 @@ import (
 type CmdWidget struct {
 	BaseWidget
 
-	history History
-	parser  *commands.CommandParser
-	active  bool
-	text    string
-	cursor  int
+	history   History
+	parser    *commands.CommandParser
+	clipboard ClipboardIO
+	active    bool
+	text      string
+	cursor    int
 }
 
 func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
@@ -27,6 +28,17 @@ func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 		active:     false,
 	}
 }
+
+// SetClipboard wires the shared copy/paste bridge (same as Viewport / ConsolePane).
+func (c *CmdWidget) SetClipboard(io ClipboardIO) {
+	c.clipboard = io
+}
+
+// Active reports whether the cmdline is editing (command / completion mode).
+func (c *CmdWidget) Active() bool { return c.active }
+
+// Text returns the current cmdline contents (including leading ':').
+func (c *CmdWidget) Text() string { return c.text }
 
 func (c *CmdWidget) emit(ev Event) {
 	if c.Events != nil {
@@ -108,6 +120,25 @@ func (c *CmdWidget) Deativate() {
 
 }
 
+// SetCursorAtLocalX places the caret from a click x relative to the cmdline left edge.
+// Column 0 is the leading ':'; the caret never moves onto or before it.
+func (c *CmdWidget) SetCursorAtLocalX(localX int) {
+	if !c.active {
+		return
+	}
+	n := len([]rune(c.text))
+	if n < 1 {
+		return
+	}
+	if localX < 1 {
+		localX = 1
+	}
+	if localX > n {
+		localX = n
+	}
+	c.cursor = localX
+}
+
 func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
@@ -116,6 +147,21 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 		return
 
 	case *tcell.EventKey:
+		if !c.active {
+			return
+		}
+		if isPasteKey(e) {
+			c.pasteAtCursor()
+			return
+		}
+		if isCopyCutKey(e) {
+			// No mark selection on cmdline: copy/cut the editable text after ':'.
+			c.copyEditable()
+			if e.Key() == tcell.KeyCtrlX || (e.Modifiers()&tcell.ModCtrl != 0 && (e.Rune() == 'x' || e.Rune() == 'X')) {
+				c.clearEditable()
+			}
+			return
+		}
 
 		switch e.Key() {
 
@@ -271,15 +317,73 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 		}
 	case *tcell.EventClipboard:
+		if !c.active {
+			return
+		}
+		if data := e.Data(); len(data) > 0 {
+			c.pasteText(string(data))
+		}
+	case *tcell.EventMouse:
+		if !c.active {
+			return
+		}
+		if isMiddlePaste(e) {
+			c.pasteAtCursor()
+			return
+		}
+		if e.Buttons()&tcell.ButtonPrimary != 0 {
+			// Caller should prefer SetCursorAtLocalX with a known origin;
+			// without a rect, treat absolute X as local (tests / simple hosts).
+			x, _ := e.Position()
+			c.SetCursorAtLocalX(x)
+		}
 	case *tcell.EventError:
 	case tcell.EventFocus:
 	case *tcell.EventInterrupt:
-	case *tcell.EventMouse:
 	case *tcell.EventPaste:
 	case *tcell.EventTime:
 	default:
 		panic(fmt.Sprintf("unexpected tcell.Event: %#v", e))
 	}
+}
+
+func (c *CmdWidget) pasteAtCursor() {
+	c.pasteText(c.clipboard.pasteText())
+}
+
+func (c *CmdWidget) pasteText(text string) {
+	text = firstLinePaste(text)
+	if text == "" || !c.active {
+		return
+	}
+	runes := []rune(c.text)
+	ins := []rune(text)
+	out := make([]rune, 0, len(runes)+len(ins))
+	out = append(out, runes[:c.cursor]...)
+	out = append(out, ins...)
+	out = append(out, runes[c.cursor:]...)
+	c.text = string(out)
+	c.cursor += len(ins)
+}
+
+func (c *CmdWidget) editableText() string {
+	runes := []rune(c.text)
+	if len(runes) <= 1 {
+		return ""
+	}
+	return string(runes[1:])
+}
+
+func (c *CmdWidget) copyEditable() {
+	c.clipboard.copyText(c.editableText())
+}
+
+func (c *CmdWidget) clearEditable() {
+	if !c.active {
+		return
+	}
+	c.text = ":"
+	c.cursor = 1
 }
 
 func (m *CmdWidget) Draw(c Canvas) {

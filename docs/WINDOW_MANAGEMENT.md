@@ -66,7 +66,7 @@ graph TB
 - Workspace resize math is isolated — only the middle band changes height on terminal resize.
 - Optional chrome overlays (wildmenu, future search/message bars) share the same TermApp layer — **no popup compositor**.
 
-**TermApp chrome** is a flat `AddWidget` list. **`DebuggerApp.HandleResize`** assigns rects today (`cmd/cgdb/setup.go` order = index order):
+**TermApp chrome** is a flat `AddWidget` list. **`DebuggerApp.HandleResize`** assigns rects today (`cmd/xgdb/setup.go` order = index order):
 
 ```go
 // setup: AddWidget(tab), AddWidget(completionBar), AddWidget(cmdWidget)
@@ -204,7 +204,7 @@ What happens:
 
 **Design rationale:** splitting at focus matches cgdb/emacs user expectations. Alternative designs (split always right, pick target pane first) may be added as commands (`:vsplit`, `:hsplit`) later.
 
-`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. Debugger workspaces live in `internal/cgdb/layout` and are applied with `:layout <name>`:
+`NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of the two widgets. Debugger workspaces live in `internal/xgdb/layout` and are applied with `:layout <name>`:
 
 | Layout | Tree |
 |--------|------|
@@ -212,13 +212,13 @@ What happens:
 | **`default`** | Left Code/GDB **2/3**; right Output / Breakpoints / Threads / Call stack (`DefaultLayoutRatios`) |
 | **`classic`** | Full-width Code over GDB (original cgdb) |
 
-Per-layout normal-mode key policy is registered in `cmd/cgdb/layout_behavior.go` (not in TermUI Tab).
+Per-layout normal-mode key policy is registered in `cmd/xgdb/layout_behavior.go` (not in TermUI Tab).
 
 ---
 
 ## Tab management
 
-Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Mark **names** and focus policy are **app-private**: `cmd/cgdb` chooses `"code"` / `"gdb"` / `"last"` for Esc / `i` restore. TermUI stays reusable for other apps (e.g. lazygit-style layouts) with no debugger role knowledge.
+Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Mark **names** and focus policy are **app-private**: `cmd/xgdb` chooses `"code"` / `"gdb"` / `"last"` for Esc / `i` restore. TermUI stays reusable for other apps (e.g. lazygit-style layouts) with no debugger role knowledge.
 
 ```mermaid
 flowchart LR
@@ -295,11 +295,13 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic` (`internal/cgdb/layout`).
+**Implemented today:** Vim-like `:b name` switches among builtins (`help`, `about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic` (`internal/xgdb/layout`).
 
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
 ```text
+:help
+:b help
 :b about
 :b logger
 :b gdb

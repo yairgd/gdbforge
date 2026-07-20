@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/cgdb-go/internal/cgdb/widgets"
+	"github.com/yairgd/cgdb-go/internal/xgdb/widgets"
 	"github.com/yairgd/cgdb-go/internal/commands"
 	"github.com/yairgd/cgdb-go/internal/platform"
 )
@@ -47,13 +47,7 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"<Esc>",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("command-mode", func(args ...any) {
-			if a.completionBar != nil {
-				a.completionBar.Clear()
-			}
-			a.SetMode(platform.ModeCommand)
-			a.cmdWidget.Activate()
-		}),
+		commands.NewCommand("command-mode", func(args ...any) { a.enterCommandMode() }),
 		":",
 	)
 	a.keyBindings.Bind(

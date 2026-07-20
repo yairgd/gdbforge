@@ -358,7 +358,7 @@ Current behavior:
 - **`DebuggerApp`** calls `tab.FocusLeft/Right/Up/Down()` from trie-bound callbacks (`<C-w>h/j/k/l`).
 - **Visual focus:** the focused leaf's `DrawStatusLine` paints `▎ {PaneName}` on the pane's bottom status row (see [Layout engine](#layout-engine)).
 
-**Mode-aware routing** (implemented in `cmd/cgdb/input.go`):
+**Mode-aware routing** (implemented in `cmd/xgdb/input.go`):
 
 | Mode | Terminal keys routed to |
 |------|-------------------------|
@@ -378,7 +378,7 @@ Current behavior:
 
 ## Key-sequence bindings
 
-`commands.KeyBindingRegistry` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns bindings (`cmd/cgdb/keybindings.go`):
+`commands.KeyBindingRegistry` matches **multi-key sequences** incrementally (`SearchPartial`). The application owns bindings (`cmd/xgdb/keybindings.go`):
 
 ```go
 a.keyBindings.Bind(
@@ -396,7 +396,7 @@ Sequences use angle-bracket tokens (`<C-w>`, `<Up>`, …) from `platform` key pa
 
 **Design decision:** binding state is per-application, not global — multiple apps or tests can bind independently.
 
-Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`. Wiring: `cmd/cgdb/keybindings.go` + `input.go` (normal mode).
+Implementation: `internal/collections/trie.go` via `commands.KeyBindingRegistry`. Wiring: `cmd/xgdb/keybindings.go` + `input.go` (normal mode).
 
 ---
 
@@ -521,7 +521,7 @@ sequenceDiagram
     Main->>App: Close / Fini
 ```
 
-`AppApi` is implemented by the application (`DebuggerApp` in `cmd/cgdb/`):
+`AppApi` is implemented by the application (`DebuggerApp` in `cmd/xgdb/`):
 
 - `HandleKey` — mode routing, trie dispatch, widget `HandleEvent`.
 - `HandleResize` — top-level widget rects after `UpdateCanvas`.
@@ -535,14 +535,14 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `GDBWidget` | `internal/cgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
-| `CodeWidget` | `internal/cgdb/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | `internal/cgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
-| `ThreadWidget` | `internal/cgdb/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
-| `CallStackWidget` | `internal/cgdb/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
-| `OutputWidget` | `internal/cgdb/widgets/output_widget.go` | `:b output`; program stdout (`printf`), not MI noise |
-| `ExecWidget` | `internal/cgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
-| `AboutWidget` | `internal/cgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
+| `GDBWidget` | `internal/xgdb/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
+| `CodeWidget` | `internal/xgdb/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
+| `BreakpointWidget` | `internal/xgdb/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
+| `ThreadWidget` | `internal/xgdb/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
+| `CallStackWidget` | `internal/xgdb/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
+| `OutputWidget` | `internal/xgdb/widgets/output_widget.go` | `:b output`; program stdout (`printf`), not MI noise |
+| `ExecWidget` | `internal/xgdb/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
+| `AboutWidget` | `internal/xgdb/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
