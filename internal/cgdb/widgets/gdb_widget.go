@@ -24,6 +24,8 @@ type GDBWidget struct {
 	onStopped     func(*gdb.MiStopMsg)
 	onBreakpoints func()
 	onRunning     func()
+	onFrameSync   func()
+	pendingFrameSync bool
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
@@ -76,6 +78,12 @@ func (m *GDBWidget) SetOnStopped(fn func(*gdb.MiStopMsg)) {
 // SetOnBreakpointsChanged registers a callback for =breakpoint-created/deleted/modified.
 func (m *GDBWidget) SetOnBreakpointsChanged(fn func()) {
 	m.onBreakpoints = fn
+}
+
+// SetOnFrameSync registers a callback after CLI/MI stack navigation
+// (frame / f / up / down / -stack-select-frame) completes (^done).
+func (m *GDBWidget) SetOnFrameSync(fn func()) {
+	m.onFrameSync = fn
 }
 
 // SetOnRunning registers a callback for ^running (inferior resumed).
@@ -221,6 +229,9 @@ func (m *GDBWidget) onSubmit(raw string) {
 	if cmd == "" {
 		cmd = m.console.Input().LastHistory()
 	}
+	if isStackNavCmd(cmd) {
+		m.pendingFrameSync = true
+	}
 	send := func() {
 		if cmd != "" {
 			_ = m.client.Send(cmd)
@@ -239,6 +250,24 @@ func (m *GDBWidget) onSubmit(raw string) {
 	}
 	m.console.Input().Clear()
 	m.console.FollowTailAndScroll()
+}
+
+// isStackNavCmd reports CLI/MI commands that change the selected stack frame
+// without a *stopped event.
+func isStackNavCmd(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return false
+	}
+	switch fields[0] {
+	case "frame", "f", "up", "down", "select-frame":
+		return true
+	}
+	return strings.HasPrefix(fields[0], "-stack-select-frame")
 }
 
 func (m *GDBWidget) onInterrupt() {
@@ -310,6 +339,18 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 			m.appState.SetInferiorRunning(false)
 		}
 		m.handleStop(upd.Stopped)
+	}
+	if m.pendingFrameSync {
+		if upd.State == gdb.Error {
+			m.pendingFrameSync = false
+		} else if upd.PromptReady {
+			// Wait for (gdb) so ^done + console frame text have arrived.
+			// Do not key off State==Done: zero-value MiUpdate is Done.
+			m.pendingFrameSync = false
+			if m.onFrameSync != nil {
+				m.onFrameSync()
+			}
+		}
 	}
 	if upd.State == gdb.Running {
 		if m.appState != nil {

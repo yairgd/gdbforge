@@ -201,11 +201,15 @@ func (a *DebuggerApp) tryCodeBreakAtSel() bool {
 }
 
 // trySpaceBreak toggles a breakpoint: Call Stack selection, or Code cursor
-// (same Space behavior as CodeWidget). Falls through for other panes.
+// (same Space behavior as CodeWidget). Falls through for other panes / GDB typing.
 func (a *DebuggerApp) trySpaceBreak() bool {
 	if a.focusedIsCallstack() {
 		a.toggleCallstackBreak()
 		return true
+	}
+	// Never steal Space from the GDB console (insert typing).
+	if a.focusedIsGdb() {
+		return false
 	}
 	return a.tryCodeBreakAtSel()
 }

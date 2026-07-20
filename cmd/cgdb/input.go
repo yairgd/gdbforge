@@ -11,6 +11,18 @@ import (
 )
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
+	// GDB console insert: pass all keys through so typing is native (Space, n,
+	// etc.). Only Esc leaves insert mode.
+	if a.focusedIsGdb() {
+		if key, ok := platform.KeyFromEvent(ev); ok {
+			if key.Key == tcell.KeyEscape {
+				a.onEscape()
+				return true
+			}
+		}
+		a.tab.HandleEvent(ev)
+		return true
+	}
 	if a.tryKeyBindings(a.insertKeys, ev) {
 		return true
 	}

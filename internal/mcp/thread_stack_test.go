@@ -32,3 +32,14 @@ func TestParseStackListFrames(t *testing.T) {
 		t.Fatalf("frame1=%+v", got[1])
 	}
 }
+
+func TestParseStackInfoFrame(t *testing.T) {
+	raw := `^done,frame={level="2",addr="0x4010",func="foo",file="a.c",fullname="/src/a.c",line="42"}`
+	fr, ok := ParseStackInfoFrame(raw)
+	if !ok {
+		t.Fatal("expected frame")
+	}
+	if fr.Level != 2 || fr.File != "/src/a.c" || fr.Line != 42 || fr.Func != "foo" {
+		t.Fatalf("got=%+v", fr)
+	}
+}

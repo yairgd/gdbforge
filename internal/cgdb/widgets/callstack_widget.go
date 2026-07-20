@@ -139,6 +139,20 @@ func (w *CallStackWidget) SetItems(items []mcp.StackFrame) {
 	w.rebuild()
 }
 
+// SelectLevel highlights the frame with the given GDB level (no OnActivate).
+func (w *CallStackWidget) SelectLevel(level int) {
+	for i, it := range w.items {
+		if it.Level == level {
+			w.selected = i
+			w.viewport.CursorLine = i
+			w.viewport.CursorCol = 0
+			w.viewport.Left = 0
+			w.viewport.EnsureCursorVisible()
+			return
+		}
+	}
+}
+
 func (w *CallStackWidget) rebuild() {
 	w.buf.Clear()
 	w.viewport.Left = 0

@@ -55,3 +55,8 @@ func (a *DebuggerApp) focusedCallstack() *widgets.CallStackWidget {
 func (a *DebuggerApp) focusedIsCallstack() bool {
 	return a.focusedCallstack() != nil
 }
+
+// focusedIsGdb reports whether the GDB console pane has focus.
+func (a *DebuggerApp) focusedIsGdb() bool {
+	return a.gdbWidget != nil && a.focusedWidget() == a.gdbWidget
+}

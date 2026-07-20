@@ -31,6 +31,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.SetAppState(a.State())
 	a.gdbWidget.SetOnStopped(a.onGdbStopped)
 	a.gdbWidget.SetOnBreakpointsChanged(a.onBreakpointsChanged)
+	a.gdbWidget.SetOnFrameSync(a.onGdbFrameSync)
 	a.gdbWidget.Start(a.Screen())
 	a.registerBuiltin("gdb", a.gdbWidget)
 

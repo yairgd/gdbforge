@@ -133,20 +133,69 @@ func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 		return
 	}
 	widgets.SendGdbCmd(sess, a.State(), fmt.Sprintf("frame %d", fr.Level))
+	a.showFrameSource(fr)
+	a.RequestFrame()
+}
+
+// onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
+// (those do not emit *stopped).
+func (a *DebuggerApp) onGdbFrameSync() {
+	go func() {
+		a.syncCurrentFrameFromGDB()
+		if scr := a.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: a.activeCodeWidget()}))
+		}
+	}()
+}
+
+func (a *DebuggerApp) syncCurrentFrameFromGDB() {
+	if a.gdbMcp == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	raw, err := a.gdbMcp.Query(ctx, "-stack-info-frame")
+	if err != nil {
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("frame").Error(err.Error())
+		}
+		return
+	}
+	fr, ok := mcp.ParseStackInfoFrame(raw)
+	if !ok {
+		return
+	}
+
+	// Keep the callstack list in sync and highlight the selected level.
+	if a.callstackWidget != nil {
+		rawStack, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
+		if err == nil {
+			a.callstackWidget.SetItems(mcp.ParseStackListFrames(rawStack))
+		}
+		a.callstackWidget.SelectLevel(fr.Level)
+	}
+
+	a.showFrameSource(fr)
+}
+
+func (a *DebuggerApp) showFrameSource(fr mcp.StackFrame) {
 	var w *widgets.CodeWidget
 	switch {
 	case fr.File != "":
+		a.State().SetCurrentLocation(fr.File, fr.Line)
 		w = a.showCodeAt(fr.File, fr.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(fr.File, formatUnavailableExtra(fr.Func, fr.Line))
 		}
 	case fr.Func != "":
 		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
+	default:
+		return
 	}
 	if w != nil {
 		a.applyCodeStop(w)
 	}
-	a.RequestFrame()
 }
 
 // onBreakpointActivate shows the source at the selected breakpoint location.
