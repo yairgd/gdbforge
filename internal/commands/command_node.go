@@ -42,8 +42,8 @@ type CommandNode struct {
 	// RestArgs means tokens after this node are passed to Action, not walked as children.
 	RestArgs bool
 	// CompleteArgs optionally supplies dynamic rest-arg completions (e.g. :b buffers).
-	// Called with the current rest token prefix; return matching names.
-	CompleteArgs func(prefix string) []string
+	// Same Completer shape as GDB Tab (-complete → []string names).
+	CompleteArgs Completer
 }
 
 func NewCommandNode(name string) *CommandNode {

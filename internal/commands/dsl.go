@@ -15,7 +15,7 @@ func CmdRest(name string, action func(args ...any)) *CommandNode {
 }
 
 // CmdRestComplete is CmdRest with a dynamic rest-arg completer (Tab after the command).
-func CmdRestComplete(name string, action func(args ...any), complete func(prefix string) []string) *CommandNode {
+func CmdRestComplete(name string, action func(args ...any), complete Completer) *CommandNode {
 	n := CmdRest(name, action)
 	n.CompleteArgs = complete
 	return n
@@ -52,7 +52,7 @@ func (n *CommandNode) LeafRest(name string, action func(args ...any)) *CommandNo
 }
 
 // LeafRestComplete inserts a rest-args leaf with dynamic Tab completions.
-func (n *CommandNode) LeafRestComplete(name string, action func(args ...any), complete func(prefix string) []string) *CommandNode {
+func (n *CommandNode) LeafRestComplete(name string, action func(args ...any), complete Completer) *CommandNode {
 	n.Insert(CmdRestComplete(name, action, complete))
 	return n
 }

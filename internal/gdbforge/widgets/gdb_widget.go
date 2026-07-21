@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -226,6 +227,33 @@ func (m *GDBWidget) AppendTargetText(text string) {
 
 func (m *GDBWidget) Clear() {
 	m.console.Clear()
+}
+
+// InputText returns the current GDB input-line contents.
+func (m *GDBWidget) InputText() string {
+	if m == nil || m.console == nil || m.console.Input() == nil {
+		return ""
+	}
+	return m.console.Input().Text()
+}
+
+// ApplyCompletion replaces the GDB input line with name (full-line MI -complete match).
+func (m *GDBWidget) ApplyCompletion(name string) {
+	if m == nil || m.console == nil || m.console.Input() == nil || name == "" {
+		return
+	}
+	m.console.Input().SetText(name)
+	m.console.FollowTailAndScroll()
+}
+
+// Completer returns a commands.Completer backed by MI -complete on this session.
+func (m *GDBWidget) Completer() commands.Completer {
+	return func(prefix string) []string {
+		if m == nil {
+			return nil
+		}
+		return gdb.CompleteNames(m.Session(), m.appState, prefix)
+	}
 }
 
 func (m *GDBWidget) SetFocused(focused bool) {
