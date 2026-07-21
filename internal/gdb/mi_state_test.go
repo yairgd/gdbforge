@@ -66,6 +66,18 @@ func TestPushRawBreakpointNotify(t *testing.T) {
 	}
 }
 
+func TestPushRawThreadGroupLifecycle(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw(`=thread-group-started,id="i1",pid="24193"` + "\n")
+	if u.InferiorPID != "24193" {
+		t.Fatalf("pid=%q", u.InferiorPID)
+	}
+	u = st.PushRaw(`=thread-group-exited,id="i1"` + "\n")
+	if !u.InferiorExited {
+		t.Fatal("expected InferiorExited")
+	}
+}
+
 func TestPushRawTargetStreamSeparate(t *testing.T) {
 	st := NewGdbInputState()
 	u := st.PushRaw("@\"hello\\n\"\n~\"(gdb) \\n\"\n")
@@ -100,6 +112,33 @@ func TestPushRawSignalReceivedSynthesizesWhenNoConsoleStream(t *testing.T) {
 	u := st.PushRaw(`*stopped,reason="signal-received",signal-name="SIGINT",signal-meaning="Interrupt"` + "\n(gdb)\n")
 	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "Program received signal SIGINT, Interrupt." {
 		t.Fatalf("display=%q", u.DisplayLines)
+	}
+}
+
+func TestPushRawCtrlCQuitLogStream(t *testing.T) {
+	st := NewGdbInputState()
+	// Stock GDB: ^C glued onto &"Quit\n"
+	u := st.PushRaw("\x03&\"Quit\\n\"\n(gdb)\n")
+	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "Quit" {
+		t.Fatalf("display=%q", u.DisplayLines)
+	}
+	if !u.PromptReady {
+		t.Fatal("expected PromptReady")
+	}
+
+	st = NewGdbInputState()
+	// Custom gdbinit may prefix an emoji.
+	u = st.PushRaw("&\"\\342\\235\\214\\357\\270\\217 Quit\\n\"\n(gdb)\n")
+	if len(u.DisplayLines) != 1 || !strings.Contains(u.DisplayLines[0], "Quit") {
+		t.Fatalf("display=%q", u.DisplayLines)
+	}
+}
+
+func TestPushRawLogStreamSkipsCommandEcho(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw("&\"break main\\n\"\n^done\n(gdb)\n")
+	if len(u.DisplayLines) != 0 {
+		t.Fatalf("command echo should stay hidden, got %q", u.DisplayLines)
 	}
 }
 

@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -28,6 +29,10 @@ type GDBWidget struct {
 	onRunning     func()
 	onFrameSync   func()
 	pendingFrameSync bool
+	// MI suppresses CLI "Quit anyway?" — track inferior and mirror that prompt.
+	inferiorPID  string
+	inferiorAlive bool
+	quitConfirm  bool
 }
 
 func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
@@ -60,6 +65,9 @@ func gdbLineStyle(line string) tcell.Style {
 	st := tcell.StyleDefault
 	if strings.HasPrefix(line, ">>>") {
 		return st.Foreground(tcell.ColorTeal).Bold(true)
+	}
+	if strings.Contains(line, "❌️ Quit") {
+		return st.Foreground(tcell.ColorRed).Bold(true)
 	}
 	if strings.HasPrefix(line, "(gdb)") {
 		return st.Foreground(tcell.ColorYellow)
@@ -272,19 +280,29 @@ func (m *GDBWidget) onSubmit(raw string) {
 	if m.client == nil {
 		return
 	}
+
+	// Finish a pending quit confirm (MI never asks; we mirror CLI wording).
+	if m.quitConfirm {
+		m.finishQuitConfirm(raw)
+		return
+	}
+
+	// Empty Enter at (gdb) repeats the previous command (CLI GDB behavior).
 	cmd := raw
 	if cmd == "" {
 		cmd = m.console.Input().LastHistory()
 	}
+
+	if isQuitCmd(cmd) && m.inferiorAlive {
+		m.beginQuitConfirm(cmd)
+		return
+	}
+
 	if isStackNavCmd(cmd) {
 		m.pendingFrameSync = true
 	}
 	send := func() {
-		if cmd != "" {
-			_ = m.client.Send(cmd)
-		} else {
-			_ = m.client.Send("")
-		}
+		_ = m.client.Send(cmd)
 	}
 	if cmd != "" {
 		m.console.Input().PushHistory(cmd)
@@ -297,6 +315,85 @@ func (m *GDBWidget) onSubmit(raw string) {
 	}
 	m.console.Input().Clear()
 	m.console.FollowTailAndScroll()
+}
+
+// beginQuitConfirm shows the standard CLI quit prompt. MI auto-exits without
+// asking, so we gate Send("q") until the user answers y/n.
+func (m *GDBWidget) beginQuitConfirm(cmd string) {
+	m.quitConfirm = true
+	if cmd != "" {
+		m.console.Input().PushHistory(cmd)
+		m.console.EchoSubmit(cmd)
+	}
+	pid := m.inferiorPID
+	if pid == "" {
+		pid = "?"
+	}
+	m.console.AppendLines([]string{
+		"A debugging session is active.",
+		"",
+		fmt.Sprintf("\tInferior 1 [process %s] will be killed.", pid),
+		"",
+	})
+	if buf := m.console.Buffer(); buf != nil {
+		buf.AppendLine("Quit anyway? (y or n) ")
+	}
+	m.console.SetLivePrompt(true)
+	m.console.Input().Clear()
+	m.console.FollowTailAndScroll()
+}
+
+func (m *GDBWidget) finishQuitConfirm(raw string) {
+	ans := strings.TrimSpace(strings.ToLower(raw))
+	// Bare Enter = default [n], matching CLI.
+	yes := ans == "y" || ans == "yes"
+	no := ans == "" || ans == "n" || ans == "no"
+	if !yes && !no {
+		// Re-prompt on garbage (same as keeping the question open).
+		if buf := m.console.Buffer(); buf != nil {
+			buf.AppendLine("Please answer y or n.")
+			buf.AppendLine("Quit anyway? (y or n) ")
+		}
+		m.console.SetLivePrompt(true)
+		m.console.Input().Clear()
+		m.console.FollowTailAndScroll()
+		return
+	}
+
+	display := ans
+	if display == "" {
+		display = "n"
+	}
+	m.console.EchoSubmit(display)
+	m.console.Input().Clear()
+	m.quitConfirm = false
+
+	if !yes {
+		m.console.EnsureLivePrompt()
+		m.console.FollowTailAndScroll()
+		return
+	}
+
+	send := func() { _ = m.client.Send("quit") }
+	if m.appState != nil {
+		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
+	} else {
+		send()
+	}
+	m.console.FollowTailAndScroll()
+}
+
+func isQuitCmd(cmd string) bool {
+	fields := strings.Fields(strings.TrimSpace(cmd))
+	if len(fields) == 0 {
+		return false
+	}
+	switch strings.ToLower(fields[0]) {
+	case "q", "quit":
+		return true
+	default:
+		return false
+	}
 }
 
 // isStackNavCmd reports CLI/MI commands that change the selected stack frame
@@ -321,6 +418,8 @@ func (m *GDBWidget) onInterrupt() {
 	if m.client == nil {
 		return
 	}
+	// Clear partial input; Quit text comes from MI &"Quit" / &"❌️ Quit", not UI.
+	m.console.Input().Clear()
 	send := func() { _ = m.client.SendRaw("\x03") }
 	if m.appState != nil {
 		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
@@ -331,6 +430,11 @@ func (m *GDBWidget) onInterrupt() {
 
 func (m *GDBWidget) onEOF() {
 	if m.client == nil {
+		return
+	}
+	// Same path as typing q — confirm when an inferior is alive.
+	if m.inferiorAlive && !m.quitConfirm {
+		m.beginQuitConfirm("q")
 		return
 	}
 	send := func() { _ = m.client.Send("q") }
@@ -368,26 +472,53 @@ func (m *GDBWidget) silentOwner() bool {
 }
 
 func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
+	if upd.InferiorPID != "" {
+		m.inferiorPID = upd.InferiorPID
+		m.inferiorAlive = true
+	}
+	if upd.InferiorExited {
+		m.inferiorPID = ""
+		m.inferiorAlive = false
+		m.quitConfirm = false
+	}
+
 	silent := m.silentOwner()
 	if !silent {
 		lines := upd.DisplayLines
 		if m.appState != nil && m.appState.GdbTargetPrint() {
 			lines = append(lines, upd.TargetLines...)
 		}
-		if len(lines) > 0 {
-			m.console.AppendLines(lines)
-			m.console.StripTrailingBarePrompt()
+		var rest []string
+		painted := false
+		for _, line := range lines {
+			// Attach Ctrl-C Quit log to the live (gdb) prompt line.
+			if gdb.IsCtrlCQuitLog(line) {
+				m.console.EchoSubmit(line)
+				painted = true
+				continue
+			}
+			rest = append(rest, line)
 		}
-		if upd.PromptReady {
+		if len(rest) > 0 {
+			m.console.AppendLines(rest)
+			m.console.StripTrailingBarePrompt()
+			painted = true
+		}
+		// Do not replace the "Quit anyway?" host with (gdb) while confirming.
+		if upd.PromptReady && !m.quitConfirm {
 			m.console.EnsureLivePrompt()
 		}
-		if len(lines) > 0 || upd.PromptReady {
+		if painted || (upd.PromptReady && !m.quitConfirm) {
 			m.console.FollowTailAndScroll()
 		}
 	}
 	if upd.Stopped != nil {
 		if m.appState != nil {
 			m.appState.SetInferiorRunning(false)
+		}
+		if reason := upd.Stopped.Reason; reason == "exited-normally" || reason == "exited" || reason == "exited-signalled" {
+			m.inferiorAlive = false
+			m.inferiorPID = ""
 		}
 		m.handleStop(upd.Stopped)
 	}

@@ -14,6 +14,10 @@ type MiUpdate struct {
 	ErrorMsg             string
 	Stopped              *MiStopMsg
 	BreakpointsChanged   bool
+	// InferiorPID is set on =thread-group-started (non-empty).
+	InferiorPID string
+	// InferiorExited is set on =thread-group-exited.
+	InferiorExited bool
 }
 
 // GdbInputState splits PTY chunks into MI lines and streams display updates.
@@ -68,8 +72,13 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		out.TargetLines = append(out.TargetLines, decodeStreamPayload(line)...)
 
 	case strings.HasPrefix(line, "&\""):
-		// Log stream is usually the CLI echo / noise; the UI already echoes
-		// submitted commands. Surface it only when paired with ^error.
+		// Log stream: mostly CLI echo (UI already EchoSubmit). Still surface
+		// Ctrl-C feedback (&"Quit\n" / &"❌️ Quit\n") and similar markers.
+		for _, p := range decodeStreamPayload(line) {
+			if isCtrlCQuitLog(p) {
+				out.DisplayLines = append(out.DisplayLines, p)
+			}
+		}
 
 	case strings.HasPrefix(line, "^error"):
 		m.state = Error
@@ -120,6 +129,12 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		// Structural changes only. Ignore =breakpoint-modified (hit counts on
 		// "n"/continue) — those raced -break-list and desynced the widgets.
 		out.BreakpointsChanged = true
+
+	case strings.HasPrefix(line, "=thread-group-started"):
+		out.InferiorPID = ExtractMIField(line, "pid")
+
+	case strings.HasPrefix(line, "=thread-group-exited"):
+		out.InferiorExited = true
 
 	default:
 		// other notify (=...), async, or partial — ignore for display
@@ -177,6 +192,19 @@ func displayHasSignalMsg(lines []string) bool {
 		}
 	}
 	return false
+}
+
+// IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").
+func IsCtrlCQuitLog(s string) bool {
+	return isCtrlCQuitLog(s)
+}
+
+func isCtrlCQuitLog(s string) bool {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return false
+	}
+	return t == "Quit" || strings.HasSuffix(t, " Quit") || strings.Contains(t, "Quit")
 }
 
 func decodeStreamPayload(line string) []string {
