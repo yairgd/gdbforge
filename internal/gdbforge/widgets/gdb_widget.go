@@ -42,7 +42,9 @@ func NewGDBWidget(gdbPath, prog string, args ...string) (*GDBWidget, error) {
 	}
 
 	console := termui.NewConsolePane("GDB")
-	console.Prompt = "(gdb) "
+	// No standing Prompt: Draw must not invent "(gdb)" while waiting.
+	// The live host is attached only when MI emits the (gdb) marker.
+	console.Prompt = ""
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
 	console.LineStyle = gdbLineStyle
 
@@ -369,11 +371,22 @@ func (m *GDBWidget) finishQuitConfirm(raw string) {
 	m.quitConfirm = false
 
 	if !yes {
-		m.console.EnsureLivePrompt()
+		// Solicit a real MI (gdb) prompt — do not invent one locally.
+		if m.client != nil {
+			send := func() { _ = m.client.Send("") }
+			if m.appState != nil {
+				m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
+			} else {
+				send()
+			}
+		}
 		m.console.FollowTailAndScroll()
 		return
 	}
 
+	if m.client == nil {
+		return
+	}
 	send := func() { _ = m.client.Send("quit") }
 	if m.appState != nil {
 		m.appState.WithPTYOwner(platform.PTYOwnerUI, send)
@@ -501,12 +514,12 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 		}
 		if len(rest) > 0 {
 			m.console.AppendLines(rest)
-			m.console.StripTrailingBarePrompt()
+			m.stripTrailingGdbPrompt()
 			painted = true
 		}
-		// Do not replace the "Quit anyway?" host with (gdb) while confirming.
+		// Materialize the MI (gdb) marker as the live host — never invent it earlier.
 		if upd.PromptReady && !m.quitConfirm {
-			m.console.EnsureLivePrompt()
+			m.attachGdbPrompt()
 		}
 		if painted || (upd.PromptReady && !m.quitConfirm) {
 			m.console.FollowTailAndScroll()
@@ -544,6 +557,39 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 	}
 	if upd.BreakpointsChanged && m.onBreakpoints != nil {
 		m.onBreakpoints()
+	}
+}
+
+// attachGdbPrompt paints the MI (gdb) prompt record as the live input host.
+func (m *GDBWidget) attachGdbPrompt() {
+	const host = "(gdb) "
+	if buf := m.console.Buffer(); buf != nil {
+		n := buf.NumLines()
+		if n > 0 && buf.Line(n-1) == host {
+			m.console.SetLivePrompt(true)
+			return
+		}
+		buf.AppendLine(host)
+	}
+	m.console.SetLivePrompt(true)
+}
+
+// stripTrailingGdbPrompt drops a trailing bare (gdb) host before new output.
+func (m *GDBWidget) stripTrailingGdbPrompt() {
+	buf := m.console.Buffer()
+	if buf == nil {
+		return
+	}
+	for buf.NumLines() > 0 {
+		last := strings.TrimSpace(buf.Line(buf.NumLines() - 1))
+		if last != "" && last != "(gdb)" {
+			return
+		}
+		buf.RemoveLine(buf.NumLines() - 1)
+		m.console.SetLivePrompt(false)
+		if last == "(gdb)" {
+			return
+		}
 	}
 }
 

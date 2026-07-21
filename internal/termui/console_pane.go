@@ -107,8 +107,9 @@ func (p *ConsolePane) LivePrompt() bool {
 
 // EnsureLivePrompt makes the last buffer line equal to Prompt and marks it live
 // so the input line continues on that same row.
+// No-op when Prompt is empty (callers must attach a host line themselves).
 func (p *ConsolePane) EnsureLivePrompt() {
-	if p.buf == nil {
+	if p.buf == nil || p.Prompt == "" {
 		return
 	}
 	if n := p.buf.NumLines(); n > 0 && p.buf.Line(n-1) == p.Prompt {
@@ -170,14 +171,24 @@ func (p *ConsolePane) Clear() {
 // EchoSubmit appends prompt+cmd to scrollback (native REPL echo, not chat labels).
 func (p *ConsolePane) EchoSubmit(cmd string) {
 	n := p.buf.NumLines()
-	promptTrim := strings.TrimSpace(p.Prompt)
 	if p.livePrompt && n > 0 {
 		p.buf.SetLine(n-1, p.buf.Line(n-1)+cmd)
 		p.livePrompt = false
 		return
 	}
-	if n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == promptTrim {
+	promptTrim := strings.TrimSpace(p.Prompt)
+	if p.Prompt != "" && n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == promptTrim {
 		p.buf.SetLine(n-1, p.Prompt+cmd)
+		p.livePrompt = false
+		return
+	}
+	// Empty Prompt (GDB): echo onto a bare (gdb) host line if present.
+	if p.Prompt == "" && n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == "(gdb)" {
+		host := p.buf.Line(n - 1)
+		if !strings.HasSuffix(host, " ") {
+			host += " "
+		}
+		p.buf.SetLine(n-1, host+cmd)
 		p.livePrompt = false
 		return
 	}
@@ -193,9 +204,11 @@ func (p *ConsolePane) AppendLines(lines []string) {
 }
 
 func (p *ConsolePane) AppendText(text string) {
-	if n := p.buf.NumLines(); n > 0 && p.buf.Line(n-1) == p.Prompt {
-		p.buf.SetLine(n-1, p.buf.Line(n-1)+text)
-		return
+	if p.Prompt != "" {
+		if n := p.buf.NumLines(); n > 0 && p.buf.Line(n-1) == p.Prompt {
+			p.buf.SetLine(n-1, p.buf.Line(n-1)+text)
+			return
+		}
 	}
 	p.buf.AppendLine(text)
 }
@@ -220,12 +233,14 @@ func (p *ConsolePane) StripTrailingBarePrompt() {
 	promptTrim := strings.TrimSpace(p.Prompt)
 	for p.buf.NumLines() > 0 {
 		last := strings.TrimSpace(p.buf.Line(p.buf.NumLines() - 1))
-		if last != "" && last != promptTrim {
+		bareGdb := last == "(gdb)"
+		bareConfigured := promptTrim != "" && last == promptTrim
+		if last != "" && !bareGdb && !bareConfigured {
 			return
 		}
 		p.buf.RemoveLine(p.buf.NumLines() - 1)
 		p.livePrompt = false
-		if last == promptTrim {
+		if bareGdb || bareConfigured {
 			return
 		}
 	}
@@ -315,9 +330,14 @@ func (p *ConsolePane) Draw(c Canvas) {
 	if attach {
 		inputY = n - 1
 	}
-	if !p.out.FollowTail() || inputY > h-1 {
+	if !p.out.FollowTail() {
+		// Scrolled away from the tail: input alone on the bottom row.
 		inputY = h - 1
 		attach = false
+	} else if inputY > h-1 {
+		// Full viewport: keep live host+input on the bottom row (do not
+		// clear attach — that painted (gdb) one line above the caret).
+		inputY = h - 1
 	}
 	if contentH := inputY; contentH > 0 {
 		content := c.WithRect(c.ChildRect(0, 0, c.W(), contentH))
