@@ -125,6 +125,7 @@ func buildHelpLines() []string {
 		"                       Threads|Callstack over Breakpoints)",
 		"    :layout default    six-pane workspace",
 		"    :layout classic    full-width Code over GDB",
+		"    :layout wide       Code|IO over GDB|(Threads|Callstack / BP)",
 		"    :layout            re-apply panels",
 		"    :vs / :split       vertical / horizontal split",
 		"",

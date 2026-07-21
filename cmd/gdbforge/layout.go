@@ -8,7 +8,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// OnLayout applies a named workspace layout (:layout panels|default|classic).
+// OnLayout applies a named workspace layout (:layout panels|default|classic|wide).
 // With no name, re-applies the panels (startup) layout.
 func (a *DebuggerApp) OnLayout(args ...any) {
 	name := layout.Panels
@@ -72,6 +72,8 @@ func (a *DebuggerApp) buildLayoutTab(name string) *termui.TabWidget {
 		return layout.BuildPanels("panels", panes)
 	case layout.Classic:
 		return layout.BuildClassic("classic", panes)
+	case layout.Wide:
+		return layout.BuildWide("wide", panes)
 	default:
 		return nil
 	}
@@ -115,7 +117,7 @@ func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 // registerLayouts registers named workspace layouts on AppState.
 // Startup / current layout is panels.
 func (a *DebuggerApp) registerLayouts() {
-	for _, name := range []string{layout.Panels, layout.Default, layout.Classic} {
+	for _, name := range []string{layout.Panels, layout.Default, layout.Classic, layout.Wide} {
 		a.State().RegisterLayout(name)
 	}
 	a.State().SetCurrentLayout(layout.Panels)

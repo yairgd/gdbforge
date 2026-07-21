@@ -123,3 +123,52 @@ func TestBuildClassicStructure(t *testing.T) {
 		t.Fatalf("leaves=%d want 2", len(leaves))
 	}
 }
+
+func TestBuildWideStructure(t *testing.T) {
+	tw := BuildWide("wide", stubPanes())
+	root := tw.ActiveTree().Root()
+	if root == nil || root.Dir != termui.Horizontal {
+		t.Fatal("expected outer horizontal (top/bottom)")
+	}
+	if math.Abs(root.Ratio-wideTopRatio) > 1e-9 {
+		t.Fatalf("top ratio=%v want %v", root.Ratio, wideTopRatio)
+	}
+	top := root.First
+	if top == nil || top.Dir != termui.Vertical {
+		t.Fatal("expected top Code|Output")
+	}
+	if math.Abs(top.Ratio-wideCodeRatio) > 1e-9 {
+		t.Fatalf("code ratio=%v want %v", top.Ratio, wideCodeRatio)
+	}
+	bottom := root.Second
+	if bottom == nil || bottom.Dir != termui.Vertical {
+		t.Fatal("expected bottom GDB|side")
+	}
+	if math.Abs(bottom.Ratio-wideGdbRatio) > 1e-9 {
+		t.Fatalf("gdb ratio=%v want %v", bottom.Ratio, wideGdbRatio)
+	}
+	side := bottom.Second
+	if side == nil || side.Dir != termui.Horizontal {
+		t.Fatal("expected side (Threads|CS) over BP")
+	}
+	if math.Abs(side.Ratio-wideThreadsCallstackRatio) > 1e-9 {
+		t.Fatalf("threads|cs ratio=%v want %v", side.Ratio, wideThreadsCallstackRatio)
+	}
+	if side.Second == nil || side.Second.Type != termui.NodeLeaf {
+		t.Fatal("expected Breakpoints leaf")
+	}
+	pair := side.First
+	if pair == nil || pair.Dir != termui.Vertical {
+		t.Fatal("expected Threads|Callstack")
+	}
+	if pair.First == nil || pair.First.Type != termui.NodeLeaf {
+		t.Fatal("expected Threads leaf")
+	}
+	if pair.Second == nil || pair.Second.Type != termui.NodeLeaf {
+		t.Fatal("expected Callstack leaf")
+	}
+	leaves := termui.CollectLeaves(root)
+	if len(leaves) != 6 {
+		t.Fatalf("leaves=%d want 6", len(leaves))
+	}
+}

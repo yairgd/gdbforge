@@ -21,7 +21,7 @@ func (standardDebugKeys) HandleNormalKey(a *DebuggerApp, ev *tcell.EventKey) boo
 
 func (a *DebuggerApp) currentLayoutBehavior() layoutBehavior {
 	switch a.State().CurrentLayout() {
-	case layout.Default, layout.Panels, layout.Classic:
+	case layout.Default, layout.Panels, layout.Classic, layout.Wide:
 		return standardDebugKeys{}
 	default:
 		return standardDebugKeys{}

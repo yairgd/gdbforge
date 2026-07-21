@@ -11,6 +11,7 @@ const (
 	Default = "default"
 	Panels  = "panels"
 	Classic = "classic"
+	Wide    = "wide"
 )
 
 // Panes are the singleton widgets a layout may place. Unused fields may be nil
