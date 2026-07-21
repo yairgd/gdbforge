@@ -215,15 +215,6 @@ func (a *TermApp) HandleEvent(ev tcell.Event) {
 		a.mouseActive = false
 		a.HandleKey(e)
 
-		switch e.Key() {
-		case tcell.KeyCtrlD:
-			a.exit = true
-			return
-
-		default:
-			//	tab.HandleEvent(e)
-		}
-
 	case *tcell.EventMouse:
 		a.mouseX, a.mouseY = e.Position()
 		if e.Buttons()&tcell.ButtonPrimary != 0 {

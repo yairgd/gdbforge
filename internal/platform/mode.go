@@ -13,7 +13,7 @@ const (
 	ModeNormal Mode = iota
 	ModeInsert
 	ModeCommand
-	ModeCompletion // wildmenu: only CompletionBar receives nav keys
+	ModeCompletion // wildmenu: CompletionMenu + CompletionView (bar) receive keys
 )
 
 // PTYOwner identifies which frontend currently holds exclusive PTY write

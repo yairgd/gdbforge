@@ -38,7 +38,7 @@ func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
 		return
 	}
 	if a.gdbWidget != nil {
-		w.SetPTY(a.gdbWidget.Session(), a.State())
+		w.SetPTY(a.GDB(), a.State())
 	}
 	w.SetOnBreakCmd(a.onBreakpointsChanged)
 	w.SetOnToggleEnable(a.toggleCodeBreakEnable)

@@ -34,7 +34,7 @@
 
 ## What you get
 
-- Named layouts (`:layout panels`, `default`, `classic`) and splits (`:vs` / `:split`)
+- Named layouts (`:layout wide`, `panels`, `default`, `classic`) and splits (`:vs` / `:split`)
 - Code (or startup logo), GDB console, IO, Threads, Call Stack, Breakpoints
 - In-app manual: `:help` or `:b help`
 - Space to toggle breakpoints on the Code cursor or Call Stack frame
@@ -130,7 +130,7 @@ Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for comple
 
 **Completion**
 
-After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cycle; Enter accepts; Esc cancels back to command.
+After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cycle; type letters to narrow (CompletionMenu); Enter accepts; Esc cancels. The completion bar is a replaceable view over that menu.
 
 ### Global keys (normal mode)
 
@@ -162,11 +162,11 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **Layout**
 
-- `:layout panels` — startup layout (Code|GDB left; IO + Threads|Callstack over Breakpoints)
+- `:layout wide` — startup layout (Code|IO over GDB|(Threads|Callstack / Breakpoints))
+- `:layout panels` — Code|GDB left; IO + Threads|Callstack over Breakpoints
 - `:layout default` — six-pane workspace
 - `:layout classic` — full-width Code over GDB
-- `:layout wide` — Code|IO over GDB|(Threads|Callstack / Breakpoints)
-- `:layout` — re-apply panels
+- `:layout` — re-apply wide
 - `:vs` / `:split` — vertical / horizontal split
 
 **Settings (`:set …`)**
@@ -253,7 +253,7 @@ Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only
 ### Tips
 
 - Tab after `:b` or `:edit` lists candidates in the wildmenu
-- Use `:layout panels` if the workspace looks wrong after splits
+- Use `:layout wide` if the workspace looks wrong after splits
 - Prefer `:edit` for project files; `:b` is for open buffers + builtins
 
 ### See also (in-app)

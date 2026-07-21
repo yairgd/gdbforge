@@ -34,11 +34,11 @@ func (a *DebuggerApp) maybeBreakMain() {
 	if a.gdbWidget == nil || !a.State().BreakMain() {
 		return
 	}
-	sess := a.gdbWidget.Session()
+	sess := a.GDB()
 	if sess == nil {
 		return
 	}
-	widgets.SendGdbCmd(sess, a.State(), "break main")
+	gdb.SendCmd(sess, a.State(), "break main")
 }
 
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
@@ -47,40 +47,50 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	if stop == nil {
 		return
 	}
+	a.State().SetInferiorRunning(false)
+	if !gdb.StopNeedsUIRefresh(stop) {
+		return
+	}
 	file := stop.File
 	line := stop.Line
 	if file != "" {
 		a.State().SetCurrentLocation(file, line)
 	}
 
+	// Threads / call stack / code: refresh from GDB. Code is also synced from
+	// the stack after Ctrl-C (signal-received) when *stopped lacks a usable
+	// fullname (e.g. stop inside libc) or when the fast path races the PTY.
 	a.scheduleDebugInfoRefresh()
 
-	if file == "" {
-		if stop.Func == "" {
-			return
-		}
-		go func() {
-			w := a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", line))
-			if scr := a.Screen(); scr != nil {
-				_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
-			}
-		}()
-		return
-	}
 	go func() {
 		a.ensureSourceFiles()
-		// Do not -break-list on every stop: that flooded the PTY and froze input.
-		// Breakpoint list / red marks sync via =breakpoint-* notifies only.
-		// Only paint gutters for a newly created buffer — re-painting an existing
-		// CodeWidget from bpWidget here races Space toggles and stale MergeFromGDB.
-		w := a.showCodeAt(file, line)
-		if w != nil && w.Unavailable() {
-			w.ShowUnavailable(file, formatUnavailableExtra(stop.Func, line))
-		}
+		w := a.updateCodeAfterStop(stop)
 		if scr := a.Screen(); scr != nil {
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
 		}
 	}()
+}
+
+// updateCodeAfterStop moves ━━▶ to the stop location. Prefers *stopped frame;
+// if that has no source file (common for SIGINT in libc), uses the first
+// call-stack frame that has a file after a stack query.
+func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
+	if stop != nil && stop.File != "" {
+		w := a.showCodeAt(stop.File, stop.Line)
+		if w != nil && w.Unavailable() {
+			w.ShowUnavailable(stop.File, formatUnavailableExtra(stop.Func, stop.Line))
+		}
+		return w
+	}
+	// No fullname on *stopped — query stack (same path as frame sync).
+	a.syncCurrentFrameFromGDB()
+	if w := a.activeCodeWidget(); w != nil {
+		return w
+	}
+	if stop != nil && stop.Func != "" {
+		return a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
+	}
+	return nil
 }
 
 // showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters when new.
@@ -131,11 +141,11 @@ func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 	if a.gdbWidget == nil {
 		return
 	}
-	sess := a.gdbWidget.Session()
+	sess := a.GDB()
 	if sess == nil {
 		return
 	}
-	widgets.SendGdbCmd(sess, a.State(), fmt.Sprintf("frame %d", fr.Level))
+	gdb.SendCmd(sess, a.State(), fmt.Sprintf("frame %d", fr.Level))
 	a.showFrameSource(fr)
 	a.RequestFrame()
 }
@@ -201,6 +211,26 @@ func (a *DebuggerApp) showFrameSource(fr mcp.StackFrame) {
 	}
 }
 
+// syncCodeFromCallstack moves Code to the first stack frame that has a source
+// file. Used after stop refreshes so Ctrl-C / SIGINT still update ━━▶ when the
+// current frame is in a library without sources.
+func (a *DebuggerApp) syncCodeFromCallstack() {
+	if a.callstackWidget == nil {
+		return
+	}
+	frames := a.callstackWidget.Items()
+	for _, fr := range frames {
+		if fr.File != "" {
+			a.showFrameSource(fr)
+			return
+		}
+	}
+	if len(frames) > 0 && frames[0].Func != "" {
+		w := a.showCodeUnavailable(frames[0].Func, formatUnavailableExtra("", frames[0].Line))
+		a.applyCodeStop(w)
+	}
+}
+
 // onBreakpointActivate shows the source at the selected breakpoint location.
 func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
 	if bp.File == "" {
@@ -220,11 +250,11 @@ func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
 	if a.gdbWidget == nil || th.ID == "" {
 		return
 	}
-	sess := a.gdbWidget.Session()
+	sess := a.GDB()
 	if sess == nil {
 		return
 	}
-	widgets.SendGdbCmd(sess, a.State(), "thread "+th.ID)
+	gdb.SendCmd(sess, a.State(), "thread "+th.ID)
 	a.refreshThreadsAndStack()
 
 	file, line := th.File, th.Line
@@ -330,6 +360,10 @@ func (a *DebuggerApp) refreshThreadsAndStack() {
 			a.callstackWidget.SetItems(mcp.ParseStackListFrames(raw))
 		}
 	}
+
+	// After Ctrl-C / any stop: keep Code ━━▶ aligned with the stack (prefer a
+	// frame that has a source file when frame #0 is in a shared library).
+	a.syncCodeFromCallstack()
 }
 
 // onBreakpointsChanged publishes a bus event; the Subscribe handler coalesces

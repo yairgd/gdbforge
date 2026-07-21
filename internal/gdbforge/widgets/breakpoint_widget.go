@@ -6,6 +6,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -267,7 +268,7 @@ func breakLoc(it mcp.BreakInfo) string {
 }
 
 func (w *BreakpointWidget) sendMI(cmd string) {
-	sendGdbCmd(w.sess, w.state, cmd)
+	gdb.SendCmd(w.sess, w.state, cmd)
 	if w.OnBreakCmd != nil {
 		w.OnBreakCmd()
 	}

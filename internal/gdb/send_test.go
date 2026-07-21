@@ -1,18 +1,41 @@
-package widgets
+package gdb
 
 import (
+	"context"
 	"testing"
 
+	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
-func TestSendGdbCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
+type fakeSess struct {
+	sent chan string
+}
+
+func (f *fakeSess) Send(cmd string) error {
+	f.sent <- cmd
+	return nil
+}
+func (f *fakeSess) SendRaw(raw string) error {
+	f.sent <- raw
+	return nil
+}
+func (f *fakeSess) Close() {}
+func (f *fakeSess) Subscribe() (<-chan core.PtyOutputMsg, func()) {
+	ch := make(chan core.PtyOutputMsg)
+	return ch, func() { close(ch) }
+}
+func (f *fakeSess) WithWrite(_ context.Context, fn func(core.PTYWriter) error) error {
+	return fn(f)
+}
+
+func TestSendCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
 	st := platform.NewAppState()
 	st.SetInferiorRunning(true)
 
-	SendGdbCmd(sess, st, "frame 2")
+	SendCmd(sess, st, "frame 2")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
@@ -27,13 +50,13 @@ func TestSendGdbCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
 	}
 }
 
-func TestSendGdbCmdThreadWhileRunningDoesNotContinue(t *testing.T) {
+func TestSendCmdThreadWhileRunningDoesNotContinue(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
 	st := platform.NewAppState()
 	st.SetInferiorRunning(true)
 
-	SendGdbCmd(sess, st, "thread 1")
+	SendCmd(sess, st, "thread 1")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
@@ -48,13 +71,13 @@ func TestSendGdbCmdThreadWhileRunningDoesNotContinue(t *testing.T) {
 	}
 }
 
-func TestSendGdbCmdBreakWhileRunningStillContinues(t *testing.T) {
+func TestSendCmdBreakWhileRunningStillContinues(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
 	st := platform.NewAppState()
 	st.SetInferiorRunning(true)
 
-	SendGdbCmd(sess, st, "break hello.c:10")
+	SendCmd(sess, st, "break hello.c:10")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
@@ -80,8 +103,26 @@ func TestIsBreakInsertCmd(t *testing.T) {
 		"continue":           false,
 	}
 	for cmd, want := range cases {
-		if got := isBreakInsertCmd(cmd); got != want {
+		if got := IsBreakInsertCmd(cmd); got != want {
 			t.Fatalf("%q: got %v want %v", cmd, got, want)
 		}
+	}
+}
+
+func TestIsStackNavCmd(t *testing.T) {
+	if !IsStackNavCmd("frame 1") || !IsStackNavCmd("f 0") || !IsStackNavCmd("up") {
+		t.Fatal("expected stack nav")
+	}
+	if IsStackNavCmd("break main") || IsStackNavCmd("") {
+		t.Fatal("not stack nav")
+	}
+}
+
+func TestStopNeedsUIRefresh(t *testing.T) {
+	if StopNeedsUIRefresh(&MiStopMsg{Reason: "exited"}) {
+		t.Fatal("exit should not refresh UI")
+	}
+	if !StopNeedsUIRefresh(&MiStopMsg{Reason: "breakpoint-hit"}) {
+		t.Fatal("breakpoint should refresh")
 	}
 }

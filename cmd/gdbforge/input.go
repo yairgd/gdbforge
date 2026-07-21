@@ -84,15 +84,13 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	a.completionForGDB = false
 	a.cmdWidget.HandleEvent(ev)
-	if ev.Key() == tcell.KeyTAB && a.completionBar != nil && a.completionBar.Active() {
+	if ev.Key() == tcell.KeyTAB && a.completionActive() {
 		a.SetMode(platform.ModeCompletion)
 		a.RequestFrame()
 		return true
 	}
 	if ev.Key() == tcell.KeyEnter {
-		if a.completionBar != nil {
-			a.completionBar.Clear()
-		}
+		a.clearCompletion()
 		a.cmdWidget.Deativate()
 		if a.Mode() == platform.ModeCommand {
 			a.SetMode(platform.ModeNormal)
@@ -102,16 +100,44 @@ func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 }
 
 // handleCompletionKey owns keys while the wildmenu is open (ModeCompletion).
+// Tab/arrows only move selection. Letters/backspace edit the source line
+// (GDB console or cmdline) and re-query completions into the menu — no local filter.
 func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
-	if a.completionBar == nil {
+	if a.completionMenu == nil {
 		a.leaveCompletionMode()
 		return true
 	}
 	if a.tryKeyBindings(a.completionKeys, ev) {
 		return true
 	}
-	// Printable / Backspace: leave wildmenu and continue editing.
-	a.completionBar.Clear()
+	isType := ev.Key() == tcell.KeyRune && ev.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) == 0
+	isBS := ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2
+	if isType || isBS {
+		if a.completionForGDB && a.gdbWidget != nil {
+			if isType {
+				a.gdbWidget.InsertInputRune(ev.Rune())
+			} else {
+				a.gdbWidget.BackspaceInput()
+			}
+			a.refreshGDBCompletionMenu()
+			a.RequestFrame()
+			return true
+		}
+		if a.cmdWidget != nil {
+			a.cmdWidget.HandleEvent(ev)
+			if !a.cmdWidget.Active() {
+				a.clearCompletion()
+				a.SetMode(platform.ModeNormal)
+				a.RequestFrame()
+				return true
+			}
+			a.refreshCmdCompletionMenu()
+			a.RequestFrame()
+			return true
+		}
+	}
+	// Other keys: leave wildmenu and continue editing.
+	a.clearCompletion()
 	if a.completionForGDB {
 		a.completionForGDB = false
 		a.SetMode(platform.ModeInsert)
@@ -125,9 +151,7 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 }
 
 func (a *DebuggerApp) leaveCompletionMode() {
-	if a.completionBar != nil {
-		a.completionBar.Clear()
-	}
+	a.clearCompletion()
 	if a.completionForGDB {
 		a.completionForGDB = false
 		a.SetMode(platform.ModeInsert)
@@ -155,9 +179,54 @@ func (a *DebuggerApp) gdbTabComplete() {
 	if len(names) == 0 && res.Completion != "" {
 		names = []string{res.Completion}
 	}
-	// Wildmenu: only the word being completed, not prior words.
-	menu := gdb.MenuNames(text, names)
+	a.publishGDBCompletionMenu(text, names)
 
+	switch len(names) {
+	case 0:
+		// nothing
+	case 1:
+		a.gdbWidget.ApplyCompletion(names[0])
+		a.clearCompletion()
+	default:
+		a.completionForGDB = true
+		a.SetMode(platform.ModeCompletion)
+	}
+	a.RequestFrame()
+}
+
+// refreshGDBCompletionMenu re-runs -complete for the current GDB input and
+// replaces the wildmenu. Does not apply LCP or unique matches (typing owns the
+// line). Tab/arrows only move selection and must not call this.
+func (a *DebuggerApp) refreshGDBCompletionMenu() {
+	if a.gdbWidget == nil {
+		a.leaveCompletionMode()
+		return
+	}
+	text := a.gdbWidget.InputText()
+	res := gdb.Complete(a.GDB(), a.State(), text)
+	names := res.Matches
+	if len(names) == 0 && res.Completion != "" && res.Completion != text {
+		names = []string{res.Completion}
+	}
+	a.publishGDBCompletionMenu(text, names)
+	if len(names) <= 1 {
+		// No multi-match wildmenu left; keep typed input, return to insert.
+		a.leaveCompletionMode()
+		return
+	}
+	a.completionForGDB = true
+	if a.Mode() != platform.ModeCompletion {
+		a.SetMode(platform.ModeCompletion)
+	}
+}
+
+func (a *DebuggerApp) publishGDBCompletionMenu(text string, names []string) {
+	menu := gdb.MenuNames(text, names)
+	// After file:, attach signatures from -symbol-info-functions
+	// ("foo" → "foo(int, char *)"); apply still inserts bare name.
+	if sigs := gdb.FunctionSignatures(a.GDB(), a.State()); len(sigs) > 0 {
+		menu = gdb.EnrichLinespecMenuNames(text, menu, sigs)
+	}
 	if a.ctx.Bus != nil {
 		platform.Publish(a.ctx.Bus, termui.CompletionMsg{
 			Input: text,
@@ -165,20 +234,29 @@ func (a *DebuggerApp) gdbTabComplete() {
 			Names: menu,
 		})
 	}
+}
 
-	switch len(names) {
-	case 0:
-		// nothing
-	case 1:
-		a.gdbWidget.ApplyCompletion(names[0])
-		if a.completionBar != nil {
-			a.completionBar.Clear()
-		}
-	default:
-		a.completionForGDB = true
+// refreshCmdCompletionMenu re-syncs the cmdline parser and replaces the wildmenu.
+func (a *DebuggerApp) refreshCmdCompletionMenu() {
+	if a.cmdWidget == nil || !a.cmdWidget.Active() {
+		a.leaveCompletionMode()
+		return
+	}
+	names := a.cmdWidget.CompletionNames()
+	if a.ctx.Bus != nil {
+		platform.Publish(a.ctx.Bus, termui.CompletionMsg{
+			Input: a.cmdWidget.Text(),
+			Token: a.cmdWidget.Text(),
+			Names: names,
+		})
+	}
+	if len(names) <= 1 {
+		a.leaveCompletionMode()
+		return
+	}
+	if a.Mode() != platform.ModeCompletion {
 		a.SetMode(platform.ModeCompletion)
 	}
-	a.RequestFrame()
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {
@@ -246,9 +324,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 // enterCommandMode activates the ':' cmdline (same as pressing ':').
 // Leaves insert-active so the focused pane status is blue, matching Esc then ':'.
 func (a *DebuggerApp) enterCommandMode() {
-	if a.completionBar != nil {
-		a.completionBar.Clear()
-	}
+	a.clearCompletion()
 	if a.tab != nil {
 		a.tab.SetInsertActive(false)
 	}
@@ -261,9 +337,7 @@ func (a *DebuggerApp) enterCommandMode() {
 
 // leaveCommandMode exits ':' / wildmenu (same as Esc).
 func (a *DebuggerApp) leaveCommandMode() {
-	if a.completionBar != nil {
-		a.completionBar.Clear()
-	}
+	a.clearCompletion()
 	if a.cmdWidget != nil {
 		a.cmdWidget.Deativate()
 	}
@@ -295,9 +369,7 @@ func (a *DebuggerApp) clickCmdLine(screenX int) {
 		}
 	}
 	if a.Mode() == platform.ModeCompletion {
-		if a.completionBar != nil {
-			a.completionBar.Clear()
-		}
+		a.clearCompletion()
 		a.SetMode(platform.ModeCommand)
 	}
 	a.cmdWidget.SetCursorAtLocalX(screenX - originX)
@@ -342,7 +414,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.miLog.Error(data.Err.Error())
 		}
 		if a.gdbWidget != nil {
-			a.gdbWidget.HandleEvent(ev)
+			a.handleGdbOutputMsg(data)
 		}
 		if a.outputWidget != nil && data.Data != "" {
 			a.outputWidget.AppendPty(data.Data)
@@ -374,9 +446,11 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	case breakpointsUIMsg:
 		a.RequestFrame()
 	case debugInfoUIMsg:
+		// Stack/thread refresh may have moved Code (e.g. after Ctrl-C).
+		a.applyCodeStop(a.activeCodeWidget())
 		a.RequestFrame()
 	case string:
-		// GDB PTY closed (q / quit / -gdb-exit) — leave the app like Ctrl-D.
+		// GDB PTY closed (q / quit / -gdb-exit) — leave the app.
 		if data == "gdb-exit" {
 			a.Exit()
 			return

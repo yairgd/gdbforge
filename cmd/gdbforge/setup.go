@@ -37,9 +37,14 @@ func (a *DebuggerApp) InitB() error {
 	a.tab.SetEqualAlways(true)
 	a.AddWidget(a.tab)
 
+	a.completionMenu = &termui.CompletionMenu{}
 	a.completionBar = termui.NewCompletionBarWidget(a.ctx)
+	a.completionView = a.completionBar
 	a.completionBar.Events = a.Events()
 	a.AddWidget(a.completionBar)
+	if a.ctx.Bus != nil {
+		platform.Subscribe(a.ctx.Bus, a.onCompletionMsg)
+	}
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx

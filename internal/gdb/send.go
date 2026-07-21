@@ -1,4 +1,4 @@
-package widgets
+package gdb
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
-// SendGdbCmd writes a GDB CLI/MI command on the shared PTY.
+// SendCmd writes a GDB CLI/MI command on the shared PTY.
 //
 // While the inferior is running, sync GDB will not process break/clear until
 // interrupted — so we send Ctrl-C, then the command. Auto-resume with
@@ -17,7 +17,7 @@ import (
 // and, optionally, to remove when AppState.ContinueAfterClear is set.
 // Other commands (frame, thread, …) stay stopped after the interrupt —
 // never send a surprise continue.
-func SendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
+func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
 	if sess == nil || cmd == "" {
 		return
 	}
@@ -37,13 +37,13 @@ func SendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
 			if !running {
 				return nil
 			}
-			if isBreakRemoveCmd(cmd) {
+			if IsBreakRemoveCmd(cmd) {
 				if state != nil && state.ContinueAfterClear() {
 					return pw.Send("continue")
 				}
 				return nil
 			}
-			if isBreakInsertCmd(cmd) {
+			if IsBreakInsertCmd(cmd) {
 				return pw.Send("continue")
 			}
 			return nil
@@ -56,16 +56,14 @@ func SendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
 	}
 }
 
-func sendGdbCmd(sess core.Session, state *platform.AppState, cmd string) {
-	SendGdbCmd(sess, state, cmd)
-}
-
-func isBreakRemoveCmd(cmd string) bool {
+// IsBreakRemoveCmd reports clear / -break-delete style commands.
+func IsBreakRemoveCmd(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
 	return strings.HasPrefix(cmd, "clear ") || strings.HasPrefix(cmd, "-break-delete")
 }
 
-func isBreakInsertCmd(cmd string) bool {
+// IsBreakInsertCmd reports break / tbreak / -break-insert style commands.
+func IsBreakInsertCmd(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
 	switch {
 	case strings.HasPrefix(cmd, "break "):

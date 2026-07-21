@@ -9,9 +9,9 @@ import (
 )
 
 // OnLayout applies a named workspace layout (:layout panels|default|classic|wide).
-// With no name, re-applies the panels (startup) layout.
+// With no name, re-applies the wide (startup) layout.
 func (a *DebuggerApp) OnLayout(args ...any) {
-	name := layout.Panels
+	name := layout.Wide
 	if len(args) > 0 {
 		if s, ok := args[0].(string); ok && strings.TrimSpace(s) != "" {
 			name = strings.TrimSpace(s)
@@ -115,15 +115,15 @@ func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 }
 
 // registerLayouts registers named workspace layouts on AppState.
-// Startup / current layout is panels.
+// Startup / current layout is wide.
 func (a *DebuggerApp) registerLayouts() {
-	for _, name := range []string{layout.Panels, layout.Default, layout.Classic, layout.Wide} {
+	for _, name := range []string{layout.Wide, layout.Panels, layout.Default, layout.Classic} {
 		a.State().RegisterLayout(name)
 	}
-	a.State().SetCurrentLayout(layout.Panels)
+	a.State().SetCurrentLayout(layout.Wide)
 }
 
-// newStartupTab builds the initial panels workspace tab.
+// newStartupTab builds the initial wide workspace tab.
 func (a *DebuggerApp) newStartupTab(code termui.Widget) *termui.TabWidget {
-	return layout.BuildPanels("panels", a.debugPanes(code))
+	return layout.BuildWide("wide", a.debugPanes(code))
 }

@@ -5,8 +5,17 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
+// CompletionView paints a CompletionMenu snapshot. CompletionBarWidget is the
+// default chrome row; a list window could implement the same interface later.
+type CompletionView interface {
+	SetItems(names []string, selected int)
+	Clear()
+	Active() bool
+}
+
 // CompletionBarWidget is chrome (not a WidgetTree leaf): one row above the
-// command line, fed by CompletionMsg, drawn after TabWidget to overlay that row.
+// command line. It only paints items + selection from CompletionMenu via
+// SetItems — no selection ownership.
 type CompletionBarWidget struct {
 	BaseWidget
 	names    []string
@@ -14,59 +23,33 @@ type CompletionBarWidget struct {
 	start    int // first visible candidate (horizontal roll)
 }
 
+var _ CompletionView = (*CompletionBarWidget)(nil)
+
 func NewCompletionBarWidget(ctx platform.AppContext) *CompletionBarWidget {
-	w := &CompletionBarWidget{
+	return &CompletionBarWidget{
 		BaseWidget: NewBaseWidget(ctx),
 	}
-	if ctx.Bus != nil {
-		platform.Subscribe(ctx.Bus, w.onCompletion)
-	}
-	w.initKeyBindings()
-	return w
 }
 
-func (w *CompletionBarWidget) initKeyBindings() {
-	w.BindKeyFunc("prev", func(args ...any) { w.move(-1) }, "<Left>", "<Up>")
-	w.BindKeyFunc("next", func(args ...any) { w.move(1) }, "<Right>", "<Down>")
-}
-
-func (w *CompletionBarWidget) onCompletion(msg CompletionMsg) {
-	if len(msg.Names) <= 1 {
-		w.Clear()
-		return
+// SetItems replaces the painted candidate row. selected is clamped.
+func (w *CompletionBarWidget) SetItems(names []string, selected int) {
+	w.names = append([]string(nil), names...)
+	w.selected = selected
+	if w.selected < 0 {
+		w.selected = 0
 	}
-	w.names = append([]string(nil), msg.Names...)
-	w.selected = 0
+	if n := len(w.names); n > 0 && w.selected >= n {
+		w.selected = n - 1
+	}
 	w.start = 0
 }
 
-// MoveSelection steps the wildmenu highlight by delta (wraps).
-func (w *CompletionBarWidget) MoveSelection(delta int) {
-	w.move(delta)
-}
-
-func (w *CompletionBarWidget) move(delta int) {
-	n := len(w.names)
-	if n == 0 {
-		return
-	}
-	w.selected = (w.selected + delta%n + n) % n
-}
-
-// Active reports whether the wildmenu has candidates.
+// Active reports whether the bar has candidates to paint.
 func (w *CompletionBarWidget) Active() bool {
 	return len(w.names) > 0
 }
 
-// Selected returns the highlighted completion name, or "".
-func (w *CompletionBarWidget) Selected() string {
-	if w.selected < 0 || w.selected >= len(w.names) {
-		return ""
-	}
-	return w.names[w.selected]
-}
-
-// Clear hides the wildmenu.
+// Clear hides the wildmenu row.
 func (w *CompletionBarWidget) Clear() {
 	w.names = nil
 	w.selected = 0
@@ -74,19 +57,15 @@ func (w *CompletionBarWidget) Clear() {
 }
 
 func (w *CompletionBarWidget) HandleEvent(ev tcell.Event) {
-	if e, ok := ev.(*tcell.EventKey); ok {
-		_ = w.HandleBoundKey(e)
-	}
+	// Navigation is owned by CompletionMenu + ModeCompletion keys.
 }
 
 func (w *CompletionBarWidget) DrawStatusLine(c Canvas, active bool) {}
 
-// nameWidth is the display width of a completion token (runes).
 func nameWidth(name string) int {
 	return len([]rune(name))
 }
 
-// endCol returns the exclusive column of names[idx] when drawing from start.
 func (w *CompletionBarWidget) endCol(start, idx int) int {
 	if idx < start || idx >= len(w.names) {
 		return 0
@@ -101,7 +80,6 @@ func (w *CompletionBarWidget) endCol(start, idx int) int {
 	return x
 }
 
-// ensureSelectedVisible rolls start left/right so the selected item fits in width.
 func (w *CompletionBarWidget) ensureSelectedVisible(width int) {
 	n := len(w.names)
 	if n == 0 || width <= 0 {
@@ -120,15 +98,12 @@ func (w *CompletionBarWidget) ensureSelectedVisible(width int) {
 	if w.selected < w.start {
 		w.start = w.selected
 	}
-	// Roll left (increase start) until selected ends within width, or start
-	// catches up to selected (single overlong token).
 	for w.start < w.selected && w.endCol(w.start, w.selected) > width {
 		w.start++
 	}
 }
 
 func (w *CompletionBarWidget) Draw(c Canvas) {
-	// Only paint while wildmenu is active; otherwise leave the pane status line alone.
 	if !w.Active() {
 		return
 	}

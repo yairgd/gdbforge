@@ -7,7 +7,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -54,6 +53,16 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 	a.keyBindings.Bind(
 		commands.NewCommand("insert-gdb", func(args ...any) { a.activateGdbInsertMode() }),
 		"i",
+	)
+
+	a.keyBindings.Bind(
+		commands.NewCommand("gdb-quit", func(args ...any) {
+			if a.gdbClient != nil {
+				a.handleGdbQuitAction(a.gdbClient.RequestQuit(), "q")
+			}
+			a.RequestFrame()
+		}),
+		"<C-d>",
 	)
 
 	// Code globals (gated fallthrough where list panes own the key).
@@ -112,14 +121,16 @@ func (a *DebuggerApp) initCompletionKeyBindings() {
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("accept", func(args ...any) {
-			if name := a.completionBar.Selected(); name != "" {
-				if a.completionForGDB {
-					if a.gdbWidget != nil {
-						cur := a.gdbWidget.InputText()
-						a.gdbWidget.ApplyCompletion(gdb.ApplyMenuChoice(cur, name))
+			if a.completionMenu != nil {
+				if name := a.completionMenu.Selected(); name != "" {
+					if a.completionForGDB {
+						if a.gdbWidget != nil {
+							cur := a.gdbWidget.InputText()
+							a.gdbWidget.ApplyCompletion(gdb.ApplyMenuChoice(cur, name))
+						}
+					} else if a.cmdWidget != nil {
+						a.cmdWidget.ApplyCompletion(name)
 					}
-				} else if a.cmdWidget != nil {
-					a.cmdWidget.ApplyCompletion(name)
 				}
 			}
 			a.leaveCompletionMode()
@@ -129,14 +140,20 @@ func (a *DebuggerApp) initCompletionKeyBindings() {
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("prev", func(args ...any) {
-			a.completionBar.MoveSelection(-1)
+			if a.completionMenu != nil {
+				a.completionMenu.Move(-1)
+				a.syncCompletionView()
+			}
 			a.RequestFrame()
 		}),
 		"<Left>", "<Up>",
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("next", func(args ...any) {
-			a.completionBar.MoveSelection(1)
+			if a.completionMenu != nil {
+				a.completionMenu.Move(1)
+				a.syncCompletionView()
+			}
 			a.RequestFrame()
 		}),
 		"<Right>", "<Down>", "<Tab>",
@@ -257,7 +274,7 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	if a.gdbWidget == nil {
 		return
 	}
-	sess := a.gdbWidget.Session()
+	sess := a.GDB()
 	if sess == nil {
 		return
 	}
@@ -266,7 +283,7 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	if a.hasBreakAt(fr.File, fr.Line) {
 		cmd = "clear " + loc
 	}
-	widgets.SendGdbCmd(sess, a.State(), cmd)
+	gdb.SendCmd(sess, a.State(), cmd)
 	a.onBreakpointsChanged()
 	a.RequestFrame()
 }

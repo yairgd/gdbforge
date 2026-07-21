@@ -14,6 +14,7 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -208,7 +209,7 @@ func (w *CodeWidget) clearLocalBreak(line int) {
 }
 
 func (w *CodeWidget) sendMI(cmd string) {
-	sendGdbCmd(w.sess, w.state, cmd)
+	gdb.SendCmd(w.sess, w.state, cmd)
 	if w.onBreakCmd != nil {
 		w.onBreakCmd()
 	}

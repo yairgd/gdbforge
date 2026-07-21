@@ -106,6 +106,15 @@ func (c *CmdWidget) ApplyCompletion(name string) {
 	}
 	c.replaceToken(name)
 }
+
+// CompletionNames returns Tab candidates for the current cmdline token.
+func (c *CmdWidget) CompletionNames() []string {
+	if c == nil || !c.active {
+		return nil
+	}
+	c.syncParser()
+	return c.parser.SuggestionNames()
+}
 func (c *CmdWidget) Activate() {
 	c.active = true
 	c.text = ":"

@@ -3,10 +3,11 @@ package main
 import (
 	"sync"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/execcli"
+	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -32,13 +33,19 @@ type DebuggerApp struct {
 
 	tab           *termui.TabWidget
 	cmdWidget     *termui.CmdWidget
-	completionBar *termui.CompletionBarWidget
-	ctx           platform.AppContext
-	miLog         *platform.NamedLogger
+	completionMenu *termui.CompletionMenu
+	completionView termui.CompletionView
+	completionBar  *termui.CompletionBarWidget // concrete chrome; also CompletionView
+	ctx            platform.AppContext
+	miLog          *platform.NamedLogger
 
-	cfg       SessionConfig
-	gdbWidget *widgets.GDBWidget
-	gdbMcp    *mcp.GdbMcpService
+	cfg              SessionConfig
+	gdbClient        *gdb.GDBClient
+	gdbCancelSub     func()
+	gdbInputState    *gdb.GdbInputState
+	pendingFrameSync bool
+	gdbWidget        *widgets.GDBWidget
+	gdbMcp           *mcp.GdbMcpService
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
@@ -89,10 +96,10 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 
 // GDB returns the owned GDB session for external APIs (e.g. MCP).
 func (a *DebuggerApp) GDB() core.Session {
-	if a.gdbWidget == nil {
+	if a == nil {
 		return nil
 	}
-	return a.gdbWidget.Session()
+	return a.gdbClient
 }
 
 // Close tears down owned debugger/exec sessions.
@@ -104,8 +111,13 @@ func (a *DebuggerApp) Close() {
 	if a.outputWidget != nil {
 		a.outputWidget.StopInferior()
 	}
-	if a.gdbWidget != nil {
-		a.gdbWidget.Close()
+	if a.gdbCancelSub != nil {
+		a.gdbCancelSub()
+		a.gdbCancelSub = nil
+	}
+	if a.gdbClient != nil {
+		a.gdbClient.Close()
+		a.gdbClient = nil
 	}
 	if a.execClient != nil {
 		a.execClient.Close()

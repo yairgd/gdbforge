@@ -236,7 +236,7 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if a.gdbWidget == nil || cmd == "" {
 		return
 	}
-	sess := a.gdbWidget.Session()
+	sess := a.GDB()
 	if sess == nil {
 		return
 	}

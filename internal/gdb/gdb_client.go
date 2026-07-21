@@ -10,9 +10,11 @@ import (
 
 // GDBClient is a GDB MI session over a PTY, plus a separate inferior TTY for
 // the debugged program's stdin/stdout (-inferior-tty-set).
+// QuitGate holds MI quit confirmation policy (UI paints from QuitAction).
 type GDBClient struct {
 	*ptyx.Client
 	inferior *ptyx.TTY
+	Quit     QuitGate
 }
 
 var _ core.Session = (*GDBClient)(nil)
@@ -60,6 +62,22 @@ func (c *GDBClient) InferiorTTY() *ptyx.TTY {
 		return nil
 	}
 	return c.inferior
+}
+
+// RequestQuit applies Ctrl-D / EOF quit policy (confirm or send q).
+func (c *GDBClient) RequestQuit() QuitAction {
+	if c == nil {
+		return QuitSendQ
+	}
+	return c.Quit.RequestQuit()
+}
+
+// Interrupt sends Ctrl-C on the GDB MI PTY (same as console C-c).
+func (c *GDBClient) Interrupt() error {
+	if c == nil {
+		return nil
+	}
+	return c.SendRaw("\x03")
 }
 
 // Close tears down the inferior TTY then the GDB PTY session.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -28,22 +29,24 @@ func (a *DebuggerApp) initBuiltins() error {
 	logWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("logger", logWidget)
 
-	gdbWidget, err := widgets.NewGDBWidget(a.cfg.GDBPath, a.cfg.Prog, a.cfg.ProgArgs...)
+	client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.Prog, a.cfg.ProgArgs...)
 	if err != nil {
 		return err
 	}
-	a.gdbWidget = gdbWidget
+	a.gdbClient = client
+	a.gdbInputState = gdb.NewGdbInputState()
+
+	a.gdbWidget = widgets.NewGDBWidget()
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
-	a.gdbWidget.SetAppState(a.State())
-	a.gdbWidget.SetOnStopped(a.onGdbStopped)
-	a.gdbWidget.SetOnBreakpointsChanged(a.onBreakpointsChanged)
-	a.gdbWidget.SetOnFrameSync(a.onGdbFrameSync)
-	a.gdbWidget.Start(a.Screen())
+	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
+	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
+	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
+	a.startGdbConsoleBridge()
 	a.registerBuiltin("gdb", a.gdbWidget)
 
 	a.outputWidget = widgets.NewOutputWidget()
 	a.outputWidget.SetClipboard(a.ClipboardIO())
-	if tty := a.gdbWidget.InferiorTTY(); tty != nil {
+	if tty := a.gdbClient.InferiorTTY(); tty != nil {
 		a.outputWidget.SetInferior(tty, a.State())
 		a.outputWidget.Start(a.Screen())
 	}
@@ -75,9 +78,9 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.registerLayouts()
 
-	a.gdbMcp = mcp.NewGdbMcpService(a.gdbWidget.Session(), a.State())
+	a.gdbMcp = mcp.NewGdbMcpService(a.GDB(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
-	a.bpWidget.SetPTY(a.gdbWidget.Session(), a.State())
+	a.bpWidget.SetPTY(a.GDB(), a.State())
 	a.bpWidget.OnChange = a.onBreakpointListChanged
 	a.bpWidget.OnBreakCmd = a.onBreakpointsChanged
 	a.bpWidget.OnActivate = a.onBreakpointActivate

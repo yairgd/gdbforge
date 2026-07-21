@@ -4,34 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
-func TestCompletionBarCyclesAndIgnoresSingle(t *testing.T) {
+func TestCompletionBarSetItemsAndClear(t *testing.T) {
 	ctx := platform.NewAppContext()
 	bar := NewCompletionBarWidget(ctx)
 
-	bar.onCompletion(CompletionMsg{Names: []string{"only"}})
-	if bar.Active() {
-		t.Fatal("single match should not activate wildmenu")
-	}
-
-	bar.onCompletion(CompletionMsg{Names: []string{"about", "logger", "gdb"}})
-	if !bar.Active() || bar.Selected() != "about" {
-		t.Fatalf("selected=%q active=%v", bar.Selected(), bar.Active())
-	}
-	bar.move(1)
-	if bar.Selected() != "logger" {
-		t.Fatalf("after next selected=%q", bar.Selected())
-	}
-	bar.move(-1)
-	if bar.Selected() != "about" {
-		t.Fatalf("after prev selected=%q", bar.Selected())
-	}
-	bar.move(-1)
-	if bar.Selected() != "gdb" {
-		t.Fatalf("wrap prev selected=%q", bar.Selected())
+	bar.SetItems([]string{"about", "logger", "gdb"}, 0)
+	if !bar.Active() {
+		t.Fatal("expected active after SetItems")
 	}
 	bar.Clear()
 	if bar.Active() {
@@ -51,12 +33,11 @@ func completionBarLine(g *Grid) string {
 	return strings.TrimRight(b.String(), " ")
 }
 
-func TestCompletionBarRollsLeftRight(t *testing.T) {
+func TestCompletionBarRollsWithSelection(t *testing.T) {
 	ctx := platform.NewAppContext()
 	bar := NewCompletionBarWidget(ctx)
-	// Narrow width: only one full name + partial next fits at a time.
-	// "aaaa" (4) + space + "bbbb" needs 9; width 6 forces a roll.
-	bar.onCompletion(CompletionMsg{Names: []string{"aaaa", "bbbb", "cccc"}})
+	names := []string{"aaaa", "bbbb", "cccc"}
+	bar.SetItems(names, 0)
 
 	g := NewGrid(6, 1)
 	c := Canvas{rect: NewRect(0, 0, 6, 1), grid: g}
@@ -68,33 +49,30 @@ func TestCompletionBarRollsLeftRight(t *testing.T) {
 		t.Fatalf("start=%d want 0", bar.start)
 	}
 
-	bar.HandleEvent(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
-	if bar.Selected() != "bbbb" {
-		t.Fatalf("selected=%q want bbbb", bar.Selected())
-	}
+	bar.SetItems(names, 1)
 	bar.Draw(c)
 	if bar.start != 1 {
-		t.Fatalf("after Right start=%d want 1 (rolled left)", bar.start)
+		t.Fatalf("after select 1 start=%d want 1 (rolled left)", bar.start)
 	}
 	if got := completionBarLine(g); !strings.HasPrefix(got, "bbbb") {
-		t.Fatalf("after Right draw=%q want prefix bbbb", got)
+		t.Fatalf("after select 1 draw=%q want prefix bbbb", got)
 	}
 
-	bar.HandleEvent(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	bar.SetItems(names, 2)
 	bar.Draw(c)
-	if bar.Selected() != "cccc" || bar.start != 2 {
-		t.Fatalf("selected=%q start=%d want cccc/2", bar.Selected(), bar.start)
+	if bar.selected != 2 || bar.start != 2 {
+		t.Fatalf("selected=%d start=%d want 2/2", bar.selected, bar.start)
 	}
 	if got := completionBarLine(g); !strings.HasPrefix(got, "cccc") {
-		t.Fatalf("after Right draw=%q want prefix cccc", got)
+		t.Fatalf("after select 2 draw=%q want prefix cccc", got)
 	}
 
-	bar.HandleEvent(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+	bar.SetItems(names, 1)
 	bar.Draw(c)
-	if bar.Selected() != "bbbb" || bar.start != 1 {
-		t.Fatalf("after Left selected=%q start=%d want bbbb/1", bar.Selected(), bar.start)
+	if bar.selected != 1 || bar.start != 1 {
+		t.Fatalf("after select 1 again selected=%d start=%d want 1/1", bar.selected, bar.start)
 	}
 	if got := completionBarLine(g); !strings.HasPrefix(got, "bbbb") {
-		t.Fatalf("after Left draw=%q want prefix bbbb", got)
+		t.Fatalf("after select 1 draw=%q want prefix bbbb", got)
 	}
 }
