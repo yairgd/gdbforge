@@ -81,13 +81,13 @@ func TestGDBWidgetPaintMiDisplayWithoutPromptLineDoesNotInvent(t *testing.T) {
 	}
 }
 
-func TestGDBWidgetQuitConfirmPaint(t *testing.T) {
+func TestGDBWidgetBeginLiveHost(t *testing.T) {
 	w := testGDBWidget()
 	w.console.Buffer().AppendLine(gdb.MIPromptToken)
 	w.SetLivePrompt(true)
 
-	w.PresentQuitConfirm("q", "1234")
-	if strings.TrimSpace(bufLast(w)) != "Quit anyway? (y or n)" {
+	w.BeginLiveHost(gdb.QuitConfirmLines("1234"), gdb.QuitConfirmHost)
+	if strings.TrimSpace(bufLast(w)) != strings.TrimSpace(gdb.QuitConfirmHost) {
 		t.Fatalf("quit host=%q", bufLast(w))
 	}
 

@@ -8,20 +8,17 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 const outputTabWidth = 8
 
-// OutputWidget is the IO console: inferior (program) stdout/stdin with
-// terminal-like \n / \r / \t handling and ANSI colors. Built on ConsolePane
-// (same scrollback path as GDB/Exec). Builtin name: :b io (:b output alias).
+// OutputWidget is the IO console view: inferior stdout with terminal-like
+// \n / \r / \t handling and ANSI colors. Built on ConsolePane (same scrollback
+// path as GDB/Exec). Builtin name: :b io (:b output alias).
 //
-// When wired to an inferior PTY (-inferior-tty-set), program I/O goes through
-// that master: AppendInferior for stdout, typed Enter → Send to stdin.
-// GDB MI @"..." target-stream records are still accepted as a fallback.
-// GDB console input never reaches this PTY — only this pane's input line does.
+// The app owns the inferior PTY and send policy; this view paints via
+// AppendInferior / AppendPty and fires OnSubmit / OnInterrupt / OnEOF.
 type OutputWidget struct {
 	termui.BaseWidget
 	console *termui.ConsolePane
@@ -33,9 +30,10 @@ type OutputWidget struct {
 	cur             []rune
 	col             int
 
-	inferior  *ptyx.TTY
-	appState  *platform.AppState
-	cancelSub func()
+	onSubmit    func(line string)
+	onInterrupt func()
+	onEOF       func()
+	setSize     func(rows, cols uint16) error
 
 	lastRows, lastCols int
 }
@@ -64,17 +62,14 @@ func (w *OutputWidget) initKeyBindings() {
 	w.BindKeyFunc("clear", func(args ...any) { w.Clear() }, "<C-l>")
 }
 
-// SetInferior wires the dedicated program PTY for stdin/stdout.
-// Enables the input line; typed lines are written to the inferior master.
-func (w *OutputWidget) SetInferior(tty *ptyx.TTY, state *platform.AppState) {
-	w.inferior = tty
-	w.appState = state
-	w.separateTTY = tty != nil
-	w.console.SetInputEnabled(tty != nil)
-	if tty != nil {
-		w.console.OnSubmit = w.onSubmit
-		w.console.OnInterrupt = w.onInterrupt
-		w.console.OnEOF = w.onEOF
+// EnableInput turns on the stdin line and wires console intents to SetOn* callbacks.
+func (w *OutputWidget) EnableInput(on bool) {
+	w.separateTTY = on
+	w.console.SetInputEnabled(on)
+	if on {
+		w.console.OnSubmit = w.handleSubmit
+		w.console.OnInterrupt = w.handleInterrupt
+		w.console.OnEOF = w.handleEOF
 	} else {
 		w.console.OnSubmit = nil
 		w.console.OnInterrupt = nil
@@ -82,33 +77,24 @@ func (w *OutputWidget) SetInferior(tty *ptyx.TTY, state *platform.AppState) {
 	}
 }
 
-// Start bridges inferior PTY output into the UI event loop.
-func (w *OutputWidget) Start(screen tcell.Screen) {
-	if screen == nil || w.inferior == nil {
-		return
-	}
-	if w.cancelSub != nil {
-		w.cancelSub()
-		w.cancelSub = nil
-	}
-	ch, cancel := w.inferior.Subscribe()
-	w.cancelSub = cancel
-	go func() {
-		for msg := range ch {
-			_ = screen.PostEvent(tcell.NewEventInterrupt(core.InferiorOutputMsg{
-				Data: msg.Data,
-				Err:  msg.Err,
-			}))
-		}
-	}()
+// SetOnSubmit registers the Enter handler (app controller).
+func (w *OutputWidget) SetOnSubmit(fn func(line string)) {
+	w.onSubmit = fn
 }
 
-// StopInferior unsubscribes from the inferior PTY (session teardown).
-func (w *OutputWidget) StopInferior() {
-	if w.cancelSub != nil {
-		w.cancelSub()
-		w.cancelSub = nil
-	}
+// SetOnInterrupt registers the Ctrl-C handler (app controller).
+func (w *OutputWidget) SetOnInterrupt(fn func()) {
+	w.onInterrupt = fn
+}
+
+// SetOnEOF registers the Ctrl-D handler (app controller).
+func (w *OutputWidget) SetOnEOF(fn func()) {
+	w.onEOF = fn
+}
+
+// SetSizeFunc registers a callback used when the pane size changes (PTY winsize).
+func (w *OutputWidget) SetSizeFunc(fn func(rows, cols uint16) error) {
+	w.setSize = fn
 }
 
 // AppendPty ingests raw GDB PTY chunks: @" target streams, and (when no
@@ -290,10 +276,7 @@ func (w *OutputWidget) Clear() {
 	w.console.FollowTailAndScroll()
 }
 
-func (w *OutputWidget) onSubmit(raw string) {
-	if w.inferior == nil {
-		return
-	}
+func (w *OutputWidget) handleSubmit(raw string) {
 	line := raw
 	if line == "" {
 		line = w.console.Input().LastHistory()
@@ -301,38 +284,22 @@ func (w *OutputWidget) onSubmit(raw string) {
 	if line != "" {
 		w.console.Input().PushHistory(line)
 	}
-	// No EchoSubmit: the inferior TTY (ECHO) echoes when appropriate.
-	send := func() { _ = w.inferior.Send(line) }
-	if w.appState != nil {
-		w.appState.WithPTYOwner(platform.PTYOwnerUI, send)
-	} else {
-		send()
+	if w.onSubmit != nil {
+		w.onSubmit(line)
 	}
 	w.console.Input().Clear()
 	w.console.FollowTailAndScroll()
 }
 
-func (w *OutputWidget) onInterrupt() {
-	if w.inferior == nil {
-		return
-	}
-	send := func() { _ = w.inferior.SendRaw("\x03") }
-	if w.appState != nil {
-		w.appState.WithPTYOwner(platform.PTYOwnerUI, send)
-	} else {
-		send()
+func (w *OutputWidget) handleInterrupt() {
+	if w.onInterrupt != nil {
+		w.onInterrupt()
 	}
 }
 
-func (w *OutputWidget) onEOF() {
-	if w.inferior == nil {
-		return
-	}
-	send := func() { _ = w.inferior.SendRaw("\x04") }
-	if w.appState != nil {
-		w.appState.WithPTYOwner(platform.PTYOwnerUI, send)
-	} else {
-		send()
+func (w *OutputWidget) handleEOF() {
+	if w.onEOF != nil {
+		w.onEOF()
 	}
 }
 
@@ -366,13 +333,13 @@ func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
 
 func (w *OutputWidget) Draw(c termui.Canvas) {
 	width, height := c.W(), c.H()
-	if w.inferior != nil && width > 0 && height > 1 {
+	if w.setSize != nil && width > 0 && height > 1 {
 		rows := height - 1
 		cols := width
 		if rows != w.lastRows || cols != w.lastCols {
 			w.lastRows = rows
 			w.lastCols = cols
-			_ = w.inferior.SetSize(uint16(rows), uint16(cols))
+			_ = w.setSize(uint16(rows), uint16(cols))
 		}
 	}
 	w.console.Draw(c)

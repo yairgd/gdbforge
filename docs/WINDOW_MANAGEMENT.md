@@ -96,25 +96,27 @@ Do **not** introduce a separate popup/z-order system for one-line chrome.
 
 The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist.
 
-Workspace panes are **widgets** — views bound to application **models** that were created at startup. Typical GDB models and their views:
+Workspace panes are **widgets** — views bound to application **models** owned by `DebuggerApp`. Typical GDB models and their views:
 
 | Model | Widget (view) | Purpose |
 |-------|---------------|---------|
-| `CodeModel` | Source view | Current file, breakpoint markers, PC highlight |
-| `BreakpointModel` | Breakpoints pane | Breakpoint list, enable/disable |
-| `ConsoleModel` | Console pane | GDB / target output |
-| `RegisterModel` | Registers pane | Register dump |
-| `MemoryModel` | Memory pane | Hex memory view |
-| `ThreadModel` | Threads pane | Thread list |
-| `LoggerModel` | Logger pane | Application log |
+| Source buffer (per file) | CodeWidget | File, PC `━━▶`, BP gutters |
+| `models.BreakpointList` | BreakpointWidget | Breakpoint list; toggle/delete intents |
+| `GDBClient` (via controller) | GDBWidget | GDB console paint + `OnSubmit` |
+| Inferior `ptyx.TTY` (via controller) | OutputWidget | Program stdin/stdout |
+| `models.ThreadList` | ThreadWidget | Thread list on stop |
+| `models.CallStack` | CallStackWidget | Stack frames on stop |
+| `AppState.SourceFiles` | FileListWidget | `:edit` project picker |
+| `ExecClient` (via controller) | ExecWidget | `:!` shell / SSH |
+| Logger sink | LoggerWidget | Application log |
 
 ```text
-Workspace
-└── SplitTree
-    ├── CodeWidget        → CodeModel
-    ├── BreakpointWidget  → BreakpointModel
-    ├── ConsoleWidget     → ConsoleModel
-    └── …
+DebuggerApp
+├── models.BreakpointList  →  BreakpointWidget
+├── models.ThreadList      →  ThreadWidget
+├── models.CallStack       →  CallStackWidget
+├── GDBClient              →  GDBWidget (controller paints)
+└── …
 ```
 
 Each pane is a **leaf widget** in the split tree. The Workspace does not draw content itself — it delegates geometry to `WidgetTree.BuildLayout`. Models exist whether or not a widget is currently displaying them.
@@ -340,7 +342,7 @@ Future model names (aspirational):
 
 The architecture does **not** use `:attach <name>`. All models exist from startup; the user only chooses which to display. See [ARCHITECTURE.md](ARCHITECTURE.md#why-not-attach).
 
-**Current state:** `:buffer` dispatch is planned; the prototype creates widgets directly in layout at init. Model types per domain are not yet fully separated from widget state.
+**Current state:** `:b` / `:edit` bind views to models owned by `DebuggerApp` (`models.*`, `AppState`). See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
 ---
 

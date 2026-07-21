@@ -6,7 +6,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -64,21 +63,6 @@ func (a *DebuggerApp) toggleCodeBreakEnable() {
 		cw = focused
 	}
 	a.toggleCodeBreakEnableOn(cw)
-}
-
-func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
-	if cw == nil || a.bpWidget == nil {
-		return
-	}
-	path := cw.Path()
-	line := cw.SelLine()
-	if path == "" || line < 1 {
-		return
-	}
-	// Toggle when listed, or when CodeWidget still shows an enabled mark not yet merged.
-	if a.bpWidget.ToggleAtFileLine(path, line, cw.HasEnabledBreak(line)) {
-		a.RequestFrame()
-	}
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
@@ -197,23 +181,26 @@ func (a *DebuggerApp) gdbTabComplete() {
 // refreshGDBCompletionMenu re-runs -complete for the current GDB input and
 // replaces the wildmenu. Does not apply LCP or unique matches (typing owns the
 // line). Tab/arrows only move selection and must not call this.
+//
+// Stay in ModeCompletion across 0/1-match re-queries so further typing and
+// backspace keep refreshing. Leaving on ≤1 made small candidate sets die as
+// soon as the list narrowed (or -complete briefly returned empty).
 func (a *DebuggerApp) refreshGDBCompletionMenu() {
 	if a.gdbWidget == nil {
 		a.leaveCompletionMode()
 		return
 	}
 	text := a.gdbWidget.InputText()
+	if strings.TrimSpace(text) == "" {
+		a.leaveCompletionMode()
+		return
+	}
 	res := gdb.Complete(a.GDB(), a.State(), text)
 	names := res.Matches
 	if len(names) == 0 && res.Completion != "" && res.Completion != text {
 		names = []string{res.Completion}
 	}
 	a.publishGDBCompletionMenu(text, names)
-	if len(names) <= 1 {
-		// No multi-match wildmenu left; keep typed input, return to insert.
-		a.leaveCompletionMode()
-		return
-	}
 	a.completionForGDB = true
 	if a.Mode() != platform.ModeCompletion {
 		a.SetMode(platform.ModeCompletion)
@@ -224,8 +211,11 @@ func (a *DebuggerApp) publishGDBCompletionMenu(text string, names []string) {
 	menu := gdb.MenuNames(text, names)
 	// After file:, attach signatures from -symbol-info-functions
 	// ("foo" → "foo(int, char *)"); apply still inserts bare name.
-	if sigs := gdb.FunctionSignatures(a.GDB(), a.State()); len(sigs) > 0 {
-		menu = gdb.EnrichLinespecMenuNames(text, menu, sigs)
+	// Skip the heavy MI query when not completing a linespec.
+	if gdb.CompletingLinespec(text) {
+		if sigs := gdb.FunctionSignatures(a.GDB(), a.State()); len(sigs) > 0 {
+			menu = gdb.EnrichLinespecMenuNames(text, menu, sigs)
+		}
 	}
 	if a.ctx.Bus != nil {
 		platform.Publish(a.ctx.Bus, termui.CompletionMsg{
@@ -446,7 +436,10 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	case breakpointsUIMsg:
 		a.RequestFrame()
 	case debugInfoUIMsg:
-		// Stack/thread refresh may have moved Code (e.g. after Ctrl-C).
+		// Models were updated off-thread; push to views and align Code on the UI thread.
+		a.syncThreadViews()
+		a.syncCallStackViews()
+		a.syncCodeFromCallstack()
 		a.applyCodeStop(a.activeCodeWidget())
 		a.RequestFrame()
 	case string:

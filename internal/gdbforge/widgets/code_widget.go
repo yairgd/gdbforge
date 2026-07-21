@@ -13,8 +13,6 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -26,20 +24,18 @@ const (
 )
 
 // CodeWidget is a scrollable source view. The app calls ShowLocation on stops / :edit.
-// When focused: Up/Down move a bold cursor line; Space inserts/removes a breakpoint;
-// e enables/disables (yellow gutter when disabled) like the BreakpointWidget.
+// When focused: Up/Down move a bold cursor line; Space / e fire intents for the
+// shared breakpoint model (app owns GDB sends).
 type CodeWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
 
-	sess  core.Session
 	state *platform.AppState
 
-	// onBreakCmd is invoked after Space sends break/clear so the app can
-	// coalesce a -break-list refresh (in addition to MI =breakpoint-* notifies).
-	onBreakCmd func()
-	// onToggleEnable is invoked on "e" (enable/disable at cursor).
+	// onBreakToggle is Space — insert/clear breakpoint at cursor (app sends GDB).
+	onBreakToggle func(path string, line int)
+	// onToggleEnable is "e" — enable/disable at cursor.
 	onToggleEnable func()
 
 	path     string
@@ -75,15 +71,14 @@ func NewCodeWidget() *CodeWidget {
 	return w
 }
 
-// SetPTY wires the shared GDB session for Space → -break-insert / clear.
-func (w *CodeWidget) SetPTY(sess core.Session, state *platform.AppState) {
-	w.sess = sess
+// SetAppState wires break/mark colors for gutters.
+func (w *CodeWidget) SetAppState(state *platform.AppState) {
 	w.state = state
 }
 
-// SetOnBreakCmd registers a callback after Space sends break/clear to GDB.
-func (w *CodeWidget) SetOnBreakCmd(fn func()) {
-	w.onBreakCmd = fn
+// SetOnBreakToggle registers Space → insert/clear at path:line (app owns GDB).
+func (w *CodeWidget) SetOnBreakToggle(fn func(path string, line int)) {
+	w.onBreakToggle = fn
 }
 
 // SetOnToggleEnable registers a callback for "e" (enable/disable at cursor).
@@ -109,7 +104,7 @@ func (w *CodeWidget) initKeyBindings() {
 // MoveSel moves the bold cursor line by delta (exported for app-level normal-mode keys).
 func (w *CodeWidget) MoveSel(delta int) { w.moveSel(delta) }
 
-// BreakAtSel toggles a breakpoint on the selected line (exported for global Space).
+// BreakAtSel fires OnBreakToggle for the selected line (exported for global Space).
 func (w *CodeWidget) BreakAtSel() { w.breakAtSel() }
 
 // ToggleEnableAtSel runs the enable/disable callback (same as BreakpointWidget e).
@@ -165,7 +160,7 @@ func (w *CodeWidget) moveSelTo(line int) {
 }
 
 func (w *CodeWidget) breakAtSel() {
-	if w.path == "" || len(w.rawLines) == 0 {
+	if w.path == "" || len(w.rawLines) == 0 || w.onBreakToggle == nil {
 		return
 	}
 	if w.selLine < 1 {
@@ -174,16 +169,7 @@ func (w *CodeWidget) breakAtSel() {
 	if w.selLine > len(w.rawLines) {
 		w.selLine = len(w.rawLines)
 	}
-	// Basename matches how GDB resolves source (and pending locations).
-	loc := fmt.Sprintf("%s:%d", filepath.Base(w.path), w.selLine)
-	if w.lineHasBreak(w.selLine) {
-		// clear removes all breakpoints at this source location.
-		w.sendMI("clear " + loc)
-		w.clearLocalBreak(w.selLine)
-		return
-	}
-	w.sendMI("break " + loc)
-	w.addLocalBreak(w.selLine)
+	w.onBreakToggle(w.path, w.selLine)
 }
 
 func (w *CodeWidget) lineHasBreak(line int) bool {
@@ -191,28 +177,6 @@ func (w *CodeWidget) lineHasBreak(line int) bool {
 		return true
 	}
 	return len(w.bpNums[line]) > 0
-}
-
-func (w *CodeWidget) addLocalBreak(line int) {
-	if w.bpLines == nil {
-		w.bpLines = make(map[int]struct{})
-	}
-	w.bpLines[line] = struct{}{}
-	w.rebuildBuffer()
-}
-
-func (w *CodeWidget) clearLocalBreak(line int) {
-	delete(w.bpLines, line)
-	delete(w.bpDisabled, line)
-	delete(w.bpNums, line)
-	w.rebuildBuffer()
-}
-
-func (w *CodeWidget) sendMI(cmd string) {
-	gdb.SendCmd(w.sess, w.state, cmd)
-	if w.onBreakCmd != nil {
-		w.onBreakCmd()
-	}
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.

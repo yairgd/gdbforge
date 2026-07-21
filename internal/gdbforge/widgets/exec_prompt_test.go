@@ -7,7 +7,7 @@ import (
 )
 
 func TestExecPushRawKeepsLivePrompt(t *testing.T) {
-	w := NewExecWidget(nil)
+	w := NewExecWidget()
 	w.pushRaw("prompt $ ")
 	if !w.console.LivePrompt() {
 		t.Fatal("expected live prompt after incomplete line")
@@ -28,7 +28,7 @@ func TestExecPushRawKeepsLivePrompt(t *testing.T) {
 }
 
 func TestExecCROverwritesPending(t *testing.T) {
-	w := NewExecWidget(nil)
+	w := NewExecWidget()
 	w.pushRaw("old prompt $ ")
 	w.pushRaw("\rnew prompt $ ")
 	if w.console.Buffer().NumLines() != 1 {
@@ -43,7 +43,7 @@ func TestExecCROverwritesPending(t *testing.T) {
 }
 
 func TestExecDismissAfterSessionEnded(t *testing.T) {
-	w := NewExecWidget(nil)
+	w := NewExecWidget()
 	dismissed := false
 	w.SetOnDismiss(func() { dismissed = true })
 

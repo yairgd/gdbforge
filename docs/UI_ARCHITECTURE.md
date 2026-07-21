@@ -78,13 +78,14 @@ classDiagram
     }
 
     class GDBWidget {
-        +owns GDBClient / Session
         +ConsolePane
+        +SetOnSubmit / Paint APIs
     }
 
     class CmdWidget {
         +history History
-        +completer AutoCompleter
+        +parser for Tab sync
+        +SetOnExecute
         +active bool
     }
 
@@ -108,13 +109,13 @@ classDiagram
 |------|------|
 | `InputLine` | Single-line editor + readline history |
 | `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
-| `GDBWidget` | Owns GDB `Session` (`ptyx`); wires `ConsolePane` to MI |
-| `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space toggles break; red BP marks |
-| `BreakpointWidget` | Builtin `:b breakpoint`; owns list; `e`/`d`; drives CodeWidget marks |
-| `ThreadWidget` | Builtin `:b threads`; list refreshed on GDB stop |
-| `CallStackWidget` | Builtin `:b callstack`; frames refreshed on GDB stop |
-| `OutputWidget` | Builtin `:b io` (alias `:b output`); inferior stdin/stdout via dedicated PTY |
-| `ExecWidget` | Wires `ConsolePane` to `execcli.ExecClient` (`ptyx` + ANSI) |
+| `GDBWidget` | View-only GDB console; app owns `GDBClient` (`SetOnSubmit` / paint) |
+| `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space → `OnBreakToggle`; gutters from model |
+| `BreakpointWidget` | Builtin `:b breakpoint`; `SetItems` + `OnToggle` / `OnDelete` / `OnActivate` |
+| `ThreadWidget` | Builtin `:b threads`; `SetItems` from app `ThreadList` |
+| `CallStackWidget` | Builtin `:b callstack`; `SetItems` from app `CallStack` |
+| `OutputWidget` | Builtin `:b io`; paint inferior I/O; app owns PTY Send/Subscribe |
+| `ExecWidget` | View-only exec console; app owns `ExecClient` (`:!bash`) |
 
 **Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b io` / `:b output`, `:b exec`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
@@ -480,18 +481,16 @@ type AppApi interface {
 **Example flow (`CmdWidget` → app):**
 
 1. User types `:quit`, presses Enter.
-2. `CmdWidget.submitCommand()` parses input, resolves name via `AutoCompleter`.
-3. `CmdWidget` sends `SubmitMsg{CmdID: cmdQuit, Args: ""}` on `Events`.
-4. `TermApp.Run` receives from channel, calls `DebuggerApp.HandleCoreEvents`.
-5. App switches on `CommandID()`, calls `app.Exit()`.
+2. `CmdWidget` `Parse`s the line on the command tree.
+3. `onExecute` → app `ExecuteParsed()` → leaf `Action` (e.g. quit).
 
-See [ARCHITECTURE.md](ARCHITECTURE.md#core-events-layer) for command ID ownership (`termui.CmdUnknown` vs app-private IDs).
+See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#cmdwidget-integration) and [ARCHITECTURE.md](ARCHITECTURE.md#mvc-current).
 
 ### Async terminal events
 
 GDB output uses `tcell.NewEventInterrupt` to inject messages into the main loop from background goroutines. This avoids locking the screen from reader threads — a common tcell pattern.
 
-**Planned:** route GDB output through the domain bus (`GdbOutputMsg` → `HandleCoreEvents`) instead of widget-local `EventInterrupt` handling, so debugger reactions also centralize in the application layer.
+**Current:** GDB / inferior / exec output is posted as `EventInterrupt` and handled in `DebuggerApp.HandleInterrupt` (controllers paint views). Domain lists use shared models + `SetItems`.
 
 **Design decision:** prefer `EventInterrupt` for tcell wakeups today; domain bus for application-level reactions.
 
@@ -535,13 +534,13 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | Native GDB REPL via ConsolePane + MI/Debugger |
-| `CodeWidget` | `internal/gdbforge/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; internal list; `e`/`d`; syncs code marks |
-| `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; stop-driven `-thread-info` |
-| `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; stop-driven `-stack-list-frames` |
-| `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; program stdin/stdout (inferior PTY), not MI noise |
-| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | External PTY REPL via ConsolePane (`:!`) |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | GDB console view; app owns session / MI |
+| `CodeWidget` | `internal/gdbforge/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space → break intent; gutters from model |
+| `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; `SetItems` + toggle/delete intents |
+| `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; `SetItems` from app `ThreadList` after stop |
+| `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; `SetItems` from app `CallStack` after stop |
+| `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; paint inferior I/O; app owns PTY |
+| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | `:!` console view; app owns `ExecClient` |
 | `AboutWidget` | `internal/gdbforge/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |

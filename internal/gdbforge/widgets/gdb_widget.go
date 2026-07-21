@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"fmt"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -32,7 +31,8 @@ func gdbLineStyle(line string) tcell.Style {
 	if strings.HasPrefix(line, ">>>") {
 		return st.Foreground(tcell.ColorTeal).Bold(true)
 	}
-	if strings.Contains(line, "❌️ Quit") {
+	// Ctrl-C feedback from GDB log stream (&"Quit" / &"❌️ Quit"), not UI text.
+	if gdb.IsCtrlCQuitLog(line) {
 		return st.Foreground(tcell.ColorRed).Bold(true)
 	}
 	if strings.HasPrefix(line, gdb.MIPromptToken) {
@@ -205,42 +205,22 @@ func (m *GDBWidget) SetLivePrompt(on bool) {
 	m.console.SetLivePrompt(on)
 }
 
-// PresentQuitConfirm paints the CLI "Quit anyway?" chrome (no policy).
-func (m *GDBWidget) PresentQuitConfirm(echoCmd, pid string) {
+// BeginLiveHost appends scrollback lines then a live host line for typing.
+// Text comes from the controller / gdb session (e.g. QuitConfirmLines); the
+// view does not invent GDB CLI wording.
+func (m *GDBWidget) BeginLiveHost(scrollback []string, host string) {
 	if m == nil || m.console == nil {
 		return
 	}
-	if echoCmd != "" {
-		m.PushHistory(echoCmd)
-		m.EchoSubmit(echoCmd)
+	if len(scrollback) > 0 {
+		m.console.AppendLines(scrollback)
 	}
-	if pid == "" {
-		pid = "?"
+	if host != "" {
+		if buf := m.console.Buffer(); buf != nil {
+			buf.AppendLine(host)
+		}
+		m.console.SetLivePrompt(true)
 	}
-	m.console.AppendLines([]string{
-		"A debugging session is active.",
-		"",
-		fmt.Sprintf("\tInferior 1 [process %s] will be killed.", pid),
-		"",
-	})
-	if buf := m.console.Buffer(); buf != nil {
-		buf.AppendLine("Quit anyway? (y or n) ")
-	}
-	m.console.SetLivePrompt(true)
-	m.ClearInput()
-	m.console.FollowTailAndScroll()
-}
-
-// PresentQuitReprompt paints "Please answer y or n." and the confirm host.
-func (m *GDBWidget) PresentQuitReprompt() {
-	if m == nil || m.console == nil {
-		return
-	}
-	if buf := m.console.Buffer(); buf != nil {
-		buf.AppendLine("Please answer y or n.")
-		buf.AppendLine("Quit anyway? (y or n) ")
-	}
-	m.console.SetLivePrompt(true)
 	m.ClearInput()
 	m.console.FollowTailAndScroll()
 }

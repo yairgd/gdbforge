@@ -2,43 +2,37 @@ package widgets
 
 import (
 	"fmt"
-	"path/filepath"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// BreakpointWidget owns the breakpoint list shown in the UI.
+// BreakpointWidget is a view of the shared breakpoint model.
+// The app owns Merge/Toggle/Delete and GDB sends; this widget only paints
+// SetItems and fires OnActivate / OnToggle / OnDelete intents.
 //
-//	j/k or Up/Down — bold selection; also jumps CodeWidget to that location
-//	Enter / click — same as Up/Down (show source at breakpoint)
-//	e — toggle: disabled → insert into GDB; enabled → delete from GDB (row stays)
-//	d — remove from list and from GDB
-//
-// Row backgrounds: AppState BreakColor (enabled) / BreakDisabledColor (disabled).
-// Disabled rows stay in this list but are not present in GDB; CodeWidget marks
-// follow EnabledBreakInfos() for red and keep disabled yellow gutters separately.
+//	j/k or Up/Down — bold selection; OnActivate
+//	Enter / click — OnActivate
+//	e — OnToggle(selected)
+//	d — OnDelete(selected)
 type BreakpointWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
 
-	sess  core.Session
 	state *platform.AppState
 
 	items    []mcp.BreakInfo
 	selected int
 
-	// OnChange is invoked after the internal list changes (e/d or GDB merge).
-	OnChange func()
-	// OnBreakCmd is invoked after e/d sends a GDB break/clear/delete command.
-	OnBreakCmd func()
-	// OnActivate is called when the user selects a row (Up/Down/j/k, Enter, or click).
+	// OnActivate is called when the user selects a row.
 	OnActivate func(mcp.BreakInfo)
+	// OnToggle is e — enable/disable at selected index.
+	OnToggle func(index int)
+	// OnDelete is d — remove selected index.
+	OnDelete func(index int)
 }
 
 func NewBreakpointWidget() *BreakpointWidget {
@@ -59,10 +53,21 @@ func NewBreakpointWidget() *BreakpointWidget {
 	return w
 }
 
-// SetPTY wires the shared GDB session and AppState for exclusive writes.
-func (w *BreakpointWidget) SetPTY(sess core.Session, state *platform.AppState) {
-	w.sess = sess
-	w.state = state
+// SetAppState wires mark / break colors for painting.
+func (w *BreakpointWidget) SetAppState(st *platform.AppState) {
+	w.state = st
+}
+
+// SetItems replaces the painted list (from the shared model).
+func (w *BreakpointWidget) SetItems(items []mcp.BreakInfo) {
+	w.items = append([]mcp.BreakInfo(nil), items...)
+	if w.selected >= len(w.items) {
+		w.selected = len(w.items) - 1
+	}
+	if w.selected < 0 {
+		w.selected = 0
+	}
+	w.rebuild()
 }
 
 func (w *BreakpointWidget) initKeyBindings() {
@@ -71,8 +76,16 @@ func (w *BreakpointWidget) initKeyBindings() {
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
-	w.BindKeyFunc("toggle", func(args ...any) { w.toggleSelected() }, "e")
-	w.BindKeyFunc("delete", func(args ...any) { w.deleteSelected() }, "d")
+	w.BindKeyFunc("toggle", func(args ...any) {
+		if w.OnToggle != nil && len(w.items) > 0 {
+			w.OnToggle(w.selected)
+		}
+	}, "e")
+	w.BindKeyFunc("delete", func(args ...any) {
+		if w.OnDelete != nil && len(w.items) > 0 {
+			w.OnDelete(w.selected)
+		}
+	}, "d")
 }
 
 func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
@@ -140,7 +153,6 @@ func (w *BreakpointWidget) move(delta int) {
 	w.activateSelected()
 }
 
-// syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
 func (w *BreakpointWidget) syncSelectedFromViewport() {
 	n := len(w.items)
 	if n == 0 {
@@ -167,173 +179,6 @@ func (w *BreakpointWidget) activateSelected() {
 	w.OnActivate(w.items[w.selected])
 }
 
-func (w *BreakpointWidget) notifyChange() {
-	if w.OnChange != nil {
-		w.OnChange()
-	}
-}
-
-// toggleSelected: enabled → remove from GDB but keep row (disabled);
-// disabled → re-insert into GDB and mark enabled.
-func (w *BreakpointWidget) toggleSelected() {
-	if w.selected < 0 || w.selected >= len(w.items) {
-		return
-	}
-	it := w.items[w.selected]
-	loc := breakLoc(it)
-	if it.Enabled {
-		if it.Number > 0 {
-			w.sendMI(fmt.Sprintf("-break-delete %d", it.Number))
-		} else {
-			w.sendMI("clear " + loc)
-		}
-		it.Enabled = false
-		it.Number = 0
-		w.items[w.selected] = it
-		w.rebuild()
-		w.notifyChange()
-		return
-	}
-	w.sendMI("break " + loc)
-	it.Enabled = true
-	w.items[w.selected] = it
-	w.rebuild()
-	w.notifyChange()
-}
-
-func (w *BreakpointWidget) deleteSelected() {
-	if w.selected < 0 || w.selected >= len(w.items) {
-		return
-	}
-	it := w.items[w.selected]
-	if it.Enabled {
-		if it.Number > 0 {
-			w.sendMI(fmt.Sprintf("-break-delete %d", it.Number))
-		} else {
-			w.sendMI("clear " + breakLoc(it))
-		}
-	}
-	w.items = append(w.items[:w.selected], w.items[w.selected+1:]...)
-	if w.selected >= len(w.items) {
-		w.selected = len(w.items) - 1
-	}
-	if w.selected < 0 {
-		w.selected = 0
-	}
-	w.rebuild()
-	w.notifyChange()
-}
-
-// ToggleAtFileLine enables/disables the breakpoint at file:line like e in
-// the BreakpointWidget. If codeHasEnabled and there is no list row yet, inserts
-// an enabled stub then disables it (Space added the mark before MergeFromGDB).
-// Returns false when there is nothing to toggle.
-func (w *BreakpointWidget) ToggleAtFileLine(file string, line int, codeHasEnabled bool) bool {
-	if file == "" || line < 1 {
-		return false
-	}
-	base := filepath.Base(file)
-	idx := -1
-	for i, it := range w.items {
-		if it.Line != line {
-			continue
-		}
-		if it.File == file || filepath.Base(it.File) == base {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		if !codeHasEnabled {
-			return false
-		}
-		w.items = append(w.items, mcp.BreakInfo{
-			File:    file,
-			Line:    line,
-			Enabled: true,
-		})
-		idx = len(w.items) - 1
-	}
-	w.selected = idx
-	w.toggleSelected()
-	return true
-}
-
-func breakLoc(it mcp.BreakInfo) string {
-	file := it.File
-	if file == "" {
-		file = "?"
-	}
-	return fmt.Sprintf("%s:%d", file, it.Line)
-}
-
-func (w *BreakpointWidget) sendMI(cmd string) {
-	gdb.SendCmd(w.sess, w.state, cmd)
-	if w.OnBreakCmd != nil {
-		w.OnBreakCmd()
-	}
-}
-
-// MergeFromGDB syncs live GDB breakpoints into the internal list without
-// dropping locally disabled rows (those are intentionally absent from GDB).
-func (w *BreakpointWidget) MergeFromGDB(gdbItems []mcp.BreakInfo) {
-	keyOf := func(it mcp.BreakInfo) string {
-		return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
-	}
-	gdbByKey := make(map[string]mcp.BreakInfo, len(gdbItems))
-	for _, g := range gdbItems {
-		g.Enabled = true
-		gdbByKey[keyOf(g)] = g
-	}
-
-	placed := make(map[string]bool)
-	out := make([]mcp.BreakInfo, 0, len(w.items)+len(gdbItems))
-	for _, local := range w.items {
-		k := keyOf(local)
-		if g, ok := gdbByKey[k]; ok {
-			out = append(out, g)
-			placed[k] = true
-			continue
-		}
-		if !local.Enabled {
-			// Still disabled and not in GDB — keep in the widget list.
-			local.Number = 0
-			out = append(out, local)
-		}
-		// Enabled locally but missing from GDB → dropped (deleted elsewhere).
-	}
-	for _, g := range gdbItems {
-		k := keyOf(g)
-		if placed[k] {
-			continue
-		}
-		g.Enabled = true
-		out = append(out, g)
-		placed[k] = true
-	}
-	w.items = out
-
-	if w.selected >= len(w.items) {
-		w.selected = len(w.items) - 1
-	}
-	if w.selected < 0 {
-		w.selected = 0
-	}
-	w.rebuild()
-	w.notifyChange()
-}
-
-// EnabledBreakInfos returns only breakpoints currently active in GDB.
-func (w *BreakpointWidget) EnabledBreakInfos() []mcp.BreakInfo {
-	var out []mcp.BreakInfo
-	for _, it := range w.items {
-		if it.Enabled {
-			out = append(out, it)
-		}
-	}
-	return out
-}
-
 func (w *BreakpointWidget) rebuild() {
 	w.buf.Clear()
 	w.viewport.Left = 0
@@ -351,8 +196,11 @@ func (w *BreakpointWidget) rebuild() {
 		if it.Number > 0 {
 			num = fmt.Sprintf("%3d", it.Number)
 		}
-		loc := breakLoc(it)
-		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s", num, en, loc))
+		file := it.File
+		if file == "" {
+			file = "?"
+		}
+		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s:%d", num, en, file, it.Line))
 	}
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
@@ -394,8 +242,20 @@ func (w *BreakpointWidget) Draw(c termui.Canvas) {
 
 func (w *BreakpointWidget) Selected() int { return w.selected }
 
-func (w *BreakpointWidget) Items() []mcp.BreakInfo {
-	return append([]mcp.BreakInfo(nil), w.items...)
+// SelectIndex highlights a row (e.g. after model ToggleEnableAtFileLine).
+func (w *BreakpointWidget) SelectIndex(i int) {
+	if len(w.items) == 0 {
+		w.selected = 0
+		return
+	}
+	if i < 0 {
+		i = 0
+	}
+	if i >= len(w.items) {
+		i = len(w.items) - 1
+	}
+	w.selected = i
+	w.rebuild()
 }
 
 func (w *BreakpointWidget) LinesForTest() []string {

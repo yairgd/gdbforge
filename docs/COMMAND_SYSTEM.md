@@ -292,13 +292,14 @@ Startup **`panels`** layout: Code over GDB (left, **2/3**); right IO (top half) 
 
 ## CmdWidget integration
 
-`CmdWidget` (`internal/termui/cmd_widget.go`) owns a `CommandParser` created from the app's `CommandRegistry`.
+`CmdWidget` (`internal/termui/cmd_widget.go`) holds a `CommandParser` for Tab sync / completions. **Execute** is owned by the app (`SetOnExecute` → `ExecuteParsed()`).
 
 ```mermaid
 sequenceDiagram
     participant User
     participant CmdW as CmdWidget
     participant Parser as CommandParser
+    participant App as DebuggerApp
     participant Bus as platform.EventBus
     participant Bar as CompletionBarWidget
     participant Tree as CommandNode tree
@@ -314,6 +315,8 @@ sequenceDiagram
     User->>CmdW: Enter
     CmdW->>Parser: Parse(line)
     Parser->>Tree: Accept each token
+    CmdW->>App: onExecute()
+    App->>CmdW: ExecuteParsed()
     CmdW->>Parser: Execute()
     Parser->>Tree: current.Action()
 ```
@@ -323,10 +326,13 @@ Wiring in `cmd/gdbforge/setup.go`:
 ```go
 a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
+a.cmdWidget.SetOnExecute(func() {
+    _ = a.cmdWidget.ExecuteParsed()
+})
 a.completionBar = termui.NewCompletionBarWidget(a.ctx)
 ```
 
-On **Enter**, the widget calls `Parse` then `Execute` if `CanExecute()`. Leaf actions run directly on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
+On **Enter**, the widget calls `Parse`; if `CanExecute()`, it invokes **`onExecute`** (app controller). Leaf actions run on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
 
 ---
 
@@ -412,7 +418,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `internal/commands/command_parser.go` | `CommandParser` — navigation, completion, execution |
 | `internal/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
 | `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
-| `internal/termui/cmd_widget.go` | `:` input, parser sync, tab/enter, publishes `CompletionMsg` |
+| `internal/termui/cmd_widget.go` | `:` input, parser sync, tab; `SetOnExecute` → app |
 | `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
 | `internal/termui/event.go` | `CompletionMsg` and other UI-generic events |
 | `cmd/gdbforge/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
@@ -421,7 +427,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `cmd/gdbforge/command_tree.go` | `ExapData` DSL |
 | `cmd/gdbforge/keybindings.go` | `InitKeyBindings` |
 | `cmd/gdbforge/actions.go` | Command action methods |
-| `cmd/gdbforge/setup.go` | `InitB` wiring |
+| `cmd/gdbforge/setup.go` | `InitB` wiring (`SetOnExecute`) |
 
 ---
 

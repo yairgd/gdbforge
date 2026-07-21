@@ -145,6 +145,29 @@ func IsQuitCmd(cmd string) bool {
 	}
 }
 
+// QuitConfirmHost is the live input line CLI GDB uses for quit confirmation.
+// MI never emits this; QuitGate mirrors it for UIs.
+const QuitConfirmHost = "Quit anyway? (y or n) "
+
+// QuitConfirmLines returns the scrollback block CLI GDB prints before
+// QuitConfirmHost when an inferior is alive (MI suppresses this text).
+func QuitConfirmLines(pid string) []string {
+	if pid == "" {
+		pid = "?"
+	}
+	return []string{
+		"A debugging session is active.",
+		"",
+		"\tInferior 1 [process " + pid + "] will be killed.",
+		"",
+	}
+}
+
+// QuitRepromptLines returns CLI GDB's invalid y/n reply before re-asking.
+func QuitRepromptLines() []string {
+	return []string{"Please answer y or n."}
+}
+
 // ApplyQuitAction performs the PTY write for a sending QuitAction.
 func ApplyQuitAction(d core.Debugger, a QuitAction) error {
 	if d == nil || !a.Sends() {

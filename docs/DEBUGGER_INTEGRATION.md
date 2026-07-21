@@ -1,6 +1,6 @@
 # Debugger Integration
 
-gdbforge connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2** (`gdb.GDBClient`): one PTY for GDB/MI, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY` + `-inferior-tty-set`). The GDB session is shared by the GDB console, in-app `:AI`, and future MCP/REST frontends; program I/O goes only through the IO console (`:b io`).
+gdbforge connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2** (`gdb.GDBClient`): one PTY for GDB/MI, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY` + `-inferior-tty-set`). The GDB session is **owned by `DebuggerApp`** and shared by the GDB console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -16,7 +16,7 @@ gdbforge connects to debug targets through **backend adapters** that implement `
 - [GDB integration](#gdb-integration)
 - [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
-- [GDBWidget bridge](#gdbwidget-bridge)
+- [GDB console bridge (MVC)](#gdb-console-bridge-mvc)
 - [Future OpenOCD integration](#future-openocd-integration)
 - [Future JTAG integration](#future-jtag-integration)
 - [Future kernel debugging](#future-kernel-debugging)
@@ -26,17 +26,19 @@ gdbforge connects to debug targets through **backend adapters** that implement `
 
 ## Integration overview
 
-Application data flows **Service → Event Bus → Model → Widget** (target). Today the GDB path is still widget-local via `EventInterrupt`, but ownership and the external API are session-based.
+Application data flows **Service → Controller → Model → Widget** ([MVC](ARCHITECTURE.md#mvc-current)).
 
 ```mermaid
 flowchart TB
-    subgraph UI["UI · termui / widgets"]
-        GDBW["GDBWidget owns client"]
-        Cons["GDB ConsolePane"]
-        IOW["OutputWidget · IO console"]
+    subgraph UI["UI · views"]
+        GDBW["GDBWidget · paint + OnSubmit"]
+        Cons["ConsolePane"]
+        IOW["OutputWidget · paint + OnSubmit"]
     end
 
     subgraph App["Application · cmd/gdbforge"]
+        Ctrl["Controllers · gdb_console / io_console / breakpoints"]
+        Models["models · BreakpointList ThreadList CallStack"]
         AI[":AI OnAI"]
         MCP["GdbMcpService"]
     end
@@ -53,7 +55,7 @@ flowchart TB
     end
 
     subgraph Backend["gdb"]
-        Client["GDBClient"]
+        Client["GDBClient · owned by DebuggerApp"]
         MI["GdbInputState · MiUpdate"]
     end
 
@@ -64,10 +66,13 @@ flowchart TB
     end
 
     GDBW --> Cons
-    GDBW -->|"owns"| Client
+    Ctrl -->|"owns"| Client
+    Ctrl -->|"SetItems / Paint"| GDBW
+    Ctrl -->|"Paint"| IOW
+    Ctrl --> Models
     Client --> Pty
     Client -->|"-inferior-tty-set"| Inf
-    IOW -->|"stdin Send / stdout Subscribe"| Inf
+    Ctrl -->|"Send / Subscribe"| Inf
     Inf <--> Prog
     MCP -->|"Session only"| SessIF
     AI --> MCP
@@ -75,18 +80,17 @@ flowchart TB
     SessIF --> Client
     Pty -->|"Subscribe fan-out"| PtyMsg
     PtyMsg -->|"UI bridge"| UIMsg
-    UIMsg --> GDBW
-    UIMsg --> IOW
+    UIMsg --> Ctrl
     Pty --> GDB
-    GDBW --> MI
+    Ctrl --> MI
 ```
 
 **Dependency rules:**
 
 - `internal/gdb` and `internal/ptyx` must not import `internal/termui`
-- `GDBWidget` owns the concrete `GDBClient`; app/MCP use `core.Session` via `app.GDB()` / `gdbWidget.Session()`
-- Never `Close()` the session from MCP/AI while the widget owns it
-
+- `DebuggerApp` owns the concrete `GDBClient`; views never hold `Session`
+- External APIs use `app.GDB() core.Session`
+- Never `Close()` the session from MCP/AI — the app owns lifetime
 ---
 
 ## Debugger interface
@@ -115,7 +119,7 @@ Minimal by design — sends commands to the backend. Responses arrive asynchrono
 
 **Design rationale:** MI2 and GDB CLI are streaming protocols. Blocking `Send` → response would deadlock when async `*stopped` records arrive mid-command. `GdbMcpService.GdbCommand` adds a **windowed capture** on a private subscription for tool results (best-effort until tokenized MI waiters).
 
-**Ownership:** `GDBWidget` creates and owns the `GDBClient` (`NewGDBWidget` → `Start` → `Close`). `DebuggerApp` holds `gdbMcp` as a peer constructed from `gdbWidget.Session()`. External APIs use `app.GDB() core.Session`.
+**Ownership:** `DebuggerApp` creates and owns the `GDBClient` (`initBuiltins` → `Close`). `gdbMcp` is a peer constructed from `app.GDB()`. Views (`GDBWidget`, `OutputWidget`, …) receive paint APIs and `SetOn*` callbacks only.
 
 Future extensions (separate interfaces):
 
@@ -151,15 +155,15 @@ Writers (`PTYOwner` on `AppState`):
 
 | Owner | Who | Console paint |
 |-------|-----|---------------|
-| `ui` | GDB / Exec console submit | Yes (always) |
+| `ui` | GDB / Exec / IO console submit (app controller) | Yes (always) |
 | `mcp` | `:AI` / `GdbCommand` | Painted by default; `:set nogdblistenprint` to silence |
-| `app` | Silent MI / App writes: `-break-list`, file list, **CodeWidget Space**, **BreakpointWidget e/d**, stop-driven thread/stack Query | Painted by default; `:set nogdblistenprint` to silence |
+| `app` | Silent MI / App writes: `-break-list`, file list, breakpoint toggle/delete, stop-driven thread/stack Query | Painted by default; `:set nogdblistenprint` to silence |
 
 ```mermaid
 flowchart LR
-  UI["GDBWidget PTYOwnerUI"]
+  UI["Controller PTYOwnerUI"]
   MCP["GdbMcpService PTYOwnerMCP"]
-  App["App / Code / BP widget PTYOwnerApp"]
+  App["App silent Query PTYOwnerApp"]
   Lock["write lock"]
   UI --> Lock
   MCP --> Lock
@@ -170,7 +174,7 @@ flowchart LR
   Fan --> ChMCP["MCP Subscribe"]
 ```
 
-GDB and exec (`:!`) both embed `*ptyx.Client`. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` for interrupt routing. Inferior I/O uses a **separate** bridge → `InferiorOutputMsg` (see below).
+GDB and exec (`:!`) both use `*ptyx.Client` owned by the app. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` / `InferiorOutputMsg` for interrupt routing.
 
 ## Inferior I/O (dual PTY)
 
@@ -199,10 +203,12 @@ gdbforge
 
 | Action | Path |
 |--------|------|
-| Program prints | `TTY.Subscribe` → `InferiorOutputMsg` → `AppendInferior` |
-| User types + Enter | `TTY.Send(line)` → program stdin |
-| Ctrl-C / Ctrl-D | `SendRaw("\x03")` / `SendRaw("\x04")` to **inferior** (not GDB) |
-| Pane resize | `TTY.SetSize` |
+| Program prints | App `Subscribe` → `InferiorOutputMsg` → `AppendInferior` |
+| User types + Enter | View `OnSubmit` → app `TTY.Send(line)` |
+| Ctrl-C / Ctrl-D | View intents → app `SendRaw` to **inferior** (not GDB) |
+| Pane resize | View `SetSizeFunc` → app `TTY.SetSize` |
+
+The widget does **not** hold `*ptyx.TTY`; wiring lives in `cmd/gdbforge/io_console.go`.
 
 **Separation rules:**
 
@@ -261,43 +267,42 @@ Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint i
 
 ### Ownership of the list
 
-`BreakpointWidget` owns an **internal list**:
+`models.BreakpointList` on `DebuggerApp` is the **shared model** (GUI + MCP):
 
-| Action | Internal list | GDB | CodeWidget red marks |
-|--------|---------------|-----|----------------------|
-| **e** while enabled | Row stays, `Enabled=false` | `-break-delete` (removed from GDB) | Cleared for that line |
-| **e** while disabled | Row stays, `Enabled=true` | `break file:line` (re-inserted) | Restored |
+| Action | Model | GDB | CodeWidget gutters |
+|--------|-------|-----|--------------------|
+| **e** while enabled | Row stays, `Enabled=false` | `-break-delete` | Cleared for that line |
+| **e** while disabled | Row stays, `Enabled=true` | `break file:line` | Restored |
 | **d** | Row removed | Deleted if it was in GDB | Cleared |
-| External `b` / Space / MCP | Merged via `MergeFromGDB` | As GDB reports | Enabled rows only |
+| External `b` / Space / MCP | `MergeFromGDB` on the model | As GDB reports | Enabled rows only |
 
-Disabled rows are **kept** across `-break-list` refresh (they are intentionally absent from GDB). `MergeFromGDB` updates numbers for live breakpoints and drops enabled rows that vanished elsewhere.
+Disabled rows are **kept** across `-break-list` refresh (they are intentionally absent from GDB). Controllers call `syncBreakpointViews()` → `BreakpointWidget.SetItems` + code gutters.
 
 ### Callback chain
 
-Wired in `cmd/gdbforge/builtins.go`:
+Wired in `cmd/gdbforge/builtins.go` / `breakpoints.go`:
 
 | Hook | Handler |
 |------|---------|
-| `GDBWidget.SetOnBreakpointsChanged` | `onBreakpointsChanged` → `Publish(BreakpointsChangedMsg)` |
-| `GdbMcpService.OnBreakpointsChanged` | same |
+| `GdbMcpService.OnBreakpointsChanged` | `onBreakpointsChanged` → `Publish(BreakpointsChangedMsg)` |
 | `EventBus` Subscribe | `onBreakpointsChangedMsg` → coalesced `-break-list` |
-| `BreakpointWidget.OnChange` | `onBreakpointListChanged` → `paintCodeBreakmarks` |
+| `BreakpointWidget.OnToggle` / `OnDelete` | `onBreakpointToggle` / `onBreakpointDelete` → model + `SendCmd` |
+| `CodeWidget.SetOnBreakToggle` | `onCodeBreakToggle` → model + `SendCmd` |
 
 ```mermaid
 flowchart TD
-  MI["MI =breakpoint-created/deleted/modified"] --> GW["GDBWidget.onBreakpoints"]
+  MI["MI =breakpoint-created/deleted"] --> OBC["onBreakpointsChanged"]
   MCP["MCP GdbCommand"] --> MCPCB["OnBreakpointsChanged"]
-  GW --> OBC["onBreakpointsChanged"]
   MCPCB --> OBC
   OBC --> BUS["Publish BreakpointsChangedMsg"]
   BUS --> SUB["Subscribe → coalesce -break-list"]
-  SUB --> MERGE["bpWidget.MergeFromGDB"]
-  BP["bpWidget e/d"] --> OC["bpWidget.OnChange"]
-  MERGE --> OC
-  OC --> PAINT["onBreakpointListChanged → paintCodeBreakmarks"]
-  PAINT --> CW["CodeWidget.SetBreakInfos"]
-  CODE["CodeWidget Space"] --> PTY["PTYOwnerApp break/clear"]
-  PTY --> MI
+  SUB --> MERGE["breakpoints.MergeFromGDB"]
+  MERGE --> SYNC["syncBreakpointViews"]
+  BP["bpWidget OnToggle/OnDelete"] --> CTRL["breakpoints.go controller"]
+  CODE["CodeWidget OnBreakToggle"] --> CTRL
+  CTRL --> MERGE
+  SYNC --> CW["CodeWidget.SetBreakInfos"]
+  SYNC --> BPW["BreakpointWidget.SetItems"]
 ```
 
 `DebuggerApp` Subscribes to `BreakpointsChangedMsg` in `initBuiltins` and runs a coalesced `-break-list`:
@@ -308,10 +313,9 @@ flowchart TD
 | Refresh in flight | Further publishes set `bpRefreshPending` only |
 | After refresh | If pending → one trailing `-break-list`; else clear running flag |
 
-No `time.Sleep` debounce — coalesce is event-driven (pending flag). Redraw uses `PostEvent(breakpointsUIMsg)` on the UI thread. CodeWidget red marks still come from `OnChange` → `paintCodeBreakmarks` → `SetBreakInfos` (not a separate bus subscriber on the code panes).
+No `time.Sleep` debounce — coalesce is event-driven (pending flag). Redraw uses `PostEvent(breakpointsUIMsg)` on the UI thread.
 
 Only `=breakpoint-created` / `=breakpoint-deleted` trigger a `-break-list` refresh (not `=breakpoint-modified` hit-count updates during `n`/`continue`).
-
 ### CodeWidget details
 
 - Syntax highlight via Chroma (`terminal256`); line numbers; breakpoint lines use a red number background.
@@ -324,13 +328,22 @@ PTY exclusivity remains `ptyx.WithWrite`; `PTYOwner` + sticky silence tell GDBWi
 
 ### Threads and call stack on stop
 
-On each non-exit `*stopped` (breakpoint, step, **Ctrl-C / `signal-received`**, etc.), `DebuggerApp` coalesces (pending flag, no timer):
+On each non-exit `*stopped` (breakpoint, step, **Ctrl-C / `signal-received`**, etc.), `DebuggerApp` refreshes shared models then paints the Threads / Call Stack views.
 
-1. `Query("-thread-info")` → `ParseThreadInfo` → `ThreadWidget.SetItems`
-2. `Query("-stack-list-frames")` → `ParseStackListFrames` → `CallStackWidget.SetItems`
-3. `PostEvent(debugInfoUIMsg)` → `RequestFrame`
+**When the refresh runs** (avoid racing the stop reply):
 
-Independent of `BreakpointsChangedMsg` (BP marks stay on breakpoint-change events).
+1. `onGdbStopped` arms `pendingDebugInfo`
+2. Trigger on MI **PromptReady** (`(gdb)`), or a **~120ms fallback** if the prompt is missed
+3. Coalesced worker (`scheduleDebugInfoRefresh` / pending flag) runs the queries
+
+**What the worker does:**
+
+1. `Query("-thread-info")` — apply only if the capture contains `threads=` (incomplete/stale captures are retried a few times, not applied)
+2. `Query("-stack-list-frames")` — apply only if the capture contains `stack=`
+3. Update `models.ThreadList` / `models.CallStack` off the UI thread
+4. `PostEvent(debugInfoUIMsg)` → on the UI thread: `SetItems` on the widgets, align Code from the stack, `RequestFrame`
+
+Independent of `BreakpointsChangedMsg` (BP marks stay on breakpoint-change events). Clicking a thread still re-queries (`onThreadActivate`) for an explicit `thread <id>` switch — stop refresh should not require a click.
 
 ---
 
@@ -454,46 +467,47 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 
 ---
 
-## GDBWidget bridge
+## GDB console bridge (MVC)
 
-`GDBWidget` owns the GDB session and is a thin adapter over shared termui REPL pieces:
+`GDBWidget` is a **display-only** console view. The app owns the session and MI policy (`cmd/gdbforge/gdb_console.go`):
 
 ```text
-InputLine  →  ConsolePane  →  GDBWidget  →  GDBClient (owned) → ptyx
-(edit/hist)   (scrollback +     (create/Start/Close,
-               walking prompt)   MI + Send)
+InputLine  →  ConsolePane  →  GDBWidget (view)
+(edit/hist)   (scrollback)      ↑ paint / OnSubmit
+                              DebuggerApp controller
+                                → GDBClient → ptyx
 ```
 
-`NewGDBWidget(gdbPath, prog, args...)` spawns the client; `Start(screen)` bridges `Subscribe` → coalesced `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB batches so free-running stdout does not flood the UI thread); `Close()` tears the process down. Presentation is a **native GDB session** (`(gdb) b main` then raw console output) — not labeled chat (`user:` / `gdb:`).
-
-Painting stays on the tcell event loop (tcell is not thread-safe). The bridge goroutine only batches bytes before `PostEvent`.
+`initBuiltins` creates `gdb.NewGDBClient`; `startGdbConsoleBridge` coalesces `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB). Presentation is a **native GDB session** (`(gdb) b main` then raw console output).
 
 ```mermaid
 sequenceDiagram
     participant User
     participant GDBW as GDBWidget
     participant Cons as ConsolePane
+    participant Ctrl as DebuggerApp
     participant State as GdbInputState
     participant Client as GDBClient
     participant GDB as GDB
 
     User->>Cons: type / Enter
-    Cons->>GDBW: OnSubmit(cmd)
-    GDBW->>Cons: EchoSubmit(prompt+cmd)
-    GDBW->>Client: Send(cmd)
+    Cons->>Ctrl: OnSubmit(cmd)
+    Ctrl->>GDBW: EchoSubmit / ClearInput
+    Ctrl->>Client: Send(cmd)
     Client->>GDB: PTY write
     GDB-->>Client: MI output chunk
-    Client-->>GDBW: EventInterrupt GdbOutputMsg
-    GDBW->>State: PushRaw(chunk)
-    State-->>GDBW: MiUpdate
-    GDBW->>Cons: AppendLines / Draw
+    Client-->>Ctrl: EventInterrupt GdbOutputMsg
+    Ctrl->>State: PushRaw(chunk)
+    State-->>Ctrl: MiUpdate
+    Ctrl->>GDBW: PaintMiDisplay
 ```
 
 | Component | File | Role |
 |-----------|------|------|
 | `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
-| `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit`, key shell |
-| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | Owns client; `OnSubmit` → Send; MI → AppendLines |
+| `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit` |
+| `GDBWidget` | `widgets/gdb_widget.go` | View — `SetOnSubmit` / paint APIs only |
+| Controller | `cmd/gdbforge/gdb_console.go` | Owns client bridge, MI, quit gate, Send |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
 | `ptyx.Client` | `ptyx/client.go` | Shared PTY mux |
 

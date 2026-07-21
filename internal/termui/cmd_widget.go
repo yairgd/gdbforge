@@ -18,6 +18,10 @@ type CmdWidget struct {
 	active    bool
 	text      string
 	cursor    int
+
+	// onExecute runs a successfully parsed command (app controller).
+	// When set, submit does not call parser.Execute in the view.
+	onExecute func()
 }
 
 func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
@@ -27,6 +31,20 @@ func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 		parser:     commands.NewCommandParser(reg),
 		active:     false,
 	}
+}
+
+// SetOnExecute registers the Enter handler for a fully parsed command.
+// The app should call ExecuteParsed from this callback.
+func (c *CmdWidget) SetOnExecute(fn func()) {
+	c.onExecute = fn
+}
+
+// ExecuteParsed runs the last successfully Parse'd command action.
+func (c *CmdWidget) ExecuteParsed() error {
+	if c == nil || c.parser == nil || !c.parser.CanExecute() {
+		return commands.ErrCommandNotExecutable
+	}
+	return c.parser.Execute()
 }
 
 // SetClipboard wires the shared copy/paste bridge (same as Viewport / ConsolePane).
@@ -63,6 +81,10 @@ func (c *CmdWidget) submitCommand() {
 	}
 
 	if c.parser.CanExecute() {
+		if c.onExecute != nil {
+			c.onExecute()
+			return
+		}
 		_ = c.parser.Execute()
 		return
 	}

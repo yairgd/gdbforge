@@ -115,7 +115,7 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 		}
 		act := c.Quit.Answer(raw)
 		if act == gdb.QuitReprompt {
-			w.PresentQuitReprompt()
+			w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
 			return
 		}
 		w.EchoSubmit(display)
@@ -127,7 +127,11 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 
 	if act := c.Quit.SubmitQuitCommand(cmd); act != gdb.QuitNoop {
 		if act == gdb.QuitShowConfirm {
-			w.PresentQuitConfirm(cmd, c.Quit.InferiorPID())
+			if cmd != "" {
+				w.PushHistory(cmd)
+				w.EchoSubmit(cmd)
+			}
+			w.BeginLiveHost(gdb.QuitConfirmLines(c.Quit.InferiorPID()), gdb.QuitConfirmHost)
 			return
 		}
 		if cmd != "" {
@@ -172,13 +176,18 @@ func (a *DebuggerApp) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
 	if a.gdbClient == nil || a.gdbWidget == nil {
 		return
 	}
+	w := a.gdbWidget
 	switch act {
 	case gdb.QuitShowConfirm:
-		a.gdbWidget.PresentQuitConfirm(echoCmd, a.gdbClient.Quit.InferiorPID())
+		if echoCmd != "" {
+			w.PushHistory(echoCmd)
+			w.EchoSubmit(echoCmd)
+		}
+		w.BeginLiveHost(gdb.QuitConfirmLines(a.gdbClient.Quit.InferiorPID()), gdb.QuitConfirmHost)
 	case gdb.QuitReprompt:
-		a.gdbWidget.PresentQuitReprompt()
+		w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
 	default:
-		a.gdbWidget.FollowTailAndScroll()
+		w.FollowTailAndScroll()
 	}
 	a.sendGdbQuitAction(act)
 }
@@ -210,6 +219,12 @@ func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
 	}
 	if upd.Stopped != nil {
 		a.onGdbStopped(upd.Stopped)
+	}
+	// Wait for MI prompt after *stopped before -thread-info / -stack-list-frames.
+	// Querying immediately races the stop reply and often captures an empty /
+	// stale chunk — Threads pane then does not update until a later click.
+	if a.pendingDebugInfo && upd.PromptReady {
+		a.triggerPendingDebugInfo()
 	}
 	if a.pendingFrameSync {
 		if upd.State == gdb.Error {

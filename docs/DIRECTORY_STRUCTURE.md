@@ -62,18 +62,25 @@ gdbforge/
 | File | Responsibility |
 |------|----------------|
 | `main.go` | `main()` entry |
-| `app.go` | `DebuggerApp`, constants, `NewDebuggerApp` |
-| `setup.go` | `InitB` — widgets, log, mode/command handlers |
+| `app.go` | `DebuggerApp`, models fields, `NewDebuggerApp`, `Close` |
+| `setup.go` | `InitB` — chrome, mode/command handlers, Cmd `SetOnExecute` |
+| `builtins.go` | Create models + views; wire intents; start GDB/IO bridges |
+| `gdb_console.go` | GDB controller — Submit / MI paint / quit |
+| `io_console.go` | Inferior PTY bridge + OutputWidget intents |
+| `breakpoints.go` | Breakpoint model sync / toggle / delete / code Space |
+| `debug_info.go` | Thread / call-stack / file-list view sync |
 | `command_tree.go` | `ExapData` colon-command DSL |
 | `keybindings.go` | `InitKeyBindings` |
-| `actions.go` | Command action methods (focus, split, quit, …) |
-| `input.go` | Mode key handlers, mouse, resize |
+| `actions.go` | Command actions (focus, split, quit, `:!` Exec, …) |
+| `input.go` | Mode key handlers, mouse, resize, completion refresh |
+| `completion.go` | CompletionMenu → CompletionView |
 | `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
 | `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
-| `stopped.go` | Stop / breakpoint / thread-stack refresh |
+| `stopped.go` | Stop handling; arm/trigger thread-stack refresh; code after stop |
+| `debug_info.go` | `syncThreadViews` / `syncCallStackViews` / model setters |
 
 Build all commands:
 
@@ -93,7 +100,7 @@ task build
 | `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers |
 | `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID` |
 | `completion_bar.go` | Wildmenu chrome row (`ModeCompletion`); draw-only-when-active |
-| `cmd_widget.go` | Global `:` command line (`CommandParser`, publishes completions) |
+| `cmd_widget.go` | Global `:` command line (parser for Tab; `SetOnExecute` → app) |
 | `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
 | `widget.go` | `Widget` interface |
 | `node.go` | Split tree node types; `SetWidget` / `GetWidget` |
@@ -129,24 +136,27 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/gdbforge
 
-**gdbforge application layer** — layout builders and debugger-specific widgets.
+**gdbforge application layer** — shared models, layout builders, and debugger views.
 
 | Path | Responsibility |
 |------|----------------|
+| `models/breakpoints.go` | `BreakpointList` — shared BP model (GUI + MCP) |
+| `models/threads.go` | `ThreadList` — stop snapshot |
+| `models/callstack.go` | `CallStack` — frame snapshot |
 | `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
 | `layout/default.go` | Multi-pane: Code/GDB left; IO / BP / Threads / Callstack right |
 | `layout/panels.go` | Code/GDB left; IO over (Threads\|Callstack) over Breakpoints |
 | `layout/classic.go` | Original cgdb: full-width Code over GDB |
-| `widgets/code_widget.go` | Per-file source (`:e` / `:b`); `━━▶` PC; Space break toggle; red BP marks |
-| `widgets/breakpoint_widget.go` | Builtin `:b breakpoint`; owns list; `e`/`d`; `OnChange` → code marks |
-| `widgets/thread_widget.go` | Builtin `:b threads`; list from `-thread-info` on stop |
-| `widgets/callstack_widget.go` | Builtin `:b callstack`; frames from `-stack-list-frames` on stop |
-| `widgets/output_widget.go` | Builtin `:b io` (alias `:b output`); inferior stdin/stdout via `ptyx.TTY` |
+| `widgets/code_widget.go` | Source view; Space → `OnBreakToggle`; gutters from `SetBreakInfos` |
+| `widgets/breakpoint_widget.go` | `:b breakpoint`; `SetItems` + toggle/delete/activate intents |
+| `widgets/thread_widget.go` | `:b threads`; `SetItems` from app model |
+| `widgets/callstack_widget.go` | `:b callstack`; `SetItems` from app model |
+| `widgets/output_widget.go` | `:b io`; paint inferior I/O; no PTY ownership |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |
 | `widgets/logo_widget.go` | Startup splash in the code leaf until source loads |
-| `widgets/gdb_widget.go` | GDB console — ConsolePane + streaming MI / Debugger adapter |
-| `widgets/exec_widget.go` | Exec/shell console — ConsolePane + PTY (`:!bash`) |
+| `widgets/gdb_widget.go` | GDB console view — ConsolePane + paint / `SetOn*` |
+| `widgets/exec_widget.go` | Exec/shell console view — `SetOn*` + paint (`:!bash`) |
 
 ## internal/mcp
 
@@ -195,7 +205,7 @@ flowchart TB
 
 **UI-agnostic domain logic.** No imports of `tcell` or other terminal packages.
 
-Today this package holds shared primitives (`Buffer`, `Viewport`, `Debugger` interface, backend event types). The **target** is explicit application models per domain (e.g. `BreakpointModel`) living in the app layer, with `core` supplying reusable building blocks.
+Today this package holds shared primitives (`Buffer`, `Debugger` interface, backend event types). Explicit application models live in `internal/gdbforge/models` (breakpoints, threads, call stack).
 
 | File | Responsibility |
 |------|----------------|

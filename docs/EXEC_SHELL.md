@@ -43,10 +43,10 @@ flowchart LR
 | PTY | `internal/ptyx.Client` | Shared PTY: mutex writes, `Subscribe` fan-out, `SetSize` |
 | Client | `internal/execcli.ExecClient` | Thin wrapper (`*ptyx.Client` + initial winsize) |
 | Event | `core.ExecOutputMsg` | UI-routed PTY chunks to the UI thread |
-| Widget | `widgets.ExecWidget` | Line-oriented ConsolePane + live prompt + ANSI |
-| App | `DebuggerApp.OnRun` | Create client/widget, `swapFocusedWidget`, insert mode |
+| Widget | `widgets.ExecWidget` | View — ConsolePane + live prompt + ANSI; `SetOnSubmit` |
+| App | `DebuggerApp.OnRun` | Owns `ExecClient`; wire intents; `swapFocusedWidget`; insert mode |
 
-GDB uses the same `ptyx.Client` via `gdb.GDBClient`. Exec reuses **ConsolePane** but has **no MI parser** — plain text + ANSI.
+GDB uses the same `ptyx.Client` via app-owned `gdb.GDBClient`. Exec reuses **ConsolePane** but has **no MI parser** — plain text + ANSI.
 
 ---
 
@@ -131,7 +131,7 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 | `cmd/gdbforge/builtins.go` | `swapFocusedWidget`, `JumpBack` |
 | `cmd/gdbforge/keybindings.go` | `<C-o>` |
 | `internal/execcli/exec_client.go` | PTY process I/O |
-| `internal/gdbforge/widgets/exec_widget.go` | UI adapter |
+| `internal/gdbforge/widgets/exec_widget.go` | Exec console view (`SetOn*`) |
 | `internal/commands/{dsl,command_parser,command_node}.go` | Rest-args |
 | `internal/termui/console_pane.go` | Live prompt + paste into input |
 | `internal/termui/utf.go` | ANSI draw / strip |

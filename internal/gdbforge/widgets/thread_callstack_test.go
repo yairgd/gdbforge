@@ -169,7 +169,7 @@ func TestThreadWidgetWheelActivates(t *testing.T) {
 func TestListWidgetsMouseSyncSelection(t *testing.T) {
 	bp := NewBreakpointWidget()
 	bp.SetFocused(true)
-	bp.MergeFromGDB([]mcp.BreakInfo{
+	bp.SetItems([]mcp.BreakInfo{
 		{Number: 1, Enabled: true, File: "a.c", Line: 1},
 		{Number: 2, Enabled: true, File: "a.c", Line: 2},
 	})

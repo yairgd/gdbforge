@@ -322,9 +322,18 @@ func (app *DebuggerApp) OnRun(args ...any) {
 	}
 	app.execClient = client
 
-	w := widgets.NewExecWidget(client)
+	w := widgets.NewExecWidget()
 	w.SetClipboard(app.ClipboardIO())
 	w.SetSizeFunc(client.SetSize)
+	w.SetOnSubmit(func(cmd string) {
+		_ = client.Send(cmd)
+	})
+	w.SetOnInterrupt(func() {
+		_ = client.SendRaw("\x03")
+	})
+	w.SetOnEOF(func() {
+		_ = client.SendRaw("\x04")
+	})
 	w.SetOnClose(func() {
 		client.Close()
 	})

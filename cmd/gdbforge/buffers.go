@@ -32,15 +32,13 @@ func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, crea
 	return w, true
 }
 
-// wireCodeWidget attaches the shared GDB session and breakpoint-refresh hook.
+// wireCodeWidget attaches app-owned breakpoint intents and mark colors.
 func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
 	if w == nil {
 		return
 	}
-	if a.gdbWidget != nil {
-		w.SetPTY(a.GDB(), a.State())
-	}
-	w.SetOnBreakCmd(a.onBreakpointsChanged)
+	w.SetAppState(a.State())
+	w.SetOnBreakToggle(a.onCodeBreakToggle)
 	w.SetOnToggleEnable(a.toggleCodeBreakEnable)
 }
 
@@ -181,9 +179,7 @@ func (a *DebuggerApp) OnEdit(args ...any) {
 			return
 		}
 		a.ensureSourceFiles()
-		if files := a.State().SourceFiles(); len(files) > 0 {
-			a.fileListWidget.SetItems(files)
-		}
+		a.syncFileListViews()
 		if a.swapFocusedWidget(a.fileListWidget) {
 			a.RequestFrame()
 		}

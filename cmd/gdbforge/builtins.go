@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -47,16 +48,22 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.outputWidget = widgets.NewOutputWidget()
 	a.outputWidget.SetClipboard(a.ClipboardIO())
 	if tty := a.gdbClient.InferiorTTY(); tty != nil {
-		a.outputWidget.SetInferior(tty, a.State())
-		a.outputWidget.Start(a.Screen())
+		a.wireInferiorIO(tty)
 	}
 	a.registerBuiltin("io", a.outputWidget)
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
 	a.maybeClearOutput()
 	a.maybeBreakMain()
 
+	a.breakpoints = &models.BreakpointList{}
+	a.threads = &models.ThreadList{}
+	a.callstack = &models.CallStack{}
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
+	a.bpWidget.SetAppState(a.State())
+	a.bpWidget.OnToggle = a.onBreakpointToggle
+	a.bpWidget.OnDelete = a.onBreakpointDelete
+	a.bpWidget.OnActivate = a.onBreakpointActivate
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
 	a.threadWidget = widgets.NewThreadWidget()
@@ -80,10 +87,6 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.GDB(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
-	a.bpWidget.SetPTY(a.GDB(), a.State())
-	a.bpWidget.OnChange = a.onBreakpointListChanged
-	a.bpWidget.OnBreakCmd = a.onBreakpointsChanged
-	a.bpWidget.OnActivate = a.onBreakpointActivate
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}

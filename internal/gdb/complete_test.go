@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestCompletingLinespec(t *testing.T) {
+	if !CompletingLinespec("break hello.c:") {
+		t.Fatal("expected file: linespec")
+	}
+	if !CompletingLinespec("break hello.c:ma") {
+		t.Fatal("expected file:func linespec")
+	}
+	if CompletingLinespec("break ") {
+		t.Fatal("not a linespec yet")
+	}
+	if CompletingLinespec("info breakpoints") {
+		t.Fatal("command completion is not linespec")
+	}
+	if CompletingLinespec("print NS::foo") {
+		t.Fatal("C++ scope must not count as file:")
+	}
+}
+
 func TestParseCompleteResultMatches(t *testing.T) {
 	raw := "-complete br\r\n" +
 		`^done,completion="break",matches=["break","break-range"],max_completions_reached="0"` + "\r\n(gdb) \r\n"

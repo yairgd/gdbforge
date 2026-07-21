@@ -2,7 +2,7 @@
 
 **gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
 
-The project targets a **cgdb-like experience** with a cleaner architecture: application models created at startup, widgets as on-demand views, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer.
+The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: application models created at startup, widgets as views (callbacks + paint), controllers in `cmd/gdbforge`, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
 Standalone diagram sources live under [`diagrams/`](diagrams/).
 

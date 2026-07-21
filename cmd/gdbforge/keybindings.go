@@ -289,17 +289,8 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 }
 
 func (a *DebuggerApp) hasBreakAt(file string, line int) bool {
-	if a.bpWidget == nil || file == "" || line < 1 {
+	if a.breakpoints == nil || file == "" || line < 1 {
 		return false
 	}
-	base := filepath.Base(file)
-	for _, it := range a.bpWidget.Items() {
-		if it.Line != line {
-			continue
-		}
-		if it.File == file || filepath.Base(it.File) == base {
-			return true
-		}
-	}
-	return false
+	return a.breakpoints.IndexOfFileLine(file, line) >= 0
 }

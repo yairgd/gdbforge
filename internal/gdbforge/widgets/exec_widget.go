@@ -6,34 +6,34 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// ExecWidget is a ConsolePane wired to an ExecClient PTY session.
+// ExecWidget is a display-only Exec console view (ConsolePane chrome).
+// The app owns ExecClient and send policy; it paints via Append/HandleEvent
+// and handles OnSubmit / OnInterrupt / OnEOF intents.
 type ExecWidget struct {
-	console  *termui.ConsolePane
-	Debugger core.Debugger
-	lineBuf  string
-	pending  bool // last buffer line is an incomplete PTY line
-	ended    bool // PTY/process exited; next key dismisses
-	onClose  func()
+	console *termui.ConsolePane
+	lineBuf string
+	pending bool // last buffer line is an incomplete PTY line
+	ended   bool // PTY/process exited; next key dismisses
+	onClose   func()
 	onDismiss func()
+	onSubmit    func(cmd string)
+	onInterrupt func()
+	onEOF       func()
 
 	lastRows, lastCols int
 	setSize            func(rows, cols uint16) error
 }
 
-func NewExecWidget(dbg core.Debugger) *ExecWidget {
+func NewExecWidget() *ExecWidget {
 	console := termui.NewConsolePane("Exec")
 	console.Prompt = "$ "
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorGreen)
 	console.SetANSI(true)
 
-	w := &ExecWidget{
-		console:  console,
-		Debugger: dbg,
-	}
-
-	console.OnSubmit = w.onSubmit
-	console.OnInterrupt = w.onInterrupt
-	console.OnEOF = w.onEOF
+	w := &ExecWidget{console: console}
+	console.OnSubmit = w.handleSubmit
+	console.OnInterrupt = w.handleInterrupt
+	console.OnEOF = w.handleEOF
 	return w
 }
 
@@ -46,7 +46,23 @@ func (m *ExecWidget) SetSizeFunc(fn func(rows, cols uint16) error) {
 	m.setSize = fn
 }
 
-// SetOnClose registers a callback invoked on Ctrl-D / EOF while the session is live.
+// SetOnSubmit registers the Enter handler (app controller).
+func (m *ExecWidget) SetOnSubmit(fn func(cmd string)) {
+	m.onSubmit = fn
+}
+
+// SetOnInterrupt registers the Ctrl-C handler (app controller).
+func (m *ExecWidget) SetOnInterrupt(fn func()) {
+	m.onInterrupt = fn
+}
+
+// SetOnEOF registers the Ctrl-D handler (app controller).
+func (m *ExecWidget) SetOnEOF(fn func()) {
+	m.onEOF = fn
+}
+
+// SetOnClose registers a callback invoked on Ctrl-D / EOF while the session is live
+// when the app wants to close without forwarding ^D (legacy hook).
 func (m *ExecWidget) SetOnClose(fn func()) {
 	m.onClose = fn
 }
@@ -59,6 +75,7 @@ func (m *ExecWidget) SetOnDismiss(fn func()) {
 
 const execSessionEnded = "exec-session-ended"
 
+// StartExecUIBridge posts PTY output and session-end onto the UI event loop.
 func (m *ExecWidget) StartExecUIBridge(
 	screen tcell.Screen,
 	outputChan <-chan core.PtyOutputMsg,
@@ -102,32 +119,28 @@ func (m *ExecWidget) DrawStatusLine(c termui.Canvas, active bool) {
 	m.console.DrawStatusLine(c, active)
 }
 
-func (m *ExecWidget) onSubmit(raw string) {
-	if m.Debugger == nil {
-		return
-	}
+func (m *ExecWidget) handleSubmit(raw string) {
 	cmd := raw
 	if cmd == "" {
 		cmd = m.console.Input().LastHistory()
 	}
 	if cmd != "" {
 		m.console.Input().PushHistory(cmd)
-		// Do not EchoSubmit: bash/ssh echo and draw their own colored prompts.
-		_ = m.Debugger.Send(cmd)
-	} else {
-		_ = m.Debugger.Send("")
+	}
+	if m.onSubmit != nil {
+		m.onSubmit(cmd)
 	}
 	m.console.Input().Clear()
 	m.console.FollowTailAndScroll()
 }
 
-func (m *ExecWidget) onInterrupt() {
-	if m.Debugger != nil {
-		_ = m.Debugger.SendRaw("\x03")
+func (m *ExecWidget) handleInterrupt() {
+	if m.onInterrupt != nil {
+		m.onInterrupt()
 	}
 }
 
-func (m *ExecWidget) onEOF() {
+func (m *ExecWidget) handleEOF() {
 	if m.ended {
 		m.dismiss()
 		return
@@ -136,8 +149,8 @@ func (m *ExecWidget) onEOF() {
 		m.onClose()
 		return
 	}
-	if m.Debugger != nil {
-		_ = m.Debugger.SendRaw("\x04")
+	if m.onEOF != nil {
+		m.onEOF()
 	}
 }
 
@@ -146,7 +159,6 @@ func (m *ExecWidget) markEnded() {
 		return
 	}
 	m.ended = true
-	m.Debugger = nil
 	m.lineBuf = ""
 	m.pending = false
 	m.console.SetLivePrompt(false)

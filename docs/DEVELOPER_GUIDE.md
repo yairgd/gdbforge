@@ -37,9 +37,10 @@
 | 5 | `internal/termui/canvas.go` | Drawing abstraction |
 | 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
 | 7 | `internal/termui/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
-| 8 | `internal/gdbforge/widgets/gdb_widget.go` | GDB adapter (MI + Debugger) |
-| 9 | `internal/gdb/gdb_client.go` | PTY backend |
-| 10 | `docs/ARCHITECTURE.md` | Big picture |
+| 8 | `internal/gdbforge/widgets/gdb_widget.go` | GDB console view (paint + callbacks) |
+| 9 | `cmd/gdbforge/gdb_console.go` | GDB controller (owns Session / MI) |
+| 10 | `internal/gdb/gdb_client.go` | PTY backend |
+| 11 | `docs/ARCHITECTURE.md` | Big picture (MVC) |
 
 ### Half-day path (implement a feature)
 
@@ -84,20 +85,19 @@ Widget (view)
 Data flow (target):
   Service → Event Bus → Model → Widget
 
-GDB path (today):
-  GDB PTY reader → Subscribe → EventInterrupt(GdbOutputMsg) → GDBWidget → ConsolePane
-  Inferior TTY reader → Subscribe → EventInterrupt(InferiorOutputMsg) → IO (OutputWidget)
+GDB path (MVC):
+  GDB PTY reader → Subscribe → EventInterrupt(GdbOutputMsg) → DebuggerApp controller → GDBWidget paint
+  Inferior TTY → Subscribe → InferiorOutputMsg → app → OutputWidget.AppendInferior
+  Domain lists → models.* → SetItems on Thread / CallStack / Breakpoint views
   GdbMcpService / :AI → same Session (WithWrite exclusive, Subscribe shared)
-GDB path (target):
-  Session → PtyOutputMsg on bus → Model update → Widget redraw
 ```
 
 **Rules:**
 
-- Models are created at startup; widgets are created on demand.
-- Widgets never call services directly — services publish events; models subscribe (target). Today `GDBWidget` owns the GDB `Session`; MCP uses `Session` only.
-- High-rate service output → model state → widget reads model on draw.
-- Domain actions → publish `termui.Event`, handle in **`HandleCoreEvents`** — not in widget business logic.
+- Models are created at startup; widgets are views (often singleton builtins).
+- Widgets never call services directly — controllers own `Send` / Query; models hold domain state.
+- High-rate service output → controller → paint APIs on the view.
+- Domain actions → publish `termui.Event` or app callbacks — not widget business logic.
 - App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
 - Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
 - Console editing/layout is shared (`InputLine` / `ConsolePane`); debugger backends only supply protocol glue.
@@ -109,10 +109,11 @@ GDB path (target):
 
 | Term | Meaning |
 |------|---------|
-| **Model** | Application domain object owning state (e.g. `BreakpointModel`); created at startup; subscribes to events; implements generic widget interfaces (`TextModel`, `GraphModel`, …) |
-| **Widget** | View displaying a model via a small interface; implements `HandleEvent`, `Draw`, and `DrawStatusLine`; no business logic; decides rendering style |
-| **Service** | External-system adapter (`ptyx` / `GDBClient` / `GdbMcpService`); produces events; never imports UI |
-| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; MCP/AI external API |
+| **Model** | Domain state on `DebuggerApp` / `internal/gdbforge/models` (e.g. `BreakpointList`); created at startup |
+| **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; callbacks only; no `Send` / no session |
+| **Controller** | `DebuggerApp` methods — intents, refresh, `sync*Views` |
+| **Service** | External-system adapter (`ptyx` / `GDBClient` / `GdbMcpService`); never imports UI |
+| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; owned by app; MCP/AI external API |
 | **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
@@ -332,7 +333,7 @@ flowchart LR
 
 **Do not** read from a GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
 
-`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. Console editing/layout lives in `InputLine` / `ConsolePane`; GDBWidget wires MI and `Session.Send`.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. Console editing/layout lives in `InputLine` / `ConsolePane`; the app controller owns MI and `Session.Send`.
 
 In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capture). See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md).
 
@@ -420,7 +421,8 @@ Always update docs when changing architecture-visible behavior.
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
-| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `internal/gdbforge/widgets/gdb_widget.go`; `internal/termui/logger_widget.go` |
+| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |
+| Shared models | `internal/gdbforge/models/`; sync in `breakpoints.go`, `debug_info.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termui/event.go`, `termui/command.go` |

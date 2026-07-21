@@ -50,6 +50,9 @@ func (a *DebuggerApp) InitB() error {
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.Events = a.Events()
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
+	a.cmdWidget.SetOnExecute(func() {
+		_ = a.cmdWidget.ExecuteParsed()
+	})
 	a.AddWidget(a.cmdWidget)
 
 	a.InitKeyBindings()

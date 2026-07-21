@@ -32,6 +32,12 @@ func CompletionBase(prefix string) string {
 	return ""
 }
 
+// CompletingLinespec reports whether prefix is completing after a file: linespec
+// (e.g. "break hello.c:").
+func CompletingLinespec(prefix string) bool {
+	return linespecFileColon(prefix) != ""
+}
+
 // linespecFileColon returns the prefix through the linespec file: colon
 // (e.g. "break hello.c:" / "display banner.c:"), or "" when not completing
 // after a file: location. Skips C++ "::" so "NS::foo" is not treated as file.

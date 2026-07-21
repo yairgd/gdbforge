@@ -1,6 +1,9 @@
 package gdb
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestQuitGateRequestQuitConfirm(t *testing.T) {
 	var g QuitGate
@@ -55,5 +58,15 @@ func TestQuitGateObserveExit(t *testing.T) {
 func TestIsQuitCmd(t *testing.T) {
 	if !IsQuitCmd("q") || !IsQuitCmd("Quit") || IsQuitCmd("break") {
 		t.Fatal("IsQuitCmd mismatch")
+	}
+}
+
+func TestQuitConfirmLines(t *testing.T) {
+	lines := QuitConfirmLines("42")
+	if len(lines) < 3 || !strings.Contains(lines[2], "42") {
+		t.Fatalf("lines=%v", lines)
+	}
+	if QuitConfirmHost == "" || len(QuitRepromptLines()) == 0 {
+		t.Fatal("missing quit chrome text")
 	}
 }

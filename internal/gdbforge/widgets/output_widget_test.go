@@ -35,7 +35,7 @@ func TestOutputWidgetRawWhileRunning(t *testing.T) {
 
 func TestOutputWidgetSeparateTTYIgnoresGdbRaw(t *testing.T) {
 	w := NewOutputWidget()
-	w.separateTTY = true
+	w.EnableInput(true)
 	w.AppendPty("^running\n")
 	w.AppendPty("should not appear from gdb pty\n")
 	w.AppendPty("@\"should not appear from mi\\n\"\n")

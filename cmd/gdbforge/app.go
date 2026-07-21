@@ -7,6 +7,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -42,8 +43,10 @@ type DebuggerApp struct {
 	cfg              SessionConfig
 	gdbClient        *gdb.GDBClient
 	gdbCancelSub     func()
+	inferiorCancelSub func()
 	gdbInputState    *gdb.GdbInputState
 	pendingFrameSync bool
+	pendingDebugInfo bool // refresh threads/stack after *stopped once (gdb) is ready
 	gdbWidget        *widgets.GDBWidget
 	gdbMcp           *mcp.GdbMcpService
 
@@ -63,6 +66,9 @@ type DebuggerApp struct {
 	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
 	fileBuffers map[string]*widgets.CodeWidget
 
+	breakpoints      *models.BreakpointList
+	threads          *models.ThreadList
+	callstack        *models.CallStack
 	bpWidget         *widgets.BreakpointWidget
 	threadWidget     *widgets.ThreadWidget
 	callstackWidget  *widgets.CallStackWidget
@@ -108,8 +114,9 @@ func (a *DebuggerApp) Close() {
 		a.gdbMcp.Close()
 		a.gdbMcp = nil
 	}
-	if a.outputWidget != nil {
-		a.outputWidget.StopInferior()
+	if a.inferiorCancelSub != nil {
+		a.inferiorCancelSub()
+		a.inferiorCancelSub = nil
 	}
 	if a.gdbCancelSub != nil {
 		a.gdbCancelSub()

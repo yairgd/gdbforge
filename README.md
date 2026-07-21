@@ -42,7 +42,7 @@
 - Cmdline and console paste: Ctrl+V, middle-click; selection copy/cut
 - Safer while-running behavior: auto-continue after breakpoint **insert** only (not after frame/thread switches)
 
-Deeper architecture notes live under [docs/](docs/).
+Deeper architecture notes live under [docs/](docs/) — start with [MVC](docs/ARCHITECTURE.md#mvc-current).
 
 ## Install and run (PC)
 

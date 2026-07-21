@@ -8,8 +8,29 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 
 ---
 
+## MVC (current)
+
+The GDB debugger app is organized as **Model–View–Controller**:
+
+| Layer | Owns | Lives in |
+|-------|------|----------|
+| **Model** | Session + domain snapshots (breakpoints, threads, call stack, AppState, …) | `DebuggerApp`, `internal/gdb`, `internal/gdbforge/models` |
+| **Controller** | Intents → mutate model → push paint / `Send` | `cmd/gdbforge` (`gdb_console.go`, `breakpoints.go`, `io_console.go`, `stopped.go`, …) |
+| **View** | Paint + chrome + callbacks only (`SetItems`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
+
+```text
+View (widget)  --OnToggle / OnSubmit-->  Controller (DebuggerApp)
+Controller     --Send / Query-->         Model (GDBClient, BreakpointList, …)
+Controller     --SetItems / Paint-->     View
+```
+
+GUI and MCP/AI share the same models (e.g. `BreakpointList`); widgets never own `GDBClient`, `ptyx.TTY`, or domain merge logic.
+
+---
+
 ## Table of contents
 
+- [MVC (current)](#mvc-current)
 - [System context](#system-context)
 - [Application framework](#application-framework)
 - [Startup](#startup)
@@ -109,13 +130,13 @@ Services communicate with the outside world. They publish events through the eve
 
 | Service | Application |
 |---------|-------------|
-| `gdb.GDBClient` / `ptyx.Client` | GDB debugger (owned by `GDBWidget`; exposed as `core.Session`) |
-| `execcli.ExecClient` | Vim-style `:!` shell / SSH PTYs |
-| `mcp.GdbMcpService` | In-app `:AI` / tool access to the live GDB `Session` |
+| `gdb.GDBClient` / `ptyx.Client` | GDB debugger — **owned by `DebuggerApp`**; widgets use callbacks + paint APIs |
+| `execcli.ExecClient` | Vim-style `:!` shell / SSH PTYs — owned by `DebuggerApp` |
+| `mcp.GdbMcpService` | In-app `:AI` / tool access to the live GDB `Session` (`app.GDB()`) |
 | `IBKRClient` | Trader (planned) |
 | `MSPV2Client` | MSP monitoring (planned) |
 
-Each application wires its own services during startup. Today GDB ownership lives in `GDBWidget`; MCP is a peer on `Session`. Service output becomes domain events (target); models subscribe and update state.
+Each application wires its own services during startup. Controllers update domain models and push snapshots to views; MCP is a peer controller on the same `Session`.
 
 ---
 
@@ -133,22 +154,24 @@ Model
 Widget (View)
 ```
 
-Widgets **never subscribe directly to external services** (target). Models own application state; widgets simply display models.
+Widgets **never subscribe directly to external services**. Models own application state; widgets simply display models.
 
 Examples:
 
 ```text
-GDB Session    →  BreakpointModel  →  BreakpointWidget   (target)
-GDBWidget      →  ConsolePane                            (today: owns Session)
-GdbMcpService  →  same Session (WithWrite + Subscribe)
+GDBClient / MCP  →  models.BreakpointList  →  BreakpointWidget + Code gutters
+GDBClient        →  gdb_console controller →  GDBWidget (paint + OnSubmit)
+GDBClient        →  models.CallStack / ThreadList → CallStackWidget / ThreadWidget
+GdbMcpService    →  same Session (WithWrite + Subscribe)
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
 | **Service / Session** | Talk to external systems; `Send` / `Subscribe` / `WithWrite` |
-| **Event bus** | Route events to model subscribers |
-| **Model** | Own application state; subscribe to events; maintain current data |
-| **Widget** | Display a model; no business logic; GDB console is a temporary owner of the session |
+| **Event bus** | Route events to controllers / model refresh |
+| **Model** | Own application state; live for the app lifetime |
+| **Controller** | `DebuggerApp` methods — intents, MI refresh, sync views |
+| **Widget** | Display a model / console chrome; callbacks only; no `Send` |
 
 The sections below on terminal input, domain events, and GDB output describe how this flow is wired in the current Go implementation (`termui.Event`, `HandleCoreEvents`, `ptyx`, etc.).
 
@@ -402,7 +425,7 @@ flowchart TB
 |-----------|---------|----------------|
 | **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, …) | Communicate with external systems; produce events |
 | **Event bus** | `termui.Event` channel | Distribute events to models and application dispatch |
-| **Models** | App layer (planned; today partially `core.Buffer`, widget-local state) | Own application state; subscribe to events |
+| **Models** | `internal/gdbforge/models` + `DebuggerApp` fields | Own application state; controllers push `SetItems` / paint |
 | **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Layout, widget lifecycle, model-to-widget binding |
 | **Terminal application** | `termui.TermApp` | Event loop, screen init, widget registry, redraw orchestration |
 | **Root layout** | `termui` (planned `RootLayout`) | Fixed TabBar, flexible Workspace, fixed CmdLine |
@@ -469,7 +492,7 @@ sequenceDiagram
 
 ### Debugger output → UI
 
-GDB output arrives asynchronously on a `ptyx` reader goroutine, is **fan-out** via `Subscribe`, posted into the tcell event loop as `EventInterrupt(GdbOutputMsg)`, and parsed into display buffers. **Target flow:** Session publishes on the bus → domain models update → widgets redraw from model state.
+GDB output arrives asynchronously on a `ptyx` reader goroutine, is **fan-out** via `Subscribe`, posted into the tcell event loop as `EventInterrupt(GdbOutputMsg)`, and handled by the **app controller** (`gdb_console.go`), which paints the GDB view.
 
 ```mermaid
 sequenceDiagram
@@ -477,21 +500,22 @@ sequenceDiagram
     participant PTY as ptyx reader
     participant Fan as Subscribe fan-out
     participant Screen as tcell.Screen
+    participant Ctrl as DebuggerApp controller
     participant Widget as GDBWidget
     participant Cons as ConsolePane
 
     GDB-->>PTY: MI output chunk
     PTY->>Fan: PtyOutputMsg
     Fan->>Screen: PostEvent GdbOutputMsg
-    Screen->>Widget: HandleEvent
-    Widget->>Widget: GdbInputState.PushRaw → MiUpdate
-    Widget->>Cons: AppendLines
-    Cons->>Cons: Draw on next frame
+    Screen->>Ctrl: HandleInterrupt
+    Ctrl->>Ctrl: GdbInputState.PushRaw → MiUpdate
+    Ctrl->>Widget: PaintMiDisplay / AppendLines
+    Widget->>Cons: Draw on next frame
 ```
 
 *Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
 
-Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (MI + `Debugger`).
+Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (view) ← controller owns MI + `Session`.
 
 ### End-to-end data flow
 
@@ -592,7 +616,8 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 - Application-specific types (`BreakpointModel`, `OrdersModel`, `MSPV2InfoModel`, …) that implement generic widget interfaces (`TextModel`, `GraphModel`, `TableModel`, …).
 - Subscribe to events; update internal data continuously.
 - Exist for the application lifetime; independent of widget lifetime.
-- **Current state:** partially represented by `core.Buffer` and widget-local state; explicit model types per domain are the target.
+- **Current:** `models.BreakpointList`, `models.ThreadList`, `models.CallStack`, plus `AppState` (source files, location, colors). Controllers sync views via `SetItems` / paint APIs.
+- **Still aspirational:** generic `TextModel` / `TableModel` interfaces for reusable widgets across apps.
 
 ### Widgets
 
@@ -627,7 +652,9 @@ See [TermUI layer](#termui-layer). Owns:
   - **`AppState`** (`platform.AppState` via `TermApp.State()`) — interaction mode, PTY write owner (`ui`/`mcp`), layout policy (`equalalways`).
   - **`keyBindings`** — multi-key chords (`InitKeyBindings`, `SearchPartial` in normal mode).
   - Direct references to **`TabWidget`** and **`CmdWidget`** for layout and command-line routing.
-  - **`gdbMcp`** — `GdbMcpService` peer on the GDB `Session` (does not own Close of GDB).
+  - **`gdbClient`** — owns `GDBClient` / `Session`; widgets never hold it.
+  - **`gdbMcp`** — `GdbMcpService` peer on `app.GDB()` (does not own Close of GDB).
+  - Domain models — `breakpoints`, `threads`, `callstack`, …
 - Defines app-specific `CommandID` values (break, continue, quit, …).
 - **`ModeNormal` / `ModeCommand`** are wired; focus and search modes are reserved.
 
@@ -754,9 +781,9 @@ Colon commands use a **hierarchical command tree** (`internal/commands`). See [C
 | **`commands.CommandNode`** | Tree nodes — `Name`, `Children`, `Action` |
 | **`commands.CommandRegistry`** | `Root` tree + key-binding trie |
 | **`commands.CommandParser`** | Runtime cursor — `current`, `token`, `path` |
-| **`termui.CmdWidget`** | `:` input; holds parser; publishes `CompletionMsg` on Tab |
+| **`termui.CmdWidget`** | `:` input + parser for Tab sync; **`SetOnExecute`** → app runs `ExecuteParsed()` |
 
-Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via `CommandParser.Execute()` → `CommandNode.Action`.
+Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via app-owned `ExecuteParsed()` → `CommandNode.Action`.
 
 ### Wiring (current)
 
@@ -776,27 +803,27 @@ Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal
 
 ## Current vs target architecture
 
-The **target** architecture is documented across this tree. The **current** codebase is mid-migration.
+The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Remaining gaps are mostly generic framework polish, not session-in-widget ownership.
 
 | Component | Target | Current state |
 |-----------|--------|---------------|
-| Application models | Explicit model per domain; created at startup | Partial — `core.Buffer` + widget-local state |
-| Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete types |
-| Model → widget binding | `:buffer` activates widget for existing model | Partial — widgets created in layout at init |
-| Service → bus → model | GDB events update models, not widgets directly | Partial — `ptyx` Subscribe + `EventInterrupt`; MCP uses `Session` |
-| Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` |
-| Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both in `internal/core` today |
-| Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects; overlays draw only when active |
+| Application models | Explicit model per domain; created at startup | **Done for BP / threads / call stack**; `AppState` for files/location |
+| Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete DTOs (`mcp.BreakInfo`, …) |
+| Model → widget binding | `:buffer` activates widget for existing model | **Partial** — builtins + `:b` / `:e`; models on app |
+| Service → controller → model → view | GDB events update models; widgets paint snapshots | **Done** — app owns `GDBClient`; views are callbacks + `Set*` |
+| Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` / `platform` |
+| Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both migrating |
+| Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | Workspace | Split tree only | `WidgetTree` / `TabWidget` implemented |
-| CmdLine | Global `:` command input | `CmdWidget` on bottom row (`H-1`); mode routing in `DebuggerApp` |
+| CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |
 | Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
 | Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
-| Interaction modes | Normal / Focus / Command | **Normal + Command wired** via `platform.AppState` (also PTYOwner, EqualAlways) |
-| Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw`; single `frontBuffer` |
+| Interaction modes | Normal / Focus / Command / Completion / Insert | Wired via `platform.AppState` |
+| Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
-| Debugger | `core.Session` + `ptyx`; widget owns GDB; `:AI` peer | Working — [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
+| Debugger | App-owned `Session`; MCP peer; view-only GDB/IO/Exec | **Working** — [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 
 Entry point: `cmd/gdbforge/` (`main.go` + `app.go`, `setup.go`, …).
 
