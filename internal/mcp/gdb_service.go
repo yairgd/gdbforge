@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
