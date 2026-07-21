@@ -23,6 +23,9 @@ func TestPushRawStreamsCompleteLinesImmediately(t *testing.T) {
 	if !u.PromptReady {
 		t.Fatal("expected PromptReady")
 	}
+	if u.PromptLine != MIPromptToken {
+		t.Fatalf("PromptLine=%q want %q", u.PromptLine, MIPromptToken)
+	}
 	if u.State != Done {
 		t.Fatalf("state=%v want Done", u.State)
 	}
@@ -84,7 +87,7 @@ func TestPushRawTargetStreamSeparate(t *testing.T) {
 	if len(u.TargetLines) != 1 || u.TargetLines[0] != "hello" {
 		t.Fatalf("TargetLines=%v", u.TargetLines)
 	}
-	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "(gdb) " {
+	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != MIPromptLiveHost {
 		t.Fatalf("DisplayLines=%v (console ~ must stay separate from @)", u.DisplayLines)
 	}
 }

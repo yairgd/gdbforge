@@ -34,8 +34,8 @@ func TestGDBWidgetNoFakePromptWhileWaiting(t *testing.T) {
 		t.Fatal("waiting: livePrompt should be false")
 	}
 	for _, line := range w.console.Buffer().Lines() {
-		if strings.TrimSpace(line) == "(gdb)" || strings.HasPrefix(line, "(gdb)") {
-			t.Fatalf("invented (gdb) while waiting: %v", w.console.Buffer().Lines())
+		if strings.TrimSpace(line) == gdb.MIPromptToken || strings.HasPrefix(line, gdb.MIPromptToken) {
+			t.Fatalf("invented prompt while waiting: %v", w.console.Buffer().Lines())
 		}
 	}
 
@@ -52,8 +52,8 @@ func TestGDBWidgetNoFakePromptWhileWaiting(t *testing.T) {
 			}
 			b.WriteRune(ch)
 		}
-		if strings.Contains(b.String(), "(gdb)") {
-			t.Fatalf("Draw paints fake (gdb) on row %d: %q", y, strings.TrimRight(b.String(), " "))
+		if strings.Contains(b.String(), gdb.MIPromptToken) {
+			t.Fatalf("Draw paints fake prompt on row %d: %q", y, strings.TrimRight(b.String(), " "))
 		}
 	}
 }
@@ -64,12 +64,26 @@ func TestGDBWidgetPromptReadyAttachesHost(t *testing.T) {
 	w.applyMiUpdate(gdb.MiUpdate{
 		DisplayLines: []string{"List of classes of commands:"},
 		PromptReady:  true,
+		PromptLine:   gdb.MIPromptToken,
 	})
 	if !w.console.LivePrompt() {
 		t.Fatal("PromptReady should set live prompt")
 	}
-	if got := bufLast(w); got != "(gdb) " {
-		t.Fatalf("last line=%q want %q", got, "(gdb) ")
+	if got := bufLast(w); got != gdb.MIPromptLiveHost {
+		t.Fatalf("last line=%q want %q", got, gdb.MIPromptLiveHost)
+	}
+}
+
+func TestGDBWidgetPromptReadyWithoutPromptLineDoesNotInvent(t *testing.T) {
+	w := testGDBWidget()
+	w.applyMiUpdate(gdb.MiUpdate{PromptReady: true})
+	if w.console.LivePrompt() {
+		t.Fatal("PromptReady without PromptLine must not invent a host")
+	}
+	for _, line := range w.console.Buffer().Lines() {
+		if strings.Contains(line, gdb.MIPromptToken) {
+			t.Fatalf("invented prompt: %v", w.console.Buffer().Lines())
+		}
 	}
 }
 
@@ -77,8 +91,7 @@ func TestGDBWidgetQuitCancelWaitsForGDBPrompt(t *testing.T) {
 	w := testGDBWidget()
 	w.inferiorAlive = true
 	w.inferiorPID = "1234"
-	// Pretend we already have a live (gdb) host the user typed q on.
-	w.console.Buffer().AppendLine("(gdb) ")
+	w.console.Buffer().AppendLine(gdb.MIPromptToken)
 	w.console.SetLivePrompt(true)
 
 	w.beginQuitConfirm("q")
@@ -94,19 +107,19 @@ func TestGDBWidgetQuitCancelWaitsForGDBPrompt(t *testing.T) {
 		t.Fatal("quitConfirm should clear on n")
 	}
 	if w.console.LivePrompt() {
-		t.Fatal("after n: no live prompt until GDB emits (gdb)")
+		t.Fatal("after n: no live prompt until GDB emits prompt")
 	}
 	for _, line := range w.console.Buffer().Lines() {
-		if strings.TrimSpace(line) == "(gdb)" {
-			t.Fatalf("invented (gdb) after quit n: %v", w.console.Buffer().Lines())
+		if strings.TrimSpace(line) == gdb.MIPromptToken {
+			t.Fatalf("invented prompt after quit n: %v", w.console.Buffer().Lines())
 		}
 	}
 
-	w.applyMiUpdate(gdb.MiUpdate{PromptReady: true})
+	w.applyMiUpdate(gdb.MiUpdate{PromptReady: true, PromptLine: gdb.MIPromptToken})
 	if !w.console.LivePrompt() {
 		t.Fatal("PromptReady after quit n should attach host")
 	}
-	if got := bufLast(w); got != "(gdb) " {
-		t.Fatalf("last=%q", got)
+	if got := bufLast(w); got != gdb.MIPromptLiveHost {
+		t.Fatalf("last=%q want %q", got, gdb.MIPromptLiveHost)
 	}
 }

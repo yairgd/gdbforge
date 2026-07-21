@@ -10,6 +10,9 @@ type MiUpdate struct {
 	DisplayLines         []string // GDB console stream (~) and other UI text
 	TargetLines          []string // inferior target stream (@) — legacy MI path
 	PromptReady          bool
+	// PromptLine is the exact MI prompt record GDB emitted (e.g. "(gdb)").
+	// Empty unless PromptReady. UI must paint this text — never invent a prompt.
+	PromptLine           string
 	State                GdbState
 	ErrorMsg             string
 	Stopped              *MiStopMsg
@@ -121,8 +124,9 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 			}
 		}
 
-	case line == "(gdb)":
+	case IsMIPromptRecord(line):
 		out.PromptReady = true
+		out.PromptLine = line
 
 	case strings.HasPrefix(line, "=breakpoint-created"),
 		strings.HasPrefix(line, "=breakpoint-deleted"):
@@ -197,6 +201,34 @@ func displayHasSignalMsg(lines []string) bool {
 // IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").
 func IsCtrlCQuitLog(s string) bool {
 	return isCtrlCQuitLog(s)
+}
+
+// MI prompt record GDB emits over MI (exact line token after TrimSpace).
+const (
+	MIPromptToken = "(gdb)"
+	// MIPromptLiveHost is MIPromptToken plus one trailing space for the caret.
+	MIPromptLiveHost = MIPromptToken + " "
+)
+
+// IsMIPromptRecord reports whether line is GDB's MI prompt record.
+// Used to recognize — not invent — the prompt.
+func IsMIPromptRecord(line string) bool {
+	return line == MIPromptToken
+}
+
+// IsBareMIPromptHost reports a scrollback line that is only the MI prompt
+// token (optional trailing space from a console-stream echo).
+func IsBareMIPromptHost(line string) bool {
+	return strings.TrimSpace(line) == MIPromptToken
+}
+
+// LivePromptHost returns fromGDB with exactly one trailing space for input.
+// Empty fromGDB yields empty (do not invent a token).
+func LivePromptHost(fromGDB string) string {
+	if fromGDB == "" {
+		return ""
+	}
+	return strings.TrimRight(fromGDB, " ") + " "
 }
 
 func isCtrlCQuitLog(s string) bool {

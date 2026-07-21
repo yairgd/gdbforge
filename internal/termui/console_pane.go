@@ -172,23 +172,18 @@ func (p *ConsolePane) Clear() {
 func (p *ConsolePane) EchoSubmit(cmd string) {
 	n := p.buf.NumLines()
 	if p.livePrompt && n > 0 {
-		p.buf.SetLine(n-1, p.buf.Line(n-1)+cmd)
+		host := p.buf.Line(n - 1)
+		sep := ""
+		if cmd != "" && !strings.HasSuffix(host, " ") && !strings.HasPrefix(cmd, " ") {
+			sep = " "
+		}
+		p.buf.SetLine(n-1, host+sep+cmd)
 		p.livePrompt = false
 		return
 	}
 	promptTrim := strings.TrimSpace(p.Prompt)
 	if p.Prompt != "" && n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == promptTrim {
 		p.buf.SetLine(n-1, p.Prompt+cmd)
-		p.livePrompt = false
-		return
-	}
-	// Empty Prompt (GDB): echo onto a bare (gdb) host line if present.
-	if p.Prompt == "" && n > 0 && strings.TrimSpace(p.buf.Line(n-1)) == "(gdb)" {
-		host := p.buf.Line(n - 1)
-		if !strings.HasSuffix(host, " ") {
-			host += " "
-		}
-		p.buf.SetLine(n-1, host+cmd)
 		p.livePrompt = false
 		return
 	}
@@ -233,14 +228,13 @@ func (p *ConsolePane) StripTrailingBarePrompt() {
 	promptTrim := strings.TrimSpace(p.Prompt)
 	for p.buf.NumLines() > 0 {
 		last := strings.TrimSpace(p.buf.Line(p.buf.NumLines() - 1))
-		bareGdb := last == "(gdb)"
 		bareConfigured := promptTrim != "" && last == promptTrim
-		if last != "" && !bareGdb && !bareConfigured {
+		if last != "" && !bareConfigured {
 			return
 		}
 		p.buf.RemoveLine(p.buf.NumLines() - 1)
 		p.livePrompt = false
-		if bareGdb || bareConfigured {
+		if bareConfigured {
 			return
 		}
 	}

@@ -71,7 +71,7 @@ func gdbLineStyle(line string) tcell.Style {
 	if strings.Contains(line, "❌️ Quit") {
 		return st.Foreground(tcell.ColorRed).Bold(true)
 	}
-	if strings.HasPrefix(line, "(gdb)") {
+	if strings.HasPrefix(line, gdb.MIPromptToken) {
 		return st.Foreground(tcell.ColorYellow)
 	}
 	return st
@@ -517,9 +517,9 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 			m.stripTrailingGdbPrompt()
 			painted = true
 		}
-		// Materialize the MI (gdb) marker as the live host — never invent it earlier.
+		// Attach the exact MI prompt token GDB emitted — never invent "(gdb)".
 		if upd.PromptReady && !m.quitConfirm {
-			m.attachGdbPrompt()
+			m.attachGdbPrompt(upd.PromptLine)
 		}
 		if painted || (upd.PromptReady && !m.quitConfirm) {
 			m.console.FollowTailAndScroll()
@@ -560,34 +560,42 @@ func (m *GDBWidget) applyMiUpdate(upd gdb.MiUpdate) {
 	}
 }
 
-// attachGdbPrompt paints the MI (gdb) prompt record as the live input host.
-func (m *GDBWidget) attachGdbPrompt() {
-	const host = "(gdb) "
-	if buf := m.console.Buffer(); buf != nil {
-		n := buf.NumLines()
-		if n > 0 && buf.Line(n-1) == host {
-			m.console.SetLivePrompt(true)
-			return
-		}
-		buf.AppendLine(host)
+// attachGdbPrompt paints GDB's MI prompt record as the live input host.
+// fromGDB must be the PromptLine from MiUpdate (empty → no-op).
+func (m *GDBWidget) attachGdbPrompt(fromGDB string) {
+	host := gdb.LivePromptHost(fromGDB)
+	if host == "" {
+		return
 	}
+	buf := m.console.Buffer()
+	if buf == nil {
+		return
+	}
+	n := buf.NumLines()
+	if n > 0 && gdb.IsBareMIPromptHost(buf.Line(n-1)) {
+		buf.SetLine(n-1, host)
+		m.console.SetLivePrompt(true)
+		return
+	}
+	buf.AppendLine(host)
 	m.console.SetLivePrompt(true)
 }
 
-// stripTrailingGdbPrompt drops a trailing bare (gdb) host before new output.
+// stripTrailingGdbPrompt drops a trailing bare MI prompt host before new output.
 func (m *GDBWidget) stripTrailingGdbPrompt() {
 	buf := m.console.Buffer()
 	if buf == nil {
 		return
 	}
 	for buf.NumLines() > 0 {
-		last := strings.TrimSpace(buf.Line(buf.NumLines() - 1))
-		if last != "" && last != "(gdb)" {
+		last := buf.Line(buf.NumLines() - 1)
+		bare := gdb.IsBareMIPromptHost(last)
+		if strings.TrimSpace(last) != "" && !bare {
 			return
 		}
 		buf.RemoveLine(buf.NumLines() - 1)
 		m.console.SetLivePrompt(false)
-		if last == "(gdb)" {
+		if bare {
 			return
 		}
 	}

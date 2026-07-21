@@ -61,12 +61,7 @@ func (b *Buffer) GetLines(start, end int) []string {
 
 // AppendText handles partial lines (important for PTY/GDB)
 func (b *Buffer) AppendText(text string) {
-
-	if len(b.lines) > 0 && b.lines[len(b.lines)-1] == "(gdb) " {
-		b.lines[len(b.lines)-1] += text // add the first line in next to the prompt
-	} else {
-		b.lines = append(b.lines, text)
-	}
+	b.lines = append(b.lines, text)
 }
 
 func (b *Buffer) AppendBuffer(buf []string) {

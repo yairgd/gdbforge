@@ -3,6 +3,8 @@ package termui
 import (
 	"strings"
 	"testing"
+
+	"github.com/yairgd/gdbforge/internal/gdb"
 )
 
 func gridRow(g *Grid, y, w int) string {
@@ -21,7 +23,6 @@ func TestConsolePaneEmptyPromptDrawHasNoFakeGdb(t *testing.T) {
 	p := NewConsolePane("gdb")
 	p.Prompt = ""
 	p.buf.AppendLine("some output")
-	// After submit: waiting for GDB — no live host, empty Prompt.
 	p.EchoSubmit("help")
 	if p.LivePrompt() {
 		t.Fatal("expected livePrompt false after EchoSubmit")
@@ -34,38 +35,36 @@ func TestConsolePaneEmptyPromptDrawHasNoFakeGdb(t *testing.T) {
 
 	for y := 0; y < h; y++ {
 		row := gridRow(g, y, w)
-		if strings.Contains(row, "(gdb)") {
-			t.Fatalf("row %d paints fake (gdb): %q", y, strings.TrimRight(row, " "))
+		if strings.Contains(row, gdb.MIPromptToken) {
+			t.Fatalf("row %d paints fake prompt: %q", y, strings.TrimRight(row, " "))
 		}
 	}
 }
 
-func TestConsolePaneEchoSubmitOntoBareGdbHost(t *testing.T) {
+func TestConsolePaneEchoSubmitOntoLiveHost(t *testing.T) {
 	p := NewConsolePane("gdb")
 	p.Prompt = ""
-	p.buf.AppendLine("(gdb) ")
+	p.buf.AppendLine(gdb.MIPromptLiveHost)
 	p.SetLivePrompt(true)
 	p.EchoSubmit("help")
 	if p.LivePrompt() {
 		t.Fatal("EchoSubmit should clear live prompt")
 	}
-	if got := p.buf.Line(0); got != "(gdb) help" {
+	if got := p.buf.Line(0); got != gdb.MIPromptLiveHost+"help" {
 		t.Fatalf("line=%q", got)
 	}
 }
 
-func TestConsolePaneStripTrailingBareGdbWithEmptyPrompt(t *testing.T) {
+func TestConsolePaneStripTrailingBarePromptEmptyIgnoresMIToken(t *testing.T) {
+	// Empty Prompt: ConsolePane does not hardcode MI tokens; GDBWidget strips those.
 	p := NewConsolePane("gdb")
 	p.Prompt = ""
 	p.buf.AppendLine("output")
-	p.buf.AppendLine("(gdb) ")
+	p.buf.AppendLine(gdb.MIPromptLiveHost)
 	p.SetLivePrompt(true)
 	p.StripTrailingBarePrompt()
-	if p.LivePrompt() {
-		t.Fatal("strip should clear live prompt")
-	}
-	if n := p.buf.NumLines(); n != 1 || p.buf.Line(0) != "output" {
-		t.Fatalf("buf=%v", p.buf.Lines())
+	if n := p.buf.NumLines(); n != 2 {
+		t.Fatalf("expected MI host left in place, buf=%v", p.buf.Lines())
 	}
 }
 
@@ -79,8 +78,6 @@ func TestConsolePaneEnsureLivePromptNoopWhenEmpty(t *testing.T) {
 	}
 }
 
-// When scrollback fills the pane, the live (gdb) host must share the bottom
-// row with the caret — not sit one line above an empty input row.
 func TestConsolePaneLivePromptAttachedOnLastViewportRow(t *testing.T) {
 	p := NewConsolePane("gdb")
 	p.Prompt = ""
@@ -88,7 +85,7 @@ func TestConsolePaneLivePromptAttachedOnLastViewportRow(t *testing.T) {
 	for i := 0; i < h+3; i++ {
 		p.buf.AppendLine("line")
 	}
-	p.buf.AppendLine("(gdb) ")
+	p.buf.AppendLine(gdb.MIPromptLiveHost)
 	p.SetLivePrompt(true)
 	p.Input().InsertText("help")
 
@@ -96,12 +93,13 @@ func TestConsolePaneLivePromptAttachedOnLastViewportRow(t *testing.T) {
 	c := NewCanvas(g).WithRect(NewRect(0, 0, w, h))
 	p.Draw(c)
 
+	want := strings.TrimRight(gdb.MIPromptLiveHost+"help", " ")
 	bottom := strings.TrimRight(gridRow(g, h-1, w), " ")
-	if bottom != "(gdb) help" {
-		t.Fatalf("bottom row=%q want %q", bottom, "(gdb) help")
+	if bottom != want {
+		t.Fatalf("bottom row=%q want %q", bottom, want)
 	}
 	above := strings.TrimRight(gridRow(g, h-2, w), " ")
-	if strings.Contains(above, "(gdb)") {
+	if strings.Contains(above, gdb.MIPromptToken) {
 		t.Fatalf("prompt duplicated above bottom: %q", above)
 	}
 }

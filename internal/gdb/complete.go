@@ -261,7 +261,7 @@ func captureComplete(ctx context.Context, ch <-chan core.PtyOutputMsg, out *stri
 			}
 			if msg.Data != "" {
 				out.WriteString(msg.Data)
-				if strings.Contains(msg.Data, "(gdb)") {
+				if strings.Contains(msg.Data, MIPromptToken) {
 					return
 				}
 				resetIdle()

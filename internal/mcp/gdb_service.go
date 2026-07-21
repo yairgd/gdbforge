@@ -143,7 +143,7 @@ func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Buil
 				out.WriteString(msg.Data)
 				// MI prompt ends the reply — don't wait for idle timeout (was
 				// 250ms per -break-list and froze the console under load).
-				if strings.Contains(msg.Data, "(gdb)") {
+				if strings.Contains(msg.Data, gdb.MIPromptToken) {
 					return
 				}
 				resetIdle()

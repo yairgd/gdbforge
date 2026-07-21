@@ -200,7 +200,7 @@ func hasTokenPrefix(line, kind string) bool {
 }
 
 func isMILine(line string) bool {
-	if line == "" || line == "(gdb)" {
+	if line == "" || gdb.IsMIPromptRecord(line) {
 		return true
 	}
 	if strings.HasPrefix(line, ">>>") {
