@@ -15,6 +15,7 @@ import (
 func (a *DebuggerApp) initBuiltins() error {
 	a.builtins = make(map[string]termui.Widget)
 	a.fileBuffers = make(map[string]*widgets.CodeWidget)
+	a.bufferListed = make(map[string]struct{})
 
 	a.aboutWidget = widgets.NewAboutWidget()
 	a.registerBuiltin("about", a.aboutWidget)

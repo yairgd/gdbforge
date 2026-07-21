@@ -66,9 +66,11 @@ func (a *DebuggerApp) toggleCodeBreakEnable() {
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
+	// Cmdline owns completion — never keep a prior GDB wildmenu session.
 	a.completionForGDB = false
 	a.cmdWidget.HandleEvent(ev)
 	if ev.Key() == tcell.KeyTAB && a.completionActive() {
+		a.completionForGDB = false
 		a.SetMode(platform.ModeCompletion)
 		a.RequestFrame()
 		return true
@@ -97,7 +99,11 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	isType := ev.Key() == tcell.KeyRune && ev.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) == 0
 	isBS := ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2
 	if isType || isBS {
-		if a.completionForGDB && a.gdbWidget != nil {
+		// Prefer cmdline when it is active so a stuck completionForGDB flag
+		// cannot route :b editing into MI -complete.
+		useGDB := a.completionForGDB && a.gdbWidget != nil &&
+			(a.cmdWidget == nil || !a.cmdWidget.Active())
+		if useGDB {
 			if isType {
 				a.gdbWidget.InsertInputRune(ev.Rune())
 			} else {
@@ -108,6 +114,7 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 			return true
 		}
 		if a.cmdWidget != nil {
+			a.completionForGDB = false
 			a.cmdWidget.HandleEvent(ev)
 			if !a.cmdWidget.Active() {
 				a.clearCompletion()
@@ -141,6 +148,7 @@ func (a *DebuggerApp) leaveCompletionMode() {
 		a.SetMode(platform.ModeInsert)
 		return
 	}
+	a.completionForGDB = false
 	a.SetMode(platform.ModeCommand)
 }
 
@@ -314,6 +322,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 // enterCommandMode activates the ':' cmdline (same as pressing ':').
 // Leaves insert-active so the focused pane status is blue, matching Esc then ':'.
 func (a *DebuggerApp) enterCommandMode() {
+	a.completionForGDB = false
 	a.clearCompletion()
 	if a.tab != nil {
 		a.tab.SetInsertActive(false)
@@ -327,6 +336,7 @@ func (a *DebuggerApp) enterCommandMode() {
 
 // leaveCommandMode exits ':' / wildmenu (same as Esc).
 func (a *DebuggerApp) leaveCommandMode() {
+	a.completionForGDB = false
 	a.clearCompletion()
 	if a.cmdWidget != nil {
 		a.cmdWidget.Deativate()
@@ -359,8 +369,12 @@ func (a *DebuggerApp) clickCmdLine(screenX int) {
 		}
 	}
 	if a.Mode() == platform.ModeCompletion {
+		a.completionForGDB = false
 		a.clearCompletion()
 		a.SetMode(platform.ModeCommand)
+		if a.cmdWidget != nil && !a.cmdWidget.Active() {
+			a.cmdWidget.Activate()
+		}
 	}
 	a.cmdWidget.SetCursorAtLocalX(screenX - originX)
 	a.RequestFrame()

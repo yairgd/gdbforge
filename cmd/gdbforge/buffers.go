@@ -59,7 +59,9 @@ func (a *DebuggerApp) findFileBuffer(name string) *widgets.CodeWidget {
 	return nil
 }
 
-// bufferCompletions returns dynamic :b Tab candidates (builtins + open file buffers).
+// bufferCompletions returns :b Tab candidates: builtins + buffers the user
+// opened with :edit / file-list. Auto-opened code from stop/stack/BP is kept
+// out of the wildmenu (GDB SourceFiles includes deps like ldo.c / lapi.c).
 func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 	seen := make(map[string]struct{})
 	var names []string
@@ -79,14 +81,29 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 	for name := range a.builtins {
 		add(name)
 	}
-	for path, w := range a.fileBuffers {
-		if w != nil && w.PaneName != "" {
+	for path := range a.bufferListed {
+		w := a.fileBuffers[path]
+		if w == nil || w.Unavailable() {
+			continue
+		}
+		if w.PaneName != "" {
 			add(w.PaneName)
 		}
 		add(filepath.Base(path))
 	}
 	sort.Strings(names)
 	return names
+}
+
+// markBufferListed adds path to :b Tab completions (explicit :edit / picker).
+func (a *DebuggerApp) markBufferListed(path string) {
+	if path == "" {
+		return
+	}
+	if a.bufferListed == nil {
+		a.bufferListed = make(map[string]struct{})
+	}
+	a.bufferListed[path] = struct{}{}
 }
 
 // resolveSourceFile maps a user argument to a readable path using SourceFiles, then disk.
@@ -206,6 +223,7 @@ func (a *DebuggerApp) openSourcePath(path string) {
 	if w == nil {
 		return
 	}
+	a.markBufferListed(path)
 	line := 1
 	if w.Path() == path && w.PCLine() > 0 {
 		line = w.PCLine()

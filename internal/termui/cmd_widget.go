@@ -237,6 +237,20 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 				if len(children) > 0 || node.RestArgs {
 					c.text += " "
 					c.cursor = len([]rune(c.text))
+					// :b / :e / :layout — after accepting the command, immediately
+					// show rest-arg candidates (buffers, files, layouts) so Tab
+					// does not look like GDB -complete on an empty token.
+					if node.RestArgs && node.CompleteArgs != nil {
+						c.syncParser()
+						rest := c.parser.SuggestionNames()
+						if c.Ctx.Bus != nil {
+							platform.Publish(c.Ctx.Bus, CompletionMsg{
+								Input: c.text,
+								Token: c.parser.CurrentToken(),
+								Names: rest,
+							})
+						}
+					}
 				}
 			}
 			return

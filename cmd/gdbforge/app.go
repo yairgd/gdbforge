@@ -65,6 +65,9 @@ type DebuggerApp struct {
 
 	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
 	fileBuffers map[string]*widgets.CodeWidget
+	// bufferListed paths appear in :b Tab. Only :edit / FileList open marks them —
+	// stop / callstack / BP preview must not pollute the wildmenu (ldo.c, …).
+	bufferListed map[string]struct{}
 
 	breakpoints      *models.BreakpointList
 	threads          *models.ThreadList

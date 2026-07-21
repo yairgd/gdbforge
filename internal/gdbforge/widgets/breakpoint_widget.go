@@ -13,7 +13,8 @@ import (
 // The app owns Merge/Toggle/Delete and GDB sends; this widget only paints
 // SetItems and fires OnActivate / OnToggle / OnDelete intents.
 //
-//	j/k or Up/Down — bold selection; OnActivate
+//	j/k or Up/Down — move selection and OnActivate (like Enter)
+//	wheel — same (Code jumps to the breakpoint)
 //	Enter / click — OnActivate
 //	e — OnToggle(selected)
 //	d — OnDelete(selected)
@@ -71,8 +72,8 @@ func (w *BreakpointWidget) SetItems(items []mcp.BreakInfo) {
 }
 
 func (w *BreakpointWidget) initKeyBindings() {
-	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
-	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
@@ -150,7 +151,6 @@ func (w *BreakpointWidget) move(delta int) {
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
 	w.viewport.EnsureLineVisible()
-	w.activateSelected()
 }
 
 func (w *BreakpointWidget) syncSelectedFromViewport() {
@@ -214,8 +214,20 @@ func (w *BreakpointWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		btns := e.Buttons()
+		// Wheel moves selection and activates so Code jumps to the breakpoint.
+		if btns&tcell.WheelUp != 0 {
+			w.move(-1)
+			w.activateSelected()
+			return
+		}
+		if btns&tcell.WheelDown != 0 {
+			w.move(1)
+			w.activateSelected()
+			return
+		}
 		w.viewport.HandleEvent(e)
-		if e.Buttons()&tcell.ButtonPrimary != 0 {
+		if btns&tcell.ButtonPrimary != 0 {
 			w.syncSelectedFromViewport()
 			w.activateSelected()
 		}

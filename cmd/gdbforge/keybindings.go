@@ -123,11 +123,11 @@ func (a *DebuggerApp) initCompletionKeyBindings() {
 		commands.NewCommand("accept", func(args ...any) {
 			if a.completionMenu != nil {
 				if name := a.completionMenu.Selected(); name != "" {
-					if a.completionForGDB {
-						if a.gdbWidget != nil {
-							cur := a.gdbWidget.InputText()
-							a.gdbWidget.ApplyCompletion(gdb.ApplyMenuChoice(cur, name))
-						}
+					useGDB := a.completionForGDB && a.gdbWidget != nil &&
+						(a.cmdWidget == nil || !a.cmdWidget.Active())
+					if useGDB {
+						cur := a.gdbWidget.InputText()
+						a.gdbWidget.ApplyCompletion(gdb.ApplyMenuChoice(cur, name))
 					} else if a.cmdWidget != nil {
 						a.cmdWidget.ApplyCompletion(name)
 					}

@@ -105,3 +105,18 @@ func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 		t.Fatalf("enter activated=%v", got)
 	}
 }
+
+func TestBreakpointWidgetWheelActivates(t *testing.T) {
+	w := NewBreakpointWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.BreakInfo{
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
+		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
+	})
+	var got mcp.BreakInfo
+	w.OnActivate = func(bp mcp.BreakInfo) { got = bp }
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
+	if w.Selected() != 1 || got.Number != 2 {
+		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
+	}
+}

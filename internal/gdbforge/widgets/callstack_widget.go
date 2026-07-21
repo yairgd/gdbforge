@@ -10,8 +10,11 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// CallStackWidget shows GDB stack frames (j/k / Up/Down / mouse wheel
-// selection; same keys, Enter, click, and wheel activate the selected frame).
+// CallStackWidget shows GDB stack frames.
+//
+//	j/k or Up/Down — move selection and OnActivate (like Enter)
+//	wheel — same (Code follows the selected frame)
+//	Enter / click — OnActivate
 type CallStackWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -21,8 +24,7 @@ type CallStackWidget struct {
 	items    []mcp.StackFrame
 	selected int
 
-	// OnActivate is called when the user activates a frame (Up/Down/j/k,
-	// Enter, click, or mouse wheel).
+	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(mcp.StackFrame)
 }
 
@@ -50,8 +52,8 @@ func (w *CallStackWidget) SetAppState(st *platform.AppState) {
 }
 
 func (w *CallStackWidget) initKeyBindings() {
-	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
-	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
@@ -97,7 +99,6 @@ func (w *CallStackWidget) move(delta int) {
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
 	w.viewport.EnsureLineVisible()
-	w.activateSelected()
 }
 
 // syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
@@ -185,13 +186,15 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		btns := e.Buttons()
-		// Wheel moves the blue selection and activates like Enter (not view-only scroll).
+		// Wheel moves selection and activates so Code follows the frame.
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
+			w.activateSelected()
 			return
 		}
 		if btns&tcell.WheelDown != 0 {
 			w.move(1)
+			w.activateSelected()
 			return
 		}
 		w.viewport.HandleEvent(e)

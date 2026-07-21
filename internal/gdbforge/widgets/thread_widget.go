@@ -10,8 +10,11 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// ThreadWidget shows GDB threads (j/k / Up/Down / mouse wheel selection; same
-// keys, Enter, click, and wheel activate the selected thread).
+// ThreadWidget shows GDB threads.
+//
+//	j/k or Up/Down — move selection and OnActivate (like Enter)
+//	wheel — move highlight only (avoids flooding :b with paths)
+//	Enter / click — OnActivate
 type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -21,8 +24,7 @@ type ThreadWidget struct {
 	items    []mcp.ThreadInfo
 	selected int
 
-	// OnActivate is called when the user activates a thread (Up/Down/j/k,
-	// Enter, click, or mouse wheel).
+	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(mcp.ThreadInfo)
 }
 
@@ -50,8 +52,8 @@ func (w *ThreadWidget) SetAppState(st *platform.AppState) {
 }
 
 func (w *ThreadWidget) initKeyBindings() {
-	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
-	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
@@ -97,7 +99,6 @@ func (w *ThreadWidget) move(delta int) {
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
 	w.viewport.EnsureLineVisible()
-	w.activateSelected()
 }
 
 // syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
@@ -178,7 +179,7 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		btns := e.Buttons()
-		// Wheel moves the blue selection and activates like Enter (not view-only scroll).
+		// Wheel only moves the selection highlight (not activate).
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
 			return
