@@ -54,6 +54,7 @@ func (m *GdbInputState) PushRaw(data string) MiUpdate {
 
 func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 	line = strings.TrimSpace(line)
+	line = stripMILinePrefix(line)
 	if line == "" {
 		return
 	}
@@ -103,6 +104,13 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 			}
 		}
 		out.Stopped = &stop
+		// Ctrl-C / signals: ensure the classic GDB one-liner appears even when
+		// ~ streams were fragmented or prefixed with a ^C PTY echo.
+		if stop.Reason == "signal-received" {
+			if msg := formatSignalReceived(line); msg != "" && !displayHasSignalMsg(out.DisplayLines) {
+				out.DisplayLines = append(out.DisplayLines, msg)
+			}
+		}
 
 	case line == "(gdb)":
 		out.PromptReady = true
@@ -116,6 +124,59 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 	default:
 		// other notify (=...), async, or partial — ignore for display
 	}
+}
+
+// stripMILinePrefix removes PTY echo noise glued onto MI records — especially
+// Ctrl-C (\x03), which GDB prints as ^C immediately before the first ~"...".
+// Also peels numeric MI tokens ("42^done").
+func stripMILinePrefix(line string) string {
+	for len(line) > 0 {
+		switch line[0] {
+		case '~', '@', '&', '^', '*', '=', '(':
+			return line
+		}
+		if line[0] >= '0' && line[0] <= '9' {
+			i := 0
+			for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+				i++
+			}
+			if i > 0 && i < len(line) {
+				switch line[i] {
+				case '^', '*', '=':
+					return line[i:]
+				}
+			}
+			return line
+		}
+		// ASCII control (Ctrl-C echo) or DEL — drop and keep looking.
+		if line[0] < 0x20 || line[0] == 0x7f {
+			line = line[1:]
+			continue
+		}
+		return line
+	}
+	return line
+}
+
+func formatSignalReceived(line string) string {
+	name := ExtractMIField(line, "signal-name")
+	meaning := ExtractMIField(line, "signal-meaning")
+	if name == "" {
+		return ""
+	}
+	if meaning != "" {
+		return "Program received signal " + name + ", " + meaning + "."
+	}
+	return "Program received signal " + name + "."
+}
+
+func displayHasSignalMsg(lines []string) bool {
+	for _, ln := range lines {
+		if strings.Contains(ln, "received signal") {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeStreamPayload(line string) []string {

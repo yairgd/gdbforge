@@ -2,6 +2,7 @@ package gdb
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -73,6 +74,32 @@ func TestPushRawTargetStreamSeparate(t *testing.T) {
 	}
 	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "(gdb) " {
 		t.Fatalf("DisplayLines=%v (console ~ must stay separate from @)", u.DisplayLines)
+	}
+}
+
+func TestPushRawCtrlCPrefixedConsoleStream(t *testing.T) {
+	st := NewGdbInputState()
+	// GDB echoes Ctrl-C on the PTY, glued to the first ~ console record.
+	raw := "\x03~\"\\nProgram\"\n~\" received signal SIGINT, Interrupt.\\n\"\n" +
+		`*stopped,reason="signal-received",signal-name="SIGINT",signal-meaning="Interrupt"` + "\n(gdb)\n"
+	u := st.PushRaw(raw)
+	if u.Stopped == nil || u.Stopped.Reason != "signal-received" {
+		t.Fatalf("stopped=%+v", u.Stopped)
+	}
+	joined := strings.Join(u.DisplayLines, "")
+	if !strings.Contains(joined, "Program") || !strings.Contains(joined, "SIGINT") {
+		t.Fatalf("expected full signal message in display, got %q", u.DisplayLines)
+	}
+	if !u.PromptReady {
+		t.Fatal("expected PromptReady")
+	}
+}
+
+func TestPushRawSignalReceivedSynthesizesWhenNoConsoleStream(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw(`*stopped,reason="signal-received",signal-name="SIGINT",signal-meaning="Interrupt"` + "\n(gdb)\n")
+	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != "Program received signal SIGINT, Interrupt." {
+		t.Fatalf("display=%q", u.DisplayLines)
 	}
 }
 
