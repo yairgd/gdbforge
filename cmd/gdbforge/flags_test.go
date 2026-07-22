@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"reflect"
 	"testing"
 )
 
@@ -17,8 +18,8 @@ func TestParseFlagsDefaults(t *testing.T) {
 	if cfg.Prog != "./hello" {
 		t.Fatalf("Prog: got %q", cfg.Prog)
 	}
-	if len(cfg.ProgArgs) != 0 {
-		t.Fatalf("ProgArgs: got %v", cfg.ProgArgs)
+	if !reflect.DeepEqual(cfg.GDBArgs, []string{"./hello"}) {
+		t.Fatalf("GDBArgs: got %v", cfg.GDBArgs)
 	}
 }
 
@@ -33,8 +34,29 @@ func TestParseFlagsWithDebuggerAndArgs(t *testing.T) {
 	if cfg.Prog != "./hello" {
 		t.Fatalf("Prog: got %q", cfg.Prog)
 	}
-	if len(cfg.ProgArgs) != 2 || cfg.ProgArgs[0] != "a" || cfg.ProgArgs[1] != "b" {
-		t.Fatalf("ProgArgs: got %v", cfg.ProgArgs)
+	want := []string{"--args", "./hello", "a", "b"}
+	if !reflect.DeepEqual(cfg.GDBArgs, want) {
+		t.Fatalf("GDBArgs: got %v want %v", cfg.GDBArgs, want)
+	}
+}
+
+func TestParseFlagsPassThroughGDBOptions(t *testing.T) {
+	cfg, err := parseFlags([]string{
+		"-d", "/usr/bin/gdb", "--",
+		"-nx", "-x", "/tmp/r5_debug.gdb", "/tmp/zephyr.elf",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GDBPath != "/usr/bin/gdb" {
+		t.Fatalf("GDBPath: got %q", cfg.GDBPath)
+	}
+	want := []string{"-nx", "-x", "/tmp/r5_debug.gdb", "/tmp/zephyr.elf"}
+	if !reflect.DeepEqual(cfg.GDBArgs, want) {
+		t.Fatalf("GDBArgs: got %v want %v", cfg.GDBArgs, want)
+	}
+	if cfg.Prog != "/tmp/zephyr.elf" {
+		t.Fatalf("Prog: got %q", cfg.Prog)
 	}
 }
 

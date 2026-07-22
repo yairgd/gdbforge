@@ -99,6 +99,16 @@ Optional: pick another GDB binary with `-d`:
 ./bin/gdbforge -d /usr/bin/gdb ./hello
 ```
 
+Pass **GDB options** after `--` (cgdb-style), e.g. `-nx` / `-x` for board scripts:
+
+```bash
+./bin/gdbforge -d /usr/bin/gdb -- -nx -x ./r5_debug.gdb ./zephyr.elf
+```
+
+```text
+gdbforge [gdbforge options] [--] [gdb options]
+```
+
 ---
 
 ## User guide

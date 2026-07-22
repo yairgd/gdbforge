@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -31,7 +32,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	logWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("logger", logWidget)
 
-	client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.Prog, a.cfg.ProgArgs...)
+	client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.GDBArgs)
 	if err != nil {
 		return err
 	}
@@ -43,7 +44,12 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
 	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
 	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
+	// Replay -x / banner captured before the UI subscribed, then attach live PTY.
+	if boot := client.TakeStartupOutput(); boot != "" {
+		a.handleGdbOutputMsg(core.GdbOutputMsg{Data: boot})
+	}
 	a.startGdbConsoleBridge()
+	_ = client.ConfigureInferiorTTY()
 	a.registerBuiltin("gdb", a.gdbWidget)
 
 	a.outputWidget = widgets.NewOutputWidget()
@@ -54,7 +60,10 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.registerBuiltin("io", a.outputWidget)
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
 	a.maybeClearOutput()
-	a.maybeBreakMain()
+	// Scripts via -x already set breakpoints (e.g. break main); skip default.
+	if !gdb.HasInitScript(a.cfg.GDBArgs) {
+		a.maybeBreakMain()
+	}
 
 	a.breakpoints = &models.BreakpointList{}
 	a.threads = &models.ThreadList{}

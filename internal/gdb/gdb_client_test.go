@@ -17,7 +17,7 @@ func TestNewGDBClientStartsAndCloses(t *testing.T) {
 		t.Skip("hello binary not present")
 	}
 
-	client, err := NewGDBClient("gdb", prog)
+	client, err := NewGDBClient("gdb", []string{prog})
 	if err != nil {
 		t.Skipf("gdb/pty unavailable: %v", err)
 	}
@@ -50,10 +50,10 @@ func TestNewGDBClientStartsAndCloses(t *testing.T) {
 	}
 }
 
-func TestNewGDBClientRequiresProg(t *testing.T) {
-	_, err := NewGDBClient("gdb", "")
+func TestNewGDBClientRequiresArgs(t *testing.T) {
+	_, err := NewGDBClient("gdb", nil)
 	if err == nil {
-		t.Fatal("expected error for empty prog")
+		t.Fatal("expected error for empty gdb args")
 	}
 }
 
@@ -62,7 +62,7 @@ func TestConcurrentSendSerialized(t *testing.T) {
 	if _, err := os.Stat(prog); err != nil {
 		t.Skip("hello binary not present")
 	}
-	client, err := NewGDBClient("gdb", prog)
+	client, err := NewGDBClient("gdb", []string{prog})
 	if err != nil {
 		t.Skipf("gdb/pty unavailable: %v", err)
 	}
@@ -82,4 +82,16 @@ func TestConcurrentSendSerialized(t *testing.T) {
 func TestGDBClientIsSession(t *testing.T) {
 	var _ core.Session = (*GDBClient)(nil)
 	var _ core.Session = (*ptyx.Client)(nil)
+}
+
+func TestHasInitScript(t *testing.T) {
+	if HasInitScript([]string{"prog"}) {
+		t.Fatal("plain prog should not count as init script")
+	}
+	if !HasInitScript([]string{"-nx", "-x", "r5_debug.gdb", "prog.elf"}) {
+		t.Fatal("expected -x to count")
+	}
+	if !HasInitScript([]string{"-ex=break main", "prog"}) {
+		t.Fatal("expected -ex= to count")
+	}
 }
