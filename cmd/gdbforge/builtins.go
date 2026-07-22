@@ -88,6 +88,7 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.GDB(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
+	a.gdbMcp.SetDomain(appDebugDomain{app: a})
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}

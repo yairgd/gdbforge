@@ -15,7 +15,8 @@ alwaysApply: true
 | `cmd/gdbforge/*.go` methods | GUI controller (intents → model → Send / SetItems) |
 | `internal/mcp` (`GdbMcpService`) | Peer controller (AI) on the same session |
 | `internal/gdb` (`GDBClient`, `SendCmd`) | Shared session / pipe — not a controller |
-| `internal/gdbforge/models` | Shared domain model |
+| `internal/gdbforge/models` | Shared MVC data (`BreakpointList`, …) |
+| `internal/gdbforge/domain` | `DebugDomain` surface for AI / future Lua |
 | `internal/gdbforge/widgets`, `internal/termui` | Views only (paint + callbacks) |
 
 ## One shared resource, two controllers
@@ -31,7 +32,7 @@ alwaysApply: true
 | GDB console submit/paint | `gdb_console.go` + `widgets/gdb_widget.go` |
 | Threads / callstack | `debug_info.go` / `stopped.go` + widgets |
 | `:b` completions | `buffers.go` (`bufferCompletions`, `bufferListed`) |
-| AI / MCP tools | `internal/mcp` |
+| AI / MCP tools | `internal/mcp/tools.go` + `cmd/gdbforge/debug_domain.go` implements `gdbforge/domain` |
 | MVC docs | `docs/ARCHITECTURE.md` § MVC |
 
 ## Do not

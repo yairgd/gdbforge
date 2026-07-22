@@ -13,6 +13,7 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 The GDB debugger app is organized as **Model–View–Controller**:
 
 **One shared model, two controllers (GUI + MCP/AI), views only for humans.**
+Peer controllers are **symmetrical** on an app-owned **domain surface** (list/set breakpoints, threads, frames): AI tools call the same helpers as the GUI. A future Lua controller can bind that surface too (must use the PTY write mux). Raw `gdb_command` remains an escape hatch only.
 
 ```mermaid
 flowchart TB
@@ -24,6 +25,7 @@ flowchart TB
     subgraph model ["Shared model"]
         Sess["Session · GDBClient"]
         Dom["Domain snapshots<br/>BreakpointList · ThreadList · CallStack · AppState · …"]
+        Surf["gdbforge/domain.DebugDomain"]
     end
 
     subgraph views ["Views · humans only"]
@@ -32,8 +34,10 @@ flowchart TB
 
     GUI -->|"Send / Query / Merge"| Sess
     GUI -->|"update"| Dom
+    GUI -->|"implements"| Surf
+    MCP -->|"domain tools + gdb_command"| Surf
     MCP -->|"Send / Query / WithWrite"| Sess
-    MCP -.->|"same domain facts"| Dom
+    Surf -->|"reads/writes"| Dom
 
     Dom -->|"SetItems / Paint"| W
     W -->|"OnActivate / OnToggle / OnSubmit · intents only"| GUI
@@ -42,6 +46,7 @@ flowchart TB
 | Layer | Owns | Lives in |
 |-------|------|----------|
 | **Model** | Session + domain snapshots (breakpoints, threads, call stack, AppState, …) | `DebuggerApp`, `internal/gdb`, `internal/gdbforge/models` |
+| **Domain surface** | Peer ops (list/set BP, threads, frames) for AI / future Lua | `internal/gdbforge/domain` (iface) · `cmd/gdbforge/debug_domain.go` (impl) |
 | **Controller** | Intents → mutate model → push paint / `Send` | GUI: `cmd/gdbforge` · MCP/AI: `internal/mcp` (peer on `app.GDB()`) |
 | **View** | Paint + chrome + callbacks only (`SetItems`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/domain"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -24,6 +25,9 @@ type GdbMcpService struct {
 
 	captureIdle time.Duration
 	captureMax  time.Duration
+
+	// domain is the app-owned shared model surface (AI tools; future Lua).
+	domain domain.DebugDomain
 
 	// OnBreakpointsChanged is invoked after a command whose PTY output
 	// includes =breakpoint-created/deleted. Lets the UI refresh even if a

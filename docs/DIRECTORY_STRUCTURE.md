@@ -33,7 +33,9 @@ gdbforge/
 │   ├── commands/          # Command tree, parser, DSL, key bindings ★
 │   ├── collections/       # Shared trie (keys + command children) ★
 │   ├── platform/          # Buffer, Logger, AppContext ★
-│   ├── gdbforge/              # App layer: layouts + debugger widgets ★
+│   ├── gdbforge/              # App layer: models, domain, layouts, widgets ★
+│   │   ├── models/
+│   │   ├── domain/
 │   │   ├── layout/
 │   │   └── widgets/
 │   ├── core/              # UI-agnostic domain logic ★
@@ -143,6 +145,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `models/breakpoints.go` | `BreakpointList` — shared BP model (GUI + MCP) |
 | `models/threads.go` | `ThreadList` — stop snapshot |
 | `models/callstack.go` | `CallStack` — frame snapshot |
+| `domain/domain.go` | `DebugDomain` — peer-controller surface (AI now; future Lua) |
 | `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
 | `layout/default.go` | Multi-pane: Code/GDB left; IO / BP / Threads / Callstack right |
 | `layout/panels.go` | Code/GDB left; IO over (Threads\|Callstack) over Breakpoints |
@@ -165,10 +168,11 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | File | Responsibility |
 |------|----------------|
 | `gdb_service.go` | `GdbMcpService` — `GdbCommand` under `WithWrite` + output capture |
+| `tools.go` | LLM tool dispatch → `gdbforge/domain.DebugDomain` |
 | `break_list.go` | Parse `-break-list` / pending BPs into `BreakInfo` |
 | `thread_info.go` | Parse `-thread-info` into `ThreadInfo` |
 | `stack_frames.go` | Parse `-stack-list-frames` into `StackFrame` |
-| `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with `gdb_command` tool |
+| `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with domain tools + `gdb_command` |
 
 ## internal/ptyx
 
@@ -299,7 +303,8 @@ flowchart BT
 
 | Question | Package |
 |----------|---------|
-| Application model (domain state)? | App layer (`cmd/gdbforge`, future `internal/gdbforge/models/`) |
+| Application model (domain state)? | `internal/gdbforge/models` |
+| Peer control surface (AI / Lua)? | `internal/gdbforge/domain` (+ `cmd/gdbforge/debug_domain.go` impl) |
 | Service (external I/O)? | `gdb` or future backend packages |
 | Split pane layout / window manager? | `termui` |
 | Widget (view of a model)? | `internal/gdbforge/widgets` or `termui` |

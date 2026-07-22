@@ -14,8 +14,14 @@ import (
 
 const maxToolRounds = 8
 
+const agentSystemPrompt = `You are a debugging assistant inside gdbforge.
+Prefer domain tools that read/write the shared debugger models (same truth as the GUI):
+list_breakpoints, list_threads, list_frames, set_breakpoint, clear_breakpoint.
+Use gdb_command only for GDB/MI that has no domain tool (e.g. continue, next, print).
+Explain findings clearly.`
+
 // Ask sends a natural-language debug question to an LLM (Anthropic or OpenAI)
-// with gdb_command as a tool, using the shared GdbMcpService session.
+// with domain + gdb_command tools on the shared GdbMcpService session.
 func (s *GdbMcpService) Ask(ctx context.Context, question string) (string, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
@@ -34,16 +40,59 @@ func (s *GdbMcpService) Ask(ctx context.Context, question string) (string, error
 	return "", fmt.Errorf("set ANTHROPIC_API_KEY or OPENAI_API_KEY for :AI")
 }
 
-func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question string) (string, error) {
-	model := os.Getenv("GDBFORGE_AI_MODEL")
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
-	}
-	system := "You are a debugging assistant inside gdbforge. Use the gdb_command tool to run GDB/MI commands on the live session. Prefer short commands. Explain findings clearly."
-	tools := []any{
+func anthropicTools() []any {
+	return []any{
+		map[string]any{
+			"name":        "list_breakpoints",
+			"description": "List breakpoints from the shared model (same as the Breakpoints pane).",
+			"input_schema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		map[string]any{
+			"name":        "list_threads",
+			"description": "List threads from the shared model (same as the Threads pane).",
+			"input_schema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		map[string]any{
+			"name":        "list_frames",
+			"description": "List call-stack frames from the shared model (same as the Call Stack pane).",
+			"input_schema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		map[string]any{
+			"name":        "set_breakpoint",
+			"description": "Set a breakpoint at file:line using the same path as the GUI (Space).",
+			"input_schema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"file": map[string]any{"type": "string", "description": "Source path or basename"},
+					"line": map[string]any{"type": "integer", "description": "1-based line"},
+				},
+				"required": []string{"file", "line"},
+			},
+		},
+		map[string]any{
+			"name":        "clear_breakpoint",
+			"description": "Clear a breakpoint at file:line using the same path as the GUI (Space).",
+			"input_schema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"file": map[string]any{"type": "string"},
+					"line": map[string]any{"type": "integer"},
+				},
+				"required": []string{"file", "line"},
+			},
+		},
 		map[string]any{
 			"name":        "gdb_command",
-			"description": "Run a GDB or GDB/MI command on the live debugger (e.g. 'b main.c:123', 'info break', '-break-list').",
+			"description": "Escape hatch: run a raw GDB/MI command when no domain tool applies.",
 			"input_schema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -53,6 +102,51 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 			},
 		},
 	}
+}
+
+func openaiTools() []map[string]any {
+	type param = map[string]any
+	wrap := func(name, desc string, parameters param) map[string]any {
+		return map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        name,
+				"description": desc,
+				"parameters":   parameters,
+			},
+		}
+	}
+	emptyObj := param{"type": "object", "properties": param{}}
+	fileLine := param{
+		"type": "object",
+		"properties": param{
+			"file": param{"type": "string"},
+			"line": param{"type": "integer"},
+		},
+		"required": []string{"file", "line"},
+	}
+	return []map[string]any{
+		wrap("list_breakpoints", "List breakpoints from the shared model", emptyObj),
+		wrap("list_threads", "List threads from the shared model", emptyObj),
+		wrap("list_frames", "List call-stack frames from the shared model", emptyObj),
+		wrap("set_breakpoint", "Set breakpoint at file:line (same as GUI Space)", fileLine),
+		wrap("clear_breakpoint", "Clear breakpoint at file:line (same as GUI Space)", fileLine),
+		wrap("gdb_command", "Raw GDB/MI escape hatch", param{
+			"type": "object",
+			"properties": param{
+				"command": param{"type": "string"},
+			},
+			"required": []string{"command"},
+		}),
+	}
+}
+
+func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question string) (string, error) {
+	model := os.Getenv("GDBFORGE_AI_MODEL")
+	if model == "" {
+		model = "claude-sonnet-4-20250514"
+	}
+	tools := anthropicTools()
 	messages := []map[string]any{
 		{"role": "user", "content": []map[string]any{{"type": "text", "text": question}}},
 	}
@@ -62,7 +156,7 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 		body, _ := json.Marshal(map[string]any{
 			"model":      model,
 			"max_tokens": 2048,
-			"system":     system,
+			"system":     agentSystemPrompt,
 			"tools":      tools,
 			"messages":   messages,
 		})
@@ -128,14 +222,7 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 			if b.Type != "tool_use" {
 				continue
 			}
-			var in struct {
-				Command string `json:"command"`
-			}
-			_ = json.Unmarshal(b.Input, &in)
-			out, err := s.GdbCommand(ctx, in.Command)
-			if err != nil {
-				out = "error: " + err.Error()
-			}
+			out := s.runTool(ctx, b.Name, b.Input)
 			toolResults = append(toolResults, map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": b.ID,
@@ -161,23 +248,10 @@ func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) 
 		model = "gpt-4o-mini"
 	}
 	messages := []map[string]any{
-		{"role": "system", "content": "You are a debugging assistant inside gdbforge. Use gdb_command to run GDB on the live session."},
+		{"role": "system", "content": agentSystemPrompt},
 		{"role": "user", "content": question},
 	}
-	tools := []map[string]any{{
-		"type": "function",
-		"function": map[string]any{
-			"name":        "gdb_command",
-			"description": "Run a GDB or GDB/MI command on the live debugger",
-			"parameters": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"command": map[string]any{"type": "string"},
-				},
-				"required": []string{"command"},
-			},
-		},
-	}}
+	tools := openaiTools()
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	for round := 0; round < maxToolRounds; round++ {
@@ -210,6 +284,7 @@ func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) 
 					ToolCalls []struct {
 						ID       string `json:"id"`
 						Function struct {
+							Name      string `json:"name"`
 							Arguments string `json:"arguments"`
 						} `json:"function"`
 					} `json:"tool_calls"`
@@ -235,14 +310,8 @@ func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) 
 			return msg.Content, nil
 		}
 		for _, tc := range msg.ToolCalls {
-			var in struct {
-				Command string `json:"command"`
-			}
-			_ = json.Unmarshal([]byte(tc.Function.Arguments), &in)
-			out, err := s.GdbCommand(ctx, in.Command)
-			if err != nil {
-				out = "error: " + err.Error()
-			}
+			name := tc.Function.Name
+			out := s.runTool(ctx, name, json.RawMessage(tc.Function.Arguments))
 			messages = append(messages, map[string]any{
 				"role":         "tool",
 				"tool_call_id": tc.ID,
