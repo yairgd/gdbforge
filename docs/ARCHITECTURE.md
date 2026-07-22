@@ -12,19 +12,47 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 
 The GDB debugger app is organized as **Model–View–Controller**:
 
+**One shared model, two controllers (GUI + MCP/AI), views only for humans.**
+
+```mermaid
+flowchart TB
+    subgraph controllers ["Controllers"]
+        GUI["GUI · DebuggerApp<br/>cmd/gdbforge"]
+        MCP["MCP / AI · GdbMcpService<br/>peer on same Session"]
+    end
+
+    subgraph model ["Shared model"]
+        Sess["Session · GDBClient"]
+        Dom["Domain snapshots<br/>BreakpointList · ThreadList · CallStack · AppState · …"]
+    end
+
+    subgraph views ["Views · humans only"]
+        W["Widgets<br/>Code · GDB · Threads · Call Stack · Breakpoints · IO · …"]
+    end
+
+    GUI -->|"Send / Query / Merge"| Sess
+    GUI -->|"update"| Dom
+    MCP -->|"Send / Query / WithWrite"| Sess
+    MCP -.->|"same domain facts"| Dom
+
+    Dom -->|"SetItems / Paint"| W
+    W -->|"OnActivate / OnToggle / OnSubmit · intents only"| GUI
+```
+
 | Layer | Owns | Lives in |
 |-------|------|----------|
 | **Model** | Session + domain snapshots (breakpoints, threads, call stack, AppState, …) | `DebuggerApp`, `internal/gdb`, `internal/gdbforge/models` |
-| **Controller** | Intents → mutate model → push paint / `Send` | `cmd/gdbforge` (`gdb_console.go`, `breakpoints.go`, `io_console.go`, `stopped.go`, …) |
+| **Controller** | Intents → mutate model → push paint / `Send` | GUI: `cmd/gdbforge` · MCP/AI: `internal/mcp` (peer on `app.GDB()`) |
 | **View** | Paint + chrome + callbacks only (`SetItems`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
 
 ```text
 View (widget)  --OnToggle / OnSubmit-->  Controller (DebuggerApp)
 Controller     --Send / Query-->         Model (GDBClient, BreakpointList, …)
 Controller     --SetItems / Paint-->     View
+MCP / AI       --Send / Query-->         same Model  (no widget ownership)
 ```
 
-GUI and MCP/AI share the same models (e.g. `BreakpointList`); widgets never own `GDBClient`, `ptyx.TTY`, or domain merge logic.
+GUI and MCP/AI share the same models (e.g. `BreakpointList`); widgets never own `GDBClient`, `ptyx.TTY`, or domain merge logic. MCP does not paint — views exist for the human TUI only.
 
 ---
 

@@ -1,0 +1,41 @@
+---
+description: gdbforge orchestrator/MVC map — start here to save explore tokens
+alwaysApply: true
+---
+
+# Architecture map (read first)
+
+`DebuggerApp` (`cmd/gdbforge`) = **system-context orchestrator**. It owns and wires `GDBClient`, models, MCP/AI, and widgets. It is not “only” an MVC controller — it **hosts** GUI controller methods.
+
+## Roles
+
+| Piece | Role |
+|-------|------|
+| `DebuggerApp` | Orchestrator / system context |
+| `cmd/gdbforge/*.go` methods | GUI controller (intents → model → Send / SetItems) |
+| `internal/mcp` (`GdbMcpService`) | Peer controller (AI) on the same session |
+| `internal/gdb` (`GDBClient`, `SendCmd`) | Shared session / pipe — not a controller |
+| `internal/gdbforge/models` | Shared domain model |
+| `internal/gdbforge/widgets`, `internal/termui` | Views only (paint + callbacks) |
+
+## One shared resource, two controllers
+
+`GDBClient` is owned by `DebuggerApp`. GUI and AI both use it. Widgets never own the session.
+
+## Where to edit (common)
+
+| Task | Look here first |
+|------|-----------------|
+| Set/clear BP (Space) | `widgets/code_widget.go` → `cmd/gdbforge/breakpoints.go` → `models/breakpoints.go` |
+| BP list e/d | `widgets/breakpoint_widget.go` → `breakpoints.go` → model |
+| GDB console submit/paint | `gdb_console.go` + `widgets/gdb_widget.go` |
+| Threads / callstack | `debug_info.go` / `stopped.go` + widgets |
+| `:b` completions | `buffers.go` (`bufferCompletions`, `bufferListed`) |
+| AI / MCP tools | `internal/mcp` |
+| MVC docs | `docs/ARCHITECTURE.md` § MVC |
+
+## Do not
+
+- Put GDB `Send` / session ownership in widgets
+- Duplicate breakpoint truth outside `models.BreakpointList`
+- Treat `gdb.SendCmd` as the MVC controller (it is a transport helper)

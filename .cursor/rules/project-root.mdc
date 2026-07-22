@@ -1,0 +1,11 @@
+---
+description: Active project root for this codebase
+alwaysApply: true
+---
+
+# Project root
+
+The active project directory is **`/home/yair/gdbforge`**.
+
+- Prefer this path for edits, tests, builds, and git operations.
+- Do not assume `/home/yair/cgdb-go` or other sibling checkouts unless the user explicitly points there.
