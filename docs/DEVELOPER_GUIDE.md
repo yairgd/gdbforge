@@ -421,6 +421,7 @@ Always update docs when changing architecture-visible behavior.
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
+| Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
 | Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |
 | Shared models | `internal/gdbforge/models/`; sync in `breakpoints.go`, `debug_info.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |

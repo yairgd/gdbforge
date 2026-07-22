@@ -88,21 +88,40 @@ type AppState struct {
 
 	sourceFiles []string
 	currentFile string
-	currentLine int // 1-based; 0 = unset
+	currentLine int // 1-based; 0 = unset — browsed location (frame/BP click)
+
+	// stopFile/stopLine are the inferior PC from the last *stopped (frame 0).
+	// Green BP/stack/thread marks use this so browsing other frames does not
+	// move the green highlight off the real stop.
+	stopFile string
+	stopLine int // 1-based; 0 = unset
 
 	// markColor is the selected-row background for list pickers when focused
-	// (e.g. :edit, callstack, breakpoints). Default blue; :set markcolor <name>.
+	// (e.g. :edit, callstack, breakpoints). Default DefaultMarkColor; :set markcolor.
 	markColor tcell.Color
 	// markDimColor is the selected-row background when the list pane is not
-	// focused. Default gray; :set markdimcolor <name>.
+	// focused. Default DefaultMarkDimColor; :set markdimcolor.
 	markDimColor tcell.Color
 
 	// breakColor is the enabled-breakpoint background (CodeWidget gutter +
-	// BreakpointWidget rows). Default red; :set breakcolor <name>.
+	// BreakpointWidget rows). Default DefaultBreakColor; :set breakcolor.
 	breakColor tcell.Color
-	// breakDisabledColor is the disabled-breakpoint background. Default yellow;
-	// :set breakdisabledcolor <name>.
+	// breakDisabledColor is the disabled-breakpoint background.
+	// Default DefaultBreakDisabledColor; :set breakdisabledcolor.
 	breakDisabledColor tcell.Color
+
+	// pcColor is the program-counter row background (Code ━━▶ + matching BP
+	// list rows). Default DefaultPCColor; :set pccolor.
+	pcColor tcell.Color
+	// stackBreakColor is Call Stack row bg when ━━▶ matches a breakpoint
+	// file:line. Default DefaultStackBreakColor; :set stackbreakcolor.
+	stackBreakColor tcell.Color
+	// codeSelColor is the focused CodeWidget selection row when not on PC.
+	// Default DefaultCodeSelColor; :set codeselcolor.
+	codeSelColor tcell.Color
+	// mutedColor is dim/empty-list foreground. Default DefaultMutedColor;
+	// :set mutedcolor.
+	mutedColor tcell.Color
 
 	// escToCode: Esc leaves insert and focuses the CodeWidget leaf (default true).
 	// :set esctocode / :set noesctocode.
@@ -140,10 +159,14 @@ func NewAppState() *AppState {
 		clearOutput:        true,
 		layouts:            []string{LayoutDefault},
 		currentLayout:      LayoutDefault,
-		markColor:          tcell.ColorBlue,
-		markDimColor:       tcell.ColorGray,
-		breakColor:         tcell.ColorRed,
-		breakDisabledColor: tcell.ColorYellow,
+		markColor:          DefaultMarkColor,
+		markDimColor:       DefaultMarkDimColor,
+		breakColor:         DefaultBreakColor,
+		breakDisabledColor: DefaultBreakDisabledColor,
+		pcColor:            DefaultPCColor,
+		stackBreakColor:    DefaultStackBreakColor,
+		codeSelColor:       DefaultCodeSelColor,
+		mutedColor:         DefaultMutedColor,
 		escToCode:          true,
 		breakMain:          true,
 		gdbListenPrint:     true,
@@ -421,7 +444,8 @@ func (a *AppState) CurrentLine() int {
 	return a.currentLine
 }
 
-// SetCurrentLocation sets the PC / stop file (1-based line).
+// SetCurrentLocation sets the browsed Code location (1-based line).
+// Does not change StopFile/StopLine (green marks / real PC).
 func (a *AppState) SetCurrentLocation(file string, line int) {
 	a.mu.Lock()
 	a.currentFile = file
@@ -429,11 +453,39 @@ func (a *AppState) SetCurrentLocation(file string, line int) {
 	a.mu.Unlock()
 }
 
+func (a *AppState) StopFile() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.stopFile
+}
+
+func (a *AppState) StopLine() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.stopLine
+}
+
+// SetStopLocation records the inferior PC from *stopped (frame 0).
+func (a *AppState) SetStopLocation(file string, line int) {
+	a.mu.Lock()
+	a.stopFile = file
+	a.stopLine = line
+	a.mu.Unlock()
+}
+
+// ClearStopLocation clears the inferior PC (kill / exit).
+func (a *AppState) ClearStopLocation() {
+	a.mu.Lock()
+	a.stopFile = ""
+	a.stopLine = 0
+	a.mu.Unlock()
+}
+
 func (a *AppState) MarkColor() tcell.Color {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.markColor == tcell.ColorDefault {
-		return tcell.ColorBlue
+		return DefaultMarkColor
 	}
 	return a.markColor
 }
@@ -448,7 +500,7 @@ func (a *AppState) MarkDimColor() tcell.Color {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.markDimColor == tcell.ColorDefault {
-		return tcell.ColorGray
+		return DefaultMarkDimColor
 	}
 	return a.markDimColor
 }
@@ -463,7 +515,7 @@ func (a *AppState) BreakColor() tcell.Color {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.breakColor == tcell.ColorDefault {
-		return tcell.ColorRed
+		return DefaultBreakColor
 	}
 	return a.breakColor
 }
@@ -478,7 +530,7 @@ func (a *AppState) BreakDisabledColor() tcell.Color {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if a.breakDisabledColor == tcell.ColorDefault {
-		return tcell.ColorYellow
+		return DefaultBreakDisabledColor
 	}
 	return a.breakDisabledColor
 }
@@ -486,6 +538,66 @@ func (a *AppState) BreakDisabledColor() tcell.Color {
 func (a *AppState) SetBreakDisabledColor(c tcell.Color) {
 	a.mu.Lock()
 	a.breakDisabledColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) PCColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.pcColor == tcell.ColorDefault {
+		return DefaultPCColor
+	}
+	return a.pcColor
+}
+
+func (a *AppState) SetPCColor(c tcell.Color) {
+	a.mu.Lock()
+	a.pcColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) StackBreakColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.stackBreakColor == tcell.ColorDefault {
+		return DefaultStackBreakColor
+	}
+	return a.stackBreakColor
+}
+
+func (a *AppState) SetStackBreakColor(c tcell.Color) {
+	a.mu.Lock()
+	a.stackBreakColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) CodeSelColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.codeSelColor == tcell.ColorDefault {
+		return DefaultCodeSelColor
+	}
+	return a.codeSelColor
+}
+
+func (a *AppState) SetCodeSelColor(c tcell.Color) {
+	a.mu.Lock()
+	a.codeSelColor = c
+	a.mu.Unlock()
+}
+
+func (a *AppState) MutedColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.mutedColor == tcell.ColorDefault {
+		return DefaultMutedColor
+	}
+	return a.mutedColor
+}
+
+func (a *AppState) SetMutedColor(c tcell.Color) {
+	a.mu.Lock()
+	a.mutedColor = c
 	a.mu.Unlock()
 }
 
@@ -502,6 +614,8 @@ func ParseColorName(name string) (tcell.Color, bool) {
 		return tcell.ColorBlack, true
 	case "gray", "grey":
 		return tcell.ColorGray, true
+	case "silver":
+		return tcell.ColorSilver, true
 	case "white":
 		return tcell.ColorWhite, true
 	case "red":
@@ -512,8 +626,12 @@ func ParseColorName(name string) (tcell.Color, bool) {
 		return tcell.ColorYellow, true
 	case "cyan", "aqua":
 		return tcell.ColorAqua, true
-	case "magenta":
+	case "magenta", "purple":
 		return tcell.ColorPurple, true
+	case "darkslategray", "darkslategrey", "slategray", "slategrey":
+		return tcell.ColorDarkSlateGray, true
+	case "teal":
+		return tcell.ColorTeal, true
 	default:
 		return tcell.ColorDefault, false
 	}

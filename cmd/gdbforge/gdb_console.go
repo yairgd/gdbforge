@@ -147,7 +147,10 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 	if gdb.IsStackNavCmd(cmd) {
 		a.pendingFrameSync = true
 	}
-	send := func() { _ = c.Send(cmd) }
+	// Run-control via MI so the GDB pane does not dump CLI source/line listings
+	// (Code widget already follows *stopped).
+	sendCmd := gdb.CLIExecToMI(cmd)
+	send := func() { _ = c.Send(sendCmd) }
 	if cmd != "" {
 		w.PushHistory(cmd)
 		w.EchoSubmit(cmd)

@@ -67,6 +67,21 @@ func TestQuoteCompleteArg(t *testing.T) {
 	}
 }
 
+func TestWithCompletionSpace(t *testing.T) {
+	if got := WithCompletionSpace("jump"); got != "jump " {
+		t.Fatalf("got %q", got)
+	}
+	if got := WithCompletionSpace("jump "); got != "jump " {
+		t.Fatalf("idempotent: %q", got)
+	}
+	if got := WithCompletionSpace("src/"); got != "src/" {
+		t.Fatalf("dir: %q", got)
+	}
+	if got := WithCompletionSpace(""); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+}
+
 func TestMenuNamesStripsPriorWords(t *testing.T) {
 	matches := []string{"delete bookmark", "delete breakpoints", "delete display"}
 	got := MenuNames("delete ", matches)

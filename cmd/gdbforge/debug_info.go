@@ -68,13 +68,17 @@ func (a *DebuggerApp) clearDebugInfoPanes() {
 }
 
 // clearBreakpointViews empties the shared BP model and gutters (UI only).
+// Does not clear bpSnapshot — that is saved on quit after kill/exit reset.
 func (a *DebuggerApp) clearBreakpointViews() {
 	if a.breakpoints == nil {
 		a.breakpoints = &models.BreakpointList{}
 	} else {
 		a.breakpoints.Clear()
 	}
-	a.syncBreakpointViews()
+	if a.bpWidget != nil {
+		a.bpWidget.SetItems(nil)
+	}
+	a.paintCodeBreakmarks(nil)
 }
 
 // clearCodePane empties Code widgets and restores the logo splash in the code leaf.
@@ -93,6 +97,7 @@ func (a *DebuggerApp) clearCodePane() {
 	a.primaryCode = nil
 	if a.State() != nil {
 		a.State().SetCurrentLocation("", 0)
+		a.State().ClearStopLocation()
 	}
 	a.placeLogoInCodeSlot()
 }

@@ -117,6 +117,16 @@ func ApplyMenuChoice(prefix, choice string) string {
 	return CompletionBase(prefix) + choice
 }
 
+// WithCompletionSpace appends a trailing space after a unique/final completion
+// (ju→"jump ") so the next token can be typed. Skips when already spaced or the
+// result looks like a directory (ends with /).
+func WithCompletionSpace(s string) string {
+	if s == "" || strings.HasSuffix(s, " ") || strings.HasSuffix(s, "/") {
+		return s
+	}
+	return s + " "
+}
+
 // LinespecFuncName strips a display signature down to the bare function name
 // for inserting into a file: linespec ("foo(int)" / "int foo(int)" → "foo").
 func LinespecFuncName(choice string) string {

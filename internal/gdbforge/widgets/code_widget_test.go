@@ -42,6 +42,32 @@ func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
 	}
 }
 
+func TestCodeWidgetShowSelectionKeepsPC(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.c")
+	src := "a\nb\nc\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := NewCodeWidget()
+	if err := w.ShowLocation(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.ShowSelection(path, 3); err != nil {
+		t.Fatal(err)
+	}
+	if w.PCLine() != 1 {
+		t.Fatalf("PC moved to %d, want 1", w.PCLine())
+	}
+	if w.SelLine() != 3 {
+		t.Fatalf("sel=%d want 3", w.SelLine())
+	}
+	plain := termui.StripANSI(w.LinesForTest()[0])
+	if !strings.Contains(plain, "━━▶") {
+		t.Fatalf("━━▶ should remain on line 1: %q", plain)
+	}
+}
+
 func TestCodeWidgetBreakpointLineNumberANSI(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.c")

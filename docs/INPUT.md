@@ -362,8 +362,8 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB 
 | `Up` / `Down` | Move CodeWidget cursor line (global) | Implemented |
 | `Space` | Toggle breakpoint at CodeWidget cursor (global) | Implemented |
 | `e` | Enable/disable breakpoint at CodeWidget cursor (yellow when disabled) | Implemented |
-| `n` | GDB `next` (normal; also insert when CodeWidget focused) | Implemented |
-| `s` | GDB `step` (normal; also insert when CodeWidget focused) | Implemented |
+| `n` | GDB next via MI `-exec-next` (normal; also insert when CodeWidget focused) | Implemented |
+| `s` | GDB step via MI `-exec-step` (normal; also insert when CodeWidget focused) | Implemented |
 | `:` | Enter command mode | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
 | `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |
@@ -379,13 +379,13 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 |--------|-----|--------|
 | **CodeWidget** | `e` | Enable/disable breakpoint at cursor (yellow when disabled; same as BreakpointWidget `e`) |
 | **CodeWidget** | **Space** | Insert/remove breakpoint at cursor line |
-| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down, Enter / click | Bold selection; show CodeWidget at that BP |
+| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down, Enter / click | Select row; browse Code with blue cursor (━━▶ stays on StopLocation); green when row is stop PC |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
-| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse click | Bold selection; Up/Down/Enter/click switches thread (`thread ID`) / frame (`frame N`) and updates CodeWidget `━━▶` (or centered **not available** + path for missing / `.so` sources) |
+| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse click | Bold selection; Up/Down/Enter/click switches thread (`thread ID`) / frame (`frame N`) and updates Code browse; green on stop PC (thread current / stack frame 0); missing / `.so` → **not available** |
 | **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C/D → inferior |
 
-Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync). Persist: [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence).
 
 ### Focus mode (planned)
 

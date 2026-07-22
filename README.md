@@ -38,7 +38,8 @@
 - Code (or startup logo), GDB console, IO, Threads, Call Stack, Breakpoints
 - In-app manual: `:help` or `:b help`
 - Space to toggle breakpoints on the Code cursor or Call Stack frame
-- Status colors for insert (green) vs normal (blue)
+- Breakpoints saved to `./.gdbforge/breakpoints.yaml` on quit and restored on next start
+- Status colors for insert (green) vs normal (blue); themable PC / selection / BP colors via `:set`
 - Cmdline and console paste: Ctrl+V, middle-click; selection copy/cut
 - Safer while-running behavior: auto-continue after breakpoint **insert** only (not after frame/thread switches)
 
@@ -149,9 +150,9 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | `:` | enter command mode |
 | `i` | focus GDB leaf and enter insert |
 | `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
-| `n` | GDB next (also in insert when Code is focused) |
-| `s` | GDB step (also in insert when Code is focused) |
-| Up / Down | move Code cursor line (global, with fallthrough) |
+| `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |
+| `s` | GDB step via MI `-exec-step` (also in insert when Code is focused) |
+| Up / Down | move Code browse cursor (does not move ━━▶) |
 | Space | toggle breakpoint: Call Stack selection, or Code cursor line (never steals Space from GDB) |
 | `e` | enable/disable breakpoint at Code cursor |
 | Ctrl-W h/j/k/l | focus left / down / up / right |
@@ -185,13 +186,17 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `clearoutput` / `noclearoutput` — clear IO pane when GDB session starts (default on)
 - `continueafterclear` / `nocontinueafterclear` — after removing a BP while running, auto-continue (default off). Inserting a BP while running still auto-continues. `frame`/`thread` commands never auto-continue.
 - `esctocode` / `noesctocode` — Esc restores last pane / Code (default on)
-- `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on)
+- `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on); skipped when restoring `./.gdbforge/breakpoints.yaml` or when using `-x`/`-ex`
 - `gdblistenprint` / `nogdblistenprint` — paint App/MCP replies in GDB console (default on)
 - `gdbtargetprint` / `nogdbtargetprint` — also paint program stdout in GDB console like a classic terminal (default off); IO pane always uses the inferior PTY
 - `markcolor <name>` — focused list selection (default blue)
 - `markdimcolor <name>` — unfocused selection (default gray)
 - `breakcolor <name>` — enabled BP bg (default red)
 - `breakdisabledcolor <name>` — disabled BP bg (default yellow)
+- `pccolor <name>` — Code ━━▶ row bg (default darkslategray)
+- `stackbreakcolor <name>` — green mark at stop PC on Breakpoints / Call Stack #0 / current Thread (default green)
+- `codeselcolor <name>` — Code browse cursor bg (default darkblue)
+- `mutedcolor <name>` — empty-list / dim text (default gray)
 
 **Other**
 
@@ -208,7 +213,8 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 **Code (or startup logo)**
 
 - Startup shows the gdbforge logo until a source file is opened (`*stopped`, `:edit`, or file picker). Then Logo is replaced by Code.
-- Up/Down or j/k — bold cursor line
+- ━━▶ — real program counter (`StopLocation` from `*stopped`)
+- Blue cursor line — browse selection (j/k, or jump from Breakpoints); does not move ━━▶
 - Space — insert/remove breakpoint at cursor
 - `e` — enable/disable BP (yellow gutter when disabled)
 - Missing/.so src — centered "not available" + path
@@ -216,25 +222,31 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **GDB console**
 
-- Insert mode to type CLI; Enter submits; Ctrl-C interrupt; Ctrl-D sends `q`; Ctrl-L clear; Ctrl-V / middle-click paste
+- Insert mode to type CLI; Enter submits; Tab completes (wildmenu); unique Tab completion appends a trailing space (e.g. `ju` → `jump `)
+- Enter on empty line repeats the last command
+- `n`/`s` keys and typed `next`/`step`/`continue` use MI `-exec-*` (no CLI source dump — Code pane follows `*stopped`)
+- Ctrl-C interrupt; Ctrl-D sends `q`; Ctrl-L clear; Ctrl-V / middle-click paste
 - `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` prompt
 - Mouse drag selects scrollback; Ctrl-C copies selection
 
 **Breakpoints (`:b breakpoint`)**
 
-- j/k or Up/Down / Enter / click — select and show source
+- j/k or Up/Down / Enter / click — select; Code jumps with blue cursor (━━▶ stays on real PC). Selected row at stop PC stays green
 - `e` — toggle enable (disabled rows stay in list, removed from GDB)
 - `d` — delete from list and GDB
-- Row colors from `breakcolor` / `breakdisabledcolor`
+- Row colors: `breakcolor` / `breakdisabledcolor`; green = stop PC (`stackbreakcolor`)
+- Persist: saved to `./.gdbforge/breakpoints.yaml` on quit (`q` / Ctrl-D); restored on next start from the same cwd
 
 **Threads (`:b threads`)**
 
 - j/k Up/Down Enter click wheel — select thread, send `thread <id>`, refresh stack, show current frame source
+- Green row: current thread whose location matches stop PC (━━▶)
 
 **Call Stack (`:b callstack`)**
 
 - j/k Up/Down Enter click wheel — select frame, send `frame N`, show source (or not-available placeholder)
 - Space — toggle breakpoint at selected frame location
+- Green row: frame 0 only, when it matches stop PC (━━▶)
 
 **IO console (`:b io`, alias `:b output`)**
 
@@ -246,6 +258,13 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 **About (`:b about`)**
 
 - Version, build info, and license
+
+### Session / GDB startup
+
+- `gdbforge [opts] [--] [gdb opts]` — e.g. `-- -nx -x script.gdb elf`
+- Waits for first `(gdb)` before app MI (so `-x` remote/load can finish)
+- Injects `set pagination off` (no `--Type <RET>` during load)
+- Breakpoints YAML: `./.gdbforge/breakpoints.yaml` (cwd — usually the build dir)
 
 ### Clipboard and mouse
 
@@ -265,6 +284,7 @@ Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only
 - Tab after `:b` or `:edit` lists candidates in the wildmenu
 - Use `:layout wide` if the workspace looks wrong after splits
 - Prefer `:edit` for project files; `:b` is for open buffers + builtins
+- Run gdbforge from the build dir so `./.gdbforge/breakpoints.yaml` matches your project
 
 ### See also (in-app)
 

@@ -279,14 +279,18 @@ Vim-like buffers use the same pattern:
 | `:set clearoutput` / `:set noclearoutput` | `Cmd` under `set` | Clear IO pane on GDB session Start (default **on**). Does **not** clear on step/`n`. |
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues; `frame`/`thread` never auto-continue. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc restores the last non-Code/non-GDB pane when one was focused, otherwise focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
-| `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). `:set breakmain` also inserts immediately if a session is already live. |
+| `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). Skipped when restoring `./.gdbforge/breakpoints.yaml` or when GDB args include `-x`/`-ex` (`HasInitScript`). `:set breakmain` also inserts immediately if a session is already live. |
 | `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **on**). User-typed console commands always print. |
 | `:set markcolor <name>` | `CmdRest` under `set` | Focused selected-row color for list panes / file picker (default **blue**). |
 | `:set markdimcolor <name>` | `CmdRest` under `set` | Unfocused selected-row color for list panes (default **gray**). |
 | `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |
 | `:set breakdisabledcolor <name>` | `CmdRest` under `set` | Disabled breakpoint background (default **yellow**). |
+| `:set pccolor <name>` | `CmdRest` under `set` | Code ━━▶ (StopLocation) row background (default **darkslategray**). |
+| `:set stackbreakcolor <name>` | `CmdRest` under `set` | Green mark for BP / Call Stack #0 / current Thread at stop PC (default **green**). |
+| `:set codeselcolor <name>` | `CmdRest` under `set` | Code browse-cursor background (default **darkblue**). |
+| `:set mutedcolor <name>` | `CmdRest` under `set` | Empty-list / dim text (default **gray**). |
 
-Startup **`panels`** layout: Code over GDB (left, **2/3**); right IO (top half) and (Threads\|Callstack) over Breakpoints (bottom half). **`default`** is the six-pane workspace; **`classic`** is full-width Code/GDB. Program stdin/stdout: `:b io` (alias `:b output`). Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+Startup **`panels`** layout: Code over GDB (left, **2/3**); right IO (top half) and (Threads\|Callstack) over Breakpoints (bottom half). **`default`** is the six-pane workspace; **`classic`** is full-width Code/GDB. Program stdin/stdout: `:b io` (alias `:b output`). Breakpoint list: `:b breakpoint` — see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync). Persist: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoint-persistence).
 
 ---
 

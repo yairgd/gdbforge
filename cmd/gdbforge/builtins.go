@@ -4,6 +4,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -60,8 +61,14 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.registerBuiltin("io", a.outputWidget)
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
 	a.maybeClearOutput()
-	// Scripts via -x already set breakpoints (e.g. break main); skip default.
-	if !gdb.HasInitScript(a.cfg.GDBArgs) {
+
+	savedBPs, err := persist.LoadBreakpoints(".")
+	if err != nil && a.ctx.Log != nil {
+		a.ctx.Log.Named("breakpoints").Error("load saved breakpoints: " + err.Error())
+	}
+	// Scripts via -x already set breakpoints; skip default break main when
+	// restoring a saved session or using -x.
+	if !gdb.HasInitScript(a.cfg.GDBArgs) && len(savedBPs) == 0 {
 		a.maybeBreakMain()
 	}
 
@@ -79,12 +86,18 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
 	a.threadWidget.SetAppState(a.State())
+	a.threadWidget.HasBreakAt = func(file string, line int) bool {
+		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
+	}
 	a.threadWidget.OnActivate = a.onThreadActivate
 	a.registerBuiltin("threads", a.threadWidget)
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.callstackWidget.SetAppState(a.State())
+	a.callstackWidget.HasBreakAt = func(file string, line int) bool {
+		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
+	}
 	a.callstackWidget.OnActivate = a.onCallStackActivate
 	a.registerBuiltin("callstack", a.callstackWidget)
 
@@ -101,6 +114,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}
+	a.restoreSavedBreakpoints(savedBPs)
 	return nil
 }
 

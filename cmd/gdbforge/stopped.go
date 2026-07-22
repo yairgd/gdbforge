@@ -56,6 +56,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	file := stop.File
 	line := stop.Line
 	if file != "" {
+		a.State().SetStopLocation(file, line)
 		a.State().SetCurrentLocation(file, line)
 	}
 
@@ -109,6 +110,28 @@ func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 		line = 1
 	}
 	_ = w.ShowLocation(file, line)
+	a.State().SetCurrentLocation(file, line)
+	if created && !w.Unavailable() {
+		a.paintCodeWidgetBreaks(w, file)
+	}
+	a.placeCodeInSlot(w)
+	return w
+}
+
+// showCodeBrowse loads file and moves the blue code cursor to line without
+// moving ━━▶ (program counter). Used for Breakpoints list navigation.
+func (a *DebuggerApp) showCodeBrowse(file string, line int) *widgets.CodeWidget {
+	if file == "" {
+		return nil
+	}
+	w, created := a.ensureCodeBuffer(file)
+	if w == nil {
+		return nil
+	}
+	if line < 1 {
+		line = 1
+	}
+	_ = w.ShowSelection(file, line)
 	a.State().SetCurrentLocation(file, line)
 	if created && !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
@@ -222,6 +245,10 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 		return
 	}
 	if fr, ok := a.callstack.FirstWithFile(); ok {
+		// Prefer this as stop PC when *stopped had no source file.
+		if a.State() != nil && a.State().StopFile() == "" {
+			a.State().SetStopLocation(fr.File, fr.Line)
+		}
 		a.showFrameSource(fr)
 		return
 	}
@@ -231,16 +258,17 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 	}
 }
 
-// onBreakpointActivate shows the source at the selected breakpoint location.
+// onBreakpointActivate shows the source at the selected breakpoint location
+// with the blue browse cursor — ━━▶ stays on the real program counter.
 func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
 	if bp.File == "" {
 		return
 	}
-	w := a.showCodeAt(bp.File, bp.Line)
+	w := a.showCodeBrowse(bp.File, bp.Line)
 	if w != nil && w.Unavailable() {
 		w.ShowUnavailable(bp.File, formatUnavailableExtra("", bp.Line))
 	}
-	a.applyCodeStop(w)
+	a.placeCodeInSlot(w)
 	a.RequestFrame()
 }
 

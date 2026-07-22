@@ -5,6 +5,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -144,6 +145,61 @@ func TestCallStackWidgetSelectedFrame(t *testing.T) {
 	fr, ok = w.SelectedFrame()
 	if !ok || fr.Func != "foo" || fr.Line != 20 {
 		t.Fatalf("after move selected=%v ok=%v", fr, ok)
+	}
+}
+
+func TestCallStackWidgetProgramPointStyle(t *testing.T) {
+	st := platform.NewAppState()
+	st.SetMarkColor(tcell.ColorNavy)
+	st.SetMarkDimColor(tcell.ColorSilver)
+	st.SetStopLocation("/tmp/a.c", 10)
+	// Browsed location differs (mouse picked another frame) — green must stay on #0.
+	st.SetCurrentLocation("/tmp/b.c", 20)
+
+	w := NewCallStackWidget()
+	w.SetAppState(st)
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main", File: "a.c", Line: 10},
+		{Level: 1, Func: "foo", File: "/tmp/b.c", Line: 20},
+	})
+	w.move(1)
+
+	br := w.rowStyle(0, "")
+	_, brBg, _ := br.Decompose()
+	if brBg != platform.DefaultStackBreakColor {
+		t.Fatalf("frame0+stopPC bg=%v want %v", brBg, platform.DefaultStackBreakColor)
+	}
+	f1 := w.rowStyle(1, "")
+	_, f1Bg, _ := f1.Decompose()
+	if f1Bg == platform.DefaultStackBreakColor {
+		t.Fatal("frame 1 must not use stack break green")
+	}
+}
+
+func TestThreadWidgetProgramPointStyle(t *testing.T) {
+	st := platform.NewAppState()
+	st.SetMarkColor(tcell.ColorNavy)
+	st.SetMarkDimColor(tcell.ColorSilver)
+	st.SetCurrentLocation("/tmp/a.c", 10)
+	st.SetStopLocation("/tmp/a.c", 10)
+
+	w := NewThreadWidget()
+	w.SetAppState(st)
+	w.SetItems([]mcp.ThreadInfo{
+		{ID: "1", State: "stopped", File: "a.c", Line: 10, Current: true},
+		{ID: "2", State: "stopped", File: "a.c", Line: 10, Current: false},
+	})
+	w.move(1)
+
+	br := w.rowStyle(0, "")
+	_, brBg, _ := br.Decompose()
+	if brBg != platform.DefaultStackBreakColor {
+		t.Fatalf("current+PC bg=%v want %v", brBg, platform.DefaultStackBreakColor)
+	}
+	other := w.rowStyle(1, "")
+	_, otherBg, _ := other.Decompose()
+	if otherBg == platform.DefaultStackBreakColor {
+		t.Fatal("non-current thread must not be green")
 	}
 }
 

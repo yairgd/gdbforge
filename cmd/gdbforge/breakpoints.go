@@ -1,13 +1,18 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
-// syncBreakpointViews pushes the shared BreakpointList to BP + Code views.
+// syncBreakpointViews pushes the shared BreakpointList to BP + Code views and
+// snapshots the list for .gdbforge/breakpoints.yaml on quit.
 func (a *DebuggerApp) syncBreakpointViews() {
 	if a.breakpoints == nil {
 		return
@@ -17,6 +22,8 @@ func (a *DebuggerApp) syncBreakpointViews() {
 		a.bpWidget.SetItems(items)
 	}
 	a.paintCodeBreakmarks(items)
+	a.bpSnapshot = items
+	a.bpSnapshotSet = true
 }
 
 func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
@@ -25,6 +32,67 @@ func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
 	}
 	gdb.SendCmd(a.GDB(), a.State(), cmd)
 	a.onBreakpointsChanged()
+}
+
+// restoreSavedBreakpoints reloads ./.gdbforge/breakpoints.yaml into GDB + UI.
+func (a *DebuggerApp) restoreSavedBreakpoints(saved []mcp.BreakInfo) {
+	if a == nil || len(saved) == 0 || a.breakpoints == nil {
+		return
+	}
+	sess := a.GDB()
+	if sess == nil {
+		return
+	}
+	st := a.State()
+
+	// Merge current GDB BPs first (e.g. from -x) so we do not duplicate.
+	if items, ok := a.fetchBreakInfos(); ok {
+		a.applyBreakInfos(items)
+	}
+
+	for _, it := range saved {
+		if it.File == "" || it.Line < 1 {
+			continue
+		}
+		if a.breakpoints.IndexOfFileLine(it.File, it.Line) >= 0 {
+			continue
+		}
+		gdb.SendCmd(sess, st, breakInsertCmd(it.File, it.Line))
+	}
+
+	items, ok := a.fetchBreakInfos()
+	if !ok {
+		// Still seed the model so the BP pane shows saved rows until refresh.
+		a.applyBreakInfos(saved)
+		return
+	}
+	a.applyBreakInfos(items)
+
+	// Apply disabled flags from the saved file.
+	for _, want := range saved {
+		if want.Enabled {
+			continue
+		}
+		idx := a.breakpoints.IndexOfFileLine(want.File, want.Line)
+		if idx < 0 {
+			continue
+		}
+		cur, ok := a.breakpoints.At(idx)
+		if !ok || !cur.Enabled || cur.Number < 1 {
+			continue
+		}
+		gdb.SendCmd(sess, st, fmt.Sprintf("disable %d", cur.Number))
+	}
+	a.onBreakpointsChanged()
+}
+
+func breakInsertCmd(file string, line int) string {
+	loc := fmt.Sprintf("%s:%d", file, line)
+	if strings.ContainsAny(file, " \t\"") {
+		base := filepath.Base(file)
+		loc = fmt.Sprintf("%s:%d", base, line)
+	}
+	return "break " + loc
 }
 
 func (a *DebuggerApp) onBreakpointToggle(index int) {

@@ -55,20 +55,27 @@ func (w *FileListWidget) markColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkColor()
 	}
-	return tcell.ColorBlue
+	return platform.DefaultMarkColor
 }
 
 func (w *FileListWidget) markDimColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkDimColor()
 	}
-	return tcell.ColorGray
+	return platform.DefaultMarkDimColor
+}
+
+func (w *FileListWidget) mutedColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MutedColor()
+	}
+	return platform.DefaultMutedColor
 }
 
 func (w *FileListWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.paths) == 0 {
-		return st.Foreground(tcell.ColorGray)
+		return st.Foreground(w.mutedColor())
 	}
 	if lineIdx == w.selected {
 		bg := w.markDimColor()

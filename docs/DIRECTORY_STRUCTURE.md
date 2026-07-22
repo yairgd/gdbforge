@@ -69,7 +69,7 @@ gdbforge/
 | `builtins.go` | Create models + views; wire intents; start GDB/IO bridges |
 | `gdb_console.go` | GDB controller — Submit / MI paint / quit |
 | `io_console.go` | Inferior PTY bridge + OutputWidget intents |
-| `breakpoints.go` | Breakpoint model sync / toggle / delete / code Space |
+| `breakpoints.go` | Breakpoint model sync / toggle / delete / code Space; YAML restore |
 | `debug_info.go` | Thread / call-stack / file-list view sync |
 | `command_tree.go` | `ExapData` colon-command DSL |
 | `keybindings.go` | `InitKeyBindings` |
@@ -79,9 +79,9 @@ gdbforge/
 | `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
-| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy |
+| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy; `CLIExecToMI` for n/s |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
-| `stopped.go` | Stop handling; arm/trigger thread-stack refresh; code after stop |
+| `stopped.go` | Stop handling; StopLocation; arm/trigger thread-stack refresh; code after stop |
 | `debug_info.go` | `syncThreadViews` / `syncCallStackViews` / model setters |
 
 Build all commands:
@@ -145,6 +145,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `models/breakpoints.go` | `BreakpointList` — shared BP model (GUI + MCP) |
 | `models/threads.go` | `ThreadList` — stop snapshot |
 | `models/callstack.go` | `CallStack` — frame snapshot |
+| `persist/breakpoints.go` | `./.gdbforge/breakpoints.yaml` save/load |
 | `domain/domain.go` | `DebugDomain` — peer-controller surface (AI now; future Lua) |
 | `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
 | `layout/default.go` | Multi-pane: Code/GDB left; IO / BP / Threads / Callstack right |

@@ -8,6 +8,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -69,9 +70,13 @@ type DebuggerApp struct {
 	// stop / callstack / BP preview must not pollute the wildmenu (ldo.c, …).
 	bufferListed map[string]struct{}
 
-	breakpoints      *models.BreakpointList
-	threads          *models.ThreadList
-	callstack        *models.CallStack
+	breakpoints *models.BreakpointList
+	// bpSnapshot is the last user-visible BP list for quit save. Kept across
+	// clearBreakpointViews (kill/exit UI reset) so q / Ctrl-D can still persist.
+	bpSnapshot    []mcp.BreakInfo
+	bpSnapshotSet bool
+	threads       *models.ThreadList
+	callstack     *models.CallStack
 	bpWidget         *widgets.BreakpointWidget
 	threadWidget     *widgets.ThreadWidget
 	callstackWidget  *widgets.CallStackWidget
@@ -113,6 +118,7 @@ func (a *DebuggerApp) GDB() core.Session {
 
 // Close tears down owned debugger/exec sessions.
 func (a *DebuggerApp) Close() {
+	a.saveBreakpointsOnQuit()
 	if a.gdbMcp != nil {
 		a.gdbMcp.Close()
 		a.gdbMcp = nil
@@ -133,4 +139,19 @@ func (a *DebuggerApp) Close() {
 		a.execClient.Close()
 		a.execClient = nil
 	}
+}
+
+// saveBreakpointsOnQuit writes bpSnapshot to ./.gdbforge/breakpoints.yaml.
+func (a *DebuggerApp) saveBreakpointsOnQuit() {
+	if a == nil || !a.bpSnapshotSet {
+		return
+	}
+	// Prefer live model when still populated; else last snapshot before UI clear.
+	items := a.bpSnapshot
+	if a.breakpoints != nil {
+		if cur := a.breakpoints.Items(); len(cur) > 0 {
+			items = cur
+		}
+	}
+	_ = persist.SaveBreakpoints(".", items)
 }

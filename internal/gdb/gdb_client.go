@@ -33,8 +33,14 @@ func NewGDBClient(gdbPath string, gdbArgs []string) (*GDBClient, error) {
 		return nil, fmt.Errorf("gdb arguments required (program and/or -x script)")
 	}
 
-	// Always MI2; remaining args are cgdb-style "[gdb options]" (-nx, -x, prog, …).
-	argv := append([]string{gdbPath, "--interpreter=mi2"}, gdbArgs...)
+	// Always MI2; disable pagination before -x / load so long "Loading section…"
+	// output is not stuck on "--Type <RET> for more…" (no UI yet to answer).
+	// Remaining args are cgdb-style "[gdb options]" (-nx, -x, prog, …).
+	argv := []string{gdbPath, "--interpreter=mi2"}
+	if !gdbArgsHasPaginationOff(gdbArgs) {
+		argv = append(argv, "-iex", "set pagination off")
+	}
+	argv = append(argv, gdbArgs...)
 
 	if _, err := exec.LookPath(gdbPath); err != nil {
 		return nil, fmt.Errorf("find %s: %w", gdbPath, err)
@@ -138,6 +144,26 @@ func HasInitScript(gdbArgs []string) bool {
 			return true
 		case a == "--command" || a == "--eval-command":
 			return true
+		}
+	}
+	return false
+}
+
+// gdbArgsHasPaginationOff reports whether the user already disables pagination.
+func gdbArgsHasPaginationOff(gdbArgs []string) bool {
+	for i, a := range gdbArgs {
+		low := strings.ToLower(strings.TrimSpace(a))
+		if strings.Contains(low, "set pagination off") || strings.Contains(low, "set height 0") ||
+			strings.Contains(low, "set height unlimited") {
+			return true
+		}
+		// -iex/-ex followed by the command as next argv
+		if (a == "-iex" || a == "-ex" || a == "-ix" || a == "-x") && i+1 < len(gdbArgs) {
+			next := strings.ToLower(strings.TrimSpace(gdbArgs[i+1]))
+			if strings.Contains(next, "set pagination off") || strings.Contains(next, "set height 0") ||
+				strings.Contains(next, "set height unlimited") {
+				return true
+			}
 		}
 	}
 	return false

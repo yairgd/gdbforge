@@ -92,12 +92,16 @@ func (w *BreakpointWidget) initKeyBindings() {
 func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(tcell.ColorGray)
+		return st.Foreground(w.mutedColor())
 	}
 	if lineIdx == w.selected {
 		bg := w.markDimColor()
 		if w.Focused() {
 			bg = w.markColor()
+		}
+		// Selected row at ━━▶ / stop PC stays green (not blue/magenta mark).
+		if lineIdx >= 0 && lineIdx < len(w.items) && w.atProgramPoint(w.items[lineIdx]) {
+			bg = w.stackBreakColor()
 		}
 		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
@@ -106,6 +110,12 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 		return st
 	}
 	it := w.items[lineIdx]
+	// Same stack-break color as Call Stack / Threads when ━━▶ is on this BP.
+	if w.atProgramPoint(it) {
+		bg := w.stackBreakColor()
+		_ = line
+		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
+	}
 	bg := w.breakColor()
 	if !it.Enabled {
 		bg = w.breakDisabledColor()
@@ -114,32 +124,60 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
 }
 
+func (w *BreakpointWidget) atProgramPoint(it mcp.BreakInfo) bool {
+	if w.state == nil {
+		return false
+	}
+	return sameSourceLoc(it.File, it.Line, w.state.StopFile(), w.state.StopLine())
+}
+
 func (w *BreakpointWidget) markColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkColor()
 	}
-	return tcell.ColorBlue
+	return platform.DefaultMarkColor
 }
 
 func (w *BreakpointWidget) markDimColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkDimColor()
 	}
-	return tcell.ColorGray
+	return platform.DefaultMarkDimColor
 }
 
 func (w *BreakpointWidget) breakColor() tcell.Color {
 	if w.state != nil {
 		return w.state.BreakColor()
 	}
-	return tcell.ColorRed
+	return platform.DefaultBreakColor
 }
 
 func (w *BreakpointWidget) breakDisabledColor() tcell.Color {
 	if w.state != nil {
 		return w.state.BreakDisabledColor()
 	}
-	return tcell.ColorYellow
+	return platform.DefaultBreakDisabledColor
+}
+
+func (w *BreakpointWidget) pcColor() tcell.Color {
+	if w.state != nil {
+		return w.state.PCColor()
+	}
+	return platform.DefaultPCColor
+}
+
+func (w *BreakpointWidget) stackBreakColor() tcell.Color {
+	if w.state != nil {
+		return w.state.StackBreakColor()
+	}
+	return platform.DefaultStackBreakColor
+}
+
+func (w *BreakpointWidget) mutedColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MutedColor()
+	}
+	return platform.DefaultMutedColor
 }
 
 func (w *BreakpointWidget) move(delta int) {

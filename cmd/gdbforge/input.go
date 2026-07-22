@@ -177,7 +177,8 @@ func (a *DebuggerApp) gdbTabComplete() {
 	case 0:
 		// nothing
 	case 1:
-		a.gdbWidget.ApplyCompletion(names[0])
+		// Unique match — no further completions for this word; add a trailing space.
+		a.gdbWidget.ApplyCompletion(gdb.WithCompletionSpace(names[0]))
 		a.clearCompletion()
 	default:
 		a.completionForGDB = true
@@ -317,6 +318,8 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	a.tab.HandleEvent(ev)
+	// Always repaint so green stop marks / selection update after clicks.
+	a.RequestFrame()
 }
 
 // enterCommandMode activates the ':' cmdline (same as pressing ':').

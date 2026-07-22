@@ -13,6 +13,7 @@ gdbforge connects to debug targets through **backend adapters** that implement `
 - [PTY mux](#pty-mux)
 - [Inferior I/O (dual PTY)](#inferior-io-dual-pty)
 - [Breakpoints and source sync](#breakpoints-and-source-sync)
+- [Breakpoint persistence](#breakpoint-persistence)
 - [GDB integration](#gdb-integration)
 - [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
@@ -195,9 +196,13 @@ gdbforge
 
 **Startup** (`gdb.NewGDBClient`):
 
-1. Start GDB on PTY #1 (`ptyx.New`)
-2. `ptyx.OpenTTY()` → PTY #2
-3. Send `-inferior-tty-set <slaveName>` before any `run` / `-exec-run`
+1. Start GDB on PTY #1 (`ptyx.New`) with `--interpreter=mi2` and `-iex set pagination off` (unless the user already disabled pagination)
+2. Wait up to **90s** for the first `(gdb)` prompt so `-x` / `-ex` scripts (`target remote`, `load`, …) can finish before app MI
+3. Capture startup PTY bytes for replay into the GDB pane
+4. `ptyx.OpenTTY()` → PTY #2
+5. Send `-inferior-tty-set <slaveName>` only after the first prompt
+
+Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitScript` detects `-x`/`-ex` so the app skips default `break main` when an init script is present.
 
 **IO console** (`OutputWidget`, pane name **IO**, `:b io`, alias `:b output`):
 
@@ -231,7 +236,7 @@ flowchart LR
   GDB -.->|"-inferior-tty-set slave"| PROG
 ```
 
-**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `CurrentFile` / `CurrentLine` (updated on `*stopped`), `MarkColor` (file-picker selection; `:set markcolor`), `BreakColor` / `BreakDisabledColor` (enabled/disabled BP backgrounds; `:set breakcolor` / `:set breakdisabledcolor`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
+**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `StopFile` / `StopLine` (**StopLocation** — real PC from `*stopped`, drives ━━▶), `CurrentFile` / `CurrentLine` (browse / frame selection — blue cursor), theme colors (`MarkColor`, `MarkDimColor`, `BreakColor`, `BreakDisabledColor`, `PCColor`, `StackBreakColor`, `CodeSelColor`, `MutedColor`; see `:set`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; skipped when restoring `./.gdbforge/breakpoints.yaml` or when `HasInitScript`; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
 
 ---
 
@@ -256,12 +261,12 @@ Other App PTY commands (`frame`, `thread`, …) also interrupt when running, but
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** show CodeWidget at that BP; **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click — select and **browse** Code at that BP (blue cursor; ━━▶ stays on StopLocation); row at stop PC uses `stackbreakcolor` (stays green when selected); **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
 | **OutputWidget (IO)** | `:b io` (alias `:b output`; default pane, top-right) | Program stdin/stdout via inferior PTY; type + Enter → stdin; PgUp/PgDn scroll; `<C-l>` clear; Ctrl-C/D → inferior; ANSI |
-| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `thread <id>` + refresh stack + show code; filled on stop |
-| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `frame <level>` + show code; shared libs / missing sources → centered **not available** + path |
+| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `thread <id>` + refresh stack + show code; green when current thread matches StopLocation; filled on stop |
+| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `frame <level>` + show code; green on **frame 0** only when it matches StopLocation; shared libs / missing sources → centered **not available** + path |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
-| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — bold cursor line; **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled; same as BreakpointWidget `e`). Missing file or `.so` path: centered **not available** title with the path underneath. |
+| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — blue browse cursor (`codeselcolor`); ━━▶ = StopLocation (`pccolor`); **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled). Missing file or `.so` path: centered **not available** title with the path underneath. |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
 
@@ -319,8 +324,9 @@ Only `=breakpoint-created` / `=breakpoint-deleted` trigger a `-break-list` refre
 ### CodeWidget details
 
 - Syntax highlight via Chroma (`terminal256`); line numbers; breakpoint lines use a red number background.
-- PC line: `━━▶` + dark slate row background.
-- Cursor line (when focused): bold + dark blue (unless it is the PC line).
+- PC line: `━━▶` + `pccolor` row background (**StopLocation** from `*stopped` only — not moved by BP list clicks or j/k).
+- Browse cursor (when focused): `codeselcolor` (default dark blue); independent of ━━▶.
+- Breakpoint list activate → `ShowSelection` / browse only (blue cursor); does not rewrite StopLocation.
 - Space uses basename locations (`break hello.c:23` / `clear hello.c:23`) under `PTYOwnerApp`.
 - Horizontal scroll in ANSI mode uses visible columns (not raw byte offsets) so panes stay readable after `:vs`.
 
@@ -347,18 +353,52 @@ Independent of `BreakpointsChangedMsg` (BP marks stay on breakpoint-change event
 
 ---
 
+## Breakpoint persistence
+
+Breakpoints are saved and restored via YAML under the process **cwd** (usually the build directory):
+
+| Path | Role |
+|------|------|
+| `./.gdbforge/breakpoints.yaml` | Persist file (`internal/gdbforge/persist`) |
+
+**Save** — on app quit (`Close` → `saveBreakpointsOnQuit`): writes the last `BreakpointList` snapshot (enabled + disabled rows with `file` / `line` / `enabled`).
+
+**Restore** — on GDB session start (`builtins.go`):
+
+1. `persist.LoadBreakpoints(".")` (missing file → no-op)
+2. If saved BPs exist (or `HasInitScript`), skip default `break main`
+3. `restoreSavedBreakpoints`: merge GDB’s current list (e.g. from `-x`), `break` any missing locations, re-apply disabled flags, refresh the BP pane + Code gutters
+
+Example file:
+
+```yaml
+breakpoints:
+  - file: hello.c
+    line: 23
+    enabled: true
+  - file: hello.c
+    line: 40
+    enabled: false
+```
+
+Run gdbforge from the project/build dir so the YAML matches the sources you debug.
+
+---
+
 ## GDB integration
 
 ### Client startup
 
 `gdb.NewGDBClient()` wraps `ptyx.Client` (`gdb_client.go` / `ptyx/client.go`):
 
-1. Builds `gdb --interpreter=mi2 <target>` argv.
-2. `ptyx.New` — PTY, raw mode, reader fan-out.
-3. Sends initial newline to trigger prompt.
+1. Builds `gdb --interpreter=mi2` argv; injects `-iex set pagination off` unless already set.
+2. Appends user `gdbArgs` after `--` (e.g. `-nx -x script.gdb elf`).
+3. `ptyx.New` — PTY, raw mode, reader fan-out.
+4. Waits for the first `(gdb)` (up to 90s); captures startup output for the GDB pane.
+5. Opens inferior PTY and sends `-inferior-tty-set` only after that prompt.
 
 ```go
-argv := []string{"gdb", "--interpreter=mi2", "hello"}
+argv := []string{"gdb", "--interpreter=mi2", "-iex", "set pagination off", "hello"}
 pty, err := ptyx.New(argv, ptyx.Options{})
 ```
 
@@ -371,6 +411,7 @@ pty, err := ptyx.New(argv, ptyx.Options{})
 | `Send(cmd)` | Append `\n`, send CLI/MI command (takes write lock) |
 | `SendRaw(raw)` | Send raw bytes (SIGINT, …) under write lock |
 | `WithWrite(ctx, fn)` | Hold write lock for multi-step MCP capture |
+| `CLIExecToMI(cmd)` | Map CLI `next`/`step`/`continue`/… → `-exec-*` so console/`n`/`s` do not dump source into the GDB pane; Code follows `*stopped` |
 
 ### Output path
 

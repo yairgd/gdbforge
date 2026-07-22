@@ -15,7 +15,8 @@ import (
 //	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
 //	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
 //	          gdbtargetprint, nogdbtargetprint,
-//	          markcolor, markdimcolor, breakcolor, breakdisabledcolor
+//	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
+//	          pccolor, stackbreakcolor, codeselcolor, mutedcolor
 //	/ → layout <name>  (default | panels | classic)
 //	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
@@ -61,6 +62,10 @@ func (a *DebuggerApp) ExapData() {
 			commands.CmdRest("markdimcolor", a.SetMarkDimColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),
 			commands.CmdRest("breakdisabledcolor", a.SetBreakDisabledColor),
+			commands.CmdRest("pccolor", a.SetPCColor),
+			commands.CmdRest("stackbreakcolor", a.SetStackBreakColor),
+			commands.CmdRest("codeselcolor", a.SetCodeSelColor),
+			commands.CmdRest("mutedcolor", a.SetMutedColor),
 		).
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
 		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).

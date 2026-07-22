@@ -406,7 +406,7 @@ Planned contents:
 | `PTYOwner` | Who holds exclusive PTY write intent (`none` / `ui` / `mcp` / `app`) |
 | `EqualAlways` | Vim-like: when true, split ratios rebalance to equal after **Split** / close (not every paint). `:set equalalways` also rebalances immediately. |
 | `EscToCode` | Esc restores last non-Code/non-GDB pane if any, else CodeWidget (`:set esctocode` / `:set noesctocode`; default **on**) |
-| `BreakMain` | Insert `break main` on GDB session start (`:set breakmain` / `:set nobreakmain`; default **on**) |
+| `BreakMain` | Insert `break main` on GDB session start (`:set breakmain` / `:set nobreakmain`; default **on**; skipped on YAML restore or `-x`/`-ex`) |
 | `GdbListenPrint` | Paint App/MCP replies in the GDB console (`:set gdblistenprint` / `:set nogdblistenprint`; default **on**) |
 | `DefaultLayoutRatios` | Presets for `:layout default`: `Left` **2/3**, `Output` **1/2** (right IO column), `BottomFirst` **1/3** (Breakpoints share of bottom half) |
 | `LayoutLeftRatio` | Alias for `DefaultLayoutRatios.Left` |
@@ -415,16 +415,21 @@ Planned contents:
 | `MarkDimColor` | Unfocused list selection background (`:set markdimcolor`; default gray) |
 | `BreakColor` | Enabled breakpoint background (`:set breakcolor`; default red) |
 | `BreakDisabledColor` | Disabled breakpoint background (`:set breakdisabledcolor`; default yellow) |
-| `CurrentFile` / `CurrentLine` | PC location from `*stopped` for CodeWidget |
+| `PCColor` | Code ━━▶ row background (`:set pccolor`; default darkslategray) |
+| `StackBreakColor` | Stop-PC highlight on BP / stack #0 / thread (`:set stackbreakcolor`; default green) |
+| `CodeSelColor` | Code browse cursor (`:set codeselcolor`; default darkblue) |
+| `MutedColor` | Empty-list / dim text (`:set mutedcolor`; default gray) |
+| `StopFile` / `StopLine` | Real PC from `*stopped` (━━▶); not moved by BP list browse |
+| `CurrentFile` / `CurrentLine` | Browse / selected frame location for CodeWidget |
 
 ```go
 st := app.State()
 st.PTYOwner()           // platform.PTYOwnerApp during silent file-list Query
 st.SetEqualAlways(true) // :set equalalways
-st.CurrentFile()        // after breakpoint-hit
+st.StopFile()           // after *stopped (━━▶)
 ```
 
-PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic when listen-print is off (`:set nogdblistenprint`; default paints). Layout: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic`. IO: `:b io` (alias `:b output`), `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, and sync details in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **status** so the UI can suppress console paint for App/MCP traffic when listen-print is off (`:set nogdblistenprint`; default paints). Layout: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic`. IO: `:b io` (alias `:b output`), `:set clearoutput` / `:set noclearoutput`. Source: `:edit name` opens a per-file CodeWidget (PaneName = basename); `:edit` opens the project file picker (`:e` = unique prefix); `:b filename` switches to an already-open buffer; stops show `━━▶` on the PC line. Breakpoints: `:b breakpoint`, CodeWidget **Space**, sync + YAML persist in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) / [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence).
 
 ---
 

@@ -24,6 +24,9 @@ type CallStackWidget struct {
 	items    []mcp.StackFrame
 	selected int
 
+	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
+	HasBreakAt func(file string, line int) bool
+
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(mcp.StackFrame)
 }
@@ -63,20 +66,41 @@ func (w *CallStackWidget) markColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkColor()
 	}
-	return tcell.ColorBlue
+	return platform.DefaultMarkColor
 }
 
 func (w *CallStackWidget) markDimColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkDimColor()
 	}
-	return tcell.ColorGray
+	return platform.DefaultMarkDimColor
+}
+
+func (w *CallStackWidget) pcColor() tcell.Color {
+	if w.state != nil {
+		return w.state.PCColor()
+	}
+	return platform.DefaultPCColor
+}
+
+func (w *CallStackWidget) stackBreakColor() tcell.Color {
+	if w.state != nil {
+		return w.state.StackBreakColor()
+	}
+	return platform.DefaultStackBreakColor
+}
+
+func (w *CallStackWidget) mutedColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MutedColor()
+	}
+	return platform.DefaultMutedColor
 }
 
 func (w *CallStackWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(tcell.ColorGray)
+		return st.Foreground(w.mutedColor())
 	}
 	if lineIdx == w.selected {
 		bg := w.markDimColor()
@@ -86,8 +110,42 @@ func (w *CallStackWidget) rowStyle(lineIdx int, line string) tcell.Style {
 		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
+	// Green only for frame 0 when ━━▶ points at that frame.
+	if w.isFrameZero(lineIdx) && w.atProgramPoint(lineIdx) {
+		bg := w.stackBreakColor()
+		_ = line
+		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
+	}
 	_ = line
 	return st
+}
+
+func (w *CallStackWidget) atProgramPoint(lineIdx int) bool {
+	if w.state == nil || lineIdx < 0 || lineIdx >= len(w.items) {
+		return false
+	}
+	it := w.items[lineIdx]
+	// Use stop PC (frame 0), not browsed CurrentLocation — mouse frame
+	// clicks must not clear the green mark on #0.
+	return sameSourceLoc(it.File, it.Line, w.state.StopFile(), w.state.StopLine())
+}
+
+func (w *CallStackWidget) isFrameZero(lineIdx int) bool {
+	if lineIdx < 0 || lineIdx >= len(w.items) {
+		return false
+	}
+	return w.items[lineIdx].Level == 0
+}
+
+func (w *CallStackWidget) atBreakOnProgramPoint(lineIdx int) bool {
+	if !w.atProgramPoint(lineIdx) {
+		return false
+	}
+	if w.HasBreakAt == nil {
+		return false
+	}
+	it := w.items[lineIdx]
+	return w.HasBreakAt(it.File, it.Line)
 }
 
 func (w *CallStackWidget) move(delta int) {

@@ -3,9 +3,9 @@ package gdb
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/ptyx"
@@ -26,27 +26,16 @@ func TestNewGDBClientStartsAndCloses(t *testing.T) {
 	if client.InferiorTTY() == nil || client.InferiorTTY().SlaveName() == "" {
 		t.Fatal("expected inferior tty after NewGDBClient")
 	}
-
-	ch, cancel := client.Subscribe()
-	defer cancel()
-
-	deadline := time.After(3 * time.Second)
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			if msg.Err != nil {
-				t.Fatalf("gdb output error: %v", msg.Err)
-			}
-			if msg.Data != "" {
-				client.Close()
-				return
-			}
-		case <-deadline:
-			t.Fatal("timeout waiting for gdb output")
+	boot := client.TakeStartupOutput()
+	if boot == "" {
+		t.Fatal("expected startup capture through first (gdb) prompt")
+	}
+	if !strings.Contains(boot, "(gdb)") {
+		n := len(boot)
+		if n > 80 {
+			n = 80
 		}
+		t.Fatalf("startup missing prompt: %q", boot[:n])
 	}
 }
 
@@ -93,5 +82,17 @@ func TestHasInitScript(t *testing.T) {
 	}
 	if !HasInitScript([]string{"-ex=break main", "prog"}) {
 		t.Fatal("expected -ex= to count")
+	}
+}
+
+func TestGdbArgsHasPaginationOff(t *testing.T) {
+	if gdbArgsHasPaginationOff([]string{"-nx", "-x", "s.gdb"}) {
+		t.Fatal("should be false")
+	}
+	if !gdbArgsHasPaginationOff([]string{"-iex", "set pagination off", "-x", "s.gdb"}) {
+		t.Fatal("expected -iex pair")
+	}
+	if !gdbArgsHasPaginationOff([]string{`-ex=set height 0`, "prog"}) {
+		t.Fatal("expected height 0")
 	}
 }

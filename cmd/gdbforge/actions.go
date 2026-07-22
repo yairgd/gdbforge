@@ -252,6 +252,70 @@ func (app *DebuggerApp) SetBreakDisabledColor(args ...any) {
 	app.RequestFrame()
 }
 
+func (app *DebuggerApp) SetPCColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown pccolor: " + name)
+		}
+		return
+	}
+	app.State().SetPCColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetStackBreakColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown stackbreakcolor: " + name)
+		}
+		return
+	}
+	app.State().SetStackBreakColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetCodeSelColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown codeselcolor: " + name)
+		}
+		return
+	}
+	app.State().SetCodeSelColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetMutedColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown mutedcolor: " + name)
+		}
+		return
+	}
+	app.State().SetMutedColor(c)
+	app.RequestFrame()
+}
+
 // OnAI runs an in-app LLM question against the live GDB session (:AI … / :ai …).
 func (app *DebuggerApp) OnAI(args ...any) {
 	parts := make([]string, 0, len(args))

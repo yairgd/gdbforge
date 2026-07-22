@@ -24,6 +24,9 @@ type ThreadWidget struct {
 	items    []mcp.ThreadInfo
 	selected int
 
+	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
+	HasBreakAt func(file string, line int) bool
+
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(mcp.ThreadInfo)
 }
@@ -63,20 +66,41 @@ func (w *ThreadWidget) markColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkColor()
 	}
-	return tcell.ColorBlue
+	return platform.DefaultMarkColor
 }
 
 func (w *ThreadWidget) markDimColor() tcell.Color {
 	if w.state != nil {
 		return w.state.MarkDimColor()
 	}
-	return tcell.ColorGray
+	return platform.DefaultMarkDimColor
+}
+
+func (w *ThreadWidget) pcColor() tcell.Color {
+	if w.state != nil {
+		return w.state.PCColor()
+	}
+	return platform.DefaultPCColor
+}
+
+func (w *ThreadWidget) stackBreakColor() tcell.Color {
+	if w.state != nil {
+		return w.state.StackBreakColor()
+	}
+	return platform.DefaultStackBreakColor
+}
+
+func (w *ThreadWidget) mutedColor() tcell.Color {
+	if w.state != nil {
+		return w.state.MutedColor()
+	}
+	return platform.DefaultMutedColor
 }
 
 func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(tcell.ColorGray)
+		return st.Foreground(w.mutedColor())
 	}
 	if lineIdx == w.selected {
 		bg := w.markDimColor()
@@ -86,8 +110,40 @@ func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
 		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
+	// Green only for the current thread when ━━▶ matches (that thread's frame 0).
+	if w.isCurrentThread(lineIdx) && w.atProgramPoint(lineIdx) {
+		bg := w.stackBreakColor()
+		_ = line
+		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
+	}
 	_ = line
 	return st
+}
+
+func (w *ThreadWidget) atProgramPoint(lineIdx int) bool {
+	if w.state == nil || lineIdx < 0 || lineIdx >= len(w.items) {
+		return false
+	}
+	it := w.items[lineIdx]
+	return sameSourceLoc(it.File, it.Line, w.state.StopFile(), w.state.StopLine())
+}
+
+func (w *ThreadWidget) isCurrentThread(lineIdx int) bool {
+	if lineIdx < 0 || lineIdx >= len(w.items) {
+		return false
+	}
+	return w.items[lineIdx].Current
+}
+
+func (w *ThreadWidget) atBreakOnProgramPoint(lineIdx int) bool {
+	if !w.atProgramPoint(lineIdx) {
+		return false
+	}
+	if w.HasBreakAt == nil {
+		return false
+	}
+	it := w.items[lineIdx]
+	return w.HasBreakAt(it.File, it.Line)
 }
 
 func (w *ThreadWidget) move(delta int) {

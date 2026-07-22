@@ -83,6 +83,46 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	}
 }
 
+func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
+	st := platform.NewAppState()
+	st.SetBreakColor(tcell.ColorRed)
+	st.SetBreakDisabledColor(tcell.ColorAqua)
+	st.SetMarkColor(tcell.ColorNavy)
+	st.SetMarkDimColor(tcell.ColorSilver)
+	st.SetCurrentLocation("/tmp/a.c", 2)
+	st.SetStopLocation("/tmp/a.c", 2)
+
+	w := NewBreakpointWidget()
+	w.SetAppState(st)
+	w.SetItems([]mcp.BreakInfo{
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
+		{Number: 2, Enabled: true, File: "a.c", Line: 2},
+	})
+	w.SelectIndex(0) // PC row is index 1
+
+	pc := w.rowStyle(1, "")
+	_, pcBg, _ := pc.Decompose()
+	if pcBg != platform.DefaultStackBreakColor {
+		t.Fatalf("at-PC bg=%v want %v", pcBg, platform.DefaultStackBreakColor)
+	}
+
+	other := w.rowStyle(0, "")
+	_, otherBg, _ := other.Decompose()
+	// selected row 0 uses mark dim when unfocused
+	if otherBg != tcell.ColorSilver {
+		t.Fatalf("selected bg=%v want silver", otherBg)
+	}
+
+	// Selecting the stop-PC BP keeps green (not navy mark).
+	w.SelectIndex(1)
+	w.SetFocused(true)
+	selPC := w.rowStyle(1, "")
+	_, selPCBg, _ := selPC.Decompose()
+	if selPCBg != platform.DefaultStackBreakColor {
+		t.Fatalf("selected at-PC bg=%v want green %v", selPCBg, platform.DefaultStackBreakColor)
+	}
+}
+
 func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 	w := NewBreakpointWidget()
 	w.SetFocused(true)

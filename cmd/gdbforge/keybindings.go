@@ -127,7 +127,7 @@ func (a *DebuggerApp) initCompletionKeyBindings() {
 						(a.cmdWidget == nil || !a.cmdWidget.Active())
 					if useGDB {
 						cur := a.gdbWidget.InputText()
-						a.gdbWidget.ApplyCompletion(gdb.ApplyMenuChoice(cur, name))
+						a.gdbWidget.ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
 					} else if a.cmdWidget != nil {
 						a.cmdWidget.ApplyCompletion(name)
 					}

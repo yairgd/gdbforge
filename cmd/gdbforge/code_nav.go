@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -231,7 +232,9 @@ func (a *DebuggerApp) activateCodePane() {
 	a.RequestRedraw()
 }
 
-// sendGdbExec sends a CLI exec command (next/step) on the shared GDB PTY.
+// sendGdbExec sends an execution command on the shared GDB PTY.
+// Prefer MI -exec-* so stops update Code via *stopped without dumping a CLI
+// source listing into the GDB console (the Code pane shows the line).
 func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if a.gdbWidget == nil || cmd == "" {
 		return
@@ -240,11 +243,12 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if sess == nil {
 		return
 	}
+	mi := gdb.CLIExecToMI(cmd)
 	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			return pw.Send(cmd)
+			return pw.Send(mi)
 		})
 	})
 }

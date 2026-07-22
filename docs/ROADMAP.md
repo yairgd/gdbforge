@@ -121,7 +121,7 @@ Dates are indicative — adjust as development progresses.
 |---------|-------------|
 | Session configuration | Target binary, args, working dir |
 | Source view | **Done** — file load, `━━▶` PC, Chroma, Space toggle |
-| Breakpoint pane | **Done** — `:b breakpoint`; `e`/`d`; GDB + CodeWidget sync |
+| Breakpoint pane | **Done** — `:b breakpoint`; `e`/`d`; GDB + CodeWidget sync; `./.gdbforge/breakpoints.yaml` save/restore |
 | Register / memory panes | Basic data display |
 | `*stopped` handling | **Partial** — PC + file buffer update |
 | Separate console/target streams | **Done** — GDB PTY vs inferior `ptyx.TTY` + IO pane; `@` still accepted as fallback |

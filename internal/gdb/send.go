@@ -78,3 +78,24 @@ func IsBreakInsertCmd(cmd string) bool {
 		return false
 	}
 }
+
+// CLIExecToMI maps common CLI run-control commands to MI -exec-* so the
+// console does not print source/line listings (Code widget follows *stopped).
+func CLIExecToMI(cmd string) string {
+	switch strings.TrimSpace(cmd) {
+	case "n", "next":
+		return "-exec-next"
+	case "s", "step":
+		return "-exec-step"
+	case "c", "cont", "continue":
+		return "-exec-continue"
+	case "finish":
+		return "-exec-finish"
+	case "ni", "nexti":
+		return "-exec-next-instruction"
+	case "si", "stepi":
+		return "-exec-step-instruction"
+	default:
+		return cmd
+	}
+}

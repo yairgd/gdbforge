@@ -85,6 +85,8 @@ Plugins load from:
 | `./.gdbforge/plugins/` | Project-local plugins |
 | Built-in `embed` | Shipping default panes |
 
+The same project directory also holds session data such as `./.gdbforge/breakpoints.yaml` (breakpoint save/restore — [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoint-persistence)).
+
 ---
 
 ## Feature panes

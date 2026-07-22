@@ -118,12 +118,14 @@ func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	ln := lineIdx + 1
 	if ln == w.pcLine {
-		st = st.Background(tcell.ColorDarkSlateGray)
+		st = st.Background(w.pcColor())
 	}
-	if ln == w.selLine && w.Focused() {
+	// Browse cursor (blue): shown whenever selLine is set — including when
+	// focus is on Breakpoints after a click-to-jump (━━▶ stays on real PC).
+	if ln == w.selLine {
 		st = st.Bold(true)
 		if ln != w.pcLine {
-			st = st.Background(tcell.ColorDarkBlue)
+			st = st.Background(w.codeSelColor())
 		}
 	}
 	_ = line
@@ -183,6 +185,51 @@ func (w *CodeWidget) lineHasBreak(line int) bool {
 // line is 1-based. If the source is missing or is a shared library without sources,
 // shows a centered "not available" placeholder instead of returning an error.
 func (w *CodeWidget) ShowLocation(path string, line int) error {
+	if err := w.loadAndScroll(path, line); err != nil {
+		return err
+	}
+	if w.unavailable {
+		return nil
+	}
+	w.pcLine = line
+	w.selLine = line
+	w.rebuildBuffer()
+	return nil
+}
+
+// ShowSelection loads path (if needed) and moves the browse cursor (blue) to
+// line without moving ━━▶. Used when jumping from the Breakpoints list.
+func (w *CodeWidget) ShowSelection(path string, line int) error {
+	prevPath, prevPC := w.path, w.pcLine
+	if err := w.loadAndScroll(path, line); err != nil {
+		return err
+	}
+	if w.unavailable {
+		return nil
+	}
+	// Preserve ━━▶ when staying on the same source file as the stop.
+	if prevPC > 0 && sameSourcePath(prevPath, w.path) {
+		w.pcLine = prevPC
+	} else {
+		w.pcLine = 0
+	}
+	w.selLine = line
+	w.rebuildBuffer()
+	return nil
+}
+
+func sameSourcePath(a, b string) bool {
+	if a == "" || b == "" {
+		return a == b
+	}
+	if a == b {
+		return true
+	}
+	return filepath.Base(a) == filepath.Base(b)
+}
+
+// loadAndScroll loads path and centers the viewport on line (1-based).
+func (w *CodeWidget) loadAndScroll(path string, line int) error {
 	if path == "" {
 		return fmt.Errorf("empty path")
 	}
@@ -209,9 +256,6 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 		w.rawLines = lines
 		w.hiLines = highlightLines(path, lines)
 	}
-	w.pcLine = line
-	w.selLine = line
-	w.rebuildBuffer()
 
 	idx := line - 1
 	if idx < 0 {
@@ -222,6 +266,7 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	}
 	w.viewport.Left = 0
 	w.viewport.CursorCol = 0
+	w.viewport.CursorLine = idx
 	pageH := w.viewport.Height()
 	if pageH <= 0 {
 		pageH = 20
@@ -364,14 +409,28 @@ func (w *CodeWidget) breakColor() tcell.Color {
 	if w.state != nil {
 		return w.state.BreakColor()
 	}
-	return tcell.ColorRed
+	return platform.DefaultBreakColor
 }
 
 func (w *CodeWidget) breakDisabledColor() tcell.Color {
 	if w.state != nil {
 		return w.state.BreakDisabledColor()
 	}
-	return tcell.ColorYellow
+	return platform.DefaultBreakDisabledColor
+}
+
+func (w *CodeWidget) pcColor() tcell.Color {
+	if w.state != nil {
+		return w.state.PCColor()
+	}
+	return platform.DefaultPCColor
+}
+
+func (w *CodeWidget) codeSelColor() tcell.Color {
+	if w.state != nil {
+		return w.state.CodeSelColor()
+	}
+	return platform.DefaultCodeSelColor
 }
 
 // RebuildBuffer refreshes gutter ANSI from current AppState break colors.
