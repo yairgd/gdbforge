@@ -13,7 +13,7 @@ import (
 // ThreadWidget shows GDB threads.
 //
 //	j/k or Up/Down — move selection and OnActivate (like Enter)
-//	wheel — move highlight only (avoids flooding :b with paths)
+//	wheel — same as j/k (Code / GDB follow the selected thread)
 //	Enter / click — OnActivate
 type ThreadWidget struct {
 	termui.BaseWidget
@@ -185,20 +185,35 @@ func (w *ThreadWidget) activateSelected() {
 }
 
 // SetItems replaces the thread list and rebuilds the viewport.
+// Keeps the previously selected thread ID when still present; otherwise
+// prefers the GDB current thread.
 func (w *ThreadWidget) SetItems(items []mcp.ThreadInfo) {
+	prevID := ""
+	if w.selected >= 0 && w.selected < len(w.items) {
+		prevID = w.items[w.selected].ID
+	}
 	w.items = append([]mcp.ThreadInfo(nil), items...)
+	w.selected = 0
+	if prevID != "" {
+		for i, it := range w.items {
+			if it.ID == prevID {
+				w.selected = i
+				break
+			}
+		}
+	} else {
+		for i, it := range w.items {
+			if it.Current {
+				w.selected = i
+				break
+			}
+		}
+	}
 	if w.selected >= len(w.items) {
 		w.selected = len(w.items) - 1
 	}
 	if w.selected < 0 {
 		w.selected = 0
-	}
-	// Prefer current thread when present.
-	for i, it := range w.items {
-		if it.Current {
-			w.selected = i
-			break
-		}
 	}
 	w.rebuild()
 }
@@ -235,13 +250,15 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		btns := e.Buttons()
-		// Wheel only moves the selection highlight (not activate).
+		// Wheel moves selection and activates like Enter (same as j/k).
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
+			w.activateSelected()
 			return
 		}
 		if btns&tcell.WheelDown != 0 {
 			w.move(1)
+			w.activateSelected()
 			return
 		}
 		w.viewport.HandleEvent(e)

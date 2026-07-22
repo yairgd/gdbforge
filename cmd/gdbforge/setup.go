@@ -62,6 +62,7 @@ func (a *DebuggerApp) InitB() error {
 	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)
 	a.RegisterModeHandler(platform.ModeCommand, a.handleCommandKey)
 	a.RegisterModeHandler(platform.ModeCompletion, a.handleCompletionKey)
+	a.RegisterModeHandler(platform.ModeLua, a.handleLuaKey)
 
 	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
 	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)

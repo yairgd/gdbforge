@@ -187,9 +187,22 @@ func (w *CallStackWidget) activateSelected() {
 }
 
 // SetItems replaces the frame list and rebuilds the viewport.
+// Preserves the selected GDB frame level when still present.
 func (w *CallStackWidget) SetItems(items []mcp.StackFrame) {
+	prevLevel := -1
+	if w.selected >= 0 && w.selected < len(w.items) {
+		prevLevel = w.items[w.selected].Level
+	}
 	w.items = append([]mcp.StackFrame(nil), items...)
 	w.selected = 0
+	if prevLevel >= 0 {
+		for i, it := range w.items {
+			if it.Level == prevLevel {
+				w.selected = i
+				break
+			}
+		}
+	}
 	if w.selected >= len(w.items) {
 		w.selected = len(w.items) - 1
 	}

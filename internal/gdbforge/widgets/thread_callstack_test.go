@@ -203,22 +203,22 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 	}
 }
 
-func TestThreadWidgetWheelMovesOnly(t *testing.T) {
+func TestThreadWidgetWheelActivates(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)
 	w.SetItems([]mcp.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	activated := false
-	w.OnActivate = func(th mcp.ThreadInfo) { activated = true }
+	var got mcp.ThreadInfo
+	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
-	if w.Selected() != 1 || activated {
-		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), activated)
+	if w.Selected() != 1 || got.ID != "2" {
+		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
 	}
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelUp, 0))
-	if w.Selected() != 0 || activated {
-		t.Fatalf("wheel up selected=%d activated=%v", w.Selected(), activated)
+	if w.Selected() != 0 || got.ID != "1" {
+		t.Fatalf("wheel up selected=%d activated=%v", w.Selected(), got)
 	}
 }
 

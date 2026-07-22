@@ -10,6 +10,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -33,23 +34,23 @@ type DebuggerApp struct {
 	insertKeys     *commands.KeyBindingRegistry
 	completionKeys *commands.KeyBindingRegistry
 
-	tab           *termui.TabWidget
-	cmdWidget     *termui.CmdWidget
+	tab            *termui.TabWidget
+	cmdWidget      *termui.CmdWidget
 	completionMenu *termui.CompletionMenu
 	completionView termui.CompletionView
 	completionBar  *termui.CompletionBarWidget // concrete chrome; also CompletionView
 	ctx            platform.AppContext
 	miLog          *platform.NamedLogger
 
-	cfg              SessionConfig
-	gdbClient        *gdb.GDBClient
-	gdbCancelSub     func()
+	cfg               SessionConfig
+	gdbClient         *gdb.GDBClient
+	gdbCancelSub      func()
 	inferiorCancelSub func()
-	gdbInputState    *gdb.GdbInputState
-	pendingFrameSync bool
-	pendingDebugInfo bool // refresh threads/stack after *stopped once (gdb) is ready
-	gdbWidget        *widgets.GDBWidget
-	gdbMcp           *mcp.GdbMcpService
+	gdbInputState     *gdb.GdbInputState
+	pendingFrameSync  bool
+	pendingDebugInfo  bool // refresh threads/stack after *stopped once (gdb) is ready
+	gdbWidget         *widgets.GDBWidget
+	gdbMcp            *mcp.GdbMcpService
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
@@ -73,10 +74,10 @@ type DebuggerApp struct {
 	breakpoints *models.BreakpointList
 	// bpSnapshot is the last user-visible BP list for quit save. Kept across
 	// clearBreakpointViews (kill/exit UI reset) so q / Ctrl-D can still persist.
-	bpSnapshot    []mcp.BreakInfo
-	bpSnapshotSet bool
-	threads       *models.ThreadList
-	callstack     *models.CallStack
+	bpSnapshot       []mcp.BreakInfo
+	bpSnapshotSet    bool
+	threads          *models.ThreadList
+	callstack        *models.CallStack
 	bpWidget         *widgets.BreakpointWidget
 	threadWidget     *widgets.ThreadWidget
 	callstackWidget  *widgets.CallStackWidget
@@ -93,6 +94,13 @@ type DebuggerApp struct {
 	// completionForGDB is true while ModeCompletion is driven by GDB Tab
 	// (apply/cancel return to insert mode instead of command mode).
 	completionForGDB bool
+
+	// Lua / gdbforge scripting
+	luaScratch *widgets.LuaWidget
+	luaSnake   *widgets.LuaWidget
+	luaTetris  *widgets.LuaWidget
+	activeLua  *widgets.LuaWidget
+	luaCmds    map[string]*luahost.Runtime
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -138,6 +146,12 @@ func (a *DebuggerApp) Close() {
 	if a.execClient != nil {
 		a.execClient.Close()
 		a.execClient = nil
+	}
+	a.leaveLuaMode()
+	for _, w := range []*widgets.LuaWidget{a.luaScratch, a.luaSnake, a.luaTetris} {
+		if w != nil {
+			w.Close()
+		}
 	}
 }
 

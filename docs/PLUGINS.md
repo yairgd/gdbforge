@@ -2,7 +2,7 @@
 
 gdbforge is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
-**Status:** design phase — no Lua runtime is embedded yet.
+**Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick), `:lua` DSL, `gdbforge.*` API. DOD demos: `:b snake`, `:b tetris`. OpenOCD/gdbserver automation bindings are still future work.
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
 

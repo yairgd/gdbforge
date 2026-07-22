@@ -6,6 +6,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -105,6 +106,30 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.fileListWidget.SetClipboard(a.ClipboardIO())
 	a.fileListWidget.SetAppState(a.State())
 	a.fileListWidget.OnOpen = a.openSourcePath
+
+	a.luaCmds = make(map[string]*luahost.Runtime)
+	reg := a.registerLuaCmd
+	var errLua error
+	a.luaScratch, errLua = widgets.NewLuaWidget("Lua", luahost.ScratchScript, reg)
+	if errLua != nil {
+		return errLua
+	}
+	a.luaScratch.SetFrameRequester(a.RequestFrame)
+	a.registerBuiltin("lua", a.luaScratch)
+
+	a.luaSnake, errLua = widgets.NewLuaWidget("Snake", luahost.SnakeScript, reg)
+	if errLua != nil {
+		return errLua
+	}
+	a.luaSnake.SetFrameRequester(a.RequestFrame)
+	a.registerBuiltin("snake", a.luaSnake)
+
+	a.luaTetris, errLua = widgets.NewLuaWidget("Tetris", luahost.TetrisScript, reg)
+	if errLua != nil {
+		return errLua
+	}
+	a.luaTetris.SetFrameRequester(a.RequestFrame)
+	a.registerBuiltin("tetris", a.luaTetris)
 
 	a.registerLayouts()
 

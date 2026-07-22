@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/execcli"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -87,6 +87,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 }
 
 func (app *DebuggerApp) EnterInsertMode(args ...any) {
+	app.leaveLuaMode()
 	app.tab.SetInsertActive(true)
 	app.SetMode(platform.ModeInsert)
 	app.RequestRedraw()

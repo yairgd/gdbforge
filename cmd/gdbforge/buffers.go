@@ -81,6 +81,16 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 	for name := range a.builtins {
 		add(name)
 	}
+	// Alias for the primary/active source pane (leaf mark "code").
+	if cw := a.codeBufferForB(); cw != nil {
+		add("code")
+		if cw.PaneName != "" {
+			add(cw.PaneName)
+		}
+		if path := cw.Path(); path != "" {
+			add(filepath.Base(path))
+		}
+	}
 	for path := range a.bufferListed {
 		w := a.fileBuffers[path]
 		if w == nil || w.Unavailable() {
@@ -160,6 +170,20 @@ func joinCmdArgs(args []any) string {
 	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
+// codeBufferForB returns the CodeWidget for :b code / completions.
+// Prefers primaryCode (stop / edit), then any open file buffer.
+func (a *DebuggerApp) codeBufferForB() *widgets.CodeWidget {
+	if a.primaryCode != nil && !a.primaryCode.Unavailable() {
+		return a.primaryCode
+	}
+	for _, w := range a.fileBuffers {
+		if w != nil && !w.Unavailable() {
+			return w
+		}
+	}
+	return nil
+}
+
 // OnBuffer switches to an existing builtin or open file buffer (:b name).
 // Does not create file buffers — use :e for that.
 func (a *DebuggerApp) OnBuffer(args ...any) {
@@ -167,8 +191,25 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 	if name == "" || a.tab == nil {
 		return
 	}
+	// :b code → primary/active CodeWidget (not a builtin; leaf mark name).
+	if name == "code" {
+		if cw := a.codeBufferForB(); cw != nil {
+			if a.swapFocusedWidget(cw) {
+				a.RequestFrame()
+			}
+			return
+		}
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("buffer").Error("no code buffer open yet")
+		}
+		return
+	}
 	if w := a.builtins[name]; w != nil {
 		if a.swapFocusedWidget(w) {
+			a.maybeEnterLuaBuffer(w)
+			a.RequestFrame()
+		} else if _, ok := w.(*widgets.LuaWidget); ok {
+			a.maybeEnterLuaBuffer(w)
 			a.RequestFrame()
 		}
 		return

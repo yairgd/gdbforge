@@ -14,6 +14,7 @@ const (
 	ModeInsert
 	ModeCommand
 	ModeCompletion // wildmenu: CompletionMenu + CompletionView (bar) receive keys
+	ModeLua        // LuaWidget owns keys (Esc leaves)
 )
 
 // PTYOwner identifies which frontend currently holds exclusive PTY write
@@ -22,9 +23,9 @@ type PTYOwner int
 
 const (
 	PTYOwnerNone PTYOwner = iota
-	PTYOwnerUI              // GDB / Exec console submit
-	PTYOwnerMCP             // GdbMcpService / :AI tools
-	PTYOwnerApp             // Silent MI: BreakpointWidget, -break-list, file list, …
+	PTYOwnerUI            // GDB / Exec console submit
+	PTYOwnerMCP           // GdbMcpService / :AI tools
+	PTYOwnerApp           // Silent MI: BreakpointWidget, -break-list, file list, …
 )
 
 func (o PTYOwner) String() string {

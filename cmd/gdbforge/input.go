@@ -6,6 +6,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -275,6 +276,7 @@ func isCopyKey(ev *tcell.EventKey) bool {
 func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	x, y := ev.Position()
 	primary := ev.Buttons()&tcell.ButtonPrimary != 0
+	wheel := ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0
 	inCmd := a.cmdLineContains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
@@ -288,9 +290,9 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 			a.clickCmdLine(x)
 			return
 		}
-		if primary && !inCmd {
-			// Click outside the cmdline: leave command mode (like Esc), then
-			// fall through so the pane under the pointer can take focus.
+		if (primary || wheel) && !inCmd {
+			// Click/wheel outside the cmdline: leave command mode (like Esc),
+			// then fall through so the pane under the pointer can take focus.
 			a.leaveCommandMode()
 		} else {
 			return
@@ -306,14 +308,22 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	if primary {
 		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
-			a.EnterInsertMode()
+			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
+				a.enterLuaMode(lw)
+			} else {
+				a.EnterInsertMode()
+			}
 		}
 	}
 
-	if ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0 {
+	if wheel {
 		if a.tab.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
-			a.EnterInsertMode()
+			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
+				a.enterLuaMode(lw)
+			} else {
+				a.EnterInsertMode()
+			}
 		}
 	}
 
@@ -325,6 +335,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 // enterCommandMode activates the ':' cmdline (same as pressing ':').
 // Leaves insert-active so the focused pane status is blue, matching Esc then ':'.
 func (a *DebuggerApp) enterCommandMode() {
+	a.leaveLuaMode()
 	a.completionForGDB = false
 	a.clearCompletion()
 	if a.tab != nil {

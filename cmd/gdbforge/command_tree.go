@@ -18,7 +18,8 @@ import (
 //	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
 //	          pccolor, stackbreakcolor, codeselcolor, mutedcolor
 //	/ → layout <name>  (default | panels | classic)
-//	/ → b <name>   (switch buffer: about, logger, gdb, exec, or open file)
+//	/ → b <name>   (switch buffer: about, logger, gdb, snake, tetris, lua, …)
+//	/ → lua <func> [args…]  (gdbforge.register'd Lua commands)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
 //	/ → help         (Viewport user manual)
 //	/ → vs, split, clear, quit
@@ -70,6 +71,7 @@ func (a *DebuggerApp) ExapData() {
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
 		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
 		LeafRestComplete("edit", a.OnEdit, a.editCompletions).
+		LeafRestComplete("lua", a.OnLua, a.luaCompletions).
 		Leaf("help", a.OnHelp).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
