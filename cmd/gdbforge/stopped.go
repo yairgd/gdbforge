@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
@@ -29,7 +30,7 @@ func (a *DebuggerApp) maybeClearOutput() {
 	a.outputWidget.Clear()
 }
 
-// maybeBreakMain inserts "break main" when AppState.BreakMain is set (default on).
+// maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
 func (a *DebuggerApp) maybeBreakMain() {
 	if a.gdbWidget == nil || !a.State().BreakMain() {
 		return
@@ -38,7 +39,11 @@ func (a *DebuggerApp) maybeBreakMain() {
 	if sess == nil {
 		return
 	}
-	gdb.SendCmd(sess, a.State(), "break main")
+	cmd := "break main"
+	if a.isDLV() {
+		cmd = "break main.main"
+	}
+	gdb.SendCmd(sess, a.State(), cmd)
 }
 
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
@@ -48,7 +53,11 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		return
 	}
 	a.State().SetInferiorRunning(false)
-	if !gdb.StopNeedsUIRefresh(stop) {
+	needsRefresh := gdb.StopNeedsUIRefresh(stop)
+	if a.isDLV() {
+		needsRefresh = dlv.StopNeedsUIRefresh(stop)
+	}
+	if !needsRefresh {
 		// exited / kill — clear Threads + Call Stack (do not query stack).
 		a.clearDebugInfoPanes()
 		return
@@ -192,6 +201,28 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	if a.isDLV() {
+		raw, err := a.gdbMcp.Query(ctx, "stack")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("frame").Error(err.Error())
+			}
+			return
+		}
+		fr, ok := dlv.ParseStackInfoFrame(raw)
+		if !ok {
+			return
+		}
+		if a.callstackWidget != nil || a.callstack != nil {
+			a.applyStackFrames(dlv.ParseStack(raw))
+			if a.callstackWidget != nil {
+				a.callstackWidget.SelectLevel(fr.Level)
+			}
+		}
+		a.showFrameSource(fr)
+		return
+	}
+
 	raw, err := a.gdbMcp.Query(ctx, "-stack-info-frame")
 	if err != nil {
 		if a.ctx.Log != nil {
@@ -282,7 +313,11 @@ func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
 	if sess == nil {
 		return
 	}
-	gdb.SendCmd(sess, a.State(), "thread "+th.ID)
+	cmd := "thread " + th.ID
+	if a.isDLV() {
+		cmd = "goroutine " + th.ID
+	}
+	gdb.SendCmd(sess, a.State(), cmd)
 	a.refreshThreadsAndStack()
 	a.syncThreadViews()
 	a.syncCallStackViews()
@@ -393,7 +428,7 @@ func (a *DebuggerApp) runDebugInfoRefresh() {
 	}
 }
 
-// refreshThreadsAndStack queries GDB and updates shared models only.
+// refreshThreadsAndStack queries the debugger and updates shared models only.
 // Views are synced on the UI thread via debugInfoUIMsg (or sync*Views callers).
 // Returns whether each query produced a usable payload.
 func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
@@ -402,6 +437,36 @@ func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
+	if a.isDLV() {
+		raw, err := a.gdbMcp.Query(ctx, "goroutines")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("threads").Error(err.Error())
+			}
+		} else if strings.Contains(strings.ToLower(raw), "goroutine") {
+			items := dlv.ParseGoroutines(raw)
+			a.setThreadInfos(items)
+			threadsOK = true
+			if len(items) == 0 {
+				a.setStackFrames(nil)
+			}
+		}
+
+		raw, err = a.gdbMcp.Query(ctx, "stack")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("callstack").Error(err.Error())
+			}
+		} else {
+			frames := dlv.ParseStack(raw)
+			if len(frames) > 0 {
+				a.setStackFrames(frames)
+				stackOK = true
+			}
+		}
+		return threadsOK, stackOK
+	}
 
 	raw, err := a.gdbMcp.Query(ctx, "-thread-info")
 	if err != nil {
@@ -518,6 +583,10 @@ func (a *DebuggerApp) ensureSourceFiles() {
 	if a.gdbMcp == nil {
 		return
 	}
+	if a.isDLV() {
+		// Delve has no direct analogue of -file-list-exec-source-files in MVP.
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	raw, err := a.gdbMcp.Query(ctx, "-file-list-exec-source-files")
@@ -552,6 +621,32 @@ func (a *DebuggerApp) fetchBreakInfos() ([]mcp.BreakInfo, bool) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+
+	if a.isDLV() {
+		raw, err := a.gdbMcp.Query(ctx, "breakpoints")
+		if err != nil {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("code").Error(err.Error())
+			}
+			return nil, false
+		}
+		items := dlv.ParseBreakpoints(raw)
+		low := strings.ToLower(raw)
+		if len(items) == 0 {
+			// Real empty list from Delve.
+			if strings.Contains(low, "no breakpoints") {
+				return items, true
+			}
+			// Capture often includes only runtime-* named BPs; if we could not
+			// parse any numeric user BP, keep the optimistic UI list.
+			if strings.Contains(low, "breakpoint") {
+				return nil, false
+			}
+			return nil, false
+		}
+		return items, true
+	}
+
 	raw, err := a.gdbMcp.Query(ctx, "-break-list")
 	if err != nil {
 		if a.ctx.Log != nil {

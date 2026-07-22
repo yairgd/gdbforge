@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -29,6 +30,9 @@ func (a *DebuggerApp) syncBreakpointViews() {
 func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
 	if cmd == "" {
 		return
+	}
+	if a.isDLV() {
+		cmd = dlv.MapBreakCmd(cmd)
 	}
 	gdb.SendCmd(a.GDB(), a.State(), cmd)
 	a.onBreakpointsChanged()

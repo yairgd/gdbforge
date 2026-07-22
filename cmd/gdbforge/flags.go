@@ -9,21 +9,33 @@ import (
 	"strings"
 )
 
+// Backend kinds selected with -g (default gdb).
+const (
+	BackendGDB = "gdb"
+	BackendDLV = "dlv"
+)
+
 // SessionConfig holds CLI options for a debugger session.
 //
 // Usage (cgdb-style):
 //
-//	gdbforge [gdbforge options] [--] [gdb options]
+//	gdbforge [gdbforge options] [--] [debugger options]
 //
 // Examples:
 //
 //	gdbforge ./hello
+//	gdbforge -g dlv ./hello
 //	gdbforge -d /usr/bin/gdb ./hello a b
 //	gdbforge -d /usr/bin/gdb -- -nx -x r5_debug.gdb ./zephyr.elf
+//	gdbforge -g dlv -d /usr/local/bin/dlv ./hello
 type SessionConfig struct {
+	// Kind is the backend: gdb or dlv (from -g).
+	Kind string
+	// GDBPath is the debugger binary path (from -d). Name kept for GDB-era call sites.
 	GDBPath string
-	// GDBArgs are arguments after the gdb binary. gdbforge always injects
-	// --interpreter=mi2 before them (same role as cgdb's "[gdb options]").
+	// GDBArgs are arguments after the debugger binary.
+	// For gdb: injected after --interpreter=mi2 (cgdb-style "[gdb options]").
+	// For dlv: program and args after `dlv exec --`.
 	GDBArgs []string
 	// Prog is a best-effort display hint (last non-flag arg); may be empty.
 	Prog string
@@ -65,22 +77,39 @@ func inferProg(gdbArgs []string) string {
 	return ""
 }
 
+func normalizeKind(k string) (string, error) {
+	k = strings.ToLower(strings.TrimSpace(k))
+	switch k {
+	case BackendGDB, BackendDLV:
+		return k, nil
+	case "":
+		return BackendGDB, nil
+	default:
+		return "", fmt.Errorf("unknown backend %q (want gdb or dlv)", k)
+	}
+}
+
 func parseFlags(args []string) (SessionConfig, error) {
 	before, after, passThrough := splitDashDash(args)
 
 	fs := flag.NewFlagSet("gdbforge", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	gdbPath := fs.String("d", "gdb", "path to the gdb binary")
+	kind := fs.String("g", BackendGDB, "backend kind: gdb or dlv")
+	// Empty default: filled from -g when -d is omitted.
+	debuggerPath := fs.String("d", "", "path to the debugger binary (default: matches -g)")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: gdbforge [gdbforge options] [--] [gdb options]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: gdbforge [gdbforge options] [--] [debugger options]\n\n")
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
-		fmt.Fprintf(os.Stderr, "  -d path     Debugger to use (default \"gdb\")\n")
+		fmt.Fprintf(os.Stderr, "  -g kind     Backend: gdb or dlv (default \"gdb\")\n")
+		fmt.Fprintf(os.Stderr, "  -d path     Debugger binary (default: gdb or dlv matching -g)\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help  Print help and exit\n")
-		fmt.Fprintf(os.Stderr, "  --          End of gdbforge options; rest are passed to gdb\n\n")
+		fmt.Fprintf(os.Stderr, "  --          End of gdbforge options; rest passed to the debugger\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb ./hello a b\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv -d /usr/local/bin/dlv ./pkg\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb -- -nx -x ./r5_debug.gdb ./zephyr.elf\n")
 	}
 
@@ -92,12 +121,23 @@ func parseFlags(args []string) (SessionConfig, error) {
 		return SessionConfig{}, err
 	}
 
-	cfg := SessionConfig{GDBPath: *gdbPath}
+	backend, err := normalizeKind(*kind)
+	if err != nil {
+		fs.Usage()
+		return SessionConfig{}, err
+	}
+
+	path := strings.TrimSpace(*debuggerPath)
+	if path == "" {
+		path = backend
+	}
+
+	cfg := SessionConfig{Kind: backend, GDBPath: path}
 
 	if passThrough {
 		if len(after) == 0 {
 			fs.Usage()
-			return SessionConfig{}, errors.New("missing gdb options after --")
+			return SessionConfig{}, errors.New("missing debugger options after --")
 		}
 		cfg.GDBArgs = after
 		cfg.Prog = inferProg(after)
@@ -112,9 +152,22 @@ func parseFlags(args []string) (SessionConfig, error) {
 	cfg.Prog = rest[0]
 	if len(rest) > 1 {
 		cfg.ProgArgs = append([]string{}, rest[1:]...)
-		cfg.GDBArgs = append([]string{"--args", rest[0]}, rest[1:]...)
+		if backend == BackendDLV {
+			// dlv exec -- prog args...
+			cfg.GDBArgs = append([]string{rest[0]}, rest[1:]...)
+		} else {
+			cfg.GDBArgs = append([]string{"--args", rest[0]}, rest[1:]...)
+		}
 	} else {
 		cfg.GDBArgs = []string{rest[0]}
 	}
 	return cfg, nil
+}
+
+func (c SessionConfig) IsDLV() bool {
+	return c.Kind == BackendDLV
+}
+
+func (c SessionConfig) IsGDB() bool {
+	return c.Kind == BackendGDB || c.Kind == ""
 }

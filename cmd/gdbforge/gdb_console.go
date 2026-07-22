@@ -6,6 +6,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
@@ -15,12 +16,13 @@ const (
 	gdbOutputFlushMaxBytes = 64 * 1024
 )
 
-// startGdbConsoleBridge coalesces GDB PTY chunks onto the UI event loop.
+// startGdbConsoleBridge coalesces debugger PTY chunks onto the UI event loop.
 func (a *DebuggerApp) startGdbConsoleBridge() {
-	if a.gdbClient == nil || a.Screen() == nil {
+	sess := a.GDB()
+	if sess == nil || a.Screen() == nil {
 		return
 	}
-	ch, cancel := a.gdbClient.Subscribe()
+	ch, cancel := sess.Subscribe()
 	a.gdbCancelSub = cancel
 	screen := a.Screen()
 	go coalesceGdbOutput(ch, func(msg core.GdbOutputMsg) {
@@ -96,7 +98,14 @@ func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(core.GdbOutputMsg)
 }
 
 func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
-	if a.gdbClient == nil || a.gdbWidget == nil {
+	if a.gdbWidget == nil || a.GDB() == nil {
+		return
+	}
+	if a.isDLV() {
+		a.onDlvConsoleSubmit(raw)
+		return
+	}
+	if a.gdbClient == nil {
 		return
 	}
 	w := a.gdbWidget
@@ -160,15 +169,65 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 	w.FollowTailAndScroll()
 }
 
+func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
+	if a.dlvClient == nil || a.gdbWidget == nil {
+		return
+	}
+	w := a.gdbWidget
+	c := a.dlvClient
+
+	cmd := raw
+	if cmd == "" {
+		cmd = w.LastHistory()
+	}
+	if dlv.IsStackNavCmd(cmd) {
+		a.pendingFrameSync = true
+	}
+	if isDlvRunCmd(cmd) {
+		if a.State() != nil {
+			a.State().SetInferiorRunning(true)
+		}
+	}
+	// Keep Delve CLI as-is (no MI mapping).
+	send := func() { _ = c.Send(cmd) }
+	if cmd != "" {
+		w.PushHistory(cmd)
+		w.EchoSubmit(cmd)
+	}
+	a.withGdbUIOwner(send)
+	w.ClearInput()
+	w.FollowTailAndScroll()
+}
+
 func (a *DebuggerApp) onGdbConsoleInterrupt() {
-	if a.gdbClient == nil || a.gdbWidget == nil {
+	if a.gdbWidget == nil || a.GDB() == nil {
 		return
 	}
 	a.gdbWidget.ClearInput()
-	a.withGdbUIOwner(func() { _ = a.gdbClient.Interrupt() })
+	if a.isDLV() && a.dlvClient != nil {
+		a.withGdbUIOwner(func() { _ = a.dlvClient.Interrupt() })
+		return
+	}
+	if a.gdbClient != nil {
+		a.withGdbUIOwner(func() { _ = a.gdbClient.Interrupt() })
+	}
 }
 
 func (a *DebuggerApp) onGdbConsoleEOF() {
+	if a.isDLV() {
+		if a.dlvClient == nil {
+			return
+		}
+		// Delve: send quit; it may ask for confirmation interactively.
+		w := a.gdbWidget
+		if w != nil {
+			w.PushHistory("quit")
+			w.EchoSubmit("quit")
+			w.ClearInput()
+		}
+		a.withGdbUIOwner(func() { _ = a.dlvClient.Send("quit") })
+		return
+	}
 	if a.gdbClient == nil {
 		return
 	}
@@ -220,40 +279,83 @@ func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
 		includeTarget := a.State() != nil && a.State().GdbTargetPrint()
 		a.gdbWidget.PaintMiDisplay(upd, confirming, includeTarget)
 	}
-	if upd.Stopped != nil {
-		a.onGdbStopped(upd.Stopped)
+	a.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged)
+}
+
+func (a *DebuggerApp) applyDlvUpdate(upd dlv.Update) {
+	silent := a.State() != nil && a.State().SuppressGdbConsole()
+	if !silent && a.gdbWidget != nil {
+		a.gdbWidget.PaintDlvDisplay(upd.DisplayLines, upd.PromptReady, upd.PromptLine)
 	}
-	if upd.InferiorExited {
+	a.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged)
+}
+
+func (a *DebuggerApp) applyStopAndPromptSideEffects(
+	stopped *gdb.MiStopMsg,
+	inferiorExited bool,
+	promptReady bool,
+	state gdb.GdbState,
+	breakpointsChanged bool,
+) {
+	if stopped != nil {
+		a.onGdbStopped(stopped)
+	}
+	if inferiorExited {
 		a.clearDebugInfoPanes()
 	}
-	// Wait for MI prompt after *stopped before -thread-info / -stack-list-frames.
-	// Querying immediately races the stop reply and often captures an empty /
-	// stale chunk — Threads pane then does not update until a later click.
-	if a.pendingDebugInfo && upd.PromptReady {
+	if a.pendingDebugInfo && promptReady {
 		a.triggerPendingDebugInfo()
 	}
 	if a.pendingFrameSync {
-		if upd.State == gdb.Error {
+		if state == gdb.Error {
 			a.pendingFrameSync = false
-		} else if upd.PromptReady {
+		} else if promptReady {
 			a.pendingFrameSync = false
 			a.onGdbFrameSync()
 		}
 	}
-	if upd.State == gdb.Running {
+	if state == gdb.Running {
 		if a.State() != nil {
 			a.State().SetInferiorRunning(true)
 		}
 	}
-	if upd.BreakpointsChanged {
+	if breakpointsChanged {
 		a.onBreakpointsChanged()
 	}
 }
 
-func (a *DebuggerApp) handleGdbOutputMsg(msg core.GdbOutputMsg) {
-	if msg.Data == "" || a.gdbInputState == nil {
+// handleDebuggerOutputMsg routes coalesced PTY output to the active backend parser.
+func (a *DebuggerApp) handleDebuggerOutputMsg(msg core.GdbOutputMsg) {
+	if msg.Data == "" {
 		return
 	}
-	upd := a.gdbInputState.PushRaw(msg.Data)
-	a.applyGdbMiUpdate(upd)
+	if a.isDLV() {
+		if a.dlvInputState == nil {
+			return
+		}
+		a.applyDlvUpdate(a.dlvInputState.PushRaw(msg.Data))
+		return
+	}
+	if a.gdbInputState == nil {
+		return
+	}
+	a.applyGdbMiUpdate(a.gdbInputState.PushRaw(msg.Data))
+}
+
+// handleGdbOutputMsg is kept as an alias for existing call sites / tests.
+func (a *DebuggerApp) handleGdbOutputMsg(msg core.GdbOutputMsg) {
+	a.handleDebuggerOutputMsg(msg)
+}
+
+func isDlvRunCmd(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	switch strings.Fields(cmd)[0] {
+	case "c", "continue", "n", "next", "s", "step", "stepout", "finish", "nexti", "ni", "stepi", "si":
+		return true
+	default:
+		return false
+	}
 }

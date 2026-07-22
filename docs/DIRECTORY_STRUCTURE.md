@@ -13,6 +13,7 @@ This document maps the **gdbforge** repository packages to their responsibilitie
 - [internal/termui](#internaltermui)
 - [internal/core](#internalcore)
 - [internal/gdb](#internalgdb)
+- [internal/dlv](#internaldlv)
 - [internal/gdbforge](#internalgdbforge)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
@@ -40,6 +41,7 @@ gdbforge/
 │   │   └── widgets/
 │   ├── core/              # UI-agnostic domain logic ★
 │   ├── gdb/               # GDB MI2 backend ★
+│   ├── dlv/               # Delve CLI backend ★
 │   ├── playground/        # Experiments (not production)
 │   └── tests/
 ├── docs/                  # gdbforge documentation ★
@@ -239,6 +241,20 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 **Rule:** no imports from `termui`. GDB output → `GdbOutputMsg`; inferior stdio → `InferiorOutputMsg` (`EventInterrupt`).
 
 Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
+
+---
+
+## internal/dlv
+
+**Delve interactive CLI backend** (peer of `internal/gdb`). Spawns `dlv exec --` on `ptyx`; implements `core.Session`.
+
+| File | Responsibility |
+|------|----------------|
+| `client.go` | `Client` embeds `*ptyx.Client`; waits for `(dlv)` on startup |
+| `input_state.go` | Stream splitter: `PushRaw` → `Update` (stops, prompts, BP notifies) |
+| `parse.go` | Text parsers for `breakpoints` / `stack` / `goroutines` → MCP row types |
+
+Selected with `gdbforge -g dlv`. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb).
 
 ---
 

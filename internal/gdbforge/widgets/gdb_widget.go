@@ -12,7 +12,8 @@ import (
 // The app owns GDBClient, MI parsing, and quit/send policy; it paints via
 // these methods and handles OnSubmit / OnInterrupt / OnEOF intents.
 type GDBWidget struct {
-	console *termui.ConsolePane
+	console          *termui.ConsolePane
+	promptStyleToken string // "(gdb)" or "(dlv)" for yellow line styling
 }
 
 // NewGDBWidget builds an empty GDB console view. Wire intents with SetOn*.
@@ -21,12 +22,32 @@ func NewGDBWidget() *GDBWidget {
 	// No standing Prompt: Draw must not invent "(gdb)" while waiting.
 	console.Prompt = ""
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	console.LineStyle = gdbLineStyle
-	w := &GDBWidget{console: console}
+	w := &GDBWidget{console: console, promptStyleToken: gdb.MIPromptToken}
+	console.LineStyle = w.lineStyle
 	return w
 }
 
-func gdbLineStyle(line string) tcell.Style {
+// SetPromptStyleToken sets which prompt token gets yellow styling ("(gdb)" / "(dlv)").
+func (m *GDBWidget) SetPromptStyleToken(token string) {
+	if m == nil {
+		return
+	}
+	if token == "" {
+		token = gdb.MIPromptToken
+	}
+	m.promptStyleToken = token
+}
+
+// SetANSI enables ANSI/SGR color rendering in the console scrollback
+// (needed for Delve's colored source listings).
+func (m *GDBWidget) SetANSI(on bool) {
+	if m == nil || m.console == nil {
+		return
+	}
+	m.console.SetANSI(on)
+}
+
+func (m *GDBWidget) lineStyle(line string) tcell.Style {
 	st := tcell.StyleDefault
 	if strings.HasPrefix(line, ">>>") {
 		return st.Foreground(tcell.ColorTeal).Bold(true)
@@ -35,7 +56,11 @@ func gdbLineStyle(line string) tcell.Style {
 	if gdb.IsCtrlCQuitLog(line) {
 		return st.Foreground(tcell.ColorRed).Bold(true)
 	}
-	if strings.HasPrefix(line, gdb.MIPromptToken) {
+	tok := m.promptStyleToken
+	if tok == "" {
+		tok = gdb.MIPromptToken
+	}
+	if strings.HasPrefix(line, tok) {
 		return st.Foreground(tcell.ColorYellow)
 	}
 	return st
@@ -239,16 +264,20 @@ func (m *GDBWidget) AttachGdbPrompt(fromGDB string) {
 		return
 	}
 	n := buf.NumLines()
-	if n > 0 && gdb.IsBareMIPromptHost(buf.Line(n-1)) {
-		buf.SetLine(n-1, host)
-		m.console.SetLivePrompt(true)
-		return
+	if n > 0 {
+		last := buf.Line(n - 1)
+		bare := gdb.IsBareMIPromptHost(last) || strings.TrimSpace(last) == strings.TrimSpace(fromGDB)
+		if bare {
+			buf.SetLine(n-1, host)
+			m.console.SetLivePrompt(true)
+			return
+		}
 	}
 	buf.AppendLine(host)
 	m.console.SetLivePrompt(true)
 }
 
-// StripTrailingGdbPrompt drops a trailing bare MI prompt host before new output.
+// StripTrailingGdbPrompt drops a trailing bare MI/Delve prompt host before new output.
 func (m *GDBWidget) StripTrailingGdbPrompt() {
 	if m == nil || m.console == nil {
 		return
@@ -257,9 +286,13 @@ func (m *GDBWidget) StripTrailingGdbPrompt() {
 	if buf == nil {
 		return
 	}
+	tok := m.promptStyleToken
+	if tok == "" {
+		tok = gdb.MIPromptToken
+	}
 	for buf.NumLines() > 0 {
 		last := buf.Line(buf.NumLines() - 1)
-		bare := gdb.IsBareMIPromptHost(last)
+		bare := gdb.IsBareMIPromptHost(last) || strings.TrimSpace(last) == tok
 		if strings.TrimSpace(last) != "" && !bare {
 			return
 		}
@@ -300,6 +333,25 @@ func (m *GDBWidget) PaintMiDisplay(upd gdb.MiUpdate, confirming, includeTarget b
 		m.AttachGdbPrompt(upd.PromptLine)
 	}
 	if painted || (upd.PromptReady && !confirming) {
+		m.console.FollowTailAndScroll()
+	}
+}
+
+// PaintDlvDisplay paints Delve CLI output (peer of PaintMiDisplay).
+func (m *GDBWidget) PaintDlvDisplay(displayLines []string, promptReady bool, promptLine string) {
+	if m == nil || m.console == nil {
+		return
+	}
+	painted := false
+	if len(displayLines) > 0 {
+		m.console.AppendLines(displayLines)
+		m.StripTrailingGdbPrompt()
+		painted = true
+	}
+	if promptReady {
+		m.AttachGdbPrompt(promptLine)
+	}
+	if painted || promptReady {
 		m.console.FollowTailAndScroll()
 	}
 }

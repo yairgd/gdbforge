@@ -29,6 +29,9 @@ type Runtime struct {
 	registered map[string]*lua.LFunction
 	onRegister OnRegister
 	openBuffer OpenBufferFunc
+	run        RunFunc
+	spawn      SpawnFunc
+	gdb        GDBFunc
 	lastErr    string
 }
 
@@ -177,6 +180,12 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "clear", L.NewFunction(rt.luaClear))
 	L.SetField(gf, "register", L.NewFunction(rt.luaRegister))
 	L.SetField(gf, "open_buffer", L.NewFunction(rt.luaOpenBuffer))
+	L.SetField(gf, "run", L.NewFunction(rt.luaRun))
+	L.SetField(gf, "spawn", L.NewFunction(rt.luaSpawn))
+	L.SetField(gf, "wait_port", L.NewFunction(rt.luaWaitPort))
+	L.SetField(gf, "lua_dir", L.NewFunction(rt.luaLuaDir))
+	L.SetField(gf, "sleep", L.NewFunction(rt.luaSleep))
+	L.SetField(gf, "gdb", L.NewFunction(rt.luaGDB))
 
 	pane := L.NewTable()
 	L.SetGlobal("pane", pane)

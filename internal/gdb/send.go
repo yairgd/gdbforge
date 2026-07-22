@@ -59,7 +59,9 @@ func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
 // IsBreakRemoveCmd reports clear / -break-delete style commands.
 func IsBreakRemoveCmd(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
-	return strings.HasPrefix(cmd, "clear ") || strings.HasPrefix(cmd, "-break-delete")
+	return strings.HasPrefix(cmd, "clear ") ||
+		strings.HasPrefix(cmd, "clearall ") ||
+		strings.HasPrefix(cmd, "-break-delete")
 }
 
 // IsBreakInsertCmd reports break / tbreak / -break-insert style commands.

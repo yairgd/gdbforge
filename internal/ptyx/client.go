@@ -41,6 +41,9 @@ var _ core.Session = (*Client)(nil)
 type Options struct {
 	// Rows/Cols set the initial winsize (0 = leave default / unset).
 	Rows, Cols uint16
+	// Env replaces the child environment when non-nil (like exec.Cmd.Env).
+	// When nil, the child inherits the parent environment.
+	Env []string
 }
 
 // New starts argv on a PTY, sets raw mode, and begins the reader goroutine.
@@ -54,6 +57,9 @@ func New(argv []string, opt Options) (*Client, error) {
 	}
 
 	cmd := exec.Command(name, argv[1:]...)
+	if opt.Env != nil {
+		cmd.Env = opt.Env
+	}
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("start %s: %w", name, err)

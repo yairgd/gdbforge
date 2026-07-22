@@ -2,9 +2,11 @@ package luahost
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -17,6 +19,15 @@ const (
 // OpenBufferFunc opens a builtin/buffer by name (e.g. "lua", "snake").
 type OpenBufferFunc func(name string)
 
+// RunFunc starts a shell/exec session with argv (same as :!).
+type RunFunc func(argv []string)
+
+// SpawnFunc starts a background PTY process; return error if start fails.
+type SpawnFunc func(argv []string) error
+
+// GDBFunc sends one GDB CLI command (same path as the GDB console).
+type GDBFunc func(cmd string)
+
 // SetOpenBuffer installs gdbforge.open_buffer(name) for user scripts.
 func (rt *Runtime) SetOpenBuffer(fn OpenBufferFunc) {
 	rt.mu.Lock()
@@ -28,6 +39,50 @@ func (rt *Runtime) SetOpenBuffer(fn OpenBufferFunc) {
 	gf := rt.L.GetGlobal("gdbforge")
 	if tbl, ok := gf.(*lua.LTable); ok {
 		rt.L.SetField(tbl, "open_buffer", rt.L.NewFunction(rt.luaOpenBuffer))
+	}
+}
+
+// SetRun installs gdbforge.run(...) → same path as :! argv.
+func (rt *Runtime) SetRun(fn RunFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.run = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "run", rt.L.NewFunction(rt.luaRun))
+	}
+}
+
+// SetSpawn installs gdbforge.spawn(...) — background exec, no focus steal.
+func (rt *Runtime) SetSpawn(fn SpawnFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.spawn = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "spawn", rt.L.NewFunction(rt.luaSpawn))
+	}
+}
+
+// SetGDB installs gdbforge.gdb(cmd) for console-style GDB sends.
+func (rt *Runtime) SetGDB(fn GDBFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.gdb = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "gdb", rt.L.NewFunction(rt.luaGDB))
+		rt.L.SetField(tbl, "sleep", rt.L.NewFunction(rt.luaSleep))
+		rt.L.SetField(tbl, "lua_dir", rt.L.NewFunction(rt.luaLuaDir))
 	}
 }
 
@@ -115,4 +170,108 @@ func (rt *Runtime) luaOpenBuffer(L *lua.LState) int {
 		rt.openBuffer(name)
 	}
 	return 0
+}
+
+func (rt *Runtime) luaRun(L *lua.LState) int {
+	n := L.GetTop()
+	argv := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		s := strings.TrimSpace(L.ToString(i))
+		if s != "" {
+			argv = append(argv, s)
+		}
+	}
+	if len(argv) == 0 {
+		L.RaiseError("gdbforge.run: need at least one argument")
+		return 0
+	}
+	if rt.run != nil {
+		rt.run(argv)
+	}
+	return 0
+}
+
+func (rt *Runtime) luaSpawn(L *lua.LState) int {
+	n := L.GetTop()
+	argv := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		s := strings.TrimSpace(L.ToString(i))
+		if s != "" {
+			argv = append(argv, s)
+		}
+	}
+	if len(argv) == 0 {
+		L.RaiseError("gdbforge.spawn: need at least one argument")
+		return 0
+	}
+	if rt.spawn == nil {
+		L.RaiseError("gdbforge.spawn: not available")
+		return 0
+	}
+	if err := rt.spawn(argv); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		rt.pane.AppendPrint("spawned: " + strings.Join(argv, " "))
+	}
+	return 0
+}
+
+// wait_port(port [, timeout_sec]) → true if TCP 127.0.0.1:port accepts.
+func (rt *Runtime) luaWaitPort(L *lua.LState) int {
+	port := L.CheckString(1)
+	timeout := 10.0
+	if L.GetTop() >= 2 {
+		timeout = float64(L.CheckNumber(2))
+	}
+	if timeout <= 0 {
+		timeout = 10
+	}
+	if timeout > 120 {
+		timeout = 120
+	}
+	addr := net.JoinHostPort("127.0.0.1", port)
+	deadline := time.Now().Add(time.Duration(timeout * float64(time.Second)))
+	for {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			L.Push(lua.LTrue)
+			return 1
+		}
+		if time.Now().After(deadline) {
+			L.Push(lua.LFalse)
+			return 1
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func (rt *Runtime) luaGDB(L *lua.LState) int {
+	cmd := strings.TrimSpace(L.CheckString(1))
+	if cmd == "" {
+		return 0
+	}
+	if rt.gdb != nil {
+		rt.gdb(cmd)
+	}
+	return 0
+}
+
+func (rt *Runtime) luaSleep(L *lua.LState) int {
+	sec := float64(L.CheckNumber(1))
+	if sec < 0 {
+		sec = 0
+	}
+	if sec > 60 {
+		sec = 60
+	}
+	time.Sleep(time.Duration(sec * float64(time.Second)))
+	return 0
+}
+
+func (rt *Runtime) luaLuaDir(L *lua.LState) int {
+	L.Push(lua.LString(filepath.Join(".", ".gdbforge", UserLuaDir)))
+	return 1
 }

@@ -445,10 +445,11 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		if a.outputWidget != nil {
 			a.outputWidget.AppendInferior(data.Data)
 		}
-		// Legacy / standard GDB terminal: also mirror into the GDB console.
+		// Mirror into the debugger console when enabled (default on for Delve).
 		if a.gdbWidget != nil && a.State().GdbTargetPrint() {
 			a.gdbWidget.AppendTargetText(data.Data)
 		}
+		a.RequestFrame()
 	case core.ExecOutputMsg:
 		if a.execWidget != nil {
 			a.execWidget.HandleEvent(ev)

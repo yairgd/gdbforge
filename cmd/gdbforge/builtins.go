@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
@@ -9,6 +10,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -34,30 +36,60 @@ func (a *DebuggerApp) initBuiltins() error {
 	logWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("logger", logWidget)
 
-	client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.GDBArgs)
-	if err != nil {
-		return err
+	var (
+		boot       string
+		inferior   *ptyx.TTY
+		promptTok  string
+		skipBreakMain bool
+	)
+	if a.cfg.IsDLV() {
+		client, err := dlv.NewClient(a.cfg.GDBPath, a.cfg.GDBArgs)
+		if err != nil {
+			return err
+		}
+		a.dlvClient = client
+		a.dlvInputState = dlv.NewInputState()
+		boot = client.TakeStartupOutput()
+		inferior = client.InferiorTTY()
+		promptTok = dlv.PromptToken
+		_ = client.ConfigureInferiorTTY()
+	} else {
+		client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.GDBArgs)
+		if err != nil {
+			return err
+		}
+		a.gdbClient = client
+		a.gdbInputState = gdb.NewGdbInputState()
+		boot = client.TakeStartupOutput()
+		inferior = client.InferiorTTY()
+		promptTok = gdb.MIPromptToken
+		_ = client.ConfigureInferiorTTY()
+		skipBreakMain = gdb.HasInitScript(a.cfg.GDBArgs)
 	}
-	a.gdbClient = client
-	a.gdbInputState = gdb.NewGdbInputState()
 
 	a.gdbWidget = widgets.NewGDBWidget()
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
+	a.gdbWidget.SetPromptStyleToken(promptTok)
+	if a.cfg.IsDLV() {
+		// Delve emits ANSI syntax highlighting for source listings in the console.
+		a.gdbWidget.SetANSI(true)
+		// Also paint program stdout in the Delve console (IO pane is primary).
+		a.State().SetGdbTargetPrint(true)
+	}
 	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
 	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
 	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
-	// Replay -x / banner captured before the UI subscribed, then attach live PTY.
-	if boot := client.TakeStartupOutput(); boot != "" {
-		a.handleGdbOutputMsg(core.GdbOutputMsg{Data: boot})
+	// Replay banner / -x output captured before the UI subscribed, then attach live PTY.
+	if boot != "" {
+		a.handleDebuggerOutputMsg(core.GdbOutputMsg{Data: boot})
 	}
 	a.startGdbConsoleBridge()
-	_ = client.ConfigureInferiorTTY()
 	a.registerBuiltin("gdb", a.gdbWidget)
 
 	a.outputWidget = widgets.NewOutputWidget()
 	a.outputWidget.SetClipboard(a.ClipboardIO())
-	if tty := a.gdbClient.InferiorTTY(); tty != nil {
-		a.wireInferiorIO(tty)
+	if inferior != nil {
+		a.wireInferiorIO(inferior)
 	}
 	a.registerBuiltin("io", a.outputWidget)
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
@@ -69,7 +101,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	}
 	// Scripts via -x already set breakpoints; skip default break main when
 	// restoring a saved session or using -x.
-	if !gdb.HasInitScript(a.cfg.GDBArgs) && len(savedBPs) == 0 {
+	if !skipBreakMain && len(savedBPs) == 0 {
 		a.maybeBreakMain()
 	}
 
@@ -131,11 +163,16 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.luaTetris.SetFrameRequester(a.RequestFrame)
 	a.registerBuiltin("tetris", a.luaTetris)
 
+	a.loadUserLuaScripts()
+
 	a.registerLayouts()
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.GDB(), a.State())
 	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
 	a.gdbMcp.SetDomain(appDebugDomain{app: a})
+	if a.cfg.IsDLV() {
+		a.gdbMcp.SetPromptToken(dlv.PromptToken)
+	}
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
 	}

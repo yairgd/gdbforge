@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -361,6 +362,40 @@ type aiReplyMsg struct {
 // OnRun starts (or restarts) an ExecClient for the given argv and shows ExecWidget
 // in the focused pane. Example: :!bash  or  :!ssh root@192.168.20.50
 func (app *DebuggerApp) OnRun(args ...any) {
+	argv := anyArgsToStrings(args)
+	if len(argv) == 0 {
+		return
+	}
+	w := app.startExecSession(argv)
+	if w == nil {
+		return
+	}
+	if app.tab != nil && app.swapFocusedWidget(w) {
+		app.EnterInsertMode()
+		app.RequestFrame()
+	}
+}
+
+// SpawnExec starts argv in the background without stealing focus (JLink / gdbserver).
+// Registers :b exec so logs remain optional. Used by gdbforge.spawn.
+// Returns an error if the process failed to start.
+func (app *DebuggerApp) SpawnExec(argv []string) error {
+	w := app.startExecSession(argv)
+	if w == nil {
+		return fmt.Errorf("spawn failed: could not start %v", argv)
+	}
+	// Winsize normally comes from Draw; background exec never draws — set a default.
+	if app.execClient != nil {
+		_ = app.execClient.SetSize(24, 80)
+	}
+	if app.ctx.Log != nil {
+		app.ctx.Log.Named("exec").Info("spawned: " + strings.Join(argv, " "))
+	}
+	app.RequestFrame()
+	return nil
+}
+
+func anyArgsToStrings(args []any) []string {
 	argv := make([]string, 0, len(args))
 	for _, a := range args {
 		s, ok := a.(string)
@@ -369,10 +404,15 @@ func (app *DebuggerApp) OnRun(args ...any) {
 		}
 		argv = append(argv, s)
 	}
-	if len(argv) == 0 {
-		return
-	}
+	return argv
+}
 
+// startExecSession creates ExecClient + ExecWidget and registers builtin "exec".
+// Returns nil on error. Does not change focus.
+func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
+	if len(argv) == 0 {
+		return nil
+	}
 	if app.execClient != nil {
 		app.execClient.Close()
 		app.execClient = nil
@@ -383,7 +423,7 @@ func (app *DebuggerApp) OnRun(args ...any) {
 		if app.ctx.Log != nil {
 			app.ctx.Log.Named("exec").Error(err.Error())
 		}
-		return
+		return nil
 	}
 	app.execClient = client
 
@@ -418,9 +458,5 @@ func (app *DebuggerApp) OnRun(args ...any) {
 	w.StartExecUIBridge(app.Screen(), ch)
 	app.execWidget = w
 	app.registerBuiltin("exec", w)
-
-	if app.tab != nil && app.swapFocusedWidget(w) {
-		app.EnterInsertMode()
-		app.RequestFrame()
-	}
+	return w
 }

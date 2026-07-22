@@ -26,6 +26,9 @@ type GdbMcpService struct {
 	captureIdle time.Duration
 	captureMax  time.Duration
 
+	// promptToken ends a captured reply (default "(gdb)"; Delve uses "(dlv)").
+	promptToken string
+
 	// domain is the app-owned shared model surface (AI tools; future Lua).
 	domain domain.DebugDomain
 
@@ -41,7 +44,19 @@ func NewGdbMcpService(sess core.Session, state *platform.AppState) *GdbMcpServic
 		state:       state,
 		captureIdle: defaultCaptureIdle,
 		captureMax:  defaultCaptureMax,
+		promptToken: gdb.MIPromptToken,
 	}
+}
+
+// SetPromptToken overrides the capture end marker (e.g. dlv.PromptToken).
+func (s *GdbMcpService) SetPromptToken(token string) {
+	if s == nil {
+		return
+	}
+	if token == "" {
+		token = gdb.MIPromptToken
+	}
+	s.promptToken = token
 }
 
 // Close cancels in-flight work placeholders; does not close the GDB session.
@@ -75,12 +90,16 @@ func (s *GdbMcpService) query(ctx context.Context, command string, owner platfor
 	drain(ch, defaultDrainWait)
 
 	var out strings.Builder
+	tok := s.promptToken
+	if tok == "" {
+		tok = gdb.MIPromptToken
+	}
 	run := func() error {
 		return s.sess.WithWrite(ctx, func(w core.PTYWriter) error {
 			if err := w.Send(command); err != nil {
 				return err
 			}
-			capture(ctx, ch, &out, s.captureIdle, s.captureMax)
+			capture(ctx, ch, &out, s.captureIdle, s.captureMax, tok)
 			return nil
 		})
 	}
@@ -113,7 +132,7 @@ func drain(ch <-chan core.PtyOutputMsg, wait time.Duration) {
 	}
 }
 
-func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration) {
+func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration, promptToken string) {
 	deadline := time.NewTimer(max)
 	defer deadline.Stop()
 	idleT := time.NewTimer(idle)
@@ -127,6 +146,9 @@ func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Buil
 			}
 		}
 		idleT.Reset(idle)
+	}
+	if promptToken == "" {
+		promptToken = gdb.MIPromptToken
 	}
 
 	for {
@@ -146,9 +168,9 @@ func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Buil
 			}
 			if msg.Data != "" {
 				out.WriteString(msg.Data)
-				// MI prompt ends the reply — don't wait for idle timeout (was
+				// Prompt ends the reply — don't wait for idle timeout (was
 				// 250ms per -break-list and froze the console under load).
-				if strings.Contains(msg.Data, gdb.MIPromptToken) {
+				if strings.Contains(msg.Data, promptToken) {
 					return
 				}
 				resetIdle()

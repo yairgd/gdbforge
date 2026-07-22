@@ -94,10 +94,12 @@ go run ./cmd/gdbforge ./hello
 
 Inside the app: press `i` to type in the GDB console, or use `:` for commands. Open the manual with `:help`. Quit with `:quit` or Ctrl-D.
 
-Optional: pick another GDB binary with `-d`:
+Optional: pick another GDB binary with `-d`, or run under **Delve** with `-g dlv`:
 
 ```bash
 ./bin/gdbforge -d /usr/bin/gdb ./hello
+./bin/gdbforge -g dlv ./hello          # Go programs via Delve
+./bin/gdbforge -g dlv -d /usr/local/bin/dlv ./pkg
 ```
 
 Pass **GDB options** after `--` (cgdb-style), e.g. `-nx` / `-x` for board scripts:
@@ -107,7 +109,7 @@ Pass **GDB options** after `--` (cgdb-style), e.g. `-nx` / `-x` for board script
 ```
 
 ```text
-gdbforge [gdbforge options] [--] [gdb options]
+gdbforge [-g gdb|dlv] [-d debugger] [options] [--] [debugger options]
 ```
 
 ---

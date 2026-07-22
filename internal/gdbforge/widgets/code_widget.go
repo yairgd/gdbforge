@@ -515,7 +515,15 @@ func highlightLines(path string, lines []string) []string {
 func readSourceLines(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		// Delve often reports ./file.go — try absolute from cwd.
+		if !filepath.IsAbs(path) {
+			if abs, absErr := filepath.Abs(path); absErr == nil && abs != path {
+				f, err = os.Open(abs)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer f.Close()
 

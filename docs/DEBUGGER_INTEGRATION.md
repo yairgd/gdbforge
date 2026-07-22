@@ -18,6 +18,7 @@ gdbforge connects to debug targets through **backend adapters** that implement `
 - [GdbMcpService and in-app AI](#gdbmcpservice-and-in-app-ai)
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
 - [GDB console bridge (MVC)](#gdb-console-bridge-mvc)
+- [Delve backend (peer of GDB)](#delve-backend-peer-of-gdb)
 - [Future OpenOCD integration](#future-openocd-integration)
 - [Future JTAG integration](#future-jtag-integration)
 - [Future kernel debugging](#future-kernel-debugging)
@@ -572,6 +573,43 @@ Draw highlights:
 
 ---
 
+## Delve backend (peer of GDB)
+
+Delve plugs into the **same** architecture as GDB — no new control plane:
+
+| Piece | Role |
+|-------|------|
+| CLI | `gdbforge -g dlv [-d dlv] prog [args…]` |
+| `internal/dlv.Client` | Implements `core.Session` over `ptyx` (`dlv exec -- prog…`) |
+| `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `> file:line` stops, BP lines |
+| Console | Same `GDBWidget`; prompt token `(dlv)` |
+| Pane refresh | Local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
+
+```mermaid
+flowchart LR
+  CLI["gdbforge -g gdb|dlv"] --> App["DebuggerApp"]
+  App --> GDB["gdb.GDBClient"]
+  App --> DLV["dlv.Client"]
+  GDB --> Sess["core.Session"]
+  DLV --> Sess
+  Sess --> PTY["ptyx"]
+```
+
+**MVP limits:** Delve CLI output parsing is less structured than MI (known debt). `:edit` source-file list from `-file-list-exec-source-files` is skipped under Delve. MCP/`:AI` tools remain GDB-oriented; the shared `Query` helper still drives pane refreshes with prompt token `(dlv)`.
+
+Examples:
+
+```bash
+gdbforge -g dlv ./hello
+gdbforge -g dlv -d /usr/local/bin/dlv ./pkg
+```
+
+Default entry breakpoint under Delve is `break main.main` (not `break main`).
+
+**Inferior I/O:** same dual-PTY model as GDB. `dlv.Client` opens a `ptyx.TTY` and passes `dlv exec --tty <slave>` so program stdin/stdout go to the IO pane (`:b io`), not the Delve console.
+
+---
+
 ## Future OpenOCD integration
 
 [OpenOCD](https://openocd.org/) exposes a **Telnet command port** and **TCL scripting** for embedded targets.
@@ -590,10 +628,12 @@ flowchart LR
     UI["termui"]
     Core["core.Session"]
     GDB["gdb.GDBClient"]
+    DLV["dlv.Client"]
     OOCD["openocd.Client · planned"]
 
     UI --> Core
     Core --> GDB
+    Core --> DLV
     Core --> OOCD
 ```
 

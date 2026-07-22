@@ -91,6 +91,7 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 			add(filepath.Base(path))
 		}
 	}
+	add("gdb")
 	for path := range a.bufferListed {
 		w := a.fileBuffers[path]
 		if w == nil || w.Unavailable() {
@@ -191,17 +192,22 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 	if name == "" || a.tab == nil {
 		return
 	}
-	// :b code → primary/active CodeWidget (not a builtin; leaf mark name).
+	// :b code → restore CodeWidget into the code leaf (not swap onto focused pane).
 	if name == "code" {
 		if cw := a.codeBufferForB(); cw != nil {
-			if a.swapFocusedWidget(cw) {
-				a.RequestFrame()
-			}
+			a.placeCodeInSlot(cw)
+			a.activateCodePane()
+			a.RequestFrame()
 			return
 		}
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("buffer").Error("no code buffer open yet")
 		}
+		return
+	}
+	if name == "gdb" {
+		a.activateGdbPane()
+		a.RequestFrame()
 		return
 	}
 	if w := a.builtins[name]; w != nil {

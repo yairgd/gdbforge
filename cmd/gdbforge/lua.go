@@ -1,10 +1,13 @@
 package main
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -126,4 +129,77 @@ func (a *DebuggerApp) maybeEnterLuaBuffer(w interface{}) {
 		return
 	}
 	a.enterLuaMode(lw)
+}
+
+// loadUserLuaScripts loads ./.gdbforge/lua/*.lua as :lua <basename> commands.
+func (a *DebuggerApp) loadUserLuaScripts() {
+	if a.luaScratch == nil {
+		return
+	}
+	a.luaUser = luahost.New(a.luaScratch, a.registerLuaCmd)
+	a.luaUser.SetOpenBuffer(a.openBufferForLua)
+	a.luaUser.SetRun(func(argv []string) {
+		anyArgs := make([]any, len(argv))
+		for i, s := range argv {
+			anyArgs[i] = s
+		}
+		a.OnRun(anyArgs...)
+	})
+	a.luaUser.SetSpawn(func(argv []string) error {
+		return a.SpawnExec(argv)
+	})
+	a.luaUser.SetGDB(func(cmd string) {
+		if a.gdbClient == nil || strings.TrimSpace(cmd) == "" {
+			return
+		}
+		if a.gdbWidget != nil {
+			a.gdbWidget.EchoSubmit(cmd)
+			a.gdbWidget.FollowTailAndScroll()
+		}
+		sendCmd := gdb.CLIExecToMI(cmd)
+		a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+		a.RequestFrame()
+	})
+	dir := filepath.Join(".", persist.DirName, luahost.UserLuaDir)
+	n, err := a.luaUser.LoadDir(dir)
+	if a.ctx.Log == nil {
+		return
+	}
+	log := a.ctx.Log.Named("lua")
+	if err != nil {
+		log.Error("load " + dir + ": " + err.Error())
+	}
+	if n > 0 {
+		log.Info("loaded user lua scripts from " + dir)
+	}
+}
+
+// openBufferForLua focuses named panes without stealing the Code leaf via swap.
+// "code" / "gdb" use leaf marks; other names use OnBuffer.
+func (a *DebuggerApp) openBufferForLua(name string) {
+	name = strings.TrimSpace(name)
+	switch name {
+	case "code":
+		a.leaveLuaMode()
+		if cw := a.codeBufferForB(); cw != nil {
+			a.placeCodeInSlot(cw)
+		}
+		a.activateCodePane()
+		a.RequestFrame()
+	case "gdb":
+		// Focus existing GDB leaf only — never relocate GDB onto the Code leaf.
+		a.leaveLuaMode()
+		if a.tab != nil && a.gdbWidget != nil {
+			if leaf := a.findGdbLeaf(); leaf != nil {
+				_ = a.tab.FocusLeaf(leaf)
+			} else {
+				a.tab.FocusWidget(a.gdbWidget)
+			}
+			a.tab.SetInsertActive(true)
+		}
+		a.SetMode(platform.ModeInsert)
+		a.RequestFrame()
+	default:
+		a.OnBuffer(name)
+	}
 }

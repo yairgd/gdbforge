@@ -1,10 +1,20 @@
 package main
 
 import (
+	"strings"
+	"time"
+
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
+)
+
+const (
+	inferiorOutputFlushInterval = 16 * time.Millisecond
+	inferiorOutputFlushMaxBytes = 64 * 1024
+	inferiorPostRetry           = 50 * time.Millisecond
+	inferiorPostRetries         = 40 // ~2s before dropping a coalesced chunk
 )
 
 // wireInferiorIO attaches the dedicated program PTY to the IO view and
@@ -49,14 +59,88 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 	ch, cancel := tty.Subscribe()
 	a.inferiorCancelSub = cancel
 	screen := a.Screen()
-	go func() {
-		for msg := range ch {
-			_ = screen.PostEvent(tcell.NewEventInterrupt(core.InferiorOutputMsg{
-				Data: msg.Data,
-				Err:  msg.Err,
-			}))
+	log := a.ctx.Log.Named("inferior-io")
+	go coalesceInferiorOutput(ch, func(msg core.InferiorOutputMsg) {
+		ev := tcell.NewEventInterrupt(msg)
+		for i := 0; i < inferiorPostRetries; i++ {
+			if err := screen.PostEvent(ev); err == nil {
+				return
+			}
+			time.Sleep(inferiorPostRetry)
 		}
-	}()
+		if log != nil {
+			log.Error("dropped inferior output (UI event queue full)")
+		}
+	}, func() {
+		_ = screen.PostEvent(tcell.NewEventInterrupt("inferior-exit"))
+	})
+}
+
+// coalesceInferiorOutput batches PTY chunks so a busy UI event queue is less
+// likely to drop program stdout (PostEvent returns ErrEventQFull under flood).
+func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(core.InferiorOutputMsg), onExit func()) {
+	var pending strings.Builder
+	var flushTimer *time.Timer
+	var flushC <-chan time.Time
+
+	disarm := func() {
+		if flushTimer == nil {
+			return
+		}
+		if !flushTimer.Stop() {
+			select {
+			case <-flushTimer.C:
+			default:
+			}
+		}
+		flushTimer = nil
+		flushC = nil
+	}
+	flush := func() {
+		disarm()
+		if pending.Len() == 0 {
+			return
+		}
+		data := pending.String()
+		pending.Reset()
+		post(core.InferiorOutputMsg{Data: data})
+	}
+	arm := func() {
+		if flushTimer != nil {
+			return
+		}
+		flushTimer = time.NewTimer(inferiorOutputFlushInterval)
+		flushC = flushTimer.C
+	}
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				flush()
+				if onExit != nil {
+					onExit()
+				}
+				return
+			}
+			if msg.Err != nil {
+				flush()
+				post(core.InferiorOutputMsg{Err: msg.Err})
+				continue
+			}
+			if msg.Data == "" {
+				continue
+			}
+			pending.WriteString(msg.Data)
+			if pending.Len() >= inferiorOutputFlushMaxBytes {
+				flush()
+			} else {
+				arm()
+			}
+		case <-flushC:
+			flush()
+		}
+	}
 }
 
 func (a *DebuggerApp) stopInferiorIO() {

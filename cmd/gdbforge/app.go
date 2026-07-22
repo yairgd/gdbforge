@@ -5,6 +5,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
@@ -44,11 +45,13 @@ type DebuggerApp struct {
 
 	cfg               SessionConfig
 	gdbClient         *gdb.GDBClient
+	dlvClient         *dlv.Client
 	gdbCancelSub      func()
 	inferiorCancelSub func()
 	gdbInputState     *gdb.GdbInputState
+	dlvInputState     *dlv.InputState
 	pendingFrameSync  bool
-	pendingDebugInfo  bool // refresh threads/stack after *stopped once (gdb) is ready
+	pendingDebugInfo  bool // refresh threads/stack after *stopped once prompt is ready
 	gdbWidget         *widgets.GDBWidget
 	gdbMcp            *mcp.GdbMcpService
 
@@ -101,6 +104,7 @@ type DebuggerApp struct {
 	luaTetris  *widgets.LuaWidget
 	activeLua  *widgets.LuaWidget
 	luaCmds    map[string]*luahost.Runtime
+	luaUser    *luahost.Runtime
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -116,12 +120,20 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 	return dbg, nil
 }
 
-// GDB returns the owned GDB session for external APIs (e.g. MCP).
+// GDB returns the owned debugger session for external APIs (e.g. MCP).
+// Despite the name, this is whichever backend was selected with -g (gdb or dlv).
 func (a *DebuggerApp) GDB() core.Session {
 	if a == nil {
 		return nil
 	}
+	if a.dlvClient != nil {
+		return a.dlvClient
+	}
 	return a.gdbClient
+}
+
+func (a *DebuggerApp) isDLV() bool {
+	return a != nil && a.cfg.IsDLV()
 }
 
 // Close tears down owned debugger/exec sessions.
@@ -139,6 +151,10 @@ func (a *DebuggerApp) Close() {
 		a.gdbCancelSub()
 		a.gdbCancelSub = nil
 	}
+	if a.dlvClient != nil {
+		a.dlvClient.Close()
+		a.dlvClient = nil
+	}
 	if a.gdbClient != nil {
 		a.gdbClient.Close()
 		a.gdbClient = nil
@@ -148,6 +164,10 @@ func (a *DebuggerApp) Close() {
 		a.execClient = nil
 	}
 	a.leaveLuaMode()
+	if a.luaUser != nil {
+		a.luaUser.Close()
+		a.luaUser = nil
+	}
 	for _, w := range []*widgets.LuaWidget{a.luaScratch, a.luaSnake, a.luaTetris} {
 		if w != nil {
 			w.Close()
