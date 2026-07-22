@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
@@ -53,4 +54,65 @@ func (a *DebuggerApp) setStackFrames(frames []mcp.StackFrame) {
 		a.callstack = &models.CallStack{}
 	}
 	a.callstack.Set(frames)
+}
+
+// clearDebugInfoPanes resets Threads, Call Stack, Code pane, and breakpoints
+// after the inferior exits (kill / exit).
+func (a *DebuggerApp) clearDebugInfoPanes() {
+	a.setThreadInfos(nil)
+	a.setStackFrames(nil)
+	a.syncThreadViews()
+	a.syncCallStackViews()
+	a.clearCodePane()
+	a.clearBreakpointViews()
+}
+
+// clearBreakpointViews empties the shared BP model and gutters (UI only).
+func (a *DebuggerApp) clearBreakpointViews() {
+	if a.breakpoints == nil {
+		a.breakpoints = &models.BreakpointList{}
+	} else {
+		a.breakpoints.Clear()
+	}
+	a.syncBreakpointViews()
+}
+
+// clearCodePane empties Code widgets and restores the logo splash in the code leaf.
+func (a *DebuggerApp) clearCodePane() {
+	seen := make(map[*widgets.CodeWidget]bool)
+	for _, w := range a.fileBuffers {
+		if w == nil {
+			continue
+		}
+		w.Clear()
+		seen[w] = true
+	}
+	if a.primaryCode != nil && !seen[a.primaryCode] {
+		a.primaryCode.Clear()
+	}
+	a.primaryCode = nil
+	if a.State() != nil {
+		a.State().SetCurrentLocation("", 0)
+	}
+	a.placeLogoInCodeSlot()
+}
+
+// placeLogoInCodeSlot puts the startup logo back in the code leaf (after kill).
+func (a *DebuggerApp) placeLogoInCodeSlot() {
+	if a.tab == nil {
+		return
+	}
+	logo := a.logoWidget
+	if logo == nil {
+		logo = widgets.NewLogoWidget()
+		a.logoWidget = logo
+	}
+	if _, ok := a.focusedWidget().(*widgets.CodeWidget); ok {
+		_ = a.tab.ReplaceFocusedWidget(logo)
+		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
+		return
+	}
+	if a.tab.ReplaceMatchingLeafWidget(logo, isCodeSlot) {
+		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
+	}
 }

@@ -22,6 +22,14 @@ func (b *BreakpointList) Items() []mcp.BreakInfo {
 	return append([]mcp.BreakInfo(nil), b.items...)
 }
 
+// Clear removes all rows (e.g. UI reset after kill / inferior exit).
+func (b *BreakpointList) Clear() {
+	if b == nil {
+		return
+	}
+	b.items = nil
+}
+
 // Enabled returns breakpoints currently active in GDB.
 func (b *BreakpointList) Enabled() []mcp.BreakInfo {
 	if b == nil {

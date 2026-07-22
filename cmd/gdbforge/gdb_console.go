@@ -220,6 +220,9 @@ func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
 	if upd.Stopped != nil {
 		a.onGdbStopped(upd.Stopped)
 	}
+	if upd.InferiorExited {
+		a.clearDebugInfoPanes()
+	}
 	// Wait for MI prompt after *stopped before -thread-info / -stack-list-frames.
 	// Querying immediately races the stop reply and often captures an empty /
 	// stale chunk — Threads pane then does not update until a later click.

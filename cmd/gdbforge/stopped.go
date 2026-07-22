@@ -49,6 +49,8 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	}
 	a.State().SetInferiorRunning(false)
 	if !gdb.StopNeedsUIRefresh(stop) {
+		// exited / kill — clear Threads + Call Stack (do not query stack).
+		a.clearDebugInfoPanes()
 		return
 	}
 	file := stop.File
@@ -380,8 +382,14 @@ func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
 		}
 	} else if strings.Contains(raw, "threads=") {
 		// Must see threads= (not bare id= — that matches thread-id= on *stopped).
-		a.setThreadInfos(mcp.ParseThreadInfo(raw))
+		items := mcp.ParseThreadInfo(raw)
+		a.setThreadInfos(items)
 		threadsOK = true
+		// After kill, -thread-info is often empty while -stack-list-frames fails
+		// (no stack=) — clear stale frames when there are no threads.
+		if len(items) == 0 {
+			a.setStackFrames(nil)
+		}
 	} else if a.ctx.Log != nil {
 		a.ctx.Log.Named("threads").Error("incomplete -thread-info capture")
 	}

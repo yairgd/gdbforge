@@ -230,6 +230,42 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	return nil
 }
 
+// Clear resets the pane to an empty Code view (no source, no ━━▶, no BP marks).
+func (w *CodeWidget) Clear() {
+	if w == nil {
+		return
+	}
+	w.unavailable = false
+	w.unavailablePath = ""
+	w.unavailableExtra = ""
+	w.path = ""
+	w.rawLines = nil
+	w.hiLines = nil
+	w.pcLine = 0
+	w.selLine = 0
+	w.bpLines = nil
+	w.bpDisabled = nil
+	w.bpNums = nil
+	w.PaneName = "Code"
+	w.buf.Clear()
+	w.viewport.Left = 0
+	w.viewport.Top = 0
+	w.viewport.CursorLine = 0
+	w.viewport.CursorCol = 0
+}
+
+// ClearPC removes the ━━▶ execution mark (e.g. after kill / inferior exit).
+// Keeps the loaded source, selection, and breakpoint gutters.
+func (w *CodeWidget) ClearPC() {
+	if w == nil || w.pcLine == 0 {
+		return
+	}
+	w.pcLine = 0
+	if !w.unavailable {
+		w.rebuildBuffer()
+	}
+}
+
 // ShowUnavailable clears source and shows a centered "not available" message
 // with path (and optional extra detail) in the middle of the pane.
 func (w *CodeWidget) ShowUnavailable(path, extra string) {

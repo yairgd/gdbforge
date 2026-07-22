@@ -59,11 +59,30 @@ MCP / AI       --Send / Query-->         same Model  (no widget ownership)
 
 GUI and MCP/AI share the same models (e.g. `BreakpointList`); widgets never own `GDBClient`, `ptyx.TTY`, or domain merge logic. MCP does not paint — views exist for the human TUI only.
 
+### What `DebugDomain` means (naming)
+
+In architecture, **domain** is the debugger problem space (breakpoints, threads, stack) and its data in `internal/gdbforge/models`.
+
+The Go type `DebugDomain` is **not** “the whole domain” and **not** “many ways to set a breakpoint.” It is a **port / facade**: a small menu of domain *operations* so peer controllers (AI today, Lua later) can call the app without importing `DebuggerApp`.
+
+| Piece | Role |
+|-------|------|
+| `models/` (`BreakpointList`, …) | Domain **data** (shared truth) |
+| `domain.DebugDomain` interface | Domain **operations** exposed to peers |
+| `cmd/gdbforge/debug_domain.go` | **One** real implementation (same BP path as GUI Space) |
+| GUI widgets | May call app helpers directly; they do not need the interface |
+| AI / future Lua | Call through `DebugDomain` only |
+
+There is still **one** way to place a breakpoint (`ToggleInsertClear` → `Send`). The interface only adds doors into that path (and allows a fake domain in tests).
+
+C++ analogy: an abstract class / pure virtual API. Architecture labels that fit: **port**, **use-case API**, **facade**. The name `DebugDomain` means “operations belonging to the debugger domain,” not “interface = domain” in every codebase.
+
 ---
 
 ## Table of contents
 
 - [MVC (current)](#mvc-current)
+- [What `DebugDomain` means (naming)](#what-debugdomain-means-naming)
 - [System context](#system-context)
 - [Application framework](#application-framework)
 - [Startup](#startup)
