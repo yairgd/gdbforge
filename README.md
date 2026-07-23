@@ -21,8 +21,11 @@
 
 ## Demo
 
-<!-- TODO: add screencast GIF or short MP4 -->
-![gdbforge demo](docs/media/gdbforge-demo.gif)
+Screencast of gdbforge stepping a deep call stack (Code, GDB console, Threads, Call Stack):
+
+**[Watch gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4)** (~8 MB)
+
+The program in the video is [`examples/stack_demo.c`](examples/stack_demo.c) — several nested functions plus a short recursive `descend` chain. Break on `leaf`, then browse frames with `:b callstack` or `n` / `s` / `c` from Code.
 
 ## Problems it solves
 
@@ -72,7 +75,7 @@ go build -o bin/gdbforge ./cmd/gdbforge
 
 ### Hello world example
 
-Build a tiny C program with debug info and **no** optimization so stepping and breakpoints behave as expected:
+Quick smoke test:
 
 ```bash
 cat > hello.c <<'EOF'
@@ -85,23 +88,27 @@ int main(void) {
 EOF
 
 gcc -O0 -g -o hello hello.c
+./bin/gdbforge ./hello
 ```
 
-Run it under gdbforge:
+### Deep stack demo (same as the screencast)
+
+Build the sample used in [docs/media/gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4):
 
 ```bash
-./bin/gdbforge ./hello
-# or without installing the binary first:
-go run ./cmd/gdbforge ./hello
+gcc -O0 -g -o stack_demo examples/stack_demo.c
+./bin/gdbforge ./stack_demo
 ```
 
-Inside the app: press `i` to type in the GDB console, or use `:` for commands. Open the manual with `:help`. Quit with `:quit` or Ctrl-D.
+Inside the app: `break leaf`, `run`, open `:b callstack`, or use `n` / `s` / `c` with Code focused. Open the manual with `:help`. Quit with `:quit` or Ctrl-D.
+
+On ARM/AArch64 the sample ends in `wfi` (as in the video). On a host PC it sleeps so the inferior stays alive for inspection.
 
 Optional: pick another GDB binary with `-d`, or run under **Delve** with `-g dlv`:
 
 ```bash
-./bin/gdbforge -d /usr/bin/gdb ./hello
-./bin/gdbforge -g dlv ./hello          # Go programs via Delve
+./bin/gdbforge -d /usr/bin/gdb ./stack_demo
+./bin/gdbforge -g dlv ./hello-go       # Go programs via Delve
 ./bin/gdbforge -g dlv -d /usr/local/bin/dlv ./pkg
 ```
 
@@ -134,7 +141,7 @@ gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger b
 
 **Normal**
 
-Default navigation mode. Global keys (`n`/`s`, Space, window focus) and focused-pane keys apply. Esc leaves insert into normal.
+Default navigation mode. Global keys (`n`/`s`/`c`, Space, window focus) and focused-pane keys apply. Esc leaves insert into normal.
 
 **Insert**
 
@@ -148,6 +155,12 @@ Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for comple
 
 After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cycle; type letters to narrow (CompletionMenu); Enter accepts; Esc cancels. The completion bar is a replaceable view over that menu.
 
+### Global keys (any mode)
+
+| Key | Action |
+|-----|--------|
+| Ctrl-Z | suspend inferior if running, else suspend gdbforge |
+
 ### Global keys (normal mode)
 
 | Key | Action |
@@ -157,13 +170,14 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
 | `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |
 | `s` | GDB step via MI `-exec-step` (also in insert when Code is focused) |
+| `c` | GDB continue via MI `-exec-continue` (also in insert when Code is focused) |
 | Up / Down | move Code browse cursor (does not move ━━▶) |
 | Space | toggle breakpoint: Call Stack selection, or Code cursor line (never steals Space from GDB) |
 | `e` | enable/disable breakpoint at Code cursor |
 | Ctrl-W h/j/k/l | focus left / down / up / right |
 | Ctrl-W arrows | same as hjkl |
 | Ctrl-O | jump back after `:b` / `:edit` / `:!` |
-| Ctrl-D | quit (TermApp) |
+| Ctrl-D | send `q` to GDB (confirm if inferior alive) |
 
 ### Colon commands
 
@@ -229,14 +243,14 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 - Insert mode to type CLI; Enter submits; Tab completes (wildmenu); unique Tab completion appends a trailing space (e.g. `ju` → `jump `)
 - Enter on empty line repeats the last command
-- `n`/`s` keys and typed `next`/`step`/`continue` use MI `-exec-*` (no CLI source dump — Code pane follows `*stopped`)
-- Ctrl-C interrupt; Ctrl-D sends `q`; Ctrl-L clear; Ctrl-V / middle-click paste
+- `n`/`s`/`c` keys and typed `next`/`step`/`continue` use MI `-exec-*` (no CLI source dump — Code pane follows `*stopped`)
+- Ctrl-C interrupt; Ctrl-Z suspend (any mode); Ctrl-D sends `q`; Ctrl-L clear; Ctrl-V / middle-click paste
 - `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` prompt
-- Mouse drag selects scrollback; Ctrl-C copies selection
+- Mouse drag selects scrollback; double-click word / triple-click line; Ctrl-C copies selection
 
 **Breakpoints (`:b breakpoint`)**
 
-- j/k or Up/Down / Enter / click — select; Code jumps with blue cursor (━━▶ stays on real PC). Selected row at stop PC stays green
+- j/k or Up/Down / Enter / click-release — select; Code jumps with blue cursor (━━▶ stays on real PC). Selected row at stop PC stays green
 - `e` — toggle enable (disabled rows stay in list, removed from GDB)
 - `d` — delete from list and GDB
 - Row colors: `breakcolor` / `breakdisabledcolor`; green = stop PC (`stackbreakcolor`)
@@ -244,12 +258,12 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **Threads (`:b threads`)**
 
-- j/k Up/Down Enter click wheel — select thread, send `thread <id>`, refresh stack, show current frame source
+- j/k Up/Down Enter click-release — select thread (`-thread-select`), refresh stack, show current frame source
 - Green row: current thread whose location matches stop PC (━━▶)
 
 **Call Stack (`:b callstack`)**
 
-- j/k Up/Down Enter click wheel — select frame, send `frame N`, show source (or not-available placeholder)
+- j/k Up/Down Enter click-release — select frame (`-stack-select-frame`), show source (or not-available placeholder); no CLI frame dump
 - Space — toggle breakpoint at selected frame location
 - Green row: frame 0 only, when it matches stop PC (━━▶)
 

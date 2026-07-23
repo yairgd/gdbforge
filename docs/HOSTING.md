@@ -9,6 +9,7 @@ Commit the whole `docs/` tree:
 | `docs/README.md` | Documentation index |
 | `docs/*.md` | Topic guides |
 | `docs/diagrams/*.mermaid` | Standalone diagram sources |
+| `docs/media/` | Screencasts and other binary assets (e.g. `gdbforge-demo.mp4`) |
 | `docs/www/` | CSS + client-side Markdown/Mermaid renderer |
 | `docs/serve.sh` | Convenience launcher |
 | `cmd/docserve/` | Go HTTP server + static export |
