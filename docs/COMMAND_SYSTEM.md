@@ -95,7 +95,7 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 ├── b <name>      → Action: OnBuffer (about/logger/gdb/breakpoint/threads/callstack/output/exec or open file)
 ├── edit [name]   → Action: OnEdit (picker, or open file; unique prefix :e)
 ├── layout <name> → Action: OnLayout (default | panels | classic)
-├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | esctocode | noesctocode | breakmain | nobreakmain | gdblistenprint | nogdblistenprint | markcolor <name> | markdimcolor <name> | breakcolor <name> | breakdisabledcolor <name>
+├── set           → equalalways | noequalalways | clearoutput | noclearoutput | continueafterclear | nocontinueafterclear | esctocode | noesctocode | breakmain | nobreakmain | gdblistenprint | nogdblistenprint | gdbtargetprint | nogdbtargetprint | inferior-tty <path> | markcolor <name> | markdimcolor <name> | breakcolor <name> | breakdisabledcolor <name>
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
@@ -280,7 +280,8 @@ Vim-like buffers use the same pattern:
 | `:set continueafterclear` / `:set nocontinueafterclear` | `Cmd` under `set` | After removing a breakpoint while the inferior was running, resume with `continue` (default **off** — stay stopped). Inserting a breakpoint still auto-continues; `frame`/`thread` never auto-continue. |
 | `:set esctocode` / `:set noesctocode` | `Cmd` under `set` | Esc restores the last non-Code/non-GDB pane when one was focused, otherwise focuses the CodeWidget leaf (default **on**). With `noesctocode`, Esc only leaves insert → normal and keeps the current pane focused. |
 | `:set breakmain` / `:set nobreakmain` | `Cmd` under `set` | Insert `break main` when the GDB session starts (default **on**). Skipped when restoring `./.gdbforge/breakpoints.yaml` or when GDB args include `-x`/`-ex` (`HasInitScript`). `:set breakmain` also inserts immediately if a session is already live. |
-| `:set gdblistenprint` / `:set nogdblistenprint` | `Cmd` under `set` | Paint GDB console replies from App/MCP (listener) traffic (default **on**). User-typed console commands always print. |
+| `:set gdbtargetprint` / `:set nogdbtargetprint` | `Cmd` under `set` | Also show program stdout in the GDB console (legacy; default **off** except Delve). |
+| `:set inferior-tty` / `:set inferior-tty internal` | `CmdRestComplete` under `set` | No arg: open external terminal and route program stdio there. `internal` restores `:b io`. Optional `/dev/pts/N`. Tab: `internal`. **GDB:** live `-inferior-tty-set`. **Delve:** restarts with `--tty` (prefer `:lua dlv_port` for Go TUIs). |
 | `:set markcolor <name>` | `CmdRest` under `set` | Focused selected-row color for list panes / file picker (default **blue**). |
 | `:set markdimcolor <name>` | `CmdRest` under `set` | Unfocused selected-row color for list panes (default **gray**). |
 | `:set breakcolor <name>` | `CmdRest` under `set` | Enabled breakpoint background in CodeWidget gutter and BreakpointWidget (default **red**). |

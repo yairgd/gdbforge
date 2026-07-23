@@ -30,18 +30,20 @@ Full-quality video: [gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4) (~8 MB).
 What the session shows:
 
 - Multi-pane UI (Code, GDB console, Threads, Call Stack) while stepping a deep call stack on the R5
-- Target bring-up via the Lua plugin [`examples/lua/r5_debug.lua`](examples/lua/r5_debug.lua): spawns **JLinkGDBServer** in the background (`gdbforge.spawn`), waits for the GDB port, then runs the usual attach sequence (`set architecture` / tdesc, `target remote localhost:…`, `monitor halt`, `load`, `break main`) without stealing the Code pane
+- Target bring-up via the Lua plugin [`scripts/r5_debug`](scripts/r5_debug): spawns **JLinkGDBServer** in the background (`gdbforge.spawn`), waits for the GDB port, then runs the usual attach sequence (`set architecture` / tdesc, `target remote localhost:…`, `monitor halt`, `load`, `break main`) without stealing the Code pane
 - Sample program: [`examples/stack_demo.c`](examples/stack_demo.c) — nested functions plus a short recursive `descend` chain (ends in `wfi` on ARM)
 
 Copy the plugin into the project Lua dir and run it from gdbforge:
 
 ```bash
 mkdir -p .gdbforge/lua
-cp examples/lua/r5_debug.lua .gdbforge/lua/
+cp -r scripts/r5_debug .gdbforge/lua/
 # optional: set GDBFORGE_JLINK / GDBFORGE_JLINK_DEVICE / GDBFORGE_JLINK_PORT
 # then inside gdbforge:
 #   :lua r5_debug
 ```
+
+More plugins (external terminal for TUI/Go, games, …): see [`scripts/README.md`](scripts/README.md).
 
 On a host PC (no J-Link), you can still rebuild the same stack sample and explore panes with `gcc -g -O0 -o stack_demo examples/stack_demo.c` and `./bin/gdbforge ./stack_demo`.
 
@@ -178,6 +180,8 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | Key | Action |
 |-----|--------|
 | Ctrl-Z | suspend inferior if running, else suspend gdbforge |
+| Ctrl-C | interrupt inferior / debugger (same as GDB console Ctrl-C) |
+| Ctrl-D | send `q` / quit (confirm if inferior alive); app exits when the debugger session ends |
 
 ### Global keys (normal mode)
 
@@ -195,7 +199,6 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | Ctrl-W h/j/k/l | focus left / down / up / right |
 | Ctrl-W arrows | same as hjkl |
 | Ctrl-O | jump back after `:b` / `:edit` / `:!` |
-| Ctrl-D | send `q` to GDB (confirm if inferior alive) |
 
 ### Colon commands
 
@@ -226,6 +229,13 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on); skipped when restoring `./.gdbforge/breakpoints.yaml` or when using `-x`/`-ex`
 - `gdblistenprint` / `nogdblistenprint` — paint App/MCP replies in GDB console (default on)
 - `gdbtargetprint` / `nogdbtargetprint` — also paint program stdout in GDB console like a classic terminal (default off); IO pane always uses the inferior PTY
+- `inferior-tty` / `inferior-tty internal` — route program stdio to an **external terminal** (TUI apps need a real VT; `:b io` is only a line console):
+  - bare `:set inferior-tty` — open a terminal (`GDBFORGE_TERMINAL`) and attach stdio there
+  - `:set inferior-tty internal` — restore the in-app IO pane
+  - optional `/dev/pts/N` — use an already-open slave; startup: `GDBFORGE_INFERIOR_TTY`
+  - **GDB:** live `-inferior-tty-set` (no restart)
+  - **Delve (`-g dlv`):** restarts `dlv exec --tty …` (same program args). For Go TUIs prefer `:lua dlv_port` (headless dlv in another window + `dlv connect` — stdio stays there)
+  - Details: [DEBUGGER_INTEGRATION.md](docs/DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets)
 - `markcolor <name>` — focused list selection (default blue)
 - `markdimcolor <name>` — unfocused selection (default gray)
 - `breakcolor <name>` — enabled BP bg (default red)
@@ -262,7 +272,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - Insert mode to type CLI; Enter submits; Tab completes (wildmenu); unique Tab completion appends a trailing space (e.g. `ju` → `jump `)
 - Enter on empty line repeats the last command
 - `n`/`s`/`c` keys and typed `next`/`step`/`continue` use MI `-exec-*` (no CLI source dump — Code pane follows `*stopped`)
-- Ctrl-C interrupt; Ctrl-Z suspend (any mode); Ctrl-D sends `q`; Ctrl-L clear; Ctrl-V / middle-click paste
+- Ctrl-C interrupt; Ctrl-Z suspend / Ctrl-D quit (any mode); Ctrl-L clear; Ctrl-V / middle-click paste
 - `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` prompt
 - Mouse drag selects scrollback; double-click word / triple-click line; Ctrl-C copies selection
 
@@ -287,11 +297,35 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 **IO console (`:b io`, alias `:b output`)**
 
-- Program stdin/stdout on a **dedicated PTY** (`ptyx.TTY` + GDB `-inferior-tty-set`); GDB uses a separate MI PTY
+- Default: program stdin/stdout on a **dedicated PTY** (GDB: `-inferior-tty-set`; Delve: `dlv exec --tty`); debugger console uses a separate PTY
 - Type here while the inferior is running; Enter sends to the program
-- PgUp/PgDn scroll; Ctrl-L clear; Ctrl-C / Ctrl-D → program interrupt / EOF; ANSI colors
-- GDB console input never reaches the program — see [docs/DEBUGGER_INTEGRATION.md](docs/DEBUGGER_INTEGRATION.md#inferior-io-dual-pty)
+- PgUp/PgDn scroll; Ctrl-L clear; Ctrl-C → program interrupt; ANSI colors
+- **Not a VT emulator** — for TUI/curses targets use an external terminal:
 
+| | GDB | Delve (`-g dlv`) |
+|--|-----|------------------|
+| `:set inferior-tty` | Live `-inferior-tty-set` | Restarts session with `--tty` |
+| Recommended TUI flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_port [port]` — headless dlv in another window, then `dlv connect`; inferior I/O stays in that window |
+| Env | `GDBFORGE_INFERIOR_TTY`, `GDBFORGE_TERMINAL` | same |
+
+- When external, `:b io` shows a note only (type in the other window). Closing that window does not auto-rewire — `:set inferior-tty internal`
+- Global Ctrl-D quits the debugger (same as GDB pane); it is not sent as program EOF
+
+### External terminal (quick start)
+
+```bash
+# GDB — TUI target in another window
+./bin/gdbforge ./my_tui
+# then:  :set inferior-tty
+# or:    :lua terminal_debug
+
+# Delve — Go TUI (preferred: headless + connect)
+./bin/gdbforge -g dlv -- ./my_go_tui
+# then:  :lua dlv_port          # optional: :lua dlv_port 2345
+# inferior stdin/stdout → the new terminal; this UI talks via dlv connect
+```
+
+More plugins: [`lua/README.md`](lua/README.md) (copy into `./.gdbforge/lua/`).
 **About (`:b about`)**
 
 - Version, build info, and license

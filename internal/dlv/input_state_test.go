@@ -110,6 +110,32 @@ func TestParseBreakpointsSetNotify(t *testing.T) {
 	}
 }
 
+func TestFrameNavTargetLevel(t *testing.T) {
+	level, ok := FrameNavTargetLevel("frame 2", 0)
+	if !ok || level != 2 {
+		t.Fatalf("frame 2: got %d %v", level, ok)
+	}
+	level, ok = FrameNavTargetLevel("up", 1)
+	if !ok || level != 2 {
+		t.Fatalf("up: got %d %v", level, ok)
+	}
+	level, ok = FrameNavTargetLevel("up 2", 1)
+	if !ok || level != 3 {
+		t.Fatalf("up 2: got %d %v", level, ok)
+	}
+	level, ok = FrameNavTargetLevel("down", 2)
+	if !ok || level != 1 {
+		t.Fatalf("down: got %d %v", level, ok)
+	}
+	level, ok = FrameNavTargetLevel("down 5", 2)
+	if !ok || level != 0 {
+		t.Fatalf("down 5: got %d %v", level, ok)
+	}
+	if _, ok := FrameNavTargetLevel("break main", 0); ok {
+		t.Fatal("break should not be frame nav")
+	}
+}
+
 func TestParseStack(t *testing.T) {
 	raw := " 0  0x1234 in main.main\n" +
 		"    at ./hello.go:5\n" +

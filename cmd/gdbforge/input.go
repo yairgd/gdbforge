@@ -11,10 +11,16 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z) before a mode handler.
+// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D) before a mode handler.
 func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	return func(ev *tcell.EventKey) bool {
 		if a.tryGlobalSuspend(ev) {
+			return true
+		}
+		if a.tryGlobalInterrupt(ev) {
+			return true
+		}
+		if a.tryGlobalEOF(ev) {
 			return true
 		}
 		return h(ev)
@@ -31,6 +37,28 @@ func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	return true
 }
 
+// tryGlobalInterrupt handles Ctrl-C in any mode/focus: interrupt the debugger
+// session (GDB/dlv PTY ^C — same as console Ctrl-C when the inferior is running).
+func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
+	if !isCtrlC(ev) {
+		return false
+	}
+	a.onGdbConsoleInterrupt()
+	a.RequestFrame()
+	return true
+}
+
+// tryGlobalEOF handles Ctrl-D in any mode/focus: same as GDB-console EOF
+// (send q / quit; confirm if inferior alive).
+func (a *DebuggerApp) tryGlobalEOF(ev *tcell.EventKey) bool {
+	if !isCtrlD(ev) {
+		return false
+	}
+	a.onGdbConsoleEOF()
+	a.RequestFrame()
+	return true
+}
+
 func isCtrlZ(ev *tcell.EventKey) bool {
 	if ev == nil {
 		return false
@@ -40,6 +68,34 @@ func isCtrlZ(ev *tcell.EventKey) bool {
 	}
 	// Some terminals report Ctrl-Z as a rune with ModCtrl.
 	if ev.Key() == tcell.KeyRune && (ev.Rune() == 'z' || ev.Rune() == 'Z') &&
+		ev.Modifiers()&tcell.ModCtrl != 0 {
+		return true
+	}
+	return false
+}
+
+func isCtrlC(ev *tcell.EventKey) bool {
+	if ev == nil {
+		return false
+	}
+	if ev.Key() == tcell.KeyCtrlC {
+		return true
+	}
+	if ev.Key() == tcell.KeyRune && (ev.Rune() == 'c' || ev.Rune() == 'C') &&
+		ev.Modifiers()&tcell.ModCtrl != 0 {
+		return true
+	}
+	return false
+}
+
+func isCtrlD(ev *tcell.EventKey) bool {
+	if ev == nil {
+		return false
+	}
+	if ev.Key() == tcell.KeyCtrlD {
+		return true
+	}
+	if ev.Key() == tcell.KeyRune && (ev.Rune() == 'd' || ev.Rune() == 'D') &&
 		ev.Modifiers()&tcell.ModCtrl != 0 {
 		return true
 	}
@@ -495,16 +551,32 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.RequestFrame()
 		}
 	case codeRefreshMsg:
+		if data.fromStop {
+			// Late stop paint lost the race with call-stack / frame browse.
+			if data.stopGen != a.codeNavGen {
+				a.RequestFrame()
+				break
+			}
+			if a.callstackWidget != nil {
+				a.callstackWidget.SelectLevel(0)
+			}
+			if data.stop != nil {
+				w := a.updateCodeAfterStop(data.stop)
+				a.applyCodeStop(w)
+				a.RequestFrame()
+				break
+			}
+		}
 		a.applyCodeStop(data.widget)
 		a.RequestFrame()
 	case breakpointsUIMsg:
 		a.RequestFrame()
 	case debugInfoUIMsg:
-		// Models were updated off-thread; push to views and align Code on the UI thread.
+		// Models were updated off-thread; push to views on the UI thread.
+		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
 		a.syncThreadViews()
 		a.syncCallStackViews()
 		a.syncCodeFromCallstack()
-		a.applyCodeStop(a.activeCodeWidget())
 		a.RequestFrame()
 	case string:
 		// GDB PTY closed (q / quit / -gdb-exit) — leave the app.

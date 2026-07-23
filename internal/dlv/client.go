@@ -24,16 +24,30 @@ const (
 // TTY for the debugged program's stdin/stdout when supported.
 type Client struct {
 	*ptyx.Client
-	inferior   *ptyx.TTY
-	startupOut string
+	inferior    *ptyx.TTY
+	externalTTY string // --tty path when not using an internal master
+	startupOut  string
+}
+
+// ClientOptions configures NewClient.
+type ClientOptions struct {
+	// InferiorTTY, if non-empty, is passed as `dlv exec --tty` instead of
+	// opening an internal ptyx.TTY.
+	InferiorTTY string
 }
 
 var _ core.Session = (*Client)(nil)
 
 // NewClient spawns `dlv exec --tty <slave> -- prog [args...]` so the inferior's
 // stdin/stdout use a dedicated PTY (same dual-PTY model as GDB's
-// -inferior-tty-set), painted in the IO / Output widget.
+// -inferior-tty-set), painted in the IO / Output widget unless InferiorTTY is
+// an external path.
 func NewClient(dlvPath string, dlvArgs []string) (*Client, error) {
+	return NewClientOpts(dlvPath, dlvArgs, ClientOptions{})
+}
+
+// NewClientOpts is NewClient with optional external inferior TTY path.
+func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Client, error) {
 	if dlvPath == "" {
 		dlvPath = "dlv"
 	}
@@ -45,29 +59,36 @@ func NewClient(dlvPath string, dlvArgs []string) (*Client, error) {
 		return nil, fmt.Errorf("find %s: %w", dlvPath, err)
 	}
 
-	inf, err := ptyx.OpenTTY()
-	if err != nil {
-		return nil, err
+	c := &Client{}
+	ext := strings.TrimSpace(opts.InferiorTTY)
+	ttyPath := ext
+	if ext != "" {
+		c.externalTTY = ext
+	} else {
+		inf, err := ptyx.OpenTTY()
+		if err != nil {
+			return nil, err
+		}
+		c.inferior = inf
+		ttyPath = inf.SlaveName()
 	}
 
 	// --tty must be a Delve flag (before "--"); program args follow "--".
-	argv := []string{dlvPath, "exec", "--tty", inf.SlaveName(), "--"}
+	argv := []string{dlvPath, "exec", "--tty", ttyPath, "--"}
 	argv = append(argv, dlvArgs...)
 
-	// Force a dumb pager so `stack` / `goroutines` are not trapped in less
-	// (alt-screen + END prompts break Query capture and flood the UI queue).
-	// Replace existing PAGER* entries: execve consumers often take the first
-	// occurrence, so appending alone does not override the parent environment.
 	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
 	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
 
 	dlvPty, err := ptyx.New(argv, ptyx.Options{Env: env})
 	if err != nil {
-		inf.Close()
+		if c.inferior != nil {
+			c.inferior.Close()
+		}
 		return nil, err
 	}
 
-	c := &Client{Client: dlvPty, inferior: inf}
+	c.Client = dlvPty
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
 		c.Close()
@@ -87,10 +108,108 @@ func (c *Client) TakeStartupOutput() string {
 	return s
 }
 
-// ConfigureInferiorTTY is a no-op: the inferior TTY is already attached via
-// `dlv exec --tty <slave>` at spawn time (peer of GDB -inferior-tty-set).
+// NewConnectClient spawns `dlv connect <addr>` on a PTY (terminal client to a
+// headless Delve server). Inferior stdio stays with the headless process /
+// its terminal — no local --tty.
+func NewConnectClient(dlvPath, addr string) (*Client, error) {
+	if dlvPath == "" {
+		dlvPath = "dlv"
+	}
+	addr = normalizeConnectAddr(addr)
+	if addr == "" {
+		return nil, fmt.Errorf("dlv connect: address required")
+	}
+	if _, err := exec.LookPath(dlvPath); err != nil {
+		return nil, fmt.Errorf("find %s: %w", dlvPath, err)
+	}
+
+	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
+	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
+
+	dlvPty, err := ptyx.New([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		Client:      dlvPty,
+		externalTTY: "headless:" + addr,
+	}
+	out, err := c.waitForPrompt(startupPromptWait)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	c.startupOut = out
+	return c, nil
+}
+
+func normalizeConnectAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ""
+	}
+	if strings.HasPrefix(addr, "unix:") {
+		return addr
+	}
+	if strings.HasPrefix(addr, ":") {
+		return "127.0.0.1" + addr
+	}
+	// bare port
+	if !strings.Contains(addr, ":") {
+		return "127.0.0.1:" + addr
+	}
+	return addr
+}
+
+// ConfigureInferiorTTY is a no-op after spawn: the inferior TTY is already
+// attached via `dlv exec --tty <slave>` (peer of GDB -inferior-tty-set).
 func (c *Client) ConfigureInferiorTTY() error {
 	return nil
+}
+
+// InferiorTTYPath returns the --tty path used for the inferior.
+func (c *Client) InferiorTTYPath() string {
+	if c == nil {
+		return ""
+	}
+	if c.externalTTY != "" {
+		return c.externalTTY
+	}
+	if c.inferior != nil {
+		return c.inferior.SlaveName()
+	}
+	return ""
+}
+
+// UsesExternalInferiorTTY reports whether stdio is an external terminal path.
+func (c *Client) UsesExternalInferiorTTY() bool {
+	return c != nil && c.externalTTY != ""
+}
+
+// SetInferiorTTYPath is unused by the app: Delve --tty is applied only at
+// spawn, so DebuggerApp restarts the session instead. Kept for API symmetry.
+func (c *Client) SetInferiorTTYPath(path string) error {
+	path = strings.TrimSpace(path)
+	cur := c.InferiorTTYPath()
+	if path == "" || path == "internal" {
+		if c.UsesExternalInferiorTTY() {
+			return fmt.Errorf("dlv inferior tty requires session restart")
+		}
+		return nil
+	}
+	if path == cur {
+		return nil
+	}
+	return fmt.Errorf("dlv inferior tty requires session restart")
+}
+
+// InferiorTTY returns the program I/O PTY, or nil when using an external path.
+func (c *Client) InferiorTTY() *ptyx.TTY {
+	if c == nil {
+		return nil
+	}
+	return c.inferior
 }
 
 func (c *Client) waitForPrompt(timeout time.Duration) (string, error) {
@@ -152,20 +271,18 @@ func filterEnv(env []string, drop ...string) []string {
 	return out
 }
 
-// InferiorTTY returns the program I/O PTY, or nil.
-func (c *Client) InferiorTTY() *ptyx.TTY {
-	if c == nil {
-		return nil
-	}
-	return c.inferior
-}
-
-// Interrupt sends Ctrl-C on the Delve PTY.
+// Interrupt stops a running target.
+//
+// While Delve's CLI is blocked in continue/next/step, typed commands such as
+// "halt" are not read until the prompt returns — only ^C / SIGINT unblocks it.
+// SIGINT is sent first (no dependency on the PTY write lock), then a PTY ^C.
 func (c *Client) Interrupt() error {
 	if c == nil {
 		return nil
 	}
-	return c.SendRaw("\x03")
+	err := c.SignalInterrupt()
+	_ = c.SendRaw("\x03")
+	return err
 }
 
 // Close tears down the inferior TTY then the Delve PTY session.

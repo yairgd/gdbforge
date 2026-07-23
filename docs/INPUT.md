@@ -82,10 +82,10 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`). Works with any focused pane (Code, GDB, cmdline, Lua, …).
+   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`); **Ctrl-C** interrupts via the debugger PTY (GDB/dlv); **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n`/`s`/`c` → MI `-exec-next`/`-exec-step`/`-exec-continue`); other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
-   - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z).
+   - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z / Ctrl-D).
    - **`ModeCompletion`** — wildmenu: arrows cycle; Esc → prior mode; typed keys edit source line and re-query.
    - **`ModeLua`** — keys go to the active `LuaWidget` until Esc.
 
@@ -277,7 +277,7 @@ const (
 - Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
 - Insert mode is pane-local typing (GDB CLI, IO stdin, exec shell).
 - Command mode is for UI operations, not debugger commands.
-- Ctrl-Z is mode-independent (GDB-like job control).
+- Ctrl-Z / Ctrl-D are mode-independent (GDB-like job control / quit).
 
 **Gaps:**
 
@@ -391,7 +391,7 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
 | **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse **release** | Bold selection; activate sends MI `-thread-select` / `-stack-select-frame` (not CLI `thread`/`frame`, so the GDB console stays quiet); updates Code browse; green on stop PC; missing / `.so` → **not available** |
-| **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C/D → inferior; Ctrl-Z → SIGTSTP via inferior PTY |
+| **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C → inferior; global Ctrl-D quits debugger; Ctrl-Z → SIGTSTP via inferior PTY |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync). Persist: [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence).
 

@@ -28,11 +28,18 @@ type Runtime struct {
 	pane       Pane
 	registered map[string]*lua.LFunction
 	onRegister OnRegister
-	openBuffer OpenBufferFunc
-	run        RunFunc
-	spawn      SpawnFunc
-	gdb        GDBFunc
-	lastErr    string
+	openBuffer      OpenBufferFunc
+	run             RunFunc
+	spawn           SpawnFunc
+	openExternalTTY OpenExternalTTYFunc
+	setInferiorTTY  SetInferiorTTYFunc
+	spawnTerminal   SpawnTerminalFunc
+	dlvConnect      DlvConnectFunc
+	spawnDlvHeadless SpawnDlvHeadlessFunc
+	program         ProgramFunc
+	gdb             GDBFunc
+	scriptDir       string // directory of the loaded user script (lua_dir())
+	lastErr         string
 }
 
 // New creates a Runtime and installs the gdbforge / pane APIs.
@@ -61,6 +68,13 @@ func (rt *Runtime) Close() {
 func (rt *Runtime) SetPane(pane Pane) {
 	rt.mu.Lock()
 	rt.pane = pane
+	rt.mu.Unlock()
+}
+
+// SetScriptDir sets the directory returned by gdbforge.lua_dir() (sidecar files).
+func (rt *Runtime) SetScriptDir(dir string) {
+	rt.mu.Lock()
+	rt.scriptDir = dir
 	rt.mu.Unlock()
 }
 
@@ -182,6 +196,12 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "open_buffer", L.NewFunction(rt.luaOpenBuffer))
 	L.SetField(gf, "run", L.NewFunction(rt.luaRun))
 	L.SetField(gf, "spawn", L.NewFunction(rt.luaSpawn))
+	L.SetField(gf, "spawn_terminal", L.NewFunction(rt.luaSpawnTerminal))
+	L.SetField(gf, "open_external_tty", L.NewFunction(rt.luaOpenExternalTTY))
+	L.SetField(gf, "set_inferior_tty", L.NewFunction(rt.luaSetInferiorTTY))
+	L.SetField(gf, "dlv_connect", L.NewFunction(rt.luaDlvConnect))
+	L.SetField(gf, "spawn_dlv_headless", L.NewFunction(rt.luaSpawnDlvHeadless))
+	L.SetField(gf, "program", L.NewFunction(rt.luaProgram))
 	L.SetField(gf, "wait_port", L.NewFunction(rt.luaWaitPort))
 	L.SetField(gf, "lua_dir", L.NewFunction(rt.luaLuaDir))
 	L.SetField(gf, "sleep", L.NewFunction(rt.luaSleep))

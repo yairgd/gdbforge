@@ -2,6 +2,12 @@ package widgets
 
 import "path/filepath"
 
+// SameSourceLoc reports whether two file:line pairs refer to the same source
+// location (full path or basename match), matching breakpoint list lookup.
+func SameSourceLoc(aFile string, aLine int, bFile string, bLine int) bool {
+	return sameSourceLoc(aFile, aLine, bFile, bLine)
+}
+
 // sameSourceLoc reports whether two file:line pairs refer to the same source
 // location (full path or basename match), matching breakpoint list lookup.
 func sameSourceLoc(aFile string, aLine int, bFile string, bLine int) bool {

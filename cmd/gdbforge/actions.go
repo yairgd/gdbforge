@@ -188,6 +188,41 @@ func (app *DebuggerApp) SetGdbTargetPrintOff(args ...any) {
 	app.State().SetGdbTargetPrint(false)
 }
 
+// SetInferiorTTYCmd handles:
+//
+//	:set inferior-tty              — open an external terminal and route stdio there
+//	:set inferior-tty internal     — restore the in-app IO pane
+//	:set inferior-tty /dev/pts/N   — use an already-open slave (advanced)
+func (app *DebuggerApp) SetInferiorTTYCmd(args ...any) {
+	path := strings.TrimSpace(joinCmdArgs(args))
+	if path == "" {
+		pts, err := app.OpenExternalTTY()
+		if err != nil {
+			if app.ctx.Log != nil {
+				app.ctx.Log.Named("set").Error(err.Error())
+			}
+			return
+		}
+		path = pts
+	}
+	if err := app.SetInferiorTTY(path); err != nil && app.ctx.Log != nil {
+		app.ctx.Log.Named("set").Error(err.Error())
+	}
+	app.RequestFrame()
+}
+
+// inferiorTTYCompletions is Tab after :set inferior-tty.
+func (app *DebuggerApp) inferiorTTYCompletions(prefix string) []string {
+	cands := []string{"internal"}
+	var out []string
+	for _, c := range cands {
+		if prefix == "" || strings.HasPrefix(c, prefix) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func (app *DebuggerApp) SetMarkColor(args ...any) {
 	name := joinCmdArgs(args)
 	if name == "" {

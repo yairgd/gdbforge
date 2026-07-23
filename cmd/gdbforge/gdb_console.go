@@ -23,12 +23,17 @@ func (a *DebuggerApp) startGdbConsoleBridge() {
 	if sess == nil || a.Screen() == nil {
 		return
 	}
+	gen := a.gdbBridgeGen.Add(1)
 	ch, cancel := sess.Subscribe()
 	a.gdbCancelSub = cancel
 	screen := a.Screen()
 	go coalesceGdbOutput(ch, func(msg core.GdbOutputMsg) {
 		_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
 	}, func() {
+		// Ignore closes from an old bridge (e.g. Delve --tty restart).
+		if a.gdbBridgeGen.Load() != gen {
+			return
+		}
 		_ = screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 	})
 }
@@ -155,6 +160,7 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 	}
 
 	if gdb.IsStackNavCmd(cmd) {
+		a.codeNavGen++
 		a.pendingFrameSync = true
 	}
 	// Run-control via MI so the GDB pane does not dump CLI source/line listings
@@ -182,7 +188,18 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 		cmd = w.LastHistory()
 	}
 	if dlv.IsStackNavCmd(cmd) {
+		a.codeNavGen++
+		a.dlvSuppressStopUI++
 		a.pendingFrameSync = true
+		cur := 0
+		if a.callstackWidget != nil {
+			if fr, ok := a.callstackWidget.SelectedFrame(); ok {
+				cur = fr.Level
+			}
+		}
+		if level, ok := dlv.FrameNavTargetLevel(cmd, cur); ok {
+			a.noteFrameSyncLevel(level)
+		}
 	}
 	if isDlvRunCmd(cmd) {
 		if a.State() != nil {
@@ -201,16 +218,22 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 }
 
 func (a *DebuggerApp) onGdbConsoleInterrupt() {
-	if a.gdbWidget == nil || a.GDB() == nil {
+	if a.gdbWidget != nil {
+		a.gdbWidget.ClearInput()
+	}
+	if a.GDB() == nil {
 		return
 	}
-	a.gdbWidget.ClearInput()
+	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
+	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
 	if a.isDLV() && a.dlvClient != nil {
-		a.withGdbUIOwner(func() { _ = a.dlvClient.Interrupt() })
+		_ = a.dlvClient.Interrupt()
+		a.RequestFrame()
 		return
 	}
 	if a.gdbClient != nil {
-		a.withGdbUIOwner(func() { _ = a.gdbClient.Interrupt() })
+		_ = a.gdbClient.Interrupt()
+		a.RequestFrame()
 	}
 }
 
@@ -341,6 +364,10 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 			a.pendingFrameSync = false
 			a.onGdbFrameSync()
 		}
+	}
+	// Drop unused frame-nav suppress tokens once Delve is idle again.
+	if promptReady && a.isDLV() && a.dlvSuppressStopUI > 0 && stopped == nil {
+		a.dlvSuppressStopUI = 0
 	}
 	if state == gdb.Running {
 		if a.State() != nil {

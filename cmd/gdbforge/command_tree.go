@@ -14,7 +14,7 @@ import (
 //	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
 //	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
 //	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
-//	          gdbtargetprint, nogdbtargetprint,
+//	          gdbtargetprint, nogdbtargetprint, inferior-tty,
 //	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
 //	          pccolor, stackbreakcolor, codeselcolor, mutedcolor
 //	/ → layout <name>  (default | panels | classic)
@@ -59,6 +59,7 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("nogdblistenprint", a.SetGdbListenPrintOff),
 			commands.Cmd("gdbtargetprint", a.SetGdbTargetPrintOn),
 			commands.Cmd("nogdbtargetprint", a.SetGdbTargetPrintOff),
+			commands.CmdRestComplete("inferior-tty", a.SetInferiorTTYCmd, a.inferiorTTYCompletions),
 			commands.CmdRest("markcolor", a.SetMarkColor),
 			commands.CmdRest("markdimcolor", a.SetMarkDimColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),

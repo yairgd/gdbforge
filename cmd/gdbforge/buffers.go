@@ -15,6 +15,7 @@ import (
 // line shows the full path via CodeWidget.DrawStatusLine. created is true when
 // a new widget was allocated (caller may need to paint breakpoint gutters).
 func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, created bool) {
+	path = normalizeCodePath(path)
 	if path == "" {
 		return nil, false
 	}
@@ -30,6 +31,24 @@ func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, crea
 	a.wireCodeWidget(w)
 	a.fileBuffers[path] = w
 	return w, true
+}
+
+// normalizeCodePath makes source paths absolute/clean so Delve's ./file.go and
+// an absolute stop path share one CodeWidget buffer.
+func normalizeCodePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return path
+	}
+	if strings.HasPrefix(path, "unavailable:") {
+		return path
+	}
+	if !filepath.IsAbs(path) {
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+	}
+	return filepath.Clean(path)
 }
 
 // wireCodeWidget attaches app-owned breakpoint intents and mark colors.

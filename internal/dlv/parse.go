@@ -140,7 +140,8 @@ func parseGoroutinesLoose(raw string) []mcp.ThreadInfo {
 	return out
 }
 
-// ParseStackInfoFrame returns the current (level 0) frame from stack output.
+// ParseStackInfoFrame returns the innermost (level 0) frame from stack output.
+// Prefer frameAtLevel / call-stack selection when syncing after `frame N`.
 func ParseStackInfoFrame(raw string) (mcp.StackFrame, bool) {
 	frames := ParseStack(raw)
 	if len(frames) == 0 {

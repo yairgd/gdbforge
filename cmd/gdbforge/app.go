@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/core"
@@ -48,10 +49,21 @@ type DebuggerApp struct {
 	dlvClient         *dlv.Client
 	gdbCancelSub      func()
 	inferiorCancelSub func()
-	gdbInputState     *gdb.GdbInputState
-	dlvInputState     *dlv.InputState
-	pendingFrameSync  bool
-	pendingDebugInfo  bool // refresh threads/stack after *stopped once prompt is ready
+	// gdbBridgeGen identifies the active debugger console bridge. Bump before
+	// canceling a subscription so a deliberate restart does not post gdb-exit.
+	gdbBridgeGen  atomic.Uint64
+	gdbInputState *gdb.GdbInputState
+	dlvInputState *dlv.InputState
+	pendingFrameSync     bool
+	pendingFrameLevel    int // Delve: level to show after frame/up/down (see pendingFrameLevelSet)
+	pendingFrameLevelSet bool
+	pendingDebugInfo     bool // refresh threads/stack after *stopped once prompt is ready
+	// codeNavGen increments when the user browses away from the stop frame
+	// (call stack / frame cmd). Late stop refreshes with an older gen are ignored.
+	codeNavGen uint64
+	// dlvSuppressStopUI counts Delve frame/up/down ops whose re-emitted "> …"
+	// lines must not run stop UI (would snap Code back to frame 0).
+	dlvSuppressStopUI int
 	gdbWidget         *widgets.GDBWidget
 	gdbMcp            *mcp.GdbMcpService
 
@@ -103,8 +115,9 @@ type DebuggerApp struct {
 	luaSnake   *widgets.LuaWidget
 	luaTetris  *widgets.LuaWidget
 	activeLua  *widgets.LuaWidget
-	luaCmds    map[string]*luahost.Runtime
-	luaUser    *luahost.Runtime
+	luaCmds         map[string]*luahost.Runtime
+	luaUser         *luahost.Runtime
+	luaUserRuntimes []*luahost.Runtime
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -164,10 +177,13 @@ func (a *DebuggerApp) Close() {
 		a.execClient = nil
 	}
 	a.leaveLuaMode()
-	if a.luaUser != nil {
-		a.luaUser.Close()
-		a.luaUser = nil
+	for _, rt := range a.luaUserRuntimes {
+		if rt != nil {
+			rt.Close()
+		}
 	}
+	a.luaUserRuntimes = nil
+	a.luaUser = nil
 	for _, w := range []*widgets.LuaWidget{a.luaScratch, a.luaSnake, a.luaTetris} {
 		if w != nil {
 			w.Close()

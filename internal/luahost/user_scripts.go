@@ -25,6 +25,25 @@ type RunFunc func(argv []string)
 // SpawnFunc starts a background PTY process; return error if start fails.
 type SpawnFunc func(argv []string) error
 
+// OpenExternalTTYFunc opens a real terminal holding a pts and returns its path.
+type OpenExternalTTYFunc func() (string, error)
+
+// SetInferiorTTYFunc routes program stdio to path ("internal" restores IO pane).
+type SetInferiorTTYFunc func(path string) error
+
+// SpawnTerminalFunc opens a real terminal emulator running argv.
+type SpawnTerminalFunc func(argv []string) error
+
+// DlvConnectFunc replaces the local Delve session with `dlv connect addr`.
+type DlvConnectFunc func(addr string) error
+
+// SpawnDlvHeadlessFunc opens an external terminal running headless dlv for the
+// current session program (+ optional extraArgs), listening on port.
+type SpawnDlvHeadlessFunc func(port string, extraArgs []string) error
+
+// ProgramFunc returns the debuggee path from the current session (may be "").
+type ProgramFunc func() string
+
 // GDBFunc sends one GDB CLI command (same path as the GDB console).
 type GDBFunc func(cmd string)
 
@@ -70,6 +89,90 @@ func (rt *Runtime) SetSpawn(fn SpawnFunc) {
 	}
 }
 
+// SetOpenExternalTTY installs gdbforge.open_external_tty() → pts path.
+func (rt *Runtime) SetOpenExternalTTY(fn OpenExternalTTYFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.openExternalTTY = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "open_external_tty", rt.L.NewFunction(rt.luaOpenExternalTTY))
+	}
+}
+
+// SetSetInferiorTTY installs gdbforge.set_inferior_tty(path).
+func (rt *Runtime) SetSetInferiorTTY(fn SetInferiorTTYFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.setInferiorTTY = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "set_inferior_tty", rt.L.NewFunction(rt.luaSetInferiorTTY))
+	}
+}
+
+// SetSpawnTerminal installs gdbforge.spawn_terminal(...) — real terminal + argv.
+func (rt *Runtime) SetSpawnTerminal(fn SpawnTerminalFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.spawnTerminal = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "spawn_terminal", rt.L.NewFunction(rt.luaSpawnTerminal))
+	}
+}
+
+// SetDlvConnect installs gdbforge.dlv_connect(addr) — `dlv connect` to headless.
+func (rt *Runtime) SetDlvConnect(fn DlvConnectFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.dlvConnect = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "dlv_connect", rt.L.NewFunction(rt.luaDlvConnect))
+	}
+}
+
+// SetSpawnDlvHeadless installs gdbforge.spawn_dlv_headless(port).
+func (rt *Runtime) SetSpawnDlvHeadless(fn SpawnDlvHeadlessFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.spawnDlvHeadless = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "spawn_dlv_headless", rt.L.NewFunction(rt.luaSpawnDlvHeadless))
+	}
+}
+
+// SetProgram installs gdbforge.program() — debuggee path from session startup.
+func (rt *Runtime) SetProgram(fn ProgramFunc) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.program = fn
+	if rt.L == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, "program", rt.L.NewFunction(rt.luaProgram))
+	}
+}
+
 // SetGDB installs gdbforge.gdb(cmd) for console-style GDB sends.
 func (rt *Runtime) SetGDB(fn GDBFunc) {
 	rt.mu.Lock()
@@ -86,9 +189,49 @@ func (rt *Runtime) SetGDB(fn GDBFunc) {
 	}
 }
 
-// LoadDir loads every *.lua file under dir. Each file basename (without .lua)
-// becomes a :lua command: either via gdbforge.register in the file, or by
-// auto-binding global main() / <basename>() to that name.
+// ScriptFile is one discoverable *.lua under a user lua tree.
+type ScriptFile struct {
+	Path string // absolute or relative path to the .lua file
+	Cmd  string // :lua command name (basename without .lua)
+}
+
+// WalkLuaScripts recursively finds *.lua under root. Command name is the file
+// basename (e.g. games/snake/snake.lua → "snake"). Missing root is empty.
+func WalkLuaScripts(root string) ([]ScriptFile, error) {
+	var out []ScriptFile
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) && path == root {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".lua") {
+			return nil
+		}
+		cmd := strings.TrimSuffix(name, filepath.Ext(name))
+		if cmd == "" {
+			return nil
+		}
+		out = append(out, ScriptFile{Path: path, Cmd: cmd})
+		return nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return out, nil
+}
+
+// LoadDir loads every *.lua file under dir (non-recursive). Prefer WalkLuaScripts
+// + per-file Runtime for nested trees (scripts/ copied into .gdbforge/lua/).
+// Each file basename (without .lua) becomes a :lua command via EnsureCommand.
 // Missing dir is a no-op. Returns how many files were loaded.
 func (rt *Runtime) LoadDir(dir string) (int, error) {
 	entries, err := os.ReadDir(dir)
@@ -113,28 +256,32 @@ func (rt *Runtime) LoadDir(dir string) (int, error) {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		src, err := os.ReadFile(path)
-		if err != nil {
+		if err := rt.LoadScriptFile(path, cmd); err != nil {
 			if firstErr == nil {
 				firstErr = err
-			}
-			continue
-		}
-		if err := rt.LoadString(string(src), path); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("%s: %w", path, err)
-			}
-			continue
-		}
-		if err := rt.EnsureCommand(cmd); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("%s: %w", path, err)
 			}
 			continue
 		}
 		n++
 	}
 	return n, firstErr
+}
+
+// LoadScriptFile reads path, runs it, and EnsureCommand(cmd). Sets scriptDir
+// to the file's directory for gdbforge.lua_dir().
+func (rt *Runtime) LoadScriptFile(path, cmd string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	rt.SetScriptDir(filepath.Dir(path))
+	if err := rt.LoadString(string(src), path); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if err := rt.EnsureCommand(cmd); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
 }
 
 // EnsureCommand registers name for :lua if not already registered.
@@ -218,6 +365,125 @@ func (rt *Runtime) luaSpawn(L *lua.LState) int {
 	return 0
 }
 
+func (rt *Runtime) luaOpenExternalTTY(L *lua.LState) int {
+	if rt.openExternalTTY == nil {
+		L.RaiseError("gdbforge.open_external_tty: not available")
+		return 0
+	}
+	path, err := rt.openExternalTTY()
+	if err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		rt.pane.AppendPrint("external tty: " + path)
+	}
+	L.Push(lua.LString(path))
+	return 1
+}
+
+func (rt *Runtime) luaSetInferiorTTY(L *lua.LState) int {
+	path := strings.TrimSpace(L.CheckString(1))
+	if rt.setInferiorTTY == nil {
+		L.RaiseError("gdbforge.set_inferior_tty: not available")
+		return 0
+	}
+	if err := rt.setInferiorTTY(path); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		rt.pane.AppendPrint("inferior tty: " + path)
+	}
+	return 0
+}
+
+func (rt *Runtime) luaSpawnTerminal(L *lua.LState) int {
+	n := L.GetTop()
+	argv := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		s := strings.TrimSpace(L.ToString(i))
+		if s != "" {
+			argv = append(argv, s)
+		}
+	}
+	if len(argv) == 0 {
+		L.RaiseError("gdbforge.spawn_terminal: need at least one argument")
+		return 0
+	}
+	if rt.spawnTerminal == nil {
+		L.RaiseError("gdbforge.spawn_terminal: not available")
+		return 0
+	}
+	if err := rt.spawnTerminal(argv); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		rt.pane.AppendPrint("spawn_terminal: " + strings.Join(argv, " "))
+	}
+	return 0
+}
+
+func (rt *Runtime) luaDlvConnect(L *lua.LState) int {
+	addr := strings.TrimSpace(L.CheckString(1))
+	if rt.dlvConnect == nil {
+		L.RaiseError("gdbforge.dlv_connect: not available")
+		return 0
+	}
+	if err := rt.dlvConnect(addr); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		rt.pane.AppendPrint("dlv_connect: " + addr)
+	}
+	return 0
+}
+
+func (rt *Runtime) luaSpawnDlvHeadless(L *lua.LState) int {
+	port := "2345"
+	var extra []string
+	n := L.GetTop()
+	if n >= 1 {
+		port = strings.TrimSpace(L.ToString(1))
+	}
+	if port == "" {
+		port = "2345"
+	}
+	for i := 2; i <= n; i++ {
+		s := strings.TrimSpace(L.ToString(i))
+		if s != "" {
+			extra = append(extra, s)
+		}
+	}
+	if rt.spawnDlvHeadless == nil {
+		L.RaiseError("gdbforge.spawn_dlv_headless: not available")
+		return 0
+	}
+	if err := rt.spawnDlvHeadless(port, extra); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
+	if rt.pane != nil {
+		msg := "spawn_dlv_headless :" + port
+		if len(extra) > 0 {
+			msg += " -- " + strings.Join(extra, " ")
+		}
+		rt.pane.AppendPrint(msg)
+	}
+	return 0
+}
+
+func (rt *Runtime) luaProgram(L *lua.LState) int {
+	if rt.program == nil {
+		L.Push(lua.LString(""))
+		return 1
+	}
+	L.Push(lua.LString(rt.program()))
+	return 1
+}
+
 // wait_port(port [, timeout_sec]) → true if TCP 127.0.0.1:port accepts.
 func (rt *Runtime) luaWaitPort(L *lua.LState) int {
 	port := L.CheckString(1)
@@ -272,6 +538,11 @@ func (rt *Runtime) luaSleep(L *lua.LState) int {
 }
 
 func (rt *Runtime) luaLuaDir(L *lua.LState) int {
-	L.Push(lua.LString(filepath.Join(".", ".gdbforge", UserLuaDir)))
+	// Do not lock: CallNamed holds rt.mu while running Lua.
+	dir := rt.scriptDir
+	if dir == "" {
+		dir = filepath.Join(".", ".gdbforge", UserLuaDir)
+	}
+	L.Push(lua.LString(dir))
 	return 1
 }

@@ -203,6 +203,26 @@ func (c *Client) SendRaw(s string) error {
 	})
 }
 
+// SignalInterrupt delivers SIGINT to the child process (e.g. unblock Delve
+// while it is blocked in continue). Prefer this alongside a PTY ^C write.
+// The process pointer is snapshotted under writeMu so Close racing is safe;
+// Signal itself does not hold the lock (interrupt must not wait on PTY writers).
+func (c *Client) SignalInterrupt() error {
+	if c == nil {
+		return io.ErrClosedPipe
+	}
+	c.writeMu.Lock()
+	var proc *os.Process
+	if c.cmd != nil {
+		proc = c.cmd.Process
+	}
+	c.writeMu.Unlock()
+	if proc == nil {
+		return io.ErrClosedPipe
+	}
+	return proc.Signal(os.Interrupt)
+}
+
 // SetSize updates the PTY window size (SSH / curses / pane resize).
 func (c *Client) SetSize(rows, cols uint16) error {
 	c.writeMu.Lock()

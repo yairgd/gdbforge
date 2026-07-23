@@ -273,6 +273,44 @@ func IsStackNavCmd(cmd string) bool {
 	}
 }
 
+// FrameNavTargetLevel returns the absolute stack level after a Delve frame/up/down
+// command. cur is the level before the command (usually the call-stack selection).
+func FrameNavTargetLevel(cmd string, cur int) (int, bool) {
+	cmd = strings.TrimSpace(cmd)
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return 0, false
+	}
+	n := 1
+	if len(fields) > 1 {
+		if v, err := strconv.Atoi(fields[1]); err == nil {
+			n = v
+		}
+	}
+	switch fields[0] {
+	case "frame":
+		if len(fields) < 2 || n < 0 {
+			return 0, false
+		}
+		return n, true
+	case "up":
+		if n < 1 {
+			n = 1
+		}
+		return cur + n, true
+	case "down":
+		if n < 1 {
+			n = 1
+		}
+		if cur < n {
+			return 0, true
+		}
+		return cur - n, true
+	default:
+		return 0, false
+	}
+}
+
 // MapBreakCmd maps GDB-oriented break/clear/delete strings to Delve CLI.
 func MapBreakCmd(cmd string) string {
 	cmd = strings.TrimSpace(cmd)

@@ -232,9 +232,9 @@ func (a *DebuggerApp) activateCodePane() {
 	a.RequestRedraw()
 }
 
-// sendGdbExec sends an execution command on the shared GDB PTY.
-// Prefer MI -exec-* so stops update Code via *stopped without dumping a CLI
-// source listing into the GDB console (the Code pane shows the line).
+// sendGdbExec sends an execution command on the shared debugger PTY.
+// GDB: prefer MI -exec-* so stops update Code via *stopped without dumping a
+// CLI source listing into the console. Delve: keep CLI (no MI mapping).
 func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if a.gdbWidget == nil || cmd == "" {
 		return
@@ -243,12 +243,19 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if sess == nil {
 		return
 	}
-	mi := gdb.CLIExecToMI(cmd)
+	sendCmd := cmd
+	if a.isDLV() {
+		if isDlvRunCmd(cmd) && a.State() != nil {
+			a.State().SetInferiorRunning(true)
+		}
+	} else {
+		sendCmd = gdb.CLIExecToMI(cmd)
+	}
 	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			return pw.Send(mi)
+			return pw.Send(sendCmd)
 		})
 	})
 }

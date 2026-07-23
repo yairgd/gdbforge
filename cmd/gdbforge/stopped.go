@@ -17,6 +17,15 @@ import (
 
 type codeRefreshMsg struct {
 	widget *widgets.CodeWidget
+	// fromStop is set for *stopped / Delve "> " refreshes. Frame/up/down sync
+	// must not set this — otherwise we keep snapping Code back to frame 0.
+	fromStop bool
+	// stopGen is App.codeNavGen at stop time; if the user browsed the call
+	// stack since then, we skip clobbering Code.
+	stopGen uint64
+	// stop is applied on the UI thread (not in a background goroutine) so a
+	// call-stack browse cannot be overwritten by a racing showCodeAt.
+	stop *gdb.MiStopMsg
 }
 
 type breakpointsUIMsg struct{}
@@ -52,6 +61,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	if stop == nil {
 		return
 	}
+	wasRunning := a.State() != nil && a.State().InferiorRunning()
 	a.State().SetInferiorRunning(false)
 	needsRefresh := gdb.StopNeedsUIRefresh(stop)
 	if a.isDLV() {
@@ -62,6 +72,20 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		a.clearDebugInfoPanes()
 		return
 	}
+
+	// Delve re-prints "> …" (often without [Breakpoint N]) on every `frame N` /
+	// call-stack select. That is not a new halt — never run stop UI unless the
+	// inferior was actually running (continue/next/step/…).
+	if a.isDLV() {
+		if a.dlvSuppressStopUI > 0 {
+			a.dlvSuppressStopUI--
+			return
+		}
+		if !wasRunning {
+			return
+		}
+	}
+
 	file := stop.File
 	line := stop.Line
 	if file != "" {
@@ -73,11 +97,17 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	// fallback timer if PromptReady is missed (Threads then only updated on click).
 	a.armDebugInfoRefresh()
 
+	stopGen := a.codeNavGen
+	stopCopy := *stop
 	go func() {
 		a.ensureSourceFiles()
-		w := a.updateCodeAfterStop(stop)
 		if scr := a.Screen(); scr != nil {
-			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: w}))
+			// Apply Code on the UI thread after gen check (see codeRefreshMsg).
+			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
+				fromStop: true,
+				stopGen:  stopGen,
+				stop:     &stopCopy,
+			}))
 		}
 	}()
 }
@@ -169,9 +199,18 @@ func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidg
 	return w
 }
 
-// onCallStackActivate selects a stack frame in GDB and shows its source.
+// onCallStackActivate selects a stack frame in GDB/Delve and shows its source.
 // Uses MI for GDB so the console does not print CLI frame listings.
 func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
+	// User is browsing — cancel any in-flight stop refresh that would snap
+	// Code back to frame 0.
+	a.codeNavGen++
+
+	// Drive Code from the selected row first — do not wait on the debugger PTY
+	// (Delve `stack` / `goroutines` queries hold the write lock for a long time).
+	a.showFrameSource(fr)
+	a.RequestFrame()
+
 	if a.gdbWidget == nil {
 		return
 	}
@@ -181,11 +220,16 @@ func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 	}
 	cmd := fmt.Sprintf("-stack-select-frame %d", fr.Level)
 	if a.isDLV() {
+		// Selecting a call-stack row must update Code from the row's file:line.
+		// Sending `frame N` makes Delve re-emit "> …" and dump source, which we
+		// used to treat as a new stop (goroutines/stack refresh → snap to frame 0).
+		a.dlvSuppressStopUI++
 		cmd = fmt.Sprintf("frame %d", fr.Level)
+		go gdb.SendCmd(sess, a.State(), cmd)
+		return
 	}
+	// GDB MI frame select is cheap; keep it on the UI path like before.
 	gdb.SendCmd(sess, a.State(), cmd)
-	a.showFrameSource(fr)
-	a.RequestFrame()
 }
 
 // onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
@@ -194,7 +238,10 @@ func (a *DebuggerApp) onGdbFrameSync() {
 	go func() {
 		a.syncCurrentFrameFromGDB()
 		if scr := a.Screen(); scr != nil {
-			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{widget: a.activeCodeWidget()}))
+			// Not fromStop: must not SelectLevel(0) / force the stop file.
+			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
+				widget: a.activeCodeWidget(),
+			}))
 		}
 	}()
 }
@@ -214,15 +261,21 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 			}
 			return
 		}
-		fr, ok := dlv.ParseStackInfoFrame(raw)
-		if !ok {
+		frames := dlv.ParseStack(raw)
+		if len(frames) == 0 {
 			return
 		}
-		if a.callstackWidget != nil || a.callstack != nil {
-			a.applyStackFrames(dlv.ParseStack(raw))
-			if a.callstackWidget != nil {
-				a.callstackWidget.SelectLevel(fr.Level)
-			}
+		a.applyStackFrames(frames)
+		// Delve's `stack` always lists level 0 first; it does not mark the
+		// selected frame. Use the level from the last frame/up/down command
+		// (or the call-stack highlight) instead of always taking frames[0].
+		level := a.consumeFrameSyncLevel()
+		fr := frames[0]
+		if found, ok := frameAtLevel(frames, level); ok {
+			fr = found
+		}
+		if a.callstackWidget != nil {
+			a.callstackWidget.SelectLevel(fr.Level)
 		}
 		a.showFrameSource(fr)
 		return
@@ -258,10 +311,17 @@ func (a *DebuggerApp) showFrameSource(fr mcp.StackFrame) {
 	var w *widgets.CodeWidget
 	switch {
 	case fr.File != "":
-		a.State().SetCurrentLocation(fr.File, fr.Line)
-		w = a.showCodeAt(fr.File, fr.Line)
+		file := normalizeCodePath(fr.File)
+		a.State().SetCurrentLocation(file, fr.Line)
+		// Level 0 follows the real PC (━━▶); other frames browse with the blue
+		// cursor so the stop mark stays put — same idea as the Breakpoints list.
+		if fr.Level == 0 {
+			w = a.showCodeAt(file, fr.Line)
+		} else {
+			w = a.showCodeBrowse(file, fr.Line)
+		}
 		if w != nil && w.Unavailable() {
-			w.ShowUnavailable(fr.File, formatUnavailableExtra(fr.Func, fr.Line))
+			w.ShowUnavailable(file, formatUnavailableExtra(fr.Func, fr.Line))
 		}
 	case fr.Func != "":
 		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
@@ -276,15 +336,18 @@ func (a *DebuggerApp) showFrameSource(fr mcp.StackFrame) {
 // syncCodeFromCallstack moves Code to the first stack frame that has a source
 // file. Used after stop refreshes so Ctrl-C / SIGINT still update ━━▶ when the
 // current frame is in a library without sources.
+//
+// When *stopped already carried a file, updateCodeAfterStop owns Code — do not
+// jump back to frame 0 here (that races with call-stack j/k / click browse).
 func (a *DebuggerApp) syncCodeFromCallstack() {
 	if a.callstack == nil {
 		return
 	}
+	if a.State() != nil && a.State().StopFile() != "" {
+		return
+	}
 	if fr, ok := a.callstack.FirstWithFile(); ok {
-		// Prefer this as stop PC when *stopped had no source file.
-		if a.State() != nil && a.State().StopFile() == "" {
-			a.State().SetStopLocation(fr.File, fr.Line)
-		}
+		a.State().SetStopLocation(fr.File, fr.Line)
 		a.showFrameSource(fr)
 		return
 	}
@@ -576,9 +639,56 @@ func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 		a.rememberCodeLeafFromFocus()
 		return
 	}
+	// Prefer the remembered code leaf so call-stack / BP focus still updates
+	// the source pane (ReplaceMatchingLeafWidget only scans non-focused leaves
+	// and can miss when the mark points at a specific split).
+	if leaf := a.findCodeLeaf(); leaf != nil {
+		leaf.SetWidget(w)
+		a.tab.SetLeafMark(leafMarkCode, leaf)
+		return
+	}
 	if a.tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
 		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
 	}
+}
+
+// frameAtLevel returns the stack frame with the given level.
+func frameAtLevel(frames []mcp.StackFrame, level int) (mcp.StackFrame, bool) {
+	for _, fr := range frames {
+		if fr.Level == level {
+			return fr, true
+		}
+	}
+	return mcp.StackFrame{}, false
+}
+
+// consumeFrameSyncLevel returns the Delve frame level to show after frame/up/down
+// (or call-stack activate), then clears the pending flag.
+func (a *DebuggerApp) consumeFrameSyncLevel() int {
+	if a.pendingFrameLevelSet {
+		level := a.pendingFrameLevel
+		a.pendingFrameLevelSet = false
+		a.pendingFrameLevel = 0
+		if level < 0 {
+			return 0
+		}
+		return level
+	}
+	if a.callstackWidget != nil {
+		if fr, ok := a.callstackWidget.SelectedFrame(); ok {
+			return fr.Level
+		}
+	}
+	return 0
+}
+
+// noteFrameSyncLevel records which stack level a pending Delve frame sync should show.
+func (a *DebuggerApp) noteFrameSyncLevel(level int) {
+	if level < 0 {
+		level = 0
+	}
+	a.pendingFrameLevel = level
+	a.pendingFrameLevelSet = true
 }
 
 // ensureSourceFiles re-queries GDB -file-list-exec-source-files and replaces

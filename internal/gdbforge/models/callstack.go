@@ -51,3 +51,16 @@ func (c *CallStack) At(i int) (mcp.StackFrame, bool) {
 	}
 	return c.frames[i], true
 }
+
+// ByLevel returns the frame with the given GDB/Delve level, or false.
+func (c *CallStack) ByLevel(level int) (mcp.StackFrame, bool) {
+	if c == nil {
+		return mcp.StackFrame{}, false
+	}
+	for _, fr := range c.frames {
+		if fr.Level == level {
+			return fr, true
+		}
+	}
+	return mcp.StackFrame{}, false
+}

@@ -52,7 +52,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
 | Modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | Mouse support | Working | Focus, scroll, select, word/line click, list activate on release, PRIMARY paste |
-| Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/*.lua` — [PLUGINS.md](PLUGINS.md) |
+| Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/**/*.lua` from [`scripts/`](../scripts/) — [PLUGINS.md](PLUGINS.md) |
 | OpenOCD / JTAG | Not started | Design in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 | Documentation | In progress | This docs tree + `cmd/docserve` |
 

@@ -205,6 +205,36 @@ gdbforge
 
 Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitScript` detects `-x`/`-ex` so the app skips default `break main` when an init script is present.
 
+### External terminal stdio (TUI targets)
+
+The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gdbforge itself, htop, games, …) route stdio to a **real terminal** instead.
+
+| Mode | How | IO pane |
+|------|-----|---------|
+| **internal** (default) | Internal PTY + wire `:b io` | Program stdin/stdout |
+| **external** | `:set inferior-tty` (opens terminal), `GDBFORGE_INFERIOR_TTY`, Lua `open_external_tty` / `set_inferior_tty` | Note only — no subscribe |
+
+| | **GDB** | **Delve (`-g dlv`)** |
+|--|---------|----------------------|
+| Attach stdio | `-inferior-tty-set` **live** (no restart) | `dlv exec --tty` only at **spawn**; `:set inferior-tty` **restarts** Delve |
+| Switch back | `:set inferior-tty internal` | same (restart with internal PTY) |
+| Best for TUI | `:set inferior-tty` / `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_port [port]` — headless dlv in another window + `dlv_connect`; stdio never leaves that window |
+| Terminal picker | `GDBFORGE_TERMINAL` (kitty, xterm, mate-terminal, gnome-terminal, …) | same |
+
+**Pattern B — local GDB/dlv, external pts**
+
+1. Lua `gdbforge.open_external_tty()` opens kitty/xterm/… (`GDBFORGE_TERMINAL`) that runs `tty > file; sleep infinity`.
+2. `gdbforge.set_inferior_tty(pts)` → GDB `-inferior-tty-set` (live). Delve restarts `dlv exec --tty …` with the new path (same program args).
+3. Examples: [`lua/external_tty`](../lua/external_tty), [`lua/terminal_debug`](../lua/terminal_debug).
+
+**Pattern A — gdbserver / headless dlv in the other window**
+
+1. GDB: `gdbforge.spawn_terminal("gdbserver", ":2345", "./my_tui")` then `target remote`.
+2. Delve: `:lua dlv_port` (or `spawn_dlv_headless` + `dlv_connect`) — inferior inherits that terminal’s stdio.
+3. Examples: [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_port`](../lua/dlv_port).
+
+Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an external slave at the same time. Closing the external window does not auto-rewire IO — use `:set inferior-tty internal`.
+
 **IO console** (`OutputWidget`, pane name **IO**, `:b io`, alias `:b output`):
 
 | Action | Path |
@@ -615,8 +645,7 @@ gdbforge -g dlv -d /usr/local/bin/dlv ./pkg
 
 Default entry breakpoint under Delve is `break main.main` (not `break main`).
 
-**Inferior I/O:** same dual-PTY model as GDB. `dlv.Client` opens a `ptyx.TTY` and passes `dlv exec --tty <slave>` so program stdin/stdout go to the IO pane (`:b io`), not the Delve console.
-
+**Inferior I/O:** dual-PTY like GDB, but **`--tty` is spawn-only**. `dlv.Client` opens a `ptyx.TTY` (or uses `InferiorTTY`) and passes `dlv exec --tty <slave>` so program stdin/stdout go to `:b io` or an external terminal — not the Delve console. `:set inferior-tty` / Lua `set_inferior_tty` **restarts** Delve with a new `--tty`. For Go TUI programs prefer **`:lua dlv_port`** (headless Delve in another window + `dlv connect`) so stdio never leaves that window and you avoid a mid-session restart.
 ---
 
 ## Future OpenOCD integration

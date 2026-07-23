@@ -59,6 +59,15 @@ func (s *GdbMcpService) SetPromptToken(token string) {
 	s.promptToken = token
 }
 
+// SetSession replaces the shared debugger session (e.g. after Delve restart
+// to change --tty). Does not Close the previous session — caller owns lifetime.
+func (s *GdbMcpService) SetSession(sess core.Session) {
+	if s == nil {
+		return
+	}
+	s.sess = sess
+}
+
 // Close cancels in-flight work placeholders; does not close the GDB session.
 func (s *GdbMcpService) Close() {}
 

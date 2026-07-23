@@ -1,5 +1,6 @@
--- Example: copy to .gdbforge/lua/r5_debug.lua (with r5_target.xml beside it).
--- Usage: :lua r5_debug
+-- Cortex-R5 / J-Link bring-up.
+-- Install: cp -r scripts/r5_debug .gdbforge/lua/   (keeps r5_target.xml beside the script)
+-- Usage:   :lua r5_debug
 --
 -- Uses gdbforge.spawn (background — does NOT replace the Code pane).
 -- wait_port waits until JLink listens before target remote.

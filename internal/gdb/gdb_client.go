@@ -17,9 +17,17 @@ import (
 // QuitGate holds MI quit confirmation policy (UI paints from QuitAction).
 type GDBClient struct {
 	*ptyx.Client
-	inferior   *ptyx.TTY
-	Quit       QuitGate
-	startupOut string // PTY bytes through first (gdb); for UI after NewGDBClient
+	inferior    *ptyx.TTY
+	externalTTY string // when set, -inferior-tty-set uses this path (no internal master)
+	Quit        QuitGate
+	startupOut  string // PTY bytes through first (gdb); for UI after NewGDBClient
+}
+
+// ClientOptions configures NewGDBClient.
+type ClientOptions struct {
+	// InferiorTTY, if non-empty, is used for -inferior-tty-set instead of
+	// opening an internal ptyx.TTY (external terminal / TUI debug).
+	InferiorTTY string
 }
 
 var _ core.Session = (*GDBClient)(nil)
@@ -28,6 +36,11 @@ var _ core.Session = (*GDBClient)(nil)
 const startupPromptWait = 90 * time.Second
 
 func NewGDBClient(gdbPath string, gdbArgs []string) (*GDBClient, error) {
+	return NewGDBClientOpts(gdbPath, gdbArgs, ClientOptions{})
+}
+
+// NewGDBClientOpts is NewGDBClient with optional external inferior TTY path.
+func NewGDBClientOpts(gdbPath string, gdbArgs []string, opts ClientOptions) (*GDBClient, error) {
 	if gdbPath == "" {
 		gdbPath = "gdb"
 	}
@@ -37,7 +50,6 @@ func NewGDBClient(gdbPath string, gdbArgs []string) (*GDBClient, error) {
 
 	// Always MI2; disable pagination before -x / load so long "Loading section…"
 	// output is not stuck on "--Type <RET> for more…" (no UI yet to answer).
-	// Remaining args are cgdb-style "[gdb options]" (-nx, -x, prog, …).
 	argv := []string{gdbPath, "--interpreter=mi2"}
 	if !gdbArgsHasPaginationOff(gdbArgs) {
 		argv = append(argv, "-iex", "set pagination off")
@@ -53,18 +65,19 @@ func NewGDBClient(gdbPath string, gdbArgs []string) (*GDBClient, error) {
 		return nil, err
 	}
 
-	inf, err := ptyx.OpenTTY()
-	if err != nil {
-		gdbPty.Close()
-		return nil, err
+	c := &GDBClient{Client: gdbPty}
+	ext := strings.TrimSpace(opts.InferiorTTY)
+	if ext != "" {
+		c.externalTTY = ext
+	} else {
+		inf, err := ptyx.OpenTTY()
+		if err != nil {
+			gdbPty.Close()
+			return nil, err
+		}
+		c.inferior = inf
 	}
 
-	c := &GDBClient{Client: gdbPty, inferior: inf}
-
-	// Wait for the first (gdb) prompt so -x / init scripts finish (target remote,
-	// load, …) before the app injects MI. Early Send races the script and breaks
-	// embedded workflows that work under cgdb. Capture bytes for the GDB pane
-	// (no UI subscriber yet).
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
 		c.Close()
@@ -84,14 +97,65 @@ func (c *GDBClient) TakeStartupOutput() string {
 	return s
 }
 
-// ConfigureInferiorTTY routes the program's stdio to the inferior PTY.
-// Call after the console bridge is subscribed so the MI reply is visible.
-// Usually fine for remote targets; required for local inferiors.
+// ConfigureInferiorTTY routes the program's stdio to the inferior TTY path
+// (internal slave or external /dev/pts/N). Call after the console bridge is
+// subscribed so the MI reply is visible.
 func (c *GDBClient) ConfigureInferiorTTY() error {
-	if c == nil || c.inferior == nil {
+	if c == nil {
 		return nil
 	}
-	return c.Send(fmt.Sprintf("-inferior-tty-set %s", c.inferior.SlaveName()))
+	path := c.InferiorTTYPath()
+	if path == "" {
+		return nil
+	}
+	return c.Send(fmt.Sprintf("-inferior-tty-set %s", path))
+}
+
+// InferiorTTYPath returns the path passed to -inferior-tty-set.
+func (c *GDBClient) InferiorTTYPath() string {
+	if c == nil {
+		return ""
+	}
+	if c.externalTTY != "" {
+		return c.externalTTY
+	}
+	if c.inferior != nil {
+		return c.inferior.SlaveName()
+	}
+	return ""
+}
+
+// UsesExternalInferiorTTY reports whether stdio is an external terminal path
+// (no in-process master for the IO widget).
+func (c *GDBClient) UsesExternalInferiorTTY() bool {
+	return c != nil && c.externalTTY != ""
+}
+
+// SetInferiorTTYPath switches -inferior-tty-set to path. Empty or "internal"
+// reopens an in-process PTY. Non-empty path closes the internal master (if any)
+// and uses the external slave (TUI / other terminal).
+func (c *GDBClient) SetInferiorTTYPath(path string) error {
+	if c == nil {
+		return fmt.Errorf("no gdb session")
+	}
+	path = strings.TrimSpace(path)
+	if path == "" || path == "internal" {
+		c.externalTTY = ""
+		if c.inferior == nil {
+			inf, err := ptyx.OpenTTY()
+			if err != nil {
+				return err
+			}
+			c.inferior = inf
+		}
+		return c.ConfigureInferiorTTY()
+	}
+	if c.inferior != nil {
+		c.inferior.Close()
+		c.inferior = nil
+	}
+	c.externalTTY = path
+	return c.ConfigureInferiorTTY()
 }
 
 func (c *GDBClient) waitForPrompt(timeout time.Duration) (string, error) {
@@ -187,12 +251,20 @@ func (c *GDBClient) RequestQuit() QuitAction {
 	return c.Quit.RequestQuit()
 }
 
-// Interrupt sends Ctrl-C on the GDB MI PTY (same as console C-c).
+// Interrupt stops a running inferior via PTY ^C and SIGINT to the GDB process.
+//
+// Do not lead with -exec-interrupt: while GDB is blocked in continue, typed MI
+// is often unread until the prompt returns (Send still succeeds) — that was a
+// Ctrl-C regression. ^C is the classic, reliable GDB interrupt.
 func (c *GDBClient) Interrupt() error {
 	if c == nil {
 		return nil
 	}
-	return c.SendRaw("\x03")
+	err := c.SignalInterrupt()
+	if sendErr := c.SendRaw("\x03"); err == nil {
+		err = sendErr
+	}
+	return err
 }
 
 // SuspendInferior delivers SIGTSTP like a terminal Ctrl-Z on the program's TTY.

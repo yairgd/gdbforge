@@ -42,6 +42,9 @@ type SessionConfig struct {
 	// ProgArgs is kept for tests/legacy callers; unused when GDBArgs is set
 	// via -- pass-through. Prefer GDBArgs.
 	ProgArgs []string
+	// InferiorTTY, if set, routes program stdio to that path (external
+	// terminal) instead of the in-app IO pane. Also GDBFORGE_INFERIOR_TTY.
+	InferiorTTY string
 }
 
 func splitDashDash(args []string) (before, after []string, found bool) {
@@ -98,20 +101,23 @@ func parseFlags(args []string) (SessionConfig, error) {
 	kind := fs.String("g", BackendGDB, "backend kind: gdb or dlv")
 	// Empty default: filled from -g when -d is omitted.
 	debuggerPath := fs.String("d", "", "path to the debugger binary (default: matches -g)")
+	inferiorTTY := fs.String("inferior-tty", "", "external pts for program stdio (or GDBFORGE_INFERIOR_TTY)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: gdbforge [gdbforge options] [--] [debugger options]\n\n")
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
-		fmt.Fprintf(os.Stderr, "  -g kind     Backend: gdb or dlv (default \"gdb\")\n")
-		fmt.Fprintf(os.Stderr, "  -d path     Debugger binary (default: gdb or dlv matching -g)\n")
-		fmt.Fprintf(os.Stderr, "  -version    Print version and exit\n")
-		fmt.Fprintf(os.Stderr, "  -h, --help  Print help and exit\n")
-		fmt.Fprintf(os.Stderr, "  --          End of gdbforge options; rest passed to the debugger\n\n")
+		fmt.Fprintf(os.Stderr, "  -g kind           Backend: gdb or dlv (default \"gdb\")\n")
+		fmt.Fprintf(os.Stderr, "  -d path           Debugger binary (default: gdb or dlv matching -g)\n")
+		fmt.Fprintf(os.Stderr, "  -inferior-tty pts External terminal slave for program stdio (TUI apps)\n")
+		fmt.Fprintf(os.Stderr, "  -version          Print version and exit\n")
+		fmt.Fprintf(os.Stderr, "  -h, --help        Print help and exit\n")
+		fmt.Fprintf(os.Stderr, "  --                End of gdbforge options; rest passed to the debugger\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb ./hello a b\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv -d /usr/local/bin/dlv ./pkg\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb -- -nx -x ./r5_debug.gdb ./zephyr.elf\n")
+		fmt.Fprintf(os.Stderr, "  GDBFORGE_INFERIOR_TTY=/dev/pts/3 gdbforge ./my_tui\n")
 	}
 
 	if err := fs.Parse(before); err != nil {
@@ -134,6 +140,10 @@ func parseFlags(args []string) (SessionConfig, error) {
 	}
 
 	cfg := SessionConfig{Kind: backend, GDBPath: path}
+	cfg.InferiorTTY = strings.TrimSpace(*inferiorTTY)
+	if cfg.InferiorTTY == "" {
+		cfg.InferiorTTY = strings.TrimSpace(os.Getenv("GDBFORGE_INFERIOR_TTY"))
+	}
 
 	if passThrough {
 		if len(after) == 0 {

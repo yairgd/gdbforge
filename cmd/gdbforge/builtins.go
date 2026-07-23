@@ -37,13 +37,14 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.registerBuiltin("logger", logWidget)
 
 	var (
-		boot       string
-		inferior   *ptyx.TTY
-		promptTok  string
+		boot          string
+		inferior      *ptyx.TTY
+		promptTok     string
 		skipBreakMain bool
+		extTTY        = inferiorTTYFromEnvOrCfg(a.cfg)
 	)
 	if a.cfg.IsDLV() {
-		client, err := dlv.NewClient(a.cfg.GDBPath, a.cfg.GDBArgs)
+		client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
 		if err != nil {
 			return err
 		}
@@ -54,7 +55,7 @@ func (a *DebuggerApp) initBuiltins() error {
 		promptTok = dlv.PromptToken
 		_ = client.ConfigureInferiorTTY()
 	} else {
-		client, err := gdb.NewGDBClient(a.cfg.GDBPath, a.cfg.GDBArgs)
+		client, err := gdb.NewGDBClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, gdb.ClientOptions{InferiorTTY: extTTY})
 		if err != nil {
 			return err
 		}
@@ -89,12 +90,14 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.outputWidget = widgets.NewOutputWidget()
 	a.outputWidget.SetClipboard(a.ClipboardIO())
-	if inferior != nil {
-		a.wireInferiorIO(inferior)
-	}
 	a.registerBuiltin("io", a.outputWidget)
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
 	a.maybeClearOutput()
+	if extTTY != "" {
+		a.markIOExternal(extTTY)
+	} else if inferior != nil {
+		a.wireInferiorIO(inferior)
+	}
 
 	savedBPs, err := persist.LoadBreakpoints(".")
 	if err != nil && a.ctx.Log != nil {

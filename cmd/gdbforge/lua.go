@@ -131,47 +131,95 @@ func (a *DebuggerApp) maybeEnterLuaBuffer(w interface{}) {
 	a.enterLuaMode(lw)
 }
 
-// loadUserLuaScripts loads ./.gdbforge/lua/*.lua as :lua <basename> commands.
+// loadUserLuaScripts loads ./.gdbforge/lua/**/*.lua as :lua <basename> commands.
+// Nested trees match scripts/ layout (e.g. r5_debug/r5_debug.lua, games/snake/snake.lua).
+// Each file gets its own Runtime so pane callbacks do not clobber each other.
 func (a *DebuggerApp) loadUserLuaScripts() {
 	if a.luaScratch == nil {
 		return
 	}
-	a.luaUser = luahost.New(a.luaScratch, a.registerLuaCmd)
-	a.luaUser.SetOpenBuffer(a.openBufferForLua)
-	a.luaUser.SetRun(func(argv []string) {
+	dir := filepath.Join(".", persist.DirName, luahost.UserLuaDir)
+	files, err := luahost.WalkLuaScripts(dir)
+	if a.ctx.Log != nil {
+		log := a.ctx.Log.Named("lua")
+		if err != nil {
+			log.Error("walk " + dir + ": " + err.Error())
+		}
+	}
+	n := 0
+	var firstErr error
+	for _, f := range files {
+		rt := luahost.New(a.luaScratch, a.registerLuaCmd)
+		a.wireUserLuaAPI(rt)
+		if err := rt.LoadScriptFile(f.Path, f.Cmd); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			rt.Close()
+			continue
+		}
+		a.luaUserRuntimes = append(a.luaUserRuntimes, rt)
+		// Keep luaUser as last loaded for Close backward-compat.
+		a.luaUser = rt
+		n++
+	}
+	if a.ctx.Log == nil {
+		return
+	}
+	log := a.ctx.Log.Named("lua")
+	if firstErr != nil {
+		log.Error("load " + dir + ": " + firstErr.Error())
+	}
+	if n > 0 {
+		log.Info("loaded user lua scripts from " + dir)
+	}
+}
+
+// wireUserLuaAPI installs host callbacks shared by every user script Runtime.
+func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
+	if rt == nil {
+		return
+	}
+	rt.SetOpenBuffer(a.openBufferForLua)
+	rt.SetRun(func(argv []string) {
 		anyArgs := make([]any, len(argv))
 		for i, s := range argv {
 			anyArgs[i] = s
 		}
 		a.OnRun(anyArgs...)
 	})
-	a.luaUser.SetSpawn(func(argv []string) error {
+	rt.SetSpawn(func(argv []string) error {
 		return a.SpawnExec(argv)
 	})
-	a.luaUser.SetGDB(func(cmd string) {
-		if a.gdbClient == nil || strings.TrimSpace(cmd) == "" {
+	rt.SetOpenExternalTTY(a.OpenExternalTTY)
+	rt.SetSetInferiorTTY(a.SetInferiorTTY)
+	rt.SetSpawnTerminal(a.SpawnTerminal)
+	rt.SetDlvConnect(a.ConnectDlv)
+	rt.SetSpawnDlvHeadless(a.SpawnDlvHeadless)
+	rt.SetProgram(a.SessionProgram)
+	rt.SetGDB(func(cmd string) {
+		cmd = strings.TrimSpace(cmd)
+		if cmd == "" {
 			return
 		}
 		if a.gdbWidget != nil {
 			a.gdbWidget.EchoSubmit(cmd)
 			a.gdbWidget.FollowTailAndScroll()
 		}
-		sendCmd := gdb.CLIExecToMI(cmd)
-		a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+		if a.isDLV() {
+			if a.dlvClient == nil {
+				return
+			}
+			a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
+		} else {
+			if a.gdbClient == nil {
+				return
+			}
+			sendCmd := gdb.CLIExecToMI(cmd)
+			a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+		}
 		a.RequestFrame()
 	})
-	dir := filepath.Join(".", persist.DirName, luahost.UserLuaDir)
-	n, err := a.luaUser.LoadDir(dir)
-	if a.ctx.Log == nil {
-		return
-	}
-	log := a.ctx.Log.Named("lua")
-	if err != nil {
-		log.Error("load " + dir + ": " + err.Error())
-	}
-	if n > 0 {
-		log.Info("loaded user lua scripts from " + dir)
-	}
 }
 
 // openBufferForLua focuses named panes without stealing the Code leaf via swap.
