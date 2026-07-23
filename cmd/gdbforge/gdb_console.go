@@ -9,6 +9,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
 const (
@@ -211,6 +212,33 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 	if a.gdbClient != nil {
 		a.withGdbUIOwner(func() { _ = a.gdbClient.Interrupt() })
 	}
+}
+
+// onGdbConsoleSuspend handles Ctrl-Z like GDB: SIGTSTP the inferior while it
+// is running; otherwise suspend gdbforge (job control, shell `fg` to resume).
+func (a *DebuggerApp) onGdbConsoleSuspend() {
+	running := a.State() != nil && a.State().InferiorRunning()
+	if running {
+		if a.gdbClient != nil {
+			a.withGdbUIOwner(func() { _ = a.gdbClient.SuspendInferior() })
+			return
+		}
+		if tty := a.inferiorTTY(); tty != nil {
+			a.sendInferior(tty, func() { _ = tty.SendRaw("\x1a") })
+			return
+		}
+	}
+	a.Suspend()
+}
+
+func (a *DebuggerApp) inferiorTTY() *ptyx.TTY {
+	if a.gdbClient != nil {
+		return a.gdbClient.InferiorTTY()
+	}
+	if a.dlvClient != nil {
+		return a.dlvClient.InferiorTTY()
+	}
+	return nil
 }
 
 func (a *DebuggerApp) onGdbConsoleEOF() {

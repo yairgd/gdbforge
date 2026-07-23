@@ -19,6 +19,7 @@ type ExecWidget struct {
 	onSubmit    func(cmd string)
 	onInterrupt func()
 	onEOF       func()
+	onSuspend   func()
 
 	lastRows, lastCols int
 	setSize            func(rows, cols uint16) error
@@ -34,6 +35,7 @@ func NewExecWidget() *ExecWidget {
 	console.OnSubmit = w.handleSubmit
 	console.OnInterrupt = w.handleInterrupt
 	console.OnEOF = w.handleEOF
+	console.OnSuspend = w.handleSuspend
 	return w
 }
 
@@ -59,6 +61,11 @@ func (m *ExecWidget) SetOnInterrupt(fn func()) {
 // SetOnEOF registers the Ctrl-D handler (app controller).
 func (m *ExecWidget) SetOnEOF(fn func()) {
 	m.onEOF = fn
+}
+
+// SetOnSuspend registers the Ctrl-Z handler (app controller).
+func (m *ExecWidget) SetOnSuspend(fn func()) {
+	m.onSuspend = fn
 }
 
 // SetOnClose registers a callback invoked on Ctrl-D / EOF while the session is live
@@ -151,6 +158,12 @@ func (m *ExecWidget) handleEOF() {
 	}
 	if m.onEOF != nil {
 		m.onEOF()
+	}
+}
+
+func (m *ExecWidget) handleSuspend() {
+	if m.onSuspend != nil {
+		m.onSuspend()
 	}
 }
 

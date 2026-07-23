@@ -33,6 +33,8 @@ type ConsolePane struct {
 	OnSubmit    func(cmd string)
 	OnInterrupt func()
 	OnEOF       func()
+	// OnSuspend is Ctrl-Z (SIGTSTP): GDB-like job control / inferior stop.
+	OnSuspend func()
 }
 
 func NewConsolePane(paneName string) *ConsolePane {
@@ -130,6 +132,7 @@ func (p *ConsolePane) initKeyBindings() {
 	p.BindKeyFunc("submit", func(args ...any) { p.submit() }, "<Enter>", "<C-m>", "<C-j>")
 	p.BindKeyFunc("interrupt", func(args ...any) { p.interrupt() }, "<C-c>")
 	p.BindKeyFunc("eof", func(args ...any) { p.eof() }, "<C-d>")
+	p.BindKeyFunc("suspend", func(args ...any) { p.suspend() }, "<C-z>")
 	p.BindKeyFunc("clear", func(args ...any) { p.Clear() }, "<C-l>")
 	p.BindKeyFunc("scroll-up", func(args ...any) { p.out.ScrollPageUp(10) }, "<PgUp>")
 	p.BindKeyFunc("scroll-down", func(args ...any) { p.out.ScrollPageDown(10) }, "<PgDn>")
@@ -155,6 +158,12 @@ func (p *ConsolePane) interrupt() {
 func (p *ConsolePane) eof() {
 	if p.OnEOF != nil {
 		p.OnEOF()
+	}
+}
+
+func (p *ConsolePane) suspend() {
+	if p.OnSuspend != nil {
+		p.OnSuspend()
 	}
 }
 
@@ -257,7 +266,7 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 
 	case *tcell.EventKey:
 		if p.inputEnabled && isPasteKey(e) {
-			p.pasteIntoInput()
+			p.pasteClipboardIntoInput()
 			return
 		}
 		if p.HandleBoundKey(e) {
@@ -291,8 +300,13 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 	}
 }
 
-// pasteIntoInput inserts the system clipboard into the input line (not scrollback).
+// pasteIntoInput inserts PRIMARY (middle-click) or CLIPBOARD into the input line.
 func (p *ConsolePane) pasteIntoInput() {
+	p.pasteText(p.clipboard.pastePrimaryText())
+}
+
+// pasteClipboardIntoInput inserts CLIPBOARD (Ctrl+V) into the input line.
+func (p *ConsolePane) pasteClipboardIntoInput() {
 	p.pasteText(p.clipboard.pasteText())
 }
 

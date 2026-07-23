@@ -145,3 +145,70 @@ func TestPushRawLogStreamSkipsCommandEcho(t *testing.T) {
 	}
 }
 
+func TestPushRawMakeShellRawOutput(t *testing.T) {
+	st := NewGdbInputState()
+	// GDB make/shell: log-stream echo, then raw child stdout, then ^done.
+	u := st.PushRaw("&\"make --version\\n\"\n" +
+		"GNU Make 4.4.1\n" +
+		"Built for x86_64-pc-linux-gnu\n" +
+		"^done\n(gdb)\n")
+	want := []string{"GNU Make 4.4.1", "Built for x86_64-pc-linux-gnu"}
+	if !reflect.DeepEqual(u.DisplayLines, want) {
+		t.Fatalf("display=%v want=%v", u.DisplayLines, want)
+	}
+	if u.State != Done {
+		t.Fatalf("state=%v want Done", u.State)
+	}
+	if !u.PromptReady {
+		t.Fatal("expected PromptReady")
+	}
+}
+
+func TestPushRawMakeKeepsANSIEscape(t *testing.T) {
+	st := NewGdbInputState()
+	// gcc -fdiagnostics-color lines often start with ESC[…m — must not strip ESC.
+	colored := "\x1b[01m/tmp/foo.c:1: error: boom\x1b[0m"
+	u := st.PushRaw(colored + "\n^done\n(gdb)\n")
+	if len(u.DisplayLines) != 1 || u.DisplayLines[0] != colored {
+		t.Fatalf("display=%q want ESC preserved", u.DisplayLines)
+	}
+}
+
+func TestPushRawIgnoresUnhandledMIRecords(t *testing.T) {
+	st := NewGdbInputState()
+	u := st.PushRaw("=thread-group-added,id=\"i1\"\n^running\n")
+	if len(u.DisplayLines) != 0 {
+		t.Fatalf("MI notify must not paint, got %v", u.DisplayLines)
+	}
+	if u.State != Running {
+		t.Fatalf("state=%v want Running", u.State)
+	}
+}
+
+func TestPushRawHidesDownloadStatusShowsLoadText(t *testing.T) {
+	st := NewGdbInputState()
+	// load / remote write: MI +download status is protocol noise; console ~
+	// and raw "Loading section" lines match native GDB.
+	u := st.PushRaw(
+		`+download,{section=".init",section-size="12",total-size="68266353"}` + "\n" +
+			`~"Loading section .init, size 0xc lma 0x412f4a4\n"` + "\n" +
+			"Loading section .data, size 0xa1e4 lma 0x4130f98\n" +
+			`+download,{section=".data",section-sent="41444",section-size="41444",total-sent="295079",total-size="68266353"}` + "\n" +
+			`~"Transfer rate: 278 KB/sec, 21082 bytes/write.\n"` + "\n" +
+			"^done\n(gdb)\n",
+	)
+	want := []string{
+		"Loading section .init, size 0xc lma 0x412f4a4",
+		"Loading section .data, size 0xa1e4 lma 0x4130f98",
+		"Transfer rate: 278 KB/sec, 21082 bytes/write.",
+	}
+	if !reflect.DeepEqual(u.DisplayLines, want) {
+		t.Fatalf("display=%v want=%v", u.DisplayLines, want)
+	}
+	for _, ln := range u.DisplayLines {
+		if strings.HasPrefix(ln, "+download") {
+			t.Fatalf("MI +download must stay hidden, got %q", ln)
+		}
+	}
+}
+

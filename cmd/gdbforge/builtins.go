@@ -70,14 +70,15 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget = widgets.NewGDBWidget()
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.SetPromptStyleToken(promptTok)
+	// make/gcc (and Delve listings) emit ANSI SGR on the debugger PTY.
+	a.gdbWidget.SetANSI(true)
 	if a.cfg.IsDLV() {
-		// Delve emits ANSI syntax highlighting for source listings in the console.
-		a.gdbWidget.SetANSI(true)
 		// Also paint program stdout in the Delve console (IO pane is primary).
 		a.State().SetGdbTargetPrint(true)
 	}
 	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
 	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
+	a.gdbWidget.SetOnSuspend(a.onGdbConsoleSuspend)
 	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
 	// Replay banner / -x output captured before the UI subscribed, then attach live PTY.
 	if boot != "" {

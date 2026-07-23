@@ -7,7 +7,7 @@ import (
 
 // MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
 type MiUpdate struct {
-	DisplayLines         []string // GDB console stream (~) and other UI text
+	DisplayLines         []string // console (~), make/shell raw PTY text, errors
 	TargetLines          []string // inferior target stream (@) — legacy MI path
 	PromptReady          bool
 	// PromptLine is the exact MI prompt record GDB emitted (e.g. "(gdb)").
@@ -141,18 +141,34 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 		out.InferiorExited = true
 
 	default:
-		// other notify (=...), async, or partial — ignore for display
+		// make / shell write child stdout as raw PTY text — not wrapped in
+		// ~/"@" streams. Paint it so the console matches classic GDB.
+		// Other MI records we chose not to handle above stay silent
+		// (including +download status async during load).
+		if len(line) > 0 {
+			switch line[0] {
+			case '~', '@', '&', '^', '*', '=', '+':
+				return
+			}
+		}
+		out.DisplayLines = append(out.DisplayLines, ExpandTabs(line, 8))
 	}
 }
 
 // stripMILinePrefix removes PTY echo noise glued onto MI records — especially
-// Ctrl-C (\x03), which GDB prints as ^C immediately before the first ~"...".
+// Ctrl-C (\x03), which GDB prints immediately before the first ~"/&" record.
 // Also peels numeric MI tokens ("42^done").
+// Do not strip ESC (0x1b): make/gcc color SGR sequences must stay intact.
 func stripMILinePrefix(line string) string {
 	for len(line) > 0 {
 		switch line[0] {
-		case '~', '@', '&', '^', '*', '=', '(':
+		case '~', '@', '&', '^', '*', '=', '+', '(':
 			return line
+		case '\x1b': // ANSI CSI/OSC — keep for console colorization
+			return line
+		case '\x03': // Ctrl-C echo glued onto the next MI record
+			line = line[1:]
+			continue
 		}
 		if line[0] >= '0' && line[0] <= '9' {
 			i := 0
@@ -161,13 +177,13 @@ func stripMILinePrefix(line string) string {
 			}
 			if i > 0 && i < len(line) {
 				switch line[i] {
-				case '^', '*', '=':
+				case '^', '*', '=', '+':
 					return line[i:]
 				}
 			}
 			return line
 		}
-		// ASCII control (Ctrl-C echo) or DEL — drop and keep looking.
+		// Other ASCII controls / DEL — drop and keep looking.
 		if line[0] < 0x20 || line[0] == 0x7f {
 			line = line[1:]
 			continue

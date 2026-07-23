@@ -436,6 +436,9 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 	w.SetOnInterrupt(func() {
 		_ = client.SendRaw("\x03")
 	})
+	w.SetOnSuspend(func() {
+		_ = client.SendRaw("\x1a")
+	})
 	w.SetOnEOF(func() {
 		_ = client.SendRaw("\x04")
 	})

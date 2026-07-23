@@ -3,7 +3,9 @@ package gdb
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
@@ -191,6 +193,35 @@ func (c *GDBClient) Interrupt() error {
 		return nil
 	}
 	return c.SendRaw("\x03")
+}
+
+// SuspendInferior delivers SIGTSTP like a terminal Ctrl-Z on the program's TTY.
+// Prefers writing ^Z to the inferior PTY; falls back to kill(pid, SIGTSTP).
+func (c *GDBClient) SuspendInferior() error {
+	if c == nil {
+		return nil
+	}
+	if c.inferior != nil {
+		if err := c.inferior.SendRaw("\x1a"); err == nil {
+			return nil
+		}
+	}
+	return signalInferiorTSTP(c.Quit.InferiorPID())
+}
+
+func signalInferiorTSTP(pidStr string) error {
+	if pidStr == "" {
+		return fmt.Errorf("no inferior pid")
+	}
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil || pid <= 0 {
+		return fmt.Errorf("bad inferior pid %q", pidStr)
+	}
+	// Negative pid = process group (usual shell job-control target).
+	if err := syscall.Kill(-pid, syscall.SIGTSTP); err == nil {
+		return nil
+	}
+	return syscall.Kill(pid, syscall.SIGTSTP)
 }
 
 // Close tears down the inferior TTY then the GDB PTY session.

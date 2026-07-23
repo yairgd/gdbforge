@@ -2,6 +2,9 @@ package termui
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -115,6 +118,46 @@ func (app *TermApp) HandleKey(ev *tcell.EventKey) {
 
 func (app *TermApp) Close() {
 	app.screen.Fini()
+}
+
+// Suspend restores the terminal and stops this process with SIGTSTP (job
+// control), like Ctrl-Z in GDB/vim. Resumes on SIGCONT / shell `fg`.
+func (app *TermApp) Suspend() {
+	if app == nil || app.screen == nil {
+		return
+	}
+	app.screen.DisableMouse()
+	app.screen.Fini()
+
+	signal.Reset(syscall.SIGTSTP)
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		_ = app.reinitScreen()
+		return
+	}
+	_ = p.Signal(syscall.SIGTSTP)
+	// Continues here after fg / SIGCONT.
+	if err := app.reinitScreen(); err != nil {
+		log.Printf("suspend resume: %v", err)
+		app.exit = true
+		return
+	}
+	_ = app.UpdateCanvas()
+	app.layoutDirty = true
+	if app.Api != nil {
+		app.Api.HandleResize()
+	}
+}
+
+func (app *TermApp) reinitScreen() error {
+	if err := app.screen.Init(); err != nil {
+		return err
+	}
+	app.screen.EnableMouse(tcell.MouseMotionEvents)
+	app.screen.EnablePaste()
+	app.screen.Clear()
+	app.screen.Sync()
+	return nil
 }
 
 func (app *TermApp) AddWidget(w Widget) {
@@ -274,6 +317,8 @@ func (app *TermApp) CopyToClipboard(text string) {
 	}
 	app.screen.SetClipboard([]byte(text))
 	platform.SetClipboardText(text)
+	// Middle-click outside gdbforge reads X11 PRIMARY; CLIPBOARD alone is not enough.
+	platform.SetPrimaryText(text)
 }
 
 func (app *TermApp) PasteFromClipboard() string {
@@ -283,11 +328,20 @@ func (app *TermApp) PasteFromClipboard() string {
 	return ""
 }
 
+func (app *TermApp) PasteFromPrimary() string {
+	if text, ok := platform.GetPrimaryText(); ok {
+		return text
+	}
+	// Fallback when PRIMARY is empty (e.g. copy from an app that only sets CLIPBOARD).
+	return app.PasteFromClipboard()
+}
+
 // ClipboardIO returns the shared bridge for Viewport-backed widgets.
 func (app *TermApp) ClipboardIO() ClipboardIO {
 	return ClipboardIO{
-		Copy:  app.CopyToClipboard,
-		Paste: app.PasteFromClipboard,
+		Copy:         app.CopyToClipboard,
+		Paste:        app.PasteFromClipboard,
+		PastePrimary: app.PasteFromPrimary,
 	}
 }
 

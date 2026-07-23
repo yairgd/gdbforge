@@ -33,6 +33,7 @@ type OutputWidget struct {
 	onSubmit    func(line string)
 	onInterrupt func()
 	onEOF       func()
+	onSuspend   func()
 	setSize     func(rows, cols uint16) error
 
 	lastRows, lastCols int
@@ -70,10 +71,12 @@ func (w *OutputWidget) EnableInput(on bool) {
 		w.console.OnSubmit = w.handleSubmit
 		w.console.OnInterrupt = w.handleInterrupt
 		w.console.OnEOF = w.handleEOF
+		w.console.OnSuspend = w.handleSuspend
 	} else {
 		w.console.OnSubmit = nil
 		w.console.OnInterrupt = nil
 		w.console.OnEOF = nil
+		w.console.OnSuspend = nil
 	}
 }
 
@@ -90,6 +93,11 @@ func (w *OutputWidget) SetOnInterrupt(fn func()) {
 // SetOnEOF registers the Ctrl-D handler (app controller).
 func (w *OutputWidget) SetOnEOF(fn func()) {
 	w.onEOF = fn
+}
+
+// SetOnSuspend registers the Ctrl-Z handler (app controller).
+func (w *OutputWidget) SetOnSuspend(fn func()) {
+	w.onSuspend = fn
 }
 
 // SetSizeFunc registers a callback used when the pane size changes (PTY winsize).
@@ -193,10 +201,10 @@ func isMILine(line string) bool {
 		return true
 	}
 	switch line[0] {
-	case '~', '@', '&', '^', '*', '=':
+	case '~', '@', '&', '^', '*', '=', '+':
 		return true
 	}
-	return hasTokenPrefix(line, "^") || hasTokenPrefix(line, "*") || hasTokenPrefix(line, "=")
+	return hasTokenPrefix(line, "^") || hasTokenPrefix(line, "*") || hasTokenPrefix(line, "=") || hasTokenPrefix(line, "+")
 }
 
 func decodeTargetStreamLine(line string) (string, bool) {
@@ -300,6 +308,12 @@ func (w *OutputWidget) handleInterrupt() {
 func (w *OutputWidget) handleEOF() {
 	if w.onEOF != nil {
 		w.onEOF()
+	}
+}
+
+func (w *OutputWidget) handleSuspend() {
+	if w.onSuspend != nil {
+		w.onSuspend()
 	}
 }
 

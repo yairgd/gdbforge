@@ -373,7 +373,7 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 		}
 		if isMiddlePaste(e) {
-			c.pasteAtCursor()
+			c.pastePrimaryAtCursor()
 			return
 		}
 		if e.Buttons()&tcell.ButtonPrimary != 0 {
@@ -394,6 +394,10 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 
 func (c *CmdWidget) pasteAtCursor() {
 	c.pasteText(c.clipboard.pasteText())
+}
+
+func (c *CmdWidget) pastePrimaryAtCursor() {
+	c.pasteText(c.clipboard.pastePrimaryText())
 }
 
 func (c *CmdWidget) pasteText(text string) {

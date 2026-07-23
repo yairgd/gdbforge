@@ -9,8 +9,11 @@ import (
 // ClipboardIO is the shared copy/paste bridge used by Viewport-backed widgets
 // and single-line editors (CmdWidget, ConsolePane input).
 type ClipboardIO struct {
-	Copy  func(text string)
+	Copy func(text string)
+	// Paste reads CLIPBOARD (Ctrl+V).
 	Paste func() string
+	// PastePrimary reads X11 PRIMARY (middle-click). Optional; falls back to Paste.
+	PastePrimary func() string
 }
 
 func (c *ClipboardIO) copyText(text string) {
@@ -25,6 +28,16 @@ func (c *ClipboardIO) pasteText() string {
 		return ""
 	}
 	return c.Paste()
+}
+
+// pastePrimaryText prefers PRIMARY (middle-click), then CLIPBOARD.
+func (c *ClipboardIO) pastePrimaryText() string {
+	if c != nil && c.PastePrimary != nil {
+		if t := c.PastePrimary(); t != "" {
+			return t
+		}
+	}
+	return c.pasteText()
 }
 
 // isPasteKey reports Ctrl+V (including terminal variants that send Ctrl+rune).

@@ -1,6 +1,7 @@
 package termui
 
 import (
+	"time"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -42,6 +43,12 @@ type Viewport struct {
 	selCursor bufferPos
 	selActive bool
 	hasSel    bool
+
+	// Multi-click (double = word, triple = line), like a native terminal.
+	lastClickTime time.Time
+	lastClickPos  bufferPos
+	clickCount    int
+	suppressDrag  bool // ignore drag after word/line multi-click until release
 
 	clipboard ClipboardIO
 	readOnly  bool // true → Cut copies only; Paste ignored
@@ -377,28 +384,36 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		return
 	}
 
-	// Middle-click paste (Linux terminal convention); only inside the pane.
+	// Middle-click paste (Linux PRIMARY selection); only inside the pane.
 	if isMiddlePaste(e) {
 		if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
 			return
 		}
-		v.PasteAtCursor()
+		v.PastePrimaryAtCursor()
 		return
 	}
 
-	if e.Buttons() == tcell.ButtonNone && v.selActive {
-		v.selActive = false
-		if lx >= 0 && ly >= 0 && lx < v.width && ly < v.height {
-			v.selCursor = v.posFromLocal(lx, ly)
-		}
-		v.hasSel = v.selAnchor != v.selCursor
-		if v.hasSel {
-			v.CopySelection()
+	if e.Buttons() == tcell.ButtonNone {
+		v.suppressDrag = false
+		if v.selActive {
+			v.selActive = false
+			if lx >= 0 && ly >= 0 && lx < v.width && ly < v.height {
+				v.selCursor = v.posFromLocal(lx, ly)
+			}
+			v.hasSel = v.selAnchor != v.selCursor
+			if v.hasSel {
+				v.CopySelection()
+			}
 		}
 		return
 	}
 
 	if e.Buttons()&tcell.ButtonPrimary == 0 {
+		return
+	}
+
+	// After double/triple-click, hold the selection until button release.
+	if v.suppressDrag {
 		return
 	}
 
@@ -408,6 +423,21 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 			return
 		}
 		pos := v.posFromLocal(lx, ly)
+		v.noteClick(pos, e.When())
+		switch v.clickCount {
+		case 2:
+			if v.selectWordAt(pos) {
+				v.CopySelection()
+				v.suppressDrag = true
+				return
+			}
+		case 3:
+			if v.selectLineAt(pos) {
+				v.CopySelection()
+				v.suppressDrag = true
+				return
+			}
+		}
 		v.clearSelection()
 		v.selActive = true
 		v.selAnchor = pos
@@ -457,6 +487,66 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 	v.CursorCol = pos.col
 	v.clampCursorCol()
 	v.EnsureVisible(v.width, v.height)
+}
+
+func (v *Viewport) noteClick(pos bufferPos, when time.Time) {
+	if when.IsZero() {
+		when = time.Now()
+	}
+	same := pos.line == v.lastClickPos.line && absInt(pos.col-v.lastClickPos.col) <= 1
+	if same && when.Sub(v.lastClickTime) <= clickMultiTimeoutMs*time.Millisecond {
+		v.clickCount++
+		if v.clickCount > 3 {
+			v.clickCount = 1
+		}
+	} else {
+		v.clickCount = 1
+	}
+	v.lastClickTime = when
+	v.lastClickPos = pos
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// selectWordAt marks the word under pos and returns true if anything selected.
+func (v *Viewport) selectWordAt(pos bufferPos) bool {
+	if v.Buffer == nil || pos.line < 0 || pos.line >= v.Buffer.NumLines() {
+		return false
+	}
+	line := v.Buffer.Line(pos.line)
+	start, end := wordBoundsAt(line, pos.col)
+	if start >= end {
+		return false
+	}
+	v.selActive = false
+	v.selAnchor = bufferPos{line: pos.line, col: start}
+	v.selCursor = bufferPos{line: pos.line, col: end}
+	v.hasSel = true
+	v.CursorLine = pos.line
+	v.CursorCol = end
+	v.clampCursorCol()
+	return true
+}
+
+// selectLineAt marks the whole buffer line under pos.
+func (v *Viewport) selectLineAt(pos bufferPos) bool {
+	if v.Buffer == nil || pos.line < 0 || pos.line >= v.Buffer.NumLines() {
+		return false
+	}
+	line := v.Buffer.Line(pos.line)
+	v.selActive = false
+	v.selAnchor = bufferPos{line: pos.line, col: 0}
+	v.selCursor = bufferPos{line: pos.line, col: len(line)}
+	v.hasSel = v.selAnchor != v.selCursor
+	v.CursorLine = pos.line
+	v.CursorCol = len(line)
+	v.clampCursorCol()
+	return v.hasSel
 }
 
 func (v *Viewport) handleKey(key *tcell.EventKey) {

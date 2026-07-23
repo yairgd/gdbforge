@@ -39,7 +39,7 @@ func (m *GDBWidget) SetPromptStyleToken(token string) {
 }
 
 // SetANSI enables ANSI/SGR color rendering in the console scrollback
-// (needed for Delve's colored source listings).
+// (make/gcc diagnostics, Delve source listings, …).
 func (m *GDBWidget) SetANSI(on bool) {
 	if m == nil || m.console == nil {
 		return
@@ -80,6 +80,14 @@ func (m *GDBWidget) SetOnInterrupt(fn func()) {
 		return
 	}
 	m.console.OnInterrupt = fn
+}
+
+// SetOnSuspend registers the Ctrl-Z handler (app controller).
+func (m *GDBWidget) SetOnSuspend(fn func()) {
+	if m == nil || m.console == nil {
+		return
+	}
+	m.console.OnSuspend = fn
 }
 
 // SetOnEOF registers the Ctrl-D handler (app controller).

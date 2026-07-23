@@ -89,12 +89,20 @@ func (v *Viewport) CutSelection() {
 	v.deleteSelection()
 }
 
-// PasteAtCursor inserts clipboard text at the caret (editable viewports only).
+// PasteAtCursor inserts CLIPBOARD text at the caret (editable viewports only).
 func (v *Viewport) PasteAtCursor() {
+	v.pasteAtCursor(v.clipboard.pasteText())
+}
+
+// PastePrimaryAtCursor inserts PRIMARY (middle-click) text at the caret.
+func (v *Viewport) PastePrimaryAtCursor() {
+	v.pasteAtCursor(v.clipboard.pastePrimaryText())
+}
+
+func (v *Viewport) pasteAtCursor(text string) {
 	if v.readOnly || v.Buffer == nil {
 		return
 	}
-	text := v.clipboard.pasteText()
 	if text == "" {
 		return
 	}

@@ -64,6 +64,10 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		}),
 		"<C-d>",
 	)
+	a.keyBindings.Bind(
+		commands.NewCommand("suspend", func(args ...any) { a.onGdbConsoleSuspend() }),
+		"<C-z>",
+	)
 
 	// Code globals (gated fallthrough where list panes own the key).
 	a.keyBindings.Bind(
