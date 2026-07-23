@@ -1,0 +1,41 @@
+-- Example: copy to .gdbforge/lua/r5_debug.lua (with r5_target.xml beside it).
+-- Usage: :lua r5_debug
+--
+-- Uses gdbforge.spawn (background — does NOT replace the Code pane).
+-- wait_port waits until JLink listens before target remote.
+-- Optional: :b exec to watch JLink logs.
+
+local JLINK = os.getenv("GDBFORGE_JLINK")
+  or "/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer"
+local DEVICE = os.getenv("GDBFORGE_JLINK_DEVICE") or "XCZU3CG_R5_0"
+local PORT = os.getenv("GDBFORGE_JLINK_PORT") or "2334"
+local TDESC = os.getenv("GDBFORGE_TDESC")
+  or (gdbforge.lua_dir() .. "/r5_target.xml")
+
+function main()
+  gdbforge.print("starting JLinkGDBServer …")
+  gdbforge.spawn(
+    JLINK,
+    "-device", DEVICE,
+    "-if", "JTAG",
+    "-speed", "4000",
+    "-port", PORT
+  )
+
+  gdbforge.print("waiting for port " .. PORT .. " …")
+  if not gdbforge.wait_port(PORT, 15) then
+    gdbforge.print("ERROR: JLink did not listen on :" .. PORT .. " — try :b exec")
+    return
+  end
+  gdbforge.print("port " .. PORT .. " is open")
+
+  gdbforge.open_buffer("gdb")
+  gdbforge.gdb("set architecture arm")
+  gdbforge.gdb("set tdesc filename " .. TDESC)
+  gdbforge.gdb("target remote localhost:" .. PORT)
+  gdbforge.gdb("monitor halt")
+  gdbforge.gdb("load")
+  gdbforge.gdb("set $pc = 0x0")
+  gdbforge.gdb("break main")
+  gdbforge.print("r5_debug done — Code leaf intact; :b exec for JLink logs")
+end

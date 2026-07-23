@@ -68,6 +68,11 @@ func (w *OutputWidget) EnableInput(on bool) {
 	w.separateTTY = on
 	w.console.SetInputEnabled(on)
 	if on {
+		// Attach typing to the incomplete stdout line (e.g. a live "> "
+		// prompt with no trailing newline) so Enter does not look like it
+		// deleted the text before PTY echo arrives. Do not local-echo on
+		// submit — the inferior TTY usually echoes and that would double.
+		w.console.SetLivePrompt(true)
 		w.console.OnSubmit = w.handleSubmit
 		w.console.OnInterrupt = w.handleInterrupt
 		w.console.OnEOF = w.handleEOF
@@ -281,6 +286,9 @@ func (w *OutputWidget) Clear() {
 	w.console.Clear()
 	w.ensureCurLine()
 	w.syncCurLine()
+	if w.console.InputEnabled() {
+		w.console.SetLivePrompt(true)
+	}
 	w.console.FollowTailAndScroll()
 }
 
@@ -296,6 +304,10 @@ func (w *OutputWidget) handleSubmit(raw string) {
 		w.onSubmit(line)
 	}
 	w.console.Input().Clear()
+	// Keep attach-to-tail so the next line types after the program prompt.
+	if w.console.InputEnabled() {
+		w.console.SetLivePrompt(true)
+	}
 	w.console.FollowTailAndScroll()
 }
 

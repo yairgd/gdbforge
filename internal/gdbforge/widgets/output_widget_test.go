@@ -83,6 +83,26 @@ func TestOutputWidgetCRAndTab(t *testing.T) {
 	}
 }
 
+func TestOutputWidgetSubmitClearsInputKeepsLivePrompt(t *testing.T) {
+	w := NewOutputWidget()
+	w.EnableInput(true)
+	if !w.console.LivePrompt() {
+		t.Fatal("expected live prompt attach when IO stdin is enabled")
+	}
+	w.console.Input().SetText("hello stdin")
+	w.handleSubmit("hello stdin")
+	if got := w.console.Input().Text(); got != "" {
+		t.Fatalf("input should clear after submit, got %q", got)
+	}
+	if !w.console.LivePrompt() {
+		t.Fatal("live prompt attach should remain after submit")
+	}
+	// No local echo — scrollback stays empty until inferior PTY output arrives.
+	if lines := w.LinesForTest(); len(lines) != 0 {
+		t.Fatalf("submit must not local-echo (avoids doubling PTY echo): %q", lines)
+	}
+}
+
 func TestOutputWidgetClearKeepsRunning(t *testing.T) {
 	w := NewOutputWidget()
 	w.AppendPty("^running\n")
