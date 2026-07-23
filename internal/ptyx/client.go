@@ -245,7 +245,7 @@ func (c *Client) Close() {
 }
 
 func setRaw(fd int) error {
-	termios, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
 	if err != nil {
 		return err
 	}
@@ -253,5 +253,5 @@ func setRaw(fd int) error {
 	termios.Lflag &^= unix.ECHO
 	termios.Lflag &^= unix.ICANON
 
-	return unix.IoctlSetTermios(fd, unix.TCSETS, termios)
+	return unix.IoctlSetTermios(fd, ioctlWriteTermios, termios)
 }
