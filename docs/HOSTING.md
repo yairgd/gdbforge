@@ -12,8 +12,10 @@ Commit the whole `docs/` tree:
 | `docs/media/` | Screencasts and other binary assets (e.g. `gdbforge-demo.mp4`) |
 | `docs/www/` | CSS + client-side Markdown/Mermaid renderer |
 | `docs/serve.sh` | Convenience launcher |
+| `docs/RELEASING.md` | Tag / dry-run release workflow guide |
 | `cmd/docserve/` | Go HTTP server + static export |
 | `.github/workflows/docs.yml` | GitHub Pages deploy |
+| `.github/workflows/release.yml` | Cross-build + GitHub Release on `v*` tags |
 
 Markdown sources stay in `docs/` — unchanged. GitHub Pages serves a **generated static copy** built by `docserve --export`.
 

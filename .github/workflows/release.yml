@@ -1,0 +1,140 @@
+# Release gdbforge binaries when a version tag is pushed.
+#
+# Safe testing (does not require merging to main):
+#   1. Push this workflow on your feature branch.
+#   2. Actions → "Release" → Run workflow → dry_run=true (artifacts only).
+#   3. Optional end-to-end: git tag v1.0.0-rc.1 && git push origin v1.0.0-rc.1
+#      (creates a prerelease; delete the tag/release after verifying).
+#   4. After main is ready: git tag v1.0.0 && git push origin v1.0.0
+#
+# See docs/RELEASING.md.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and upload artifacts only (no GitHub Release)"
+        type: boolean
+        default: true
+      tag:
+        description: "Version label for artifact names when dry-running (e.g. test)"
+        type: string
+        default: "dry-run"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          out="gdbforge-${VERSION}-${GOOS}-${GOARCH}"
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "dist/${out}" \
+            ./cmd/gdbforge
+          echo "artifact=${out}" >> "$GITHUB_ENV"
+
+      - name: Checksum
+        working-directory: dist
+        run: sha256sum "${{ env.artifact }}" | tee "${{ env.artifact }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gdbforge-${{ steps.ver.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version / prerelease
+        id: meta
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            ver="${GITHUB_REF_NAME}"
+          else
+            ver="${{ inputs.tag }}"
+          fi
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          if [[ "$ver" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: gdbforge-${{ steps.meta.outputs.version }}-*
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -la dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}
+          name: gdbforge ${{ steps.meta.outputs.version }}
+          draft: false
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

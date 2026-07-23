@@ -28,6 +28,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencast:
 | **[ROADMAP.md](ROADMAP.md)** | Planners | Current state, planned work, vision |
 | **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** | Contributors | Onboarding, file walk order, pitfalls |
 | **[HOSTING.md](HOSTING.md)** | DevOps | Local docs server, CI artifacts |
+| **[RELEASING.md](RELEASING.md)** | Maintainers | Tag releases, dry-run CI, GitHub Release binaries |
 
 ---
 

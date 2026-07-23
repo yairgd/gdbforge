@@ -7,7 +7,17 @@ import (
 	"os"
 )
 
+// version is set at link time by release builds:
+//
+//	go build -ldflags "-X main.version=v1.0.0" ./cmd/gdbforge
+var version = "dev"
+
 func main() {
+	if wantsVersion(os.Args[1:]) {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
 	cfg, err := parseFlags(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -24,4 +34,16 @@ func main() {
 	}
 	defer app.Close()
 	app.Run()
+}
+
+func wantsVersion(args []string) bool {
+	for _, a := range args {
+		if a == "-version" || a == "--version" {
+			return true
+		}
+		if a == "--" {
+			return false
+		}
+	}
+	return false
 }

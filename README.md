@@ -21,11 +21,29 @@
 
 ## Demo
 
-Screencast of gdbforge stepping a deep call stack (Code, GDB console, Threads, Call Stack):
+Screencast of gdbforge debugging a **Cortex-R5** core on an **MPSoC** (Xilinx/AMD Zynq UltraScale+ style), attached through a **SEGGER J-Link** probe:
 
 [![gdbforge demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo.mp4)
 
-Full-quality video: [gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4) (~8 MB). The program in the video is [`examples/stack_demo.c`](examples/stack_demo.c) — several nested functions plus a short recursive `descend` chain. Break on `leaf`, then browse frames with `:b callstack` or `n` / `s` / `c` from Code.
+Full-quality video: [gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4) (~8 MB).
+
+What the session shows:
+
+- Multi-pane UI (Code, GDB console, Threads, Call Stack) while stepping a deep call stack on the R5
+- Target bring-up via the Lua plugin [`examples/lua/r5_debug.lua`](examples/lua/r5_debug.lua): spawns **JLinkGDBServer** in the background (`gdbforge.spawn`), waits for the GDB port, then runs the usual attach sequence (`set architecture` / tdesc, `target remote localhost:…`, `monitor halt`, `load`, `break main`) without stealing the Code pane
+- Sample program: [`examples/stack_demo.c`](examples/stack_demo.c) — nested functions plus a short recursive `descend` chain (ends in `wfi` on ARM)
+
+Copy the plugin into the project Lua dir and run it from gdbforge:
+
+```bash
+mkdir -p .gdbforge/lua
+cp examples/lua/r5_debug.lua .gdbforge/lua/
+# optional: set GDBFORGE_JLINK / GDBFORGE_JLINK_DEVICE / GDBFORGE_JLINK_PORT
+# then inside gdbforge:
+#   :lua r5_debug
+```
+
+On a host PC (no J-Link), you can still rebuild the same stack sample and explore panes with `gcc -g -O0 -o stack_demo examples/stack_demo.c` and `./bin/gdbforge ./stack_demo`.
 
 ## Problems it solves
 

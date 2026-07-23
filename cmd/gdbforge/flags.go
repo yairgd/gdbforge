@@ -103,6 +103,7 @@ func parseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
 		fmt.Fprintf(os.Stderr, "  -g kind     Backend: gdb or dlv (default \"gdb\")\n")
 		fmt.Fprintf(os.Stderr, "  -d path     Debugger binary (default: gdb or dlv matching -g)\n")
+		fmt.Fprintf(os.Stderr, "  -version    Print version and exit\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help  Print help and exit\n")
 		fmt.Fprintf(os.Stderr, "  --          End of gdbforge options; rest passed to the debugger\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
