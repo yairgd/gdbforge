@@ -23,9 +23,9 @@
 
 Screencast of gdbforge stepping a deep call stack (Code, GDB console, Threads, Call Stack):
 
-**[Watch gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4)** (~8 MB)
+[![gdbforge demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo.mp4)
 
-The program in the video is [`examples/stack_demo.c`](examples/stack_demo.c) — several nested functions plus a short recursive `descend` chain. Break on `leaf`, then browse frames with `:b callstack` or `n` / `s` / `c` from Code.
+Full-quality video: [gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4) (~8 MB). The program in the video is [`examples/stack_demo.c`](examples/stack_demo.c) — several nested functions plus a short recursive `descend` chain. Break on `leaf`, then browse frames with `:b callstack` or `n` / `s` / `c` from Code.
 
 ## Problems it solves
 
