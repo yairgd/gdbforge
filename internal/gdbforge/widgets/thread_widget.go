@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/mcp"
@@ -23,6 +24,13 @@ type ThreadWidget struct {
 
 	items    []mcp.ThreadInfo
 	selected int
+
+	// mouseDown tracks primary-button press so we activate on release, not on
+	// every drag sample (which flooded GDB with thread/frame console noise).
+	mouseDown     bool
+	pressSelected int
+	lastActID     string
+	lastActTime   time.Time
 
 	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
 	HasBreakAt func(file string, line int) bool
@@ -181,7 +189,14 @@ func (w *ThreadWidget) activateSelected() {
 	if w.selected < 0 || w.selected >= len(w.items) {
 		return
 	}
-	w.OnActivate(w.items[w.selected])
+	th := w.items[w.selected]
+	now := time.Now()
+	if th.ID == w.lastActID && now.Sub(w.lastActTime) < 300*time.Millisecond {
+		return
+	}
+	w.lastActID = th.ID
+	w.lastActTime = now
+	w.OnActivate(th)
 }
 
 // SetItems replaces the thread list and rebuilds the viewport.
@@ -264,7 +279,18 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 		w.viewport.HandleEvent(e)
 		if btns&tcell.ButtonPrimary != 0 {
 			w.syncSelectedFromViewport()
-			w.activateSelected()
+			if !w.mouseDown {
+				w.mouseDown = true
+				w.pressSelected = w.selected
+			}
+			return
+		}
+		if w.mouseDown {
+			w.mouseDown = false
+			w.syncSelectedFromViewport()
+			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+				w.activateSelected()
+			}
 		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
@@ -277,6 +303,9 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 func (w *ThreadWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
 	w.viewport.SetCursorVisible(false)
+	if !focused {
+		w.mouseDown = false
+	}
 }
 
 func (w *ThreadWidget) SetClipboard(io termui.ClipboardIO) {

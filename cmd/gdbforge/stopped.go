@@ -170,6 +170,7 @@ func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidg
 }
 
 // onCallStackActivate selects a stack frame in GDB and shows its source.
+// Uses MI for GDB so the console does not print CLI frame listings.
 func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 	if a.gdbWidget == nil {
 		return
@@ -178,7 +179,11 @@ func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 	if sess == nil {
 		return
 	}
-	gdb.SendCmd(sess, a.State(), fmt.Sprintf("frame %d", fr.Level))
+	cmd := fmt.Sprintf("-stack-select-frame %d", fr.Level)
+	if a.isDLV() {
+		cmd = fmt.Sprintf("frame %d", fr.Level)
+	}
+	gdb.SendCmd(sess, a.State(), cmd)
 	a.showFrameSource(fr)
 	a.RequestFrame()
 }
@@ -305,6 +310,7 @@ func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
 
 // onThreadActivate switches GDB to the selected thread, refreshes stack/threads,
 // and shows the current frame source.
+// Uses MI for GDB so the console does not print "[Switching to thread …]".
 func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
 	if a.gdbWidget == nil || th.ID == "" {
 		return
@@ -313,7 +319,7 @@ func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
 	if sess == nil {
 		return
 	}
-	cmd := "thread " + th.ID
+	cmd := "-thread-select " + th.ID
 	if a.isDLV() {
 		cmd = "goroutine " + th.ID
 	}

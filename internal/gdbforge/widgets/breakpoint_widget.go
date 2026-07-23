@@ -28,6 +28,11 @@ type BreakpointWidget struct {
 	items    []mcp.BreakInfo
 	selected int
 
+	// mouseDown tracks primary-button press so we activate on release, not on
+	// every drag sample (avoids repeated Code jumps / GDB noise while selecting).
+	mouseDown     bool
+	pressSelected int
+
 	// OnActivate is called when the user selects a row.
 	OnActivate func(mcp.BreakInfo)
 	// OnToggle is e — enable/disable at selected index.
@@ -267,7 +272,18 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 		w.viewport.HandleEvent(e)
 		if btns&tcell.ButtonPrimary != 0 {
 			w.syncSelectedFromViewport()
-			w.activateSelected()
+			if !w.mouseDown {
+				w.mouseDown = true
+				w.pressSelected = w.selected
+			}
+			return
+		}
+		if w.mouseDown {
+			w.mouseDown = false
+			w.syncSelectedFromViewport()
+			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+				w.activateSelected()
+			}
 		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
@@ -280,6 +296,9 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 func (w *BreakpointWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
 	w.viewport.SetCursorVisible(false)
+	if !focused {
+		w.mouseDown = false
+	}
 }
 
 func (w *BreakpointWidget) SetClipboard(io termui.ClipboardIO) {

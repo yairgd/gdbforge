@@ -2,6 +2,7 @@ package termui
 
 import (
 	"strings"
+	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 )
@@ -84,7 +85,45 @@ func firstLinePaste(text string) string {
 	return text
 }
 
-// isMiddlePaste reports a middle-button press (Linux primary-selection paste).
+// Middle-click paste edge detection (UI thread only).
+var (
+	middleButtonHeld bool
+	middlePasteAt    time.Time
+)
+
+const middlePasteDebounce = 120 * time.Millisecond
+
+// isMiddlePaste reports the rising edge of a middle-button click.
+// Motion while held must not paste again — terminals with mouse reporting
+// send many ButtonMiddle events per physical click.
 func isMiddlePaste(e *tcell.EventMouse) bool {
-	return e != nil && e.Buttons()&tcell.ButtonMiddle != 0
+	if e == nil {
+		return false
+	}
+	down := e.Buttons()&tcell.ButtonMiddle != 0
+	if !down {
+		middleButtonHeld = false
+		return false
+	}
+	if middleButtonHeld {
+		return false
+	}
+	now := e.When()
+	if now.IsZero() {
+		now = time.Now()
+	}
+	// Some terminals emit two press events without a clean release between.
+	if !middlePasteAt.IsZero() && now.Sub(middlePasteAt) < middlePasteDebounce {
+		middleButtonHeld = true
+		return false
+	}
+	middleButtonHeld = true
+	middlePasteAt = now
+	return true
+}
+
+// resetMiddlePasteState is for tests.
+func resetMiddlePasteState() {
+	middleButtonHeld = false
+	middlePasteAt = time.Time{}
 }

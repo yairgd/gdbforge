@@ -260,6 +260,30 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 	}
 }
 
+func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
+	w := NewCallStackWidget()
+	w.SetFocused(true)
+	w.SetItems([]mcp.StackFrame{
+		{Level: 0, Func: "main"},
+		{Level: 1, Func: "start"},
+	})
+	var n int
+	w.OnActivate = func(fr mcp.StackFrame) { n++ }
+
+	// Press + drag motion samples must not activate.
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.ButtonPrimary, 0))
+	w.HandleEvent(tcell.NewEventMouse(1, 0, tcell.ButtonPrimary, 0))
+	w.HandleEvent(tcell.NewEventMouse(2, 0, tcell.ButtonPrimary, 0))
+	if n != 0 {
+		t.Fatalf("activate during drag: %d", n)
+	}
+	// Release without a text selection → one activate.
+	w.HandleEvent(tcell.NewEventMouse(2, 0, tcell.ButtonNone, 0))
+	if n != 1 {
+		t.Fatalf("activate on release: %d want 1", n)
+	}
+}
+
 func TestThreadWidgetHorizontalScrollKeys(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)

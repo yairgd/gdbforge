@@ -24,6 +24,7 @@ func TestCmdWidgetPasteCtrlV(t *testing.T) {
 }
 
 func TestCmdWidgetPasteMiddleClick(t *testing.T) {
+	resetMiddlePasteState()
 	reg := commands.NewCommandRegistry()
 	w := NewCmdWidget(reg)
 	w.SetClipboard(ClipboardIO{
@@ -33,6 +34,26 @@ func TestCmdWidgetPasteMiddleClick(t *testing.T) {
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.ButtonMiddle, 0))
 	if w.Text() != ":layout panels" {
 		t.Fatalf("after middle paste got %q", w.Text())
+	}
+	// Motion / repeat while held must not paste again.
+	w.HandleEvent(tcell.NewEventMouse(1, 0, tcell.ButtonMiddle, 0))
+	w.HandleEvent(tcell.NewEventMouse(2, 0, tcell.ButtonMiddle, 0))
+	if w.Text() != ":layout panels" {
+		t.Fatalf("middle drag pasted again: %q", w.Text())
+	}
+}
+
+func TestMiddlePasteRisingEdgeOnly(t *testing.T) {
+	resetMiddlePasteState()
+	evDown := tcell.NewEventMouse(0, 0, tcell.ButtonMiddle, 0)
+	if !isMiddlePaste(evDown) {
+		t.Fatal("first press should paste")
+	}
+	if isMiddlePaste(tcell.NewEventMouse(1, 0, tcell.ButtonMiddle, 0)) {
+		t.Fatal("held motion must not paste")
+	}
+	if isMiddlePaste(tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0)) {
+		t.Fatal("release must not paste")
 	}
 }
 

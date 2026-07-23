@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/mcp"
@@ -23,6 +24,13 @@ type CallStackWidget struct {
 
 	items    []mcp.StackFrame
 	selected int
+
+	// mouseDown tracks primary-button press so we activate on release, not on
+	// every drag sample (which flooded GDB with `frame N` console noise).
+	mouseDown     bool
+	pressSelected int
+	lastActLevel  int
+	lastActTime   time.Time
 
 	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
 	HasBreakAt func(file string, line int) bool
@@ -183,7 +191,15 @@ func (w *CallStackWidget) activateSelected() {
 	if w.selected < 0 || w.selected >= len(w.items) {
 		return
 	}
-	w.OnActivate(w.items[w.selected])
+	fr := w.items[w.selected]
+	// Collapse duplicate activates from noisy mouse press/release sequences.
+	now := time.Now()
+	if fr.Level == w.lastActLevel && now.Sub(w.lastActTime) < 300*time.Millisecond {
+		return
+	}
+	w.lastActLevel = fr.Level
+	w.lastActTime = now
+	w.OnActivate(fr)
 }
 
 // SetItems replaces the frame list and rebuilds the viewport.
@@ -271,7 +287,20 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 		w.viewport.HandleEvent(e)
 		if btns&tcell.ButtonPrimary != 0 {
 			w.syncSelectedFromViewport()
-			w.activateSelected()
+			if !w.mouseDown {
+				w.mouseDown = true
+				w.pressSelected = w.selected
+			}
+			return
+		}
+		// Activate on release: skip when the gesture was a text-selection drag
+		// on the same row (copy). Still activate if the row changed.
+		if w.mouseDown {
+			w.mouseDown = false
+			w.syncSelectedFromViewport()
+			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+				w.activateSelected()
+			}
 		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
@@ -284,6 +313,9 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 func (w *CallStackWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
 	w.viewport.SetCursorVisible(false)
+	if !focused {
+		w.mouseDown = false
+	}
 }
 
 func (w *CallStackWidget) SetClipboard(io termui.ClipboardIO) {

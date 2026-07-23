@@ -122,41 +122,45 @@ func (app *TermApp) Close() {
 
 // Suspend restores the terminal and stops this process with SIGTSTP (job
 // control), like Ctrl-Z in GDB/vim. Resumes on SIGCONT / shell `fg`.
+//
+// Must use Screen.Suspend/Resume — Fini() is once-only (finiOnce), so
+// Fini+Init breaks on the second Ctrl-Z with "already engaged".
 func (app *TermApp) Suspend() {
 	if app == nil || app.screen == nil {
 		return
 	}
-	app.screen.DisableMouse()
-	app.screen.Fini()
+	if err := app.screen.Suspend(); err != nil {
+		log.Printf("suspend: %v", err)
+		return
+	}
 
 	signal.Reset(syscall.SIGTSTP)
 	p, err := os.FindProcess(os.Getpid())
 	if err != nil {
-		_ = app.reinitScreen()
+		_ = app.resumeAfterSuspend()
 		return
 	}
 	_ = p.Signal(syscall.SIGTSTP)
 	// Continues here after fg / SIGCONT.
-	if err := app.reinitScreen(); err != nil {
+	if err := app.resumeAfterSuspend(); err != nil {
 		log.Printf("suspend resume: %v", err)
 		app.exit = true
-		return
-	}
-	_ = app.UpdateCanvas()
-	app.layoutDirty = true
-	if app.Api != nil {
-		app.Api.HandleResize()
 	}
 }
 
-func (app *TermApp) reinitScreen() error {
-	if err := app.screen.Init(); err != nil {
+func (app *TermApp) resumeAfterSuspend() error {
+	if err := app.screen.Resume(); err != nil {
 		return err
 	}
 	app.screen.EnableMouse(tcell.MouseMotionEvents)
 	app.screen.EnablePaste()
 	app.screen.Clear()
 	app.screen.Sync()
+	_ = app.UpdateCanvas()
+	app.layoutDirty = true
+	if app.Api != nil {
+		app.Api.HandleResize()
+	}
 	return nil
 }
 

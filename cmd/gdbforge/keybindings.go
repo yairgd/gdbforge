@@ -94,6 +94,10 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		commands.NewCommand("gdb-step", func(args ...any) { a.sendGdbExec("step") }),
 		"s",
 	)
+	a.keyBindings.Bind(
+		commands.NewCommand("gdb-continue", func(args ...any) { a.sendGdbExec("continue") }),
+		"c",
+	)
 }
 
 func (a *DebuggerApp) initInsertKeyBindings() {
@@ -108,6 +112,10 @@ func (a *DebuggerApp) initInsertKeyBindings() {
 	a.insertKeys.Bind(
 		commands.NewHandledCommand("code-step", a.tryInsertCodeStep),
 		"s",
+	)
+	a.insertKeys.Bind(
+		commands.NewHandledCommand("code-continue", a.tryInsertCodeContinue),
+		"c",
 	)
 	a.insertKeys.Bind(
 		commands.NewHandledCommand("space-break", a.trySpaceBreak),
@@ -261,6 +269,14 @@ func (a *DebuggerApp) tryInsertCodeStep() bool {
 		return false
 	}
 	a.sendGdbExec("step")
+	return true
+}
+
+func (a *DebuggerApp) tryInsertCodeContinue() bool {
+	if !a.focusedIsCode() {
+		return false
+	}
+	a.sendGdbExec("continue")
 	return true
 }
 
