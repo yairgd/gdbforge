@@ -172,7 +172,7 @@ func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.St
 
 - Uses `utf8.DecodeRuneInString` for correct wide-character iteration.
 - Clips at canvas width.
-- ANSI escape parsing exists but is **disabled** (`if false` block) — reserved for future styled GDB output.
+- ANSI/SGR escape parsing is **enabled** for console scrollback (`ConsolePane.SetANSI` / `GDBWidget.SetANSI`) so `make`/gcc colors and Delve listings render correctly. Copy selection strips ANSI to plain text.
 
 **Gap:** no grapheme cluster / East Asian width handling yet. For debugger source code (mostly ASCII), this is acceptable short-term. Source view will need `runewidth` or equivalent before internationalized code display.
 
@@ -293,7 +293,7 @@ Additional optimizations:
 | No per-frame grid clear | Stale cells if a pane shrinks | Clear or full redraw at frame start |
 | No separate `backBuffer` | In-place draw + diff only | Allocate second grid; swap after flush |
 | Grid cursor not applied to tcell | `ShowCursor` state unused at flush | Apply cursor in `Grid.Draw` or `TermApp` |
-| ANSI parsing disabled | GDB color output ignored | Enable ANSI path in DrawANSIText |
+| ANSI / SGR in consoles | Working for GDB/IO/exec scrollback | Keep ESC in MI decode; `SetANSI(true)` on GDB |
 | No wide-char width | Misaligned columns for CJK | Integrate runewidth |
 | Mixed bold/light corners | Visual glitches at focus borders | Corner weight resolver |
 

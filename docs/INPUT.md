@@ -82,10 +82,12 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **`ModeNormal`** — `:` enters command mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s** are global for Code/GDB; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
-   - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused (green status), **`n`/`s`** still send GDB `next`/`step`.
-   - **`ModeCommand`** — all keys go to `CmdWidget`.
-   - **`ModeCompletion`** — wildmenu (`CompletionBarWidget`): arrows cycle; Esc → `ModeCommand`.
+   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`). Works with any focused pane (Code, GDB, cmdline, Lua, …).
+   - **`ModeNormal`** — `:` enters command mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n`/`s`/`c` → MI `-exec-next`/`-exec-step`/`-exec-continue`); other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
+   - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
+   - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z).
+   - **`ModeCompletion`** — wildmenu: arrows cycle; Esc → prior mode; typed keys edit source line and re-query.
+   - **`ModeLua`** — keys go to the active `LuaWidget` until Esc.
 
 ```mermaid
 flowchart TB
@@ -136,10 +138,14 @@ When the GDB pane is focused (insert):
 | `Ctrl+C` | Copy selection if any; otherwise SIGINT (`\x03`) |
 | `Ctrl+D` | Send `q` to GDB |
 | `Ctrl+L` | Clear scrollback (screen reset — prompt returns to top-left) |
-| `Ctrl+V` | Paste clipboard into the input line |
-| Middle-click | Paste clipboard into the input line (Linux terminal style) |
+| `Ctrl+Z` | Global: SIGTSTP inferior if running, else suspend gdbforge (job control; `fg` to resume) |
+| `Ctrl+V` | Paste **CLIPBOARD** into the input line |
+| Middle-click | Paste **PRIMARY** (X11) when available, else CLIPBOARD — rising-edge only (~120ms debounce; motion while held does not re-paste) |
 | `PgUp` / `PgDn` | Scroll output viewport |
 | Rune | Insert into input buffer |
+| Mouse drag | Select scrollback text (copies to CLIPBOARD + PRIMARY) |
+| Double-click | Select word under cursor and copy |
+| Triple-click | Select whole line and copy |
 
 **Normal mode:** `<C-o>` jumps back to the previous widget after `:b` / `:e` / `:!` (see [EXEC_SHELL.md](EXEC_SHELL.md)).
 
@@ -153,7 +159,7 @@ Example: `CmdWidget` (`cmd_widget.go`) — uses the same `ClipboardIO` bridge as
 | `Up` / `Down` | History navigation |
 | `Tab` | Complete command name |
 | `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
-| `Ctrl+V` / middle-click | Paste clipboard into the cmdline (first line only) |
+| `Ctrl+V` / middle-click | Paste into the cmdline (CLIPBOARD / PRIMARY; first line only; middle-click rising-edge) |
 | `Ctrl+C` / `Ctrl+X` | Copy / cut text after `:` |
 | Rune / editing keys | Insert, move cursor |
 
@@ -185,7 +191,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-In **normal mode** (`cmd/gdbforge/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. Non-key switches (mouse, mode, copy heuristic) are unchanged. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
+In **normal mode** (`cmd/gdbforge/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`/`c`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. **Ctrl-Z** is not on the trie — it is intercepted by `withGlobalKeys` for every mode. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
 
 **Current bindings:**
 
@@ -204,25 +210,26 @@ Implementation: `internal/collections/trie.go` via `KeyBindingRegistry`.
 
 ## Mouse handling
 
-`tcell` mouse support is enabled in `NewTermApp`:
+`tcell` mouse support is enabled in `NewTermApp` (`EnableMouse` with motion events).
 
-```go
-screen.EnableMouse()
-```
-
-**Current state:** no widget handles `EventMouse` yet.
-
-**Planned uses:**
+**Implemented today:**
 
 | Action | Behavior |
 |--------|----------|
-| Click pane | Focus that pane |
-| Click tab | Switch tab |
-| Drag split gutter | Resize split ratio |
-| Scroll | Scroll source/console viewport |
-| Click breakpoint gutter | Toggle breakpoint |
+| Click pane | Focus that pane; leave command mode if clicking outside the cmdline |
+| Click cmdline | Enter command mode; set caret from column |
+| Scroll wheel | Scroll focused viewport (source / console / lists) |
+| Drag in viewport | Text selection; copy to CLIPBOARD and X11 PRIMARY (`platform/clipboard.go`) |
+| Double-click | Select word (`termui/viewport_word.go`) and copy |
+| Triple-click | Select line and copy |
+| Middle-click | Paste PRIMARY (preferred) or CLIPBOARD — **rising edge only** (debounce ~120ms) |
+| Thread / Call Stack / Breakpoints click | Activate on **button release** (not every drag sample); skip same-row drag that was a text select; debounce duplicate activate ~300ms |
 
-**Design decision:** mouse is **optional enhancement**, not primary UX. All operations must have keyboard equivalents for SSH / minimal terminal environments.
+**Clipboard note:** Selection copy writes both CLIPBOARD and PRIMARY so middle-click paste outside gdbforge (other X11 clients) sees the same text. Middle-paste inside gdbforge prefers PRIMARY.
+
+**Still planned:** click tab to switch; drag split gutter to resize; click breakpoint gutter to toggle.
+
+**Design decision:** mouse is an **enhancement**, not the only UX. All operations must have keyboard equivalents for SSH / minimal terminals.
 
 ---
 
@@ -242,9 +249,11 @@ stateDiagram-v2
 
 | Mode | Keys go to | Purpose | Status |
 |------|------------|---------|--------|
-| **Normal** | Trie + `TabWidget` | Navigation, key sequences, workspace input | **Implemented** |
-| **Focus** | Focused Workspace widget | Pane-specific editing (source scroll, GDB input) | Planned |
+| **Normal** | Trie + focused `FocusKeyHandler` | Navigation, key sequences, workspace input | **Implemented** |
+| **Insert** | Focused console (GDB/IO/exec) or Code-gated `n`/`s`/`c` | Type into debugger / program; Esc → normal | **Implemented** |
 | **Command** | `CmdWidget` | `:` UI commands | **Implemented** |
+| **Completion** | Wildmenu + source line edit | Tab completion (`ModeCompletion`) | **Implemented** |
+| **Lua** | Active `LuaWidget` | `:b snake` / `:b tetris` / `:b lua` games & scripts | **Implemented** |
 | **Search** | TBD | Search prompt (e.g. `/` in source) | Reserved |
 
 Mode state lives in **`platform.AppState`** on `TermApp` (`State()`):
@@ -256,26 +265,23 @@ const (
     ModeNormal Mode = iota
     ModeInsert
     ModeCommand
+    ModeCompletion
+    ModeLua
 )
-
-type PTYOwner int // none | ui | mcp | app — who holds PTY write intent
-
-type AppState struct {
-    // mode, ptyOwner, equalAlways (mutex-protected)
-}
 ```
 
-`DebuggerApp` switches modes in `HandleKey` / `HandleCoreEvents`. Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic` (geometry in `internal/gdbforge/layout`; key policy in `layout_behavior.go`). IO pane: `:set clearoutput` / `:set noclearoutput` (clears IO on session start). PTY owner is set while the console, `:AI`/MCP, or App writers (silent MI, CodeWidget Space, BreakpointWidget e/`d`) hold the write mux. App/MCP replies paint in the GDB console by default (`:set nogdblistenprint` to hide). Focus roles (Code / GDB / last pane) and concrete widget casts live on `DebuggerApp` (`focus.go` / `code_nav.go`); `TabWidget` stays a generic shell.
+`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Ctrl-Z). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide`. IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `DebuggerApp` (`focus.go` / `code_nav.go`).
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 
 - Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
-- Focus mode will be pane-local (like Vim insert, but per-widget semantics).
+- Insert mode is pane-local typing (GDB CLI, IO stdin, exec shell).
 - Command mode is for UI operations, not debugger commands.
+- Ctrl-Z is mode-independent (GDB-like job control).
 
 **Gaps:**
 
-- `ModeFocus` / `ModeInsert` / `ModeSearch` are defined but not routed yet.
+- `ModeSearch` is reserved but not routed yet.
 - `NewTabTwoHozSplitWins` creates a horizontal split of its two widgets.
 
 ---
@@ -364,10 +370,12 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB 
 | `e` | Enable/disable breakpoint at CodeWidget cursor (yellow when disabled) | Implemented |
 | `n` | GDB next via MI `-exec-next` (normal; also insert when CodeWidget focused) | Implemented |
 | `s` | GDB step via MI `-exec-step` (normal; also insert when CodeWidget focused) | Implemented |
+| `c` | GDB continue via MI `-exec-continue` (normal; also insert when CodeWidget focused) | Implemented |
 | `:` | Enter command mode | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
 | `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |
-| `Ctrl+D` | Quit | Implemented (`TermApp`) |
+| `Ctrl+D` | Send `q` to GDB (confirm if inferior alive) | Implemented |
+| `Ctrl+Z` | Suspend inferior if running, else suspend gdbforge (**any mode**) | Implemented |
 | `Tab` / `Shift-Tab` | Cycle focus | Planned |
 | `1-9` | Switch tab | Planned |
 
@@ -379,21 +387,17 @@ Keys reach the focused leaf when not consumed by the trie / command mode:
 |--------|-----|--------|
 | **CodeWidget** | `e` | Enable/disable breakpoint at cursor (yellow when disabled; same as BreakpointWidget `e`) |
 | **CodeWidget** | **Space** | Insert/remove breakpoint at cursor line |
-| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down, Enter / click | Select row; browse Code with blue cursor (━━▶ stays on StopLocation); green when row is stop PC |
+| **BreakpointWidget** (`:b breakpoint`) | `j`/`k` or Up/Down, Enter / click-release | Select row; browse Code with blue cursor (━━▶ stays on StopLocation); green when row is stop PC |
 | **BreakpointWidget** | `e` | Toggle enable (remove/re-add in GDB; row stays) |
 | **BreakpointWidget** | `d` | Delete from list and GDB |
-| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse click | Bold selection; Up/Down/Enter/click switches thread (`thread ID`) / frame (`frame N`) and updates Code browse; green on stop PC (thread current / stack frame 0); missing / `.so` → **not available** |
-| **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C/D → inferior |
+| **ThreadWidget** / **CallStackWidget** | `j`/`k` or Up/Down, Enter / mouse **release** | Bold selection; activate sends MI `-thread-select` / `-stack-select-frame` (not CLI `thread`/`frame`, so the GDB console stays quiet); updates Code browse; green on stop PC; missing / `.so` → **not available** |
+| **OutputWidget** (`:b io`, alias `:b output`) | PgUp/PgDn; type + Enter | Program stdin/stdout (inferior PTY); `<C-l>` clear; Ctrl-C/D → inferior; Ctrl-Z → SIGTSTP via inferior PTY |
 
 Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync). Persist: [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence).
 
-### Focus mode (planned)
+### Insert / Lua (focused panes)
 
-| Key | Action |
-|-----|--------|
-| `Esc` | Return to normal mode |
-| `:` | Enter command mode |
-| Pane-specific | Widget handles (scroll, GDB input, etc.) |
+When not in normal mode, keys go to the focused console or Lua widget (after global Ctrl-Z). See mode table above.
 
 ### Command mode
 
@@ -403,6 +407,7 @@ Full sync path: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-an
 | `Esc` | Cancel, return to normal mode | Implemented |
 | `Up` / `Down` | Command history | Implemented |
 | `Tab` | Completion | Implemented |
+| `Ctrl+Z` | Suspend (global) | Implemented |
 
 ---
 

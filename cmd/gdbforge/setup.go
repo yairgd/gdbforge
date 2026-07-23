@@ -58,11 +58,12 @@ func (a *DebuggerApp) InitB() error {
 	a.InitKeyBindings()
 	a.ExapData()
 
-	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
-	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)
-	a.RegisterModeHandler(platform.ModeCommand, a.handleCommandKey)
-	a.RegisterModeHandler(platform.ModeCompletion, a.handleCompletionKey)
-	a.RegisterModeHandler(platform.ModeLua, a.handleLuaKey)
+	// Ctrl-Z (suspend) is global — wrap every mode so it works in any app state.
+	a.RegisterModeHandler(platform.ModeNormal, a.withGlobalKeys(a.handleNormalKey))
+	a.RegisterModeHandler(platform.ModeInsert, a.withGlobalKeys(a.handleInsertKey))
+	a.RegisterModeHandler(platform.ModeCommand, a.withGlobalKeys(a.handleCommandKey))
+	a.RegisterModeHandler(platform.ModeCompletion, a.withGlobalKeys(a.handleCompletionKey))
+	a.RegisterModeHandler(platform.ModeLua, a.withGlobalKeys(a.handleLuaKey))
 
 	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
 	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)

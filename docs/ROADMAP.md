@@ -36,22 +36,23 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
 | Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
-| Interaction modes | Partial | **Normal + Command** via `platform.AppState`; PTYOwner + EqualAlways |
+| Interaction modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
 | `BreakpointWidget` | Working | `:b breakpoint`; internal list; `e`/`d`; syncs with GDB + CodeWidget |
 | `ThreadWidget` / `CallStackWidget` | Working | Default right panes; refreshed on GDB stop |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
-| `GDBWidget` | Working | Owns `GDBClient`/`Session`; ConsolePane + streaming MI |
+| `GDBWidget` | Working | Pure console view; app owns `GDBClient`/MI; ANSI; raw make/shell lines |
 | `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |
-| `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript |
+| `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript; Ctrl-Z OnSuspend |
 | `ptyx.Client` / `ptyx.TTY` | Working | GDB PTY mux + inferior stdio PTY (`-inferior-tty-set`) |
-| `GDBClient` | Working | Thin MI wrapper over `ptyx`; CLI prog/args |
+| `GDBClient` | Working | Thin MI wrapper over `ptyx`; CLI prog/args; `SuspendInferior` |
+| `dlv.Client` | Working | `-g dlv` backend; inferior PTY IO |
 | `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
 | Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
-| Focus mode | Not wired | `ModeInsert` / focus routing reserved |
-| Mouse support | Enabled | No handlers |
-| Lua plugins | Design only | See [PLUGINS.md](PLUGINS.md) |
+| Modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
+| Mouse support | Working | Focus, scroll, select, word/line click, list activate on release, PRIMARY paste |
+| Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/*.lua` — [PLUGINS.md](PLUGINS.md) |
 | OpenOCD / JTAG | Not started | Design in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 | Documentation | In progress | This docs tree + `cmd/docserve` |
 

@@ -11,6 +11,41 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
+// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z) before a mode handler.
+func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
+	return func(ev *tcell.EventKey) bool {
+		if a.tryGlobalSuspend(ev) {
+			return true
+		}
+		return h(ev)
+	}
+}
+
+// tryGlobalSuspend handles Ctrl-Z in any mode/focus: SIGTSTP inferior if
+// running, otherwise suspend gdbforge (same as GDB job control).
+func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
+	if !isCtrlZ(ev) {
+		return false
+	}
+	a.onGdbConsoleSuspend()
+	return true
+}
+
+func isCtrlZ(ev *tcell.EventKey) bool {
+	if ev == nil {
+		return false
+	}
+	if ev.Key() == tcell.KeyCtrlZ {
+		return true
+	}
+	// Some terminals report Ctrl-Z as a rune with ModCtrl.
+	if ev.Key() == tcell.KeyRune && (ev.Rune() == 'z' || ev.Rune() == 'Z') &&
+		ev.Modifiers()&tcell.ModCtrl != 0 {
+		return true
+	}
+	return false
+}
+
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	// GDB console insert: pass all keys through so typing is native (Space, n,
 	// etc.). Only Esc leaves insert mode; Tab runs MI -complete + wildmenu.

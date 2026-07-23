@@ -67,24 +67,25 @@ gdbforge/
 |------|----------------|
 | `main.go` | `main()` entry |
 | `app.go` | `DebuggerApp`, models fields, `NewDebuggerApp`, `Close` |
-| `setup.go` | `InitB` — chrome, mode/command handlers, Cmd `SetOnExecute` |
+| `setup.go` | `InitB` — chrome, mode handlers (`withGlobalKeys` for Ctrl-Z), Cmd `SetOnExecute` |
 | `builtins.go` | Create models + views; wire intents; start GDB/IO bridges |
-| `gdb_console.go` | GDB controller — Submit / MI paint / quit |
+| `gdb_console.go` | GDB controller — Submit / MI paint / quit / suspend |
 | `io_console.go` | Inferior PTY bridge + OutputWidget intents |
 | `breakpoints.go` | Breakpoint model sync / toggle / delete / code Space; YAML restore |
 | `debug_info.go` | Thread / call-stack / file-list view sync |
 | `command_tree.go` | `ExapData` colon-command DSL |
-| `keybindings.go` | `InitKeyBindings` |
+| `keybindings.go` | `InitKeyBindings` (n/s/c, Space, …) |
 | `actions.go` | Command actions (focus, split, quit, `:!` Exec, …) |
-| `input.go` | Mode key handlers, mouse, resize, completion refresh |
+| `input.go` | Mode key handlers, global Ctrl-Z, mouse, resize, completion refresh |
 | `completion.go` | CompletionMenu → CompletionView |
 | `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
-| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy; `CLIExecToMI` for n/s |
+| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy; `CLIExecToMI` for n/s/c |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
-| `stopped.go` | Stop handling; StopLocation; arm/trigger thread-stack refresh; code after stop |
+| `stopped.go` | Stop handling; StopLocation; arm/trigger thread-stack refresh; MI thread/frame select |
 | `debug_info.go` | `syncThreadViews` / `syncCallStackViews` / model setters |
+| `lua.go` | ModeLua enter/leave; `:lua` / embedded script builtins |
 
 Build all commands:
 
@@ -101,7 +102,7 @@ task build
 
 | File | Responsibility |
 |------|----------------|
-| `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers |
+| `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers; `Suspend`/`Resume` (Ctrl-Z job control) |
 | `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID` |
 | `completion_bar.go` | Wildmenu chrome row (`ModeCompletion`); draw-only-when-active |
 | `cmd_widget.go` | Global `:` command line (parser for Tab; `SetOnExecute` → app) |
@@ -121,6 +122,9 @@ task build
 | `input_line.go` | Reusable readline editor (text, cursor, history, paste insert) |
 | `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine |
 | `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional ANSI + `OmitTail` |
+| `viewport_word.go` | Double-click word / triple-click line select + copy |
+| `viewport_clipboard.go` | Selection → CLIPBOARD + PRIMARY |
+| `clipboard.go` | Middle-paste rising-edge + debounce; paste routing |
 | `logger_widget.go` | Reusable log pane (`platform.Sink`, `:clear`, scroll bindings) |
 | `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
 | `named_widget.go` | Optional `WindowName()` hook for dynamic pane titles |

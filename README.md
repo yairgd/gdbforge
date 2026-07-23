@@ -40,8 +40,11 @@
 - Space to toggle breakpoints on the Code cursor or Call Stack frame
 - Breakpoints saved to `./.gdbforge/breakpoints.yaml` on quit and restored on next start
 - Status colors for insert (green) vs normal (blue); themable PC / selection / BP colors via `:set`
-- Cmdline and console paste: Ctrl+V, middle-click; selection copy/cut
+- Cmdline and console paste: Ctrl+V (CLIPBOARD), middle-click (PRIMARY); double/triple-click select; selection copy
+- `n` / `s` / `c` for next / step / continue (insert when Code focused); Ctrl-Z job control in any mode
+- Quiet thread/frame activation via MI (`-thread-select` / `-stack-select-frame`) on mouse release
 - Safer while-running behavior: auto-continue after breakpoint **insert** only (not after frame/thread switches)
+- Optional Delve backend: `gdbforge -g dlv -- ./hello-go`
 
 Deeper architecture notes live under [docs/](docs/) — start with [MVC](docs/ARCHITECTURE.md#mvc-current).
 

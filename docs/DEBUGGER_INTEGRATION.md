@@ -212,6 +212,7 @@ Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitSc
 | Program prints | App `Subscribe` → `InferiorOutputMsg` → `AppendInferior` |
 | User types + Enter | View `OnSubmit` → app `TTY.Send(line)` |
 | Ctrl-C / Ctrl-D | View intents → app `SendRaw` to **inferior** (not GDB) |
+| Ctrl-Z | Global / IO: `SuspendInferior` — prefer `^Z` (`\x1a`) on the inferior PTY; else `kill(SIGTSTP)` |
 | Pane resize | View `SetSizeFunc` → app `TTY.SetSize` |
 
 The widget does **not** hold `*ptyx.TTY`; wiring lives in `cmd/gdbforge/io_console.go`.
@@ -220,7 +221,8 @@ The widget does **not** hold `*ptyx.TTY`; wiring lives in `cmd/gdbforge/io_conso
 
 - GDB console keys go only to the GDB PTY — they never become program stdin
 - IO console keys go only to the inferior PTY — they are not GDB commands
-- When a dedicated inferior TTY is active, raw non-MI text on the GDB PTY is **not** treated as program stdout (fallback shared-TTY path remains for tests / missing TTY)
+- When a dedicated inferior TTY is active, **program stdout** stays on PTY #2. Raw non-MI text on the GDB PTY is still painted in the **GDB console** (GDB `make` / `shell` child output, load messages) — it is not redirected to the IO pane
+- `+` MI status records (e.g. `+download` during `load`) are filtered from display; human-readable load lines remain
 
 ```mermaid
 flowchart LR
@@ -254,7 +256,7 @@ While the program is in `continue` / `^running`, sync GDB does not process a que
 3. On **insert** (`break` / `tbreak` / `-break-insert`): send `continue` so execution can hit the new breakpoint
 4. On **remove** (`clear` / `-break-delete`): send `continue` only if `:set continueafterclear` (default **off** — stay stopped)
 
-Other App PTY commands (`frame`, `thread`, …) also interrupt when running, but **do not** auto-`continue` — a surprise resume was resuming the inferior after call-stack / thread clicks.
+Other App PTY commands (`-stack-select-frame`, `-thread-select`, …) also interrupt when running, but **do not** auto-`continue` — a surprise resume was resuming the inferior after call-stack / thread clicks.
 
 `AppState.InferiorRunning` tracks `^running` → `*stopped` for this path. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
 
@@ -262,12 +264,12 @@ Other App PTY commands (`frame`, `thread`, …) also interrupt when running, but
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click — select and **browse** Code at that BP (blue cursor; ━━▶ stays on StopLocation); row at stop PC uses `stackbreakcolor` (stays green when selected); **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
-| **OutputWidget (IO)** | `:b io` (alias `:b output`; default pane, top-right) | Program stdin/stdout via inferior PTY; type + Enter → stdin; PgUp/PgDn scroll; `<C-l>` clear; Ctrl-C/D → inferior; ANSI |
-| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `thread <id>` + refresh stack + show code; green when current thread matches StopLocation; filled on stop |
-| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click — bold selection **and** `frame <level>` + show code; green on **frame 0** only when it matches StopLocation; shared libs / missing sources → centered **not available** + path |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — select and **browse** Code at that BP (blue cursor; ━━▶ stays on StopLocation); row at stop PC uses `stackbreakcolor` (stays green when selected); **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
+| **OutputWidget (IO)** | `:b io` (alias `:b output`; default pane, top-right) | Program stdin/stdout via inferior PTY; type + Enter → stdin; PgUp/PgDn scroll; `<C-l>` clear; Ctrl-C/D → inferior; Ctrl-Z → SIGTSTP; ANSI |
+| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-thread-select <id>` + refresh stack + show code (no CLI `[Switching to thread…]` spam); green when current thread matches StopLocation; filled on stop |
+| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-stack-select-frame <level>` + show code (no CLI frame dump); green on **frame 0** only when it matches StopLocation; shared libs / missing sources → centered **not available** + path |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
-| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — blue browse cursor (`codeselcolor`); ━━▶ = StopLocation (`pccolor`); **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled). Missing file or `.so` path: centered **not available** title with the path underneath. |
+| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — blue browse cursor (`codeselcolor`); ━━▶ = StopLocation (`pccolor`); **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled). Missing file or `.so` path: centered **not available** title with the path underneath. Global **`n`/`s`/`c`** (normal; insert when Code focused) → `-exec-next` / `-exec-step` / `-exec-continue`. |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
 
@@ -411,8 +413,9 @@ pty, err := ptyx.New(argv, ptyx.Options{})
 |--------|-----|
 | `Send(cmd)` | Append `\n`, send CLI/MI command (takes write lock) |
 | `SendRaw(raw)` | Send raw bytes (SIGINT, …) under write lock |
+| `SuspendInferior()` | SIGTSTP like terminal Ctrl-Z (`^Z` on inferior PTY or `kill`) |
 | `WithWrite(ctx, fn)` | Hold write lock for multi-step MCP capture |
-| `CLIExecToMI(cmd)` | Map CLI `next`/`step`/`continue`/… → `-exec-*` so console/`n`/`s` do not dump source into the GDB pane; Code follows `*stopped` |
+| `CLIExecToMI(cmd)` | Map CLI `next`/`step`/`continue`/… → `-exec-*` so console/`n`/`s`/`c` do not dump source into the GDB pane; Code follows `*stopped` |
 
 ### Output path
 
@@ -476,7 +479,9 @@ GDB MI2 emits several record types:
 
 | Record | Effect on `MiUpdate` |
 |--------|----------------------|
-| `~` / `@` | Decode stream payload → `DisplayLines` |
+| `~` / `@` | Decode stream payload → `DisplayLines` (ANSI ESC kept; do not strip `0x1b`) |
+| Non-MI raw line | Paint into `DisplayLines` (GDB `make` / `shell` child stdout on the GDB PTY) |
+| `+…` status | Filtered (e.g. `+download` noise during `load`); keep readable load text |
 | `&` | Ignored for display (CLI echo; UI already echoes submits) |
 | `^error` | Set `Error` state; surface `msg=` |
 | `^done` / `^running` / … | Update `GdbState` |
@@ -484,6 +489,8 @@ GDB MI2 emits several record types:
 | `(gdb)` | `PromptReady` |
 
 Incomplete lines remain in `lineBuf` across chunks.
+
+**Note:** GDB itself often buffers `make` / `shell` stdout until the child exits — live line-by-line build output may require `:! make` in an exec pane instead.
 
 **Design rationale:** GDB often splits writes mid-line; newline buffering is required. Per-line dispatch is enough for correctness and feels faster than a 100ms debounce.
 
@@ -520,7 +527,9 @@ InputLine  →  ConsolePane  →  GDBWidget (view)
                                 → GDBClient → ptyx
 ```
 
-`initBuiltins` creates `gdb.NewGDBClient`; `startGdbConsoleBridge` coalesces `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB). Presentation is a **native GDB session** (`(gdb) b main` then raw console output).
+`initBuiltins` creates `gdb.NewGDBClient`; `startGdbConsoleBridge` coalesces `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB). Presentation is a **native GDB session** (`(gdb) b main` then raw console output, including `make`/`shell` text and ANSI when present). GDB console ANSI is enabled (`SetANSI(true)`).
+
+**Job control (Ctrl-Z):** `onGdbConsoleSuspend` — if `InferiorRunning`, `SuspendInferior`; otherwise `TermApp.Suspend` uses tcell `Screen.Suspend`/`Resume` (not `Fini`/`Init`, which break on the second suspend with “already engaged”). Bound globally via `withGlobalKeys` in every mode — see [INPUT.md](INPUT.md).
 
 ```mermaid
 sequenceDiagram
