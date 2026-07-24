@@ -52,7 +52,7 @@ func helpLineStyle(line string) tcell.Style {
 }
 
 // buildHelpLines is the in-app user manual (:help / :b help).
-// Keep the root README.md "User guide" section aligned with this text.
+// Full markdown twin: docs/USER_GUIDE.md. Lua reference: docs/LUA_API.md.
 func buildHelpLines() []string {
 	return []string{
 		"gdbforge — user manual",
@@ -61,6 +61,10 @@ func buildHelpLines() []string {
 		"Scroll with j/k, Up/Down, PgUp/PgDn, g/G, or the mouse wheel.",
 		"This page is a read-only Viewport (same scroll/copy path as other panes).",
 		"Press Ctrl-O to jump back to the previous pane.",
+		"",
+		"Full manual (GitHub / ./docs/serve.sh):  docs/USER_GUIDE.md",
+		"Lua API reference:                       docs/LUA_API.md",
+		"Script catalog (copy into .gdbforge/lua): lua/README.md",
 		"",
 		"=== Overview ===",
 		"",
@@ -202,7 +206,8 @@ func buildHelpLines() []string {
 		"    :b exec                optional Exec logs (after gdbforge.spawn)",
 		"    :b code / :b gdb       focus Code / GDB leaf (does not steal panes)",
 		"    User scripts: ./.gdbforge/lua/**/*.lua → :lua <basename>",
-		"    (copy from scripts/; nested dirs OK — see scripts/README.md)",
+		"    (copy from lua/; nested dirs OK — see lua/README.md).",
+		"    Full gdbforge.* docs: docs/LUA_API.md",
 		"    gdbforge.print(...)    append line to the Lua pane",
 		"    gdbforge.register(name, fn)  expose fn to :lua name",
 		"    gdbforge.spawn(...)    background PTY (JLink); no focus steal",
@@ -282,7 +287,7 @@ func buildHelpLines() []string {
 		"Examples:",
 		"    Screencast: docs/media/gdbforge-demo.mp4",
 		"    Demo target: Cortex-R5 on MPSoC via SEGGER J-Link;",
-		"      Lua bring-up: scripts/r5_debug (:lua r5_debug)",
+		"      Lua bring-up: lua/r5_debug (:lua r5_debug)",
 		"      (spawn JLinkGDBServer, wait_port, target remote, load).",
 		"    Deep stack sample: examples/stack_demo.c",
 		"      gcc -g -O0 -o stack_demo examples/stack_demo.c",
@@ -356,7 +361,10 @@ func buildHelpLines() []string {
 		"=== See also ===",
 		"",
 		"    :b about     credits and version",
-		"    :help        this manual",
+		"    :help        this manual (short)",
+		"    docs/USER_GUIDE.md   full user manual (markdown)",
+		"    docs/LUA_API.md      Lua / gdbforge.* reference",
+		"    lua/README.md        installable workflow scripts",
 	}
 }
 

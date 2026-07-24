@@ -13,6 +13,8 @@ Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencast:
 | Document | Audience | Use when |
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
+| **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
+| **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |
 | **[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)** | UI contributors | Widgets, canvas, grid, layout, focus |
@@ -22,7 +24,7 @@ Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencast:
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
 | **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans |
-| **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua plans, feature panes, automation |
+| **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua architecture; API details in [LUA_API.md](LUA_API.md) |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
 | **[ROADMAP.md](ROADMAP.md)** | Planners | Current state, planned work, vision |
@@ -60,6 +62,8 @@ Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedd
 
 | Page | URL |
 |------|-----|
+| User guide | [/doc/USER_GUIDE.md](http://127.0.0.1:8765/doc/USER_GUIDE.md) |
+| Lua API | [/doc/LUA_API.md](http://127.0.0.1:8765/doc/LUA_API.md) |
 | Overview | [/doc/OVERVIEW.md](http://127.0.0.1:8765/doc/OVERVIEW.md) |
 | Architecture | [/doc/ARCHITECTURE.md](http://127.0.0.1:8765/doc/ARCHITECTURE.md) |
 | Developer guide | [/doc/DEVELOPER_GUIDE.md](http://127.0.0.1:8765/doc/DEVELOPER_GUIDE.md) |

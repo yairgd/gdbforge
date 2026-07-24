@@ -2,7 +2,9 @@
 
 gdbforge is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
-**Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick), `:lua` DSL, `gdbforge.*` API (`spawn` / `spawn_terminal` / `open_external_tty` / `set_inferior_tty` / `run` / `gdb` / `open_buffer`). DOD demos: `:b snake`, `:b tetris`. User extensions: `./.gdbforge/lua/**/*.lua` (nested dirs OK; copy from [`scripts/`](../scripts/)) → `:lua <basename>`. Use `gdbforge.spawn` for JLink (no focus steal); `spawn_terminal` for gdbserver/TUI in a real terminal; `gdbforge.run` is interactive `:!`.
+**Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick), `:lua` DSL, `gdbforge.*` API. DOD demos: `:b snake`, `:b tetris`. User extensions: `./.gdbforge/lua/**/*.lua` (nested dirs OK; copy from [`../lua/`](../lua/)) → `:lua <basename>`. Use `gdbforge.spawn` for JLink (no focus steal); `spawn_terminal` for gdbserver/TUI in a real terminal; `gdbforge.run` is interactive `:!`.
+
+**User API reference:** **[LUA_API.md](LUA_API.md)**. Script catalog: [../lua/README.md](../lua/README.md).
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
 
@@ -163,7 +165,7 @@ For TUI inferiors, do not pipe through `:b io`. Use:
 | `gdbforge.spawn_terminal(...)` | Real terminal emulator + argv (gdbserver / headless dlv) |
 | `gdbforge.wait_port(port, timeout)` | Wait until listen (pattern A) |
 
-Examples: [`scripts/external_tty`](../scripts/external_tty), [`scripts/gdbserver_tui`](../scripts/gdbserver_tui), [`scripts/dlv_tui`](../scripts/dlv_tui), [`scripts/terminal_debug`](../scripts/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [scripts/README.md](../scripts/README.md).
+Examples: [`lua/external_tty`](../lua/external_tty), [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_port`](../lua/dlv_port), [`lua/terminal_debug`](../lua/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [lua/README.md](../lua/README.md).
 
 ---
 

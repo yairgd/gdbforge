@@ -1,6 +1,8 @@
 # gdbforge Lua scripts
 
-`scripts/` is the **bring-up and workflow library** for gdbforge: a living directory of
+**`gdbforge.*` API reference:** [docs/LUA_API.md](../docs/LUA_API.md). In-app: `:help` (Lua section).
+
+`lua/` is the **bring-up and workflow library** for gdbforge: a living directory of
 installable Lua plugins (plus sidecar data). It is meant to **grow over time** as we
 add boards, CPUs, and debug setups — not a one-off examples folder.
 
@@ -22,7 +24,7 @@ need into a project’s `.gdbforge/lua/`.
 Suggested naming as the tree grows:
 
 ```text
-scripts/
+lua/
   terminal_debug/          # host TUI / external tty (any program)
   gdbserver_tui/           # pattern: gdbserver in other terminal
   dlv_port/                 # pattern: Go + headless dlv
@@ -34,7 +36,7 @@ scripts/
   # nrf52_debug/           # …
 ```
 
-When you add a new CPU or board: create `scripts/<name>/`, put the Lua + XML (or
+When you add a new CPU or board: create `lua/<name>/`, put the Lua + XML (or
 OpenOCD cfg, SVD snippets, etc.) **beside** each other, document env vars in the
 Lua header, and list the directory in the table below.
 
@@ -47,17 +49,17 @@ From the project you will debug (cwd for gdbforge):
 
 ```bash
 mkdir -p .gdbforge/lua
-cp -r /path/to/gdbforge/scripts/terminal_debug .gdbforge/lua/
-cp -r /path/to/gdbforge/scripts/r5_debug .gdbforge/lua/
+cp -r /path/to/gdbforge/lua/terminal_debug .gdbforge/lua/
+cp -r /path/to/gdbforge/lua/r5_debug .gdbforge/lua/
 # optional demos:
-cp -r /path/to/gdbforge/scripts/games .gdbforge/lua/
+cp -r /path/to/gdbforge/lua/games .gdbforge/lua/
 ```
 
 Or copy everything:
 
 ```bash
 mkdir -p .gdbforge/lua
-cp -r /path/to/gdbforge/scripts/* .gdbforge/lua/
+cp -r /path/to/gdbforge/lua/* .gdbforge/lua/
 ```
 
 Then inside gdbforge: `:lua <name>` (Tab completes). Command name = Lua file basename.
