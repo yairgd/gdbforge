@@ -1,11 +1,11 @@
--- gdbserver in an external terminal (pattern A) — best for TUI apps.
--- Install: cp -r scripts/gdbserver_tui .gdbforge/lua/
+-- gdbserver in an external terminal — best for local host TUI apps (GDB).
+-- Install: cp -r lua/gdbserver_tui .gdbforge/lua/
+-- Env:     GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|…
 -- Usage:   :lua gdbserver_tui [prog] [port]
 --
 -- Example:
 --   :lua gdbserver_tui ./bin/gdbforge 2345
--- Then continue / breakpoints as usual. Inferior stdio is the
--- external terminal (full VT), not :b io.
+-- Inferior stdio is the external terminal. For a remote board use :lua remotegdb.
 
 function main(prog, port)
   prog = prog or "./hello"

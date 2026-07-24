@@ -484,9 +484,10 @@ func (rt *Runtime) luaProgram(L *lua.LState) int {
 	return 1
 }
 
-// wait_port(port [, timeout_sec]) → true if TCP 127.0.0.1:port accepts.
+// wait_port(host_port [, timeout_sec]) → true if TCP accepts.
+// host_port may be "1234" (→ 127.0.0.1:1234) or "192.168.20.50:1234".
 func (rt *Runtime) luaWaitPort(L *lua.LState) int {
-	port := L.CheckString(1)
+	spec := strings.TrimSpace(L.CheckString(1))
 	timeout := 10.0
 	if L.GetTop() >= 2 {
 		timeout = float64(L.CheckNumber(2))
@@ -497,7 +498,16 @@ func (rt *Runtime) luaWaitPort(L *lua.LState) int {
 	if timeout > 120 {
 		timeout = 120
 	}
-	addr := net.JoinHostPort("127.0.0.1", port)
+	host, port, err := net.SplitHostPort(spec)
+	if err != nil {
+		// Bare port → localhost.
+		host = "127.0.0.1"
+		port = spec
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	addr := net.JoinHostPort(host, port)
 	deadline := time.Now().Add(time.Duration(timeout * float64(time.Second)))
 	for {
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)

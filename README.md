@@ -40,7 +40,7 @@ cp -r lua/r5_debug .gdbforge/lua/
 # then inside gdbforge:  :lua r5_debug
 ```
 
-More installable workflows (external terminal, Go/`dlv_port`, games): [`lua/README.md`](lua/README.md).
+More installable workflows (Go/`dlv_ext_port`, embedded/`remotegdb`, GDB tty, R5, games): [`lua/README.md`](lua/README.md) — install, env vars (`GDBFORGE_TERMINAL=mate-terminal`, …), and how to use each script.
 
 ## Problems it solves
 
@@ -58,9 +58,9 @@ More installable workflows (external terminal, Go/`dlv_port`, games): [`lua/READ
 - Space to toggle breakpoints; YAML persist under `./.gdbforge/breakpoints.yaml`
 - Themability, clipboard/mouse selection, Vim-style modes and focus chords
 - Safer while-running BP insert (no surprise continue on frame/thread switches)
-- External terminal for TUI inferiors (`:set inferior-tty` / `:lua dlv_port`)
+- External terminal for TUI inferiors (`:set inferior-tty` / `:lua dlv_ext_port`)
 - Lua automation (`gdbforge.*`) — API: [docs/LUA_API.md](docs/LUA_API.md)
-- Optional Delve backend: `gdbforge -g dlv -- ./hello-go`
+- Optional Delve backend: `gdbforge -g dlv ./hello-go` then `:lua dlv_ext_port 1234`
 
 ## Install and run (PC)
 

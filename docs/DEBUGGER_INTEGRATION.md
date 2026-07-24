@@ -218,7 +218,7 @@ The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gd
 |--|---------|----------------------|
 | Attach stdio | `-inferior-tty-set` **live** (no restart) | `dlv exec --tty` only at **spawn**; `:set inferior-tty` **restarts** Delve |
 | Switch back | `:set inferior-tty internal` | same (restart with internal PTY) |
-| Best for TUI | `:set inferior-tty` / `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_port [port]` — headless dlv in another window + `dlv_connect`; stdio never leaves that window |
+| Best for TUI | `:set inferior-tty` / `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [args…]` (alias `dlv_port`) — headless dlv in another window + `dlv_connect`; stdio never leaves that window |
 | Terminal picker | `GDBFORGE_TERMINAL` (kitty, xterm, mate-terminal, gnome-terminal, …) | same |
 
 **Pattern B — local GDB/dlv, external pts**
@@ -230,8 +230,8 @@ The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gd
 **Pattern A — gdbserver / headless dlv in the other window**
 
 1. GDB: `gdbforge.spawn_terminal("gdbserver", ":2345", "./my_tui")` then `target remote`.
-2. Delve: `:lua dlv_port` (or `spawn_dlv_headless` + `dlv_connect`) — inferior inherits that terminal’s stdio.
-3. Examples: [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_port`](../lua/dlv_port).
+2. Delve: `:lua dlv_ext_port` / `dlv_port` (or `spawn_dlv_headless` + `dlv_connect`) — inferior inherits that terminal’s stdio.
+3. Examples and **how to use each script**: [`lua/README.md`](../lua/README.md); code: [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_ext_port`](../lua/dlv_ext_port).
 
 Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an external slave at the same time. Closing the external window does not auto-rewire IO — use `:set inferior-tty internal`.
 

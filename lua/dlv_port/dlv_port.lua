@@ -1,6 +1,9 @@
--- Same as dlv_ext_port.
+-- Same as dlv_ext_port (alias).
 --
+-- Install: cp -r lua/dlv_port .gdbforge/lua/
+-- Env:     GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|…
 -- Usage:
+--   gdbforge -g dlv ./prog
 --   :lua dlv_port
 --   :lua dlv_port 12345
 --   :lua dlv_port 12345 p1 p2 p3

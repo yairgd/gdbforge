@@ -1,11 +1,10 @@
--- External tty for TUI / full-VT inferiors (pattern B).
--- Install: cp -r scripts/external_tty .gdbforge/lua/
+-- External tty for TUI / full-VT inferiors (GDB).
+-- Install: cp -r lua/external_tty .gdbforge/lua/
+-- Env:     GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|…
 -- Usage:   :lua external_tty
 --
--- Opens a real terminal (kitty/xterm/…; override with GDBFORGE_TERMINAL),
--- points GDB -inferior-tty-set at that pts, and leaves :b io idle.
--- Delve cannot change --tty after start — use GDBFORGE_INFERIOR_TTY=… at
--- launch, or :lua dlv_tui / :lua terminal_debug (see scripts/README.md).
+-- Opens a real terminal, points GDB -inferior-tty-set at that pts.
+-- Delve: prefer :lua dlv_ext_port (see lua/README.md).
 
 function main()
   local pts = gdbforge.open_external_tty()

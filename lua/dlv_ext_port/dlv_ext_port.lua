@@ -1,13 +1,18 @@
 -- Headless Delve on an external port, then connect the current gdbforge session.
 --
+-- Install:
+--   mkdir -p .gdbforge/lua && cp -r lua/dlv_ext_port .gdbforge/lua/
+--
 -- Usage:
---   gdbforge -g dlv -- ./prog
---   :lua dlv_ext_port                     -- port 2345, no extra args
+--   export GDBFORGE_TERMINAL=mate-terminal   # optional
+--   gdbforge -g dlv ./prog
+--   :lua dlv_ext_port                     -- port 2345
 --   :lua dlv_ext_port 12345               -- custom port
 --   :lua dlv_ext_port 12345 p1 p2 p3      -- port + args for ./prog
 --
--- Program path comes from the session; p1..pn are appended after it:
---   dlv exec --headless … -- ./prog p1 p2 p3
+-- Env: GDBFORGE_TERMINAL — terminal emulator for headless dlv
+--      (mate-terminal|kitty|xterm|gnome-terminal|…).
+-- Program path comes from the session; p1..pn are appended after it.
 
 function main(port, ...)
   port = tostring(port or "2345")

@@ -1,6 +1,12 @@
 -- Cortex-R5 / J-Link bring-up.
--- Install: cp -r scripts/r5_debug .gdbforge/lua/   (keeps r5_target.xml beside the script)
+-- Install: cp -r lua/r5_debug .gdbforge/lua/   (keeps r5_target.xml beside the script)
 -- Usage:   :lua r5_debug
+--
+-- Env:
+--   GDBFORGE_JLINK         path to JLinkGDBServer
+--   GDBFORGE_JLINK_DEVICE  e.g. XCZU3CG_R5_0
+--   GDBFORGE_JLINK_PORT    GDB listen port (default 2334)
+--   GDBFORGE_TDESC         target description XML (default: script dir r5_target.xml)
 --
 -- Uses gdbforge.spawn (background — does NOT replace the Code pane).
 -- wait_port waits until JLink listens before target remote.

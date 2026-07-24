@@ -54,7 +54,14 @@ Debuggee path from the current gdbforge session (may be `""` if none). Prefer th
 
 ### `gdbforge.wait_port(host_port [, timeout_sec])`
 
-Block until TCP `host:port` (or bare port → `127.0.0.1`) accepts connections, or until timeout (default generous). Returns nothing; raises on failure. Typical after `spawn` / `spawn_terminal` / `spawn_dlv_headless`.
+Block until TCP accepts connections, or until timeout (default ~10s, max 120s). Returns `true`/`false`.
+
+| Argument | Meaning |
+|----------|---------|
+| `"1234"` | Wait on `127.0.0.1:1234` |
+| `"192.168.20.50:1234"` | Wait on that host:port (embedded board / remote gdbserver) |
+
+Typical after `spawn` / `spawn_terminal` / `spawn_dlv_headless` / `:lua remotegdb`.
 
 ---
 
@@ -93,10 +100,17 @@ Interactive shell / `:!` path — replaces the focused pane with an Exec session
 
 ### `gdbforge.spawn_terminal(argv...)`
 
-Open a **real terminal emulator** (`GDBFORGE_TERMINAL`: kitty, xterm, mate-terminal, …) running `argv`. Use for gdbserver, headless tools, or anything that needs a full VT.
+Open a **real terminal emulator** running `argv`. Emulator selection:
+
+```bash
+export GDBFORGE_TERMINAL=mate-terminal   # or kitty|xterm|gnome-terminal|…
+```
+
+If unset, the first of kitty / mate-terminal / gnome-terminal / xterm / … on `PATH` is used.
 
 ```lua
 gdbforge.spawn_terminal("gdbserver", ":2345", "./my_tui")
+gdbforge.spawn_terminal("ssh", "-t", "root@192.168.20.50", "gdbserver :1234 /tmp/hello")
 ```
 
 ---
@@ -137,7 +151,7 @@ Open an external terminal running headless Delve for `gdbforge.program()` (plus 
 
 Replace the local Delve session with `dlv connect addr` (e.g. `127.0.0.1:2345`). Inferior stdio stays with the headless process / its terminal.
 
-Catalog script: `:lua dlv_port [port] [extra args…]` (see `lua/dlv_port`).
+Catalog scripts: `:lua dlv_ext_port [port] [extra args…]` (alias `dlv_port`). Step-by-step for every plugin: [../lua/README.md](../lua/README.md).
 
 ---
 
@@ -183,6 +197,8 @@ gdbforge.register("hello", main)
 | `gdbforge.gdb` | GDB CLI / MI-friendly cmds | Delve CLI only |
 | External TTY | Live `set_inferior_tty` | Restart, or `dlv_port` / `spawn_dlv_headless` + `dlv_connect` |
 | TUI bring-up | `terminal_debug`, `gdbserver_tui` | `dlv_port` / `dlv_ext_port` |
+| Embedded Linux | `:lua remotegdb` (scp + ssh gdbserver) | — |
+| Terminal emulator | `GDBFORGE_TERMINAL=mate-terminal` (shared) | same |
 
 ---
 
@@ -190,4 +206,4 @@ gdbforge.register("hello", main)
 
 - [USER_GUIDE.md](USER_GUIDE.md) — keys, `:set`, panes, external terminal UX
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets) — PTY / tty architecture
-- [../lua/README.md](../lua/README.md) — copyable workflow directories
+- [../lua/README.md](../lua/README.md) — every catalog script, env vars, recipes

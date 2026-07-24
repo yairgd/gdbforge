@@ -166,7 +166,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | | GDB | Delve (`-g dlv`) |
 |--|-----|------------------|
 | `:set inferior-tty` | Live `-inferior-tty-set` | Restarts session with `--tty` |
-| Recommended TUI flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_port [port]` — headless dlv in another window, then `dlv connect`; inferior I/O stays in that window |
+| Recommended TUI flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [prog args…]` (alias `dlv_port`) — headless dlv in another window + connect; I/O stays there |
 | Env | `GDBFORGE_INFERIOR_TTY`, `GDBFORGE_TERMINAL` | same |
 
 - When external, `:b io` shows a note only (type in the other window). Closing that window does not auto-rewire — `:set inferior-tty internal`
@@ -175,18 +175,29 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 ### External terminal (quick start)
 
 ```bash
+# Shared: pick the emulator for spawn_terminal / external tty / dlv_ext_port
+export GDBFORGE_TERMINAL=mate-terminal
+
 # GDB — TUI target in another window
 ./bin/gdbforge ./my_tui
 # then:  :set inferior-tty
 # or:    :lua terminal_debug
 
-# Delve — Go TUI (preferred: headless + connect)
-./bin/gdbforge -g dlv -- ./my_go_tui
-# then:  :lua dlv_port          # optional: :lua dlv_port 2345
-# inferior stdin/stdout → the new terminal; this UI talks via dlv connect
+# Delve — Go (preferred: headless dlv in another window + connect)
+./bin/gdbforge -g dlv ./hello-go
+# install:  mkdir -p .gdbforge/lua && cp -r lua/dlv_ext_port .gdbforge/lua/
+# then:     :lua dlv_ext_port 1234              # optional extra prog args follow
+# Alias:    :lua dlv_port …
+
+# Embedded Linux board — scp (if changed) + ssh gdbserver + target remote
+export GDBFORGE_REMOTE_HOST=192.168.20.50
+./bin/gdbforge ./hello
+# install:  cp -r lua/remotegdb .gdbforge/lua/
+# then:     :lua remotegdb
+#           :lua remotegdb ./hello 192.168.20.50 1234
 ```
 
-More plugins: [`../lua/README.md`](../lua/README.md) (copy into `./.gdbforge/lua/`).
+Full per-script recipes and env vars: [`../lua/README.md`](../lua/README.md).
 
 **About (`:b about`)**
 

@@ -1,25 +1,18 @@
--- Debug a program with stdio in another real terminal (GDB or Go/Delve).
+-- Debug a program with stdio in another real terminal (GDB).
 --
--- Install:
---   mkdir -p .gdbforge/lua
---   cp -r scripts/terminal_debug .gdbforge/lua/
+-- Install: mkdir -p .gdbforge/lua && cp -r lua/terminal_debug .gdbforge/lua/
 --
--- Usage inside gdbforge:
+-- Env:
+--   GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|gnome-terminal|…
+--   GDBFORGE_INFERIOR_TTY=/dev/pts/N   (optional startup override)
+--
+-- Usage:
+--   gdbforge ./myprog
 --   :lua terminal_debug              -- open external tty + route inferior stdio
 --   :lua terminal_debug ./myprog     -- also: file ./myprog, break main
 --   :lua terminal_debug ./myprog run -- also run (after break main)
 --
--- GDB (C/C++/Rust, or Go built with gccgo / dwarf):
---   gdbforge -- ./myprog
---   :lua terminal_debug ./myprog
---   then n / s / c as usual — the program UI is in the other window.
---
--- Go + Delve: --tty is fixed at process start. Either:
---   1) Open the hold terminal first, then:
---        GDBFORGE_INFERIOR_TTY=/dev/pts/N gdbforge -g dlv -- ./hello
---   2) Or use :lua dlv_tui ./hello  (pattern A — headless dlv in that terminal)
---
--- Terminal emulator: GDBFORGE_TERMINAL=kitty|xterm|gnome-terminal|…
+-- For Go + Delve prefer :lua dlv_ext_port (see lua/README.md).
 
 function main(prog, action)
   local pts = gdbforge.open_external_tty()
