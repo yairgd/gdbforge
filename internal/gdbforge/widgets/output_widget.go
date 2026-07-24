@@ -5,8 +5,9 @@ import (
 	"unicode"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdb"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -199,7 +200,7 @@ func hasTokenPrefix(line, kind string) bool {
 }
 
 func isMILine(line string) bool {
-	if line == "" || gdb.IsMIPromptRecord(line) {
+	if line == "" || mitext.IsMIPromptRecord(line) {
 		return true
 	}
 	if strings.HasPrefix(line, ">>>") {
@@ -216,7 +217,7 @@ func decodeTargetStreamLine(line string) (string, bool) {
 	if !strings.HasPrefix(line, "@\"") || !strings.HasSuffix(line, "\"") || len(line) < 3 {
 		return "", false
 	}
-	return gdb.DecodeMIString(line[2 : len(line)-1]), true
+	return mitext.DecodeMIString(line[2 : len(line)-1]), true
 }
 
 func (w *OutputWidget) writeTarget(text string) {
@@ -336,7 +337,7 @@ func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *OutputWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventInterrupt:
-		if data, ok := e.Data().(core.InferiorOutputMsg); ok && data.Data != "" {
+		if data, ok := e.Data().(events.InferiorOutputMsg); ok && data.Data != "" {
 			w.AppendInferior(data.Data)
 		}
 		return

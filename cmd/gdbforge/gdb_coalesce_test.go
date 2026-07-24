@@ -5,16 +5,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
 )
 
 func TestCoalesceGdbOutputBatchesChunks(t *testing.T) {
 	ch := make(chan core.PtyOutputMsg, 8)
 	var mu sync.Mutex
-	var got []core.GdbOutputMsg
+	var got []events.GdbOutputMsg
 	done := make(chan struct{})
 
-	go coalesceGdbOutput(ch, func(msg core.GdbOutputMsg) {
+	go coalesceGdbOutput(ch, func(msg events.GdbOutputMsg) {
 		mu.Lock()
 		got = append(got, msg)
 		mu.Unlock()

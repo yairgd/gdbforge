@@ -103,7 +103,7 @@ func (a *DebuggerApp) layoutCodePane() termui.Widget {
 }
 
 func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
-	if path := a.State().CurrentFile(); path != "" {
+	if path := a.Debug().CurrentFile(); path != "" {
 		if w, _ := a.ensureCodeBuffer(path); w != nil {
 			return w
 		}

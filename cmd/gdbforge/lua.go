@@ -1,11 +1,12 @@
 package main
 
 import (
-	"path/filepath"
 	"sort"
 	"strings"
 
+	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"

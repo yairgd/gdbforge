@@ -1,17 +1,17 @@
 package persist
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 func TestSaveLoadBreakpoints(t *testing.T) {
 	dir := t.TempDir()
-	items := []mcp.BreakInfo{
+	items := []models.BreakInfo{
 		{File: "/src/main.c", Line: 42, Enabled: true},
 		{File: "hello.c", Line: 10, Enabled: false},
 	}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -67,7 +68,7 @@ func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
 }
 
 func TestFileListWidgetMarkColorFromState(t *testing.T) {
-	st := platform.NewAppState()
+	st := debugstate.New(platform.NewAppState())
 	st.SetMarkColor(tcell.ColorNavy)
 	w := NewFileListWidget()
 	w.SetAppState(st)

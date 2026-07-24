@@ -23,23 +23,23 @@ type OnRegister func(name string, rt *Runtime)
 
 // Runtime wraps one Lua VM bound to a Pane and optional command registry hook.
 type Runtime struct {
-	mu         sync.Mutex
-	L          *lua.LState
-	pane       Pane
-	registered map[string]*lua.LFunction
-	onRegister OnRegister
-	openBuffer      OpenBufferFunc
-	run             RunFunc
-	spawn           SpawnFunc
-	openExternalTTY OpenExternalTTYFunc
-	setInferiorTTY  SetInferiorTTYFunc
-	spawnTerminal   SpawnTerminalFunc
-	dlvConnect      DlvConnectFunc
+	mu               sync.Mutex
+	L                *lua.LState
+	pane             Pane
+	registered       map[string]*lua.LFunction
+	onRegister       OnRegister
+	openBuffer       OpenBufferFunc
+	run              RunFunc
+	spawn            SpawnFunc
+	openExternalTTY  OpenExternalTTYFunc
+	setInferiorTTY   SetInferiorTTYFunc
+	spawnTerminal    SpawnTerminalFunc
+	dlvConnect       DlvConnectFunc
 	spawnDlvHeadless SpawnDlvHeadlessFunc
-	program         ProgramFunc
-	gdb             GDBFunc
-	scriptDir       string // directory of the loaded user script (lua_dir())
-	lastErr         string
+	program          ProgramFunc
+	gdb              GDBFunc
+	scriptDir        string // directory of the loaded user script (lua_dir())
+	lastErr          string
 }
 
 // New creates a Runtime and installs the gdbforge / pane APIs.
@@ -190,6 +190,8 @@ func (rt *Runtime) installAPI() {
 	gf := L.NewTable()
 	L.SetGlobal("gdbforge", gf)
 
+	// Framework API only. Debugger bindings (gdb, dlv_*, set_inferior_tty, program)
+	// are installed by the app via SetGDB / SetDlvConnect / … after New.
 	L.SetField(gf, "print", L.NewFunction(rt.luaPrint))
 	L.SetField(gf, "clear", L.NewFunction(rt.luaClear))
 	L.SetField(gf, "register", L.NewFunction(rt.luaRegister))
@@ -198,14 +200,9 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "spawn", L.NewFunction(rt.luaSpawn))
 	L.SetField(gf, "spawn_terminal", L.NewFunction(rt.luaSpawnTerminal))
 	L.SetField(gf, "open_external_tty", L.NewFunction(rt.luaOpenExternalTTY))
-	L.SetField(gf, "set_inferior_tty", L.NewFunction(rt.luaSetInferiorTTY))
-	L.SetField(gf, "dlv_connect", L.NewFunction(rt.luaDlvConnect))
-	L.SetField(gf, "spawn_dlv_headless", L.NewFunction(rt.luaSpawnDlvHeadless))
-	L.SetField(gf, "program", L.NewFunction(rt.luaProgram))
 	L.SetField(gf, "wait_port", L.NewFunction(rt.luaWaitPort))
 	L.SetField(gf, "lua_dir", L.NewFunction(rt.luaLuaDir))
 	L.SetField(gf, "sleep", L.NewFunction(rt.luaSleep))
-	L.SetField(gf, "gdb", L.NewFunction(rt.luaGDB))
 
 	pane := L.NewTable()
 	L.SetGlobal("pane", pane)

@@ -15,14 +15,6 @@ type PtyOutputMsg struct {
 
 func (PtyOutputMsg) Type() string { return "PtyOutputMsg" }
 
-// GdbOutputMsg is a UI-routed GDB PTY chunk (EventInterrupt → GDBWidget).
-type GdbOutputMsg struct {
-	Data string
-	Err  error
-}
-
-func (GdbOutputMsg) Type() string { return "GdbOutputMsg" }
-
 // ExecOutputMsg is a UI-routed exec/shell PTY chunk (EventInterrupt → ExecWidget).
 type ExecOutputMsg struct {
 	Data string
@@ -30,15 +22,6 @@ type ExecOutputMsg struct {
 }
 
 func (ExecOutputMsg) Type() string { return "ExecOutputMsg" }
-
-// InferiorOutputMsg is a UI-routed chunk from the debugged program's PTY
-// (EventInterrupt → IO / OutputWidget), after -inferior-tty-set.
-type InferiorOutputMsg struct {
-	Data string
-	Err  error
-}
-
-func (InferiorOutputMsg) Type() string { return "InferiorOutputMsg" }
 
 type ConsoleOutput struct{ Text string }
 type TargetOutput struct{ Text string }

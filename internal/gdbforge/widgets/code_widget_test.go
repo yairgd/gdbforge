@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"context"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -103,7 +103,7 @@ func TestCodeWidgetDisabledBreakpointYellow(t *testing.T) {
 	if err := w.ShowLocation(path, 1); err != nil {
 		t.Fatal(err)
 	}
-	w.SetBreakInfos([]mcp.BreakInfo{
+	w.SetBreakInfos([]models.BreakInfo{
 		{Number: 0, Enabled: false, File: path, Line: 2},
 	})
 	lines := w.LinesForTest()
@@ -186,12 +186,12 @@ func TestCodeWidgetSetBreakInfosNilKeepsMarks(t *testing.T) {
 	w := NewCodeWidget()
 	w.path = "/tmp/a.c"
 	w.rawLines = []string{"a", "b"}
-	w.SetBreakInfos([]mcp.BreakInfo{{File: "/tmp/a.c", Line: 2, Enabled: true}})
+	w.SetBreakInfos([]models.BreakInfo{{File: "/tmp/a.c", Line: 2, Enabled: true}})
 	w.SetBreakInfos(nil) // failed refresh
 	if !w.hasBreakpoint(2) {
 		t.Fatal("nil SetBreakInfos must keep red mark")
 	}
-	w.SetBreakInfos([]mcp.BreakInfo{}) // real empty
+	w.SetBreakInfos([]models.BreakInfo{}) // real empty
 	if w.hasBreakpoint(2) {
 		t.Fatal("empty SetBreakInfos must clear red mark")
 	}

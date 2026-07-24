@@ -2,11 +2,12 @@ package widgets
 
 import (
 	"fmt"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"path/filepath"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -20,9 +21,9 @@ type CallStackWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
-	state    *platform.AppState
+	state    *debugstate.State
 
-	items    []mcp.StackFrame
+	items    []models.StackFrame
 	selected int
 
 	// mouseDown tracks primary-button press so we activate on release, not on
@@ -36,7 +37,7 @@ type CallStackWidget struct {
 	HasBreakAt func(file string, line int) bool
 
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
-	OnActivate func(mcp.StackFrame)
+	OnActivate func(models.StackFrame)
 }
 
 func NewCallStackWidget() *CallStackWidget {
@@ -58,7 +59,7 @@ func NewCallStackWidget() *CallStackWidget {
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
-func (w *CallStackWidget) SetAppState(st *platform.AppState) {
+func (w *CallStackWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
 
@@ -204,12 +205,12 @@ func (w *CallStackWidget) activateSelected() {
 
 // SetItems replaces the frame list and rebuilds the viewport.
 // Preserves the selected GDB frame level when still present.
-func (w *CallStackWidget) SetItems(items []mcp.StackFrame) {
+func (w *CallStackWidget) SetItems(items []models.StackFrame) {
 	prevLevel := -1
 	if w.selected >= 0 && w.selected < len(w.items) {
 		prevLevel = w.items[w.selected].Level
 	}
-	w.items = append([]mcp.StackFrame(nil), items...)
+	w.items = append([]models.StackFrame(nil), items...)
 	w.selected = 0
 	if prevLevel >= 0 {
 		for i, it := range w.items {
@@ -329,15 +330,15 @@ func (w *CallStackWidget) Draw(c termui.Canvas) {
 func (w *CallStackWidget) Selected() int { return w.selected }
 
 // SelectedFrame returns the highlighted stack frame, or false if none.
-func (w *CallStackWidget) SelectedFrame() (mcp.StackFrame, bool) {
+func (w *CallStackWidget) SelectedFrame() (models.StackFrame, bool) {
 	if w.selected < 0 || w.selected >= len(w.items) {
-		return mcp.StackFrame{}, false
+		return models.StackFrame{}, false
 	}
 	return w.items[w.selected], true
 }
 
-func (w *CallStackWidget) Items() []mcp.StackFrame {
-	return append([]mcp.StackFrame(nil), w.items...)
+func (w *CallStackWidget) Items() []models.StackFrame {
+	return append([]models.StackFrame(nil), w.items...)
 }
 
 func (w *CallStackWidget) LinesForTest() []string {

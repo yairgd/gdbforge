@@ -29,13 +29,20 @@ func (f *fakeSess) WithWrite(_ context.Context, fn func(core.PTYWriter) error) e
 	return fn(f)
 }
 
+type stubCtl struct {
+	running, contAfterClear bool
+}
+
+func (s *stubCtl) InferiorRunning() bool    { return s.running }
+func (s *stubCtl) ContinueAfterClear() bool { return s.contAfterClear }
+
 func TestSendCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
-	st := platform.NewAppState()
-	st.SetInferiorRunning(true)
+	app := platform.NewAppState()
+	ctl := &stubCtl{running: true}
 
-	SendCmd(sess, st, "frame 2")
+	SendCmd(sess, app, ctl, "frame 2")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
@@ -53,10 +60,10 @@ func TestSendCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
 func TestSendCmdThreadWhileRunningDoesNotContinue(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
-	st := platform.NewAppState()
-	st.SetInferiorRunning(true)
+	app := platform.NewAppState()
+	ctl := &stubCtl{running: true}
 
-	SendCmd(sess, st, "thread 1")
+	SendCmd(sess, app, ctl, "thread 1")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
@@ -74,10 +81,10 @@ func TestSendCmdThreadWhileRunningDoesNotContinue(t *testing.T) {
 func TestSendCmdBreakWhileRunningStillContinues(t *testing.T) {
 	sent := make(chan string, 8)
 	sess := &fakeSess{sent: sent}
-	st := platform.NewAppState()
-	st.SetInferiorRunning(true)
+	app := platform.NewAppState()
+	ctl := &stubCtl{running: true}
 
-	SendCmd(sess, st, "break hello.c:10")
+	SendCmd(sess, app, ctl, "break hello.c:10")
 
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)

@@ -1,4 +1,4 @@
-package mcp
+package parse
 
 import "testing"
 
@@ -14,7 +14,7 @@ func TestParseBreakList(t *testing.T) {
 	if got[1].Number != 2 || got[1].Enabled {
 		t.Fatalf("second should be disabled: %+v", got[1])
 	}
-	locs := EnabledBreakLocs(got)
+	locs := EnabledBreakMarks(got)
 	if len(locs) != 2 {
 		t.Fatalf("enabled locs=%v", locs)
 	}

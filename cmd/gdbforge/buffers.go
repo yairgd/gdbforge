@@ -2,9 +2,10 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
+
+	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -56,7 +57,7 @@ func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
 	if w == nil {
 		return
 	}
-	w.SetAppState(a.State())
+	w.SetAppState(a.Debug())
 	w.SetOnBreakToggle(a.onCodeBreakToggle)
 	w.SetOnToggleEnable(a.toggleCodeBreakEnable)
 }
@@ -143,7 +144,7 @@ func (a *DebuggerApp) resolveSourceFile(name string) (string, bool) {
 		return "", false
 	}
 
-	files := a.State().SourceFiles()
+	files := a.Debug().SourceFiles()
 	for _, f := range files {
 		if f == name {
 			return f, true
@@ -314,7 +315,7 @@ func (a *DebuggerApp) openSourcePath(path string) {
 func (a *DebuggerApp) editCompletions(prefix string) []string {
 	seen := make(map[string]struct{})
 	var names []string
-	for _, f := range a.State().SourceFiles() {
+	for _, f := range a.Debug().SourceFiles() {
 		if f == "" {
 			continue
 		}

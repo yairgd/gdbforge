@@ -11,7 +11,6 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 const (
@@ -187,7 +186,7 @@ func ParseFuncs(raw string) []string {
 	var out []string
 	seen := make(map[string]struct{})
 	for _, line := range strings.Split(raw, "\n") {
-		plain := strings.TrimSpace(termui.StripANSI(line))
+		plain := strings.TrimSpace(platform.StripANSI(line))
 		plain = strings.TrimRight(plain, "\r")
 		if plain == "" || plain == PromptToken {
 			continue

@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 // syncThreadViews pushes the shared ThreadList to the Threads view.
@@ -27,29 +26,29 @@ func (a *DebuggerApp) syncFileListViews() {
 	if a.fileListWidget == nil {
 		return
 	}
-	if files := a.State().SourceFiles(); len(files) > 0 {
+	if files := a.Debug().SourceFiles(); len(files) > 0 {
 		a.fileListWidget.SetItems(files)
 	}
 }
 
-func (a *DebuggerApp) applyThreadInfos(items []mcp.ThreadInfo) {
+func (a *DebuggerApp) applyThreadInfos(items []models.ThreadInfo) {
 	a.setThreadInfos(items)
 	a.syncThreadViews()
 }
 
-func (a *DebuggerApp) applyStackFrames(frames []mcp.StackFrame) {
+func (a *DebuggerApp) applyStackFrames(frames []models.StackFrame) {
 	a.setStackFrames(frames)
 	a.syncCallStackViews()
 }
 
-func (a *DebuggerApp) setThreadInfos(items []mcp.ThreadInfo) {
+func (a *DebuggerApp) setThreadInfos(items []models.ThreadInfo) {
 	if a.threads == nil {
 		a.threads = &models.ThreadList{}
 	}
 	a.threads.Set(items)
 }
 
-func (a *DebuggerApp) setStackFrames(frames []mcp.StackFrame) {
+func (a *DebuggerApp) setStackFrames(frames []models.StackFrame) {
 	if a.callstack == nil {
 		a.callstack = &models.CallStack{}
 	}
@@ -96,8 +95,8 @@ func (a *DebuggerApp) clearCodePane() {
 	}
 	a.primaryCode = nil
 	if a.State() != nil {
-		a.State().SetCurrentLocation("", 0)
-		a.State().ClearStopLocation()
+		a.Debug().SetCurrentLocation("", 0)
+		a.Debug().ClearStopLocation()
 	}
 	a.placeLogoInCodeSlot()
 }

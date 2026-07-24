@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -75,7 +75,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.SetANSI(true)
 	if a.cfg.IsDLV() {
 		// Also paint program stdout in the Delve console (IO pane is primary).
-		a.State().SetGdbTargetPrint(true)
+		a.Debug().SetGdbTargetPrint(true)
 	}
 	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
 	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
@@ -83,7 +83,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
 	// Replay banner / -x output captured before the UI subscribed, then attach live PTY.
 	if boot != "" {
-		a.handleDebuggerOutputMsg(core.GdbOutputMsg{Data: boot})
+		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
 	}
 	a.startGdbConsoleBridge()
 	a.registerBuiltin("gdb", a.gdbWidget)
@@ -114,7 +114,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.callstack = &models.CallStack{}
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
-	a.bpWidget.SetAppState(a.State())
+	a.bpWidget.SetAppState(a.Debug())
 	a.bpWidget.OnToggle = a.onBreakpointToggle
 	a.bpWidget.OnDelete = a.onBreakpointDelete
 	a.bpWidget.OnActivate = a.onBreakpointActivate
@@ -122,7 +122,7 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
-	a.threadWidget.SetAppState(a.State())
+	a.threadWidget.SetAppState(a.Debug())
 	a.threadWidget.HasBreakAt = func(file string, line int) bool {
 		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
 	}
@@ -131,7 +131,7 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
-	a.callstackWidget.SetAppState(a.State())
+	a.callstackWidget.SetAppState(a.Debug())
 	a.callstackWidget.HasBreakAt = func(file string, line int) bool {
 		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
 	}
@@ -140,7 +140,7 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.fileListWidget = widgets.NewFileListWidget()
 	a.fileListWidget.SetClipboard(a.ClipboardIO())
-	a.fileListWidget.SetAppState(a.State())
+	a.fileListWidget.SetAppState(a.Debug())
 	a.fileListWidget.OnOpen = a.openSourcePath
 
 	a.luaCmds = make(map[string]*luahost.Runtime)

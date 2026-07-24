@@ -54,8 +54,9 @@ type DefaultLayoutRatios struct {
 	BottomFirst float64
 }
 
-// AppState is the process-global session model: interaction mode, PTY mux
-// owner, layout policy, and debugger source location / file list.
+// AppState is the process-global UI session model: interaction mode, PTY mux
+// owner, layout policy, and generic chrome colors. Debugger-specific state
+// (stop location, BP colors, GDB flags) lives in gdbforge/debugstate.
 type AppState struct {
 	mu sync.RWMutex
 
@@ -63,6 +64,10 @@ type AppState struct {
 
 	// ptyOwner is who currently intends to write the shared debugger/exec PTY.
 	ptyOwner PTYOwner
+
+	// onPTYOwner is invoked whenever the PTY owner changes (WithPTYOwner / SetPTYOwner).
+	// Used by app-private debugstate for console-silent sticky flags.
+	onPTYOwner func(PTYOwner)
 
 	// equalAlways mirrors Vim 'equalalways': rebalance split ratios after
 	// splits / closes (not on every paint). User drag ratios are kept until
@@ -72,30 +77,8 @@ type AppState struct {
 	// defaultLayoutRatios are the preset splits for :layout default.
 	defaultLayoutRatios DefaultLayoutRatios
 
-	// clearOutput mirrors Vim 'clearoutput': clear the Output pane when the
-	// GDB session starts (default true). Stepping (^running) does not clear.
-	clearOutput bool
-
-	// continueAfterClear: when the inferior is running and a breakpoint is
-	// removed (clear / -break-delete), interrupt then optionally resume.
-	// Default false — stay stopped after removing a breakpoint.
-	continueAfterClear bool
-
-	// inferiorRunning is true between ^running and the next *stopped / exit.
-	inferiorRunning bool
-
 	layouts       []string
 	currentLayout string
-
-	sourceFiles []string
-	currentFile string
-	currentLine int // 1-based; 0 = unset — browsed location (frame/BP click)
-
-	// stopFile/stopLine are the inferior PC from the last *stopped (frame 0).
-	// Green BP/stack/thread marks use this so browsing other frames does not
-	// move the green highlight off the real stop.
-	stopFile string
-	stopLine int // 1-based; 0 = unset
 
 	// markColor is the selected-row background for list pickers when focused
 	// (e.g. :edit, callstack, breakpoints). Default DefaultMarkColor; :set markcolor.
@@ -104,19 +87,6 @@ type AppState struct {
 	// focused. Default DefaultMarkDimColor; :set markdimcolor.
 	markDimColor tcell.Color
 
-	// breakColor is the enabled-breakpoint background (CodeWidget gutter +
-	// BreakpointWidget rows). Default DefaultBreakColor; :set breakcolor.
-	breakColor tcell.Color
-	// breakDisabledColor is the disabled-breakpoint background.
-	// Default DefaultBreakDisabledColor; :set breakdisabledcolor.
-	breakDisabledColor tcell.Color
-
-	// pcColor is the program-counter row background (Code ━━▶ + matching BP
-	// list rows). Default DefaultPCColor; :set pccolor.
-	pcColor tcell.Color
-	// stackBreakColor is Call Stack row bg when ━━▶ matches a breakpoint
-	// file:line. Default DefaultStackBreakColor; :set stackbreakcolor.
-	stackBreakColor tcell.Color
 	// codeSelColor is the focused CodeWidget selection row when not on PC.
 	// Default DefaultCodeSelColor; :set codeselcolor.
 	codeSelColor tcell.Color
@@ -127,25 +97,6 @@ type AppState struct {
 	// escToCode: Esc leaves insert and focuses the CodeWidget leaf (default true).
 	// :set esctocode / :set noesctocode.
 	escToCode bool
-
-	// breakMain: insert "break main" when the GDB session starts (default true).
-	// :set breakmain / :set nobreakmain.
-	breakMain bool
-
-	// gdbListenPrint: when true, paint GDB console lines from App/MCP (listener)
-	// traffic. Default true; :set gdblistenprint / :set nogdblistenprint.
-	gdbListenPrint bool
-
-	// gdbTargetPrint: when true, also paint program stdout in the GDB console
-	// (MI @"..." and/or mirrored inferior PTY) so it behaves like a classic
-	// shared GDB terminal. Default false; :set gdbtargetprint / :set nogdbtargetprint.
-	// The IO pane always uses the inferior PTY and never needs this for display.
-	gdbTargetPrint bool
-
-	// gdbConsoleSilent is sticky: set true on App/MCP WithPTYOwner, cleared on
-	// UI WithPTYOwner. Used with gdbListenPrint to suppress listener paint
-	// after short Send() windows (owner restores to none before replies arrive).
-	gdbConsoleSilent bool
 }
 
 // NewAppState returns AppState with Vim-like defaults.
@@ -157,21 +108,13 @@ func NewAppState() *AppState {
 			Output:      1.0 / 2.0,
 			BottomFirst: 1.0 / 3.0,
 		},
-		clearOutput:        true,
-		layouts:            []string{LayoutDefault},
-		currentLayout:      LayoutDefault,
-		markColor:          DefaultMarkColor,
-		markDimColor:       DefaultMarkDimColor,
-		breakColor:         DefaultBreakColor,
-		breakDisabledColor: DefaultBreakDisabledColor,
-		pcColor:            DefaultPCColor,
-		stackBreakColor:    DefaultStackBreakColor,
-		codeSelColor:       DefaultCodeSelColor,
-		mutedColor:         DefaultMutedColor,
-		escToCode:          true,
-		breakMain:          true,
-		gdbListenPrint:     true,
-		gdbTargetPrint:     false,
+		layouts:       []string{LayoutDefault},
+		currentLayout: LayoutDefault,
+		markColor:     DefaultMarkColor,
+		markDimColor:  DefaultMarkDimColor,
+		codeSelColor:  DefaultCodeSelColor,
+		mutedColor:    DefaultMutedColor,
+		escToCode:     true,
 	}
 }
 
@@ -196,23 +139,30 @@ func (a *AppState) PTYOwner() PTYOwner {
 func (a *AppState) SetPTYOwner(owner PTYOwner) {
 	a.mu.Lock()
 	a.ptyOwner = owner
+	hook := a.onPTYOwner
+	a.mu.Unlock()
+	if hook != nil {
+		hook(owner)
+	}
+}
+
+// SetPTYOwnerHook registers a callback for PTY owner changes (app debugstate).
+func (a *AppState) SetPTYOwnerHook(fn func(PTYOwner)) {
+	a.mu.Lock()
+	a.onPTYOwner = fn
 	a.mu.Unlock()
 }
 
 // WithPTYOwner sets owner for the duration of fn, then restores previous.
-// UI ownership clears the sticky console-silent flag; App/MCP set it so
-// async PTY replies after Send are still treated as listener traffic.
 func (a *AppState) WithPTYOwner(owner PTYOwner, fn func()) {
 	a.mu.Lock()
 	prev := a.ptyOwner
 	a.ptyOwner = owner
-	switch owner {
-	case PTYOwnerUI:
-		a.gdbConsoleSilent = false
-	case PTYOwnerApp, PTYOwnerMCP:
-		a.gdbConsoleSilent = true
-	}
+	hook := a.onPTYOwner
 	a.mu.Unlock()
+	if hook != nil {
+		hook(owner)
+	}
 	defer a.SetPTYOwner(prev)
 	fn()
 }
@@ -270,30 +220,6 @@ func clampLayoutRatio(r float64) float64 {
 	return r
 }
 
-func (a *AppState) ClearOutput() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.clearOutput
-}
-
-func (a *AppState) SetClearOutput(v bool) {
-	a.mu.Lock()
-	a.clearOutput = v
-	a.mu.Unlock()
-}
-
-func (a *AppState) ContinueAfterClear() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.continueAfterClear
-}
-
-func (a *AppState) SetContinueAfterClear(v bool) {
-	a.mu.Lock()
-	a.continueAfterClear = v
-	a.mu.Unlock()
-}
-
 // EscToCode reports whether Esc focuses the CodeWidget leaf (default true).
 func (a *AppState) EscToCode() bool {
 	a.mu.RLock()
@@ -304,73 +230,6 @@ func (a *AppState) EscToCode() bool {
 func (a *AppState) SetEscToCode(v bool) {
 	a.mu.Lock()
 	a.escToCode = v
-	a.mu.Unlock()
-}
-
-// BreakMain reports whether to insert "break main" on GDB session start (default true).
-func (a *AppState) BreakMain() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.breakMain
-}
-
-func (a *AppState) SetBreakMain(v bool) {
-	a.mu.Lock()
-	a.breakMain = v
-	a.mu.Unlock()
-}
-
-// GdbListenPrint reports whether App/MCP PTY replies paint in the GDB console
-// (default true).
-func (a *AppState) GdbListenPrint() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.gdbListenPrint
-}
-
-func (a *AppState) SetGdbListenPrint(v bool) {
-	a.mu.Lock()
-	a.gdbListenPrint = v
-	a.mu.Unlock()
-}
-
-// GdbTargetPrint reports whether program stdout is also painted in the GDB
-// console (legacy / standard-terminal mode). Default false.
-func (a *AppState) GdbTargetPrint() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.gdbTargetPrint
-}
-
-func (a *AppState) SetGdbTargetPrint(v bool) {
-	a.mu.Lock()
-	a.gdbTargetPrint = v
-	a.mu.Unlock()
-}
-
-// SuppressGdbConsole is true when the GDB widget should not paint DisplayLines
-// (listener traffic and sticky silent after App/MCP writes, unless GdbListenPrint).
-func (a *AppState) SuppressGdbConsole() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.gdbListenPrint {
-		return false
-	}
-	if a.ptyOwner == PTYOwnerApp || a.ptyOwner == PTYOwnerMCP {
-		return true
-	}
-	return a.gdbConsoleSilent
-}
-
-func (a *AppState) InferiorRunning() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.inferiorRunning
-}
-
-func (a *AppState) SetInferiorRunning(v bool) {
-	a.mu.Lock()
-	a.inferiorRunning = v
 	a.mu.Unlock()
 }
 
@@ -419,69 +278,6 @@ func (a *AppState) SetCurrentLayout(name string) {
 	a.mu.Unlock()
 }
 
-func (a *AppState) SourceFiles() []string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	out := make([]string, len(a.sourceFiles))
-	copy(out, a.sourceFiles)
-	return out
-}
-
-func (a *AppState) SetSourceFiles(files []string) {
-	a.mu.Lock()
-	a.sourceFiles = append([]string(nil), files...)
-	a.mu.Unlock()
-}
-
-func (a *AppState) CurrentFile() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.currentFile
-}
-
-func (a *AppState) CurrentLine() int {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.currentLine
-}
-
-// SetCurrentLocation sets the browsed Code location (1-based line).
-// Does not change StopFile/StopLine (green marks / real PC).
-func (a *AppState) SetCurrentLocation(file string, line int) {
-	a.mu.Lock()
-	a.currentFile = file
-	a.currentLine = line
-	a.mu.Unlock()
-}
-
-func (a *AppState) StopFile() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.stopFile
-}
-
-func (a *AppState) StopLine() int {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.stopLine
-}
-
-// SetStopLocation records the inferior PC from *stopped (frame 0).
-func (a *AppState) SetStopLocation(file string, line int) {
-	a.mu.Lock()
-	a.stopFile = file
-	a.stopLine = line
-	a.mu.Unlock()
-}
-
-// ClearStopLocation clears the inferior PC (kill / exit).
-func (a *AppState) ClearStopLocation() {
-	a.mu.Lock()
-	a.stopFile = ""
-	a.stopLine = 0
-	a.mu.Unlock()
-}
-
 func (a *AppState) MarkColor() tcell.Color {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -509,66 +305,6 @@ func (a *AppState) MarkDimColor() tcell.Color {
 func (a *AppState) SetMarkDimColor(c tcell.Color) {
 	a.mu.Lock()
 	a.markDimColor = c
-	a.mu.Unlock()
-}
-
-func (a *AppState) BreakColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.breakColor == tcell.ColorDefault {
-		return DefaultBreakColor
-	}
-	return a.breakColor
-}
-
-func (a *AppState) SetBreakColor(c tcell.Color) {
-	a.mu.Lock()
-	a.breakColor = c
-	a.mu.Unlock()
-}
-
-func (a *AppState) BreakDisabledColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.breakDisabledColor == tcell.ColorDefault {
-		return DefaultBreakDisabledColor
-	}
-	return a.breakDisabledColor
-}
-
-func (a *AppState) SetBreakDisabledColor(c tcell.Color) {
-	a.mu.Lock()
-	a.breakDisabledColor = c
-	a.mu.Unlock()
-}
-
-func (a *AppState) PCColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.pcColor == tcell.ColorDefault {
-		return DefaultPCColor
-	}
-	return a.pcColor
-}
-
-func (a *AppState) SetPCColor(c tcell.Color) {
-	a.mu.Lock()
-	a.pcColor = c
-	a.mu.Unlock()
-}
-
-func (a *AppState) StackBreakColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.stackBreakColor == tcell.ColorDefault {
-		return DefaultStackBreakColor
-	}
-	return a.stackBreakColor
-}
-
-func (a *AppState) SetStackBreakColor(c tcell.Color) {
-	a.mu.Lock()
-	a.stackBreakColor = c
 	a.mu.Unlock()
 }
 

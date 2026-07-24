@@ -3,15 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -33,7 +35,7 @@ type breakpointsUIMsg struct{}
 type debugInfoUIMsg struct{}
 
 func (a *DebuggerApp) maybeClearOutput() {
-	if a.outputWidget == nil || !a.State().ClearOutput() {
+	if a.outputWidget == nil || !a.Debug().ClearOutput() {
 		return
 	}
 	a.outputWidget.Clear()
@@ -41,7 +43,7 @@ func (a *DebuggerApp) maybeClearOutput() {
 
 // maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
 func (a *DebuggerApp) maybeBreakMain() {
-	if a.gdbWidget == nil || !a.State().BreakMain() {
+	if a.gdbWidget == nil || !a.Debug().BreakMain() {
 		return
 	}
 	sess := a.GDB()
@@ -52,7 +54,7 @@ func (a *DebuggerApp) maybeBreakMain() {
 	if a.isDLV() {
 		cmd = "break main.main"
 	}
-	gdb.SendCmd(sess, a.State(), cmd)
+	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 }
 
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
@@ -61,8 +63,8 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	if stop == nil {
 		return
 	}
-	wasRunning := a.State() != nil && a.State().InferiorRunning()
-	a.State().SetInferiorRunning(false)
+	wasRunning := a.State() != nil && a.Debug().InferiorRunning()
+	a.Debug().SetInferiorRunning(false)
 	needsRefresh := gdb.StopNeedsUIRefresh(stop)
 	if a.isDLV() {
 		needsRefresh = dlv.StopNeedsUIRefresh(stop)
@@ -89,8 +91,8 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	file := stop.File
 	line := stop.Line
 	if file != "" {
-		a.State().SetStopLocation(file, line)
-		a.State().SetCurrentLocation(file, line)
+		a.Debug().SetStopLocation(file, line)
+		a.Debug().SetCurrentLocation(file, line)
 	}
 
 	// Defer -thread-info / -stack-list-frames until (gdb), with a short
@@ -149,7 +151,7 @@ func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 		line = 1
 	}
 	_ = w.ShowLocation(file, line)
-	a.State().SetCurrentLocation(file, line)
+	a.Debug().SetCurrentLocation(file, line)
 	if created && !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
 	}
@@ -171,7 +173,7 @@ func (a *DebuggerApp) showCodeBrowse(file string, line int) *widgets.CodeWidget 
 		line = 1
 	}
 	_ = w.ShowSelection(file, line)
-	a.State().SetCurrentLocation(file, line)
+	a.Debug().SetCurrentLocation(file, line)
 	if created && !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
 	}
@@ -201,7 +203,7 @@ func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidg
 
 // onCallStackActivate selects a stack frame in GDB/Delve and shows its source.
 // Uses MI for GDB so the console does not print CLI frame listings.
-func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
+func (a *DebuggerApp) onCallStackActivate(fr models.StackFrame) {
 	// User is browsing — cancel any in-flight stop refresh that would snap
 	// Code back to frame 0.
 	a.codeNavGen++
@@ -225,11 +227,11 @@ func (a *DebuggerApp) onCallStackActivate(fr mcp.StackFrame) {
 		// used to treat as a new stop (goroutines/stack refresh → snap to frame 0).
 		a.dlvSuppressStopUI++
 		cmd = fmt.Sprintf("frame %d", fr.Level)
-		go gdb.SendCmd(sess, a.State(), cmd)
+		go gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 		return
 	}
 	// GDB MI frame select is cheap; keep it on the UI path like before.
-	gdb.SendCmd(sess, a.State(), cmd)
+	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 }
 
 // onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
@@ -288,7 +290,7 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 		}
 		return
 	}
-	fr, ok := mcp.ParseStackInfoFrame(raw)
+	fr, ok := parse.ParseStackInfoFrame(raw)
 	if !ok {
 		return
 	}
@@ -297,7 +299,7 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 	if a.callstackWidget != nil || a.callstack != nil {
 		rawStack, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
 		if err == nil {
-			a.applyStackFrames(mcp.ParseStackListFrames(rawStack))
+			a.applyStackFrames(parse.ParseStackListFrames(rawStack))
 		}
 		if a.callstackWidget != nil {
 			a.callstackWidget.SelectLevel(fr.Level)
@@ -307,12 +309,12 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 	a.showFrameSource(fr)
 }
 
-func (a *DebuggerApp) showFrameSource(fr mcp.StackFrame) {
+func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 	var w *widgets.CodeWidget
 	switch {
 	case fr.File != "":
 		file := normalizeCodePath(fr.File)
-		a.State().SetCurrentLocation(file, fr.Line)
+		a.Debug().SetCurrentLocation(file, fr.Line)
 		// Level 0 follows the real PC (━━▶); other frames browse with the blue
 		// cursor so the stop mark stays put — same idea as the Breakpoints list.
 		if fr.Level == 0 {
@@ -343,11 +345,11 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 	if a.callstack == nil {
 		return
 	}
-	if a.State() != nil && a.State().StopFile() != "" {
+	if a.State() != nil && a.Debug().StopFile() != "" {
 		return
 	}
 	if fr, ok := a.callstack.FirstWithFile(); ok {
-		a.State().SetStopLocation(fr.File, fr.Line)
+		a.Debug().SetStopLocation(fr.File, fr.Line)
 		a.showFrameSource(fr)
 		return
 	}
@@ -359,7 +361,7 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 
 // onBreakpointActivate shows the source at the selected breakpoint location
 // with the blue browse cursor — ━━▶ stays on the real program counter.
-func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
+func (a *DebuggerApp) onBreakpointActivate(bp models.BreakInfo) {
 	if bp.File == "" {
 		return
 	}
@@ -374,7 +376,7 @@ func (a *DebuggerApp) onBreakpointActivate(bp mcp.BreakInfo) {
 // onThreadActivate switches GDB to the selected thread, refreshes stack/threads,
 // and shows the current frame source.
 // Uses MI for GDB so the console does not print "[Switching to thread …]".
-func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
+func (a *DebuggerApp) onThreadActivate(th models.ThreadInfo) {
 	if a.gdbWidget == nil || th.ID == "" {
 		return
 	}
@@ -386,7 +388,7 @@ func (a *DebuggerApp) onThreadActivate(th mcp.ThreadInfo) {
 	if a.isDLV() {
 		cmd = "goroutine " + th.ID
 	}
-	gdb.SendCmd(sess, a.State(), cmd)
+	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 	a.refreshThreadsAndStack()
 	a.syncThreadViews()
 	a.syncCallStackViews()
@@ -544,7 +546,7 @@ func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
 		}
 	} else if strings.Contains(raw, "threads=") {
 		// Must see threads= (not bare id= — that matches thread-id= on *stopped).
-		items := mcp.ParseThreadInfo(raw)
+		items := parse.ParseThreadInfo(raw)
 		a.setThreadInfos(items)
 		threadsOK = true
 		// After kill, -thread-info is often empty while -stack-list-frames fails
@@ -562,7 +564,7 @@ func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
 			a.ctx.Log.Named("callstack").Error(err.Error())
 		}
 	} else if strings.Contains(raw, "stack=") {
-		a.setStackFrames(mcp.ParseStackListFrames(raw))
+		a.setStackFrames(parse.ParseStackListFrames(raw))
 		stackOK = true
 	} else if a.ctx.Log != nil {
 		a.ctx.Log.Named("callstack").Error("incomplete -stack-list-frames capture")
@@ -657,13 +659,13 @@ func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 }
 
 // frameAtLevel returns the stack frame with the given level.
-func frameAtLevel(frames []mcp.StackFrame, level int) (mcp.StackFrame, bool) {
+func frameAtLevel(frames []models.StackFrame, level int) (models.StackFrame, bool) {
 	for _, fr := range frames {
 		if fr.Level == level {
 			return fr, true
 		}
 	}
-	return mcp.StackFrame{}, false
+	return models.StackFrame{}, false
 }
 
 // consumeFrameSyncLevel returns the Delve frame level to show after frame/up/down
@@ -716,11 +718,11 @@ func (a *DebuggerApp) ensureSourceFiles() {
 		}
 		return
 	}
-	files := mcp.ParseSourceFileList(raw)
+	files := parse.ParseSourceFileList(raw)
 	if len(files) == 0 {
 		return
 	}
-	a.State().SetSourceFiles(files)
+	a.Debug().SetSourceFiles(files)
 	a.syncFileListViews()
 }
 
@@ -735,7 +737,7 @@ func (a *DebuggerApp) refreshBreakpoints() {
 	a.applyBreakInfos(items)
 }
 
-func (a *DebuggerApp) fetchBreakInfos() ([]mcp.BreakInfo, bool) {
+func (a *DebuggerApp) fetchBreakInfos() ([]models.BreakInfo, bool) {
 	if a.gdbMcp == nil {
 		return nil, false
 	}
@@ -779,12 +781,12 @@ func (a *DebuggerApp) fetchBreakInfos() ([]mcp.BreakInfo, bool) {
 	if !strings.Contains(raw, "BreakpointTable") && !strings.Contains(raw, "bkpt={") {
 		return nil, false
 	}
-	return mcp.ParseBreakList(raw), true
+	return parse.ParseBreakList(raw), true
 }
 
 // paintCodeBreakmarks paints line-number gutters from AppState break colors
 // (enabled / disabled backgrounds).
-func (a *DebuggerApp) paintCodeBreakmarks(items []mcp.BreakInfo) {
+func (a *DebuggerApp) paintCodeBreakmarks(items []models.BreakInfo) {
 	seen := make(map[*widgets.CodeWidget]bool)
 	for path, w := range a.fileBuffers {
 		if w == nil {
@@ -814,9 +816,9 @@ func (a *DebuggerApp) rebuildCodeBreakGutters() {
 	}
 }
 
-func breaksForFile(items []mcp.BreakInfo, path string) []mcp.BreakInfo {
+func breaksForFile(items []models.BreakInfo, path string) []models.BreakInfo {
 	base := filepath.Base(path)
-	out := make([]mcp.BreakInfo, 0)
+	out := make([]models.BreakInfo, 0)
 	for _, it := range items {
 		if it.File == path || filepath.Base(it.File) == base {
 			out = append(out, it)

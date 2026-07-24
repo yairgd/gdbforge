@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -529,9 +531,9 @@ func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
 
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	switch data := ev.Data().(type) {
-	case core.GdbOutputMsg:
+	case events.GdbOutputMsg:
 		// Avoid per-line file logging during free-run floods (major TUI lag).
-		if a.miLog != nil && !a.State().InferiorRunning() {
+		if a.miLog != nil && !a.Debug().InferiorRunning() {
 			for _, line := range strings.Split(data.Data, "\n") {
 				a.miLog.Info(line)
 			}
@@ -548,7 +550,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.outputWidget.AppendPty(data.Data)
 		}
 		// No RequestFrame: Run() already redraws after this interrupt.
-	case core.InferiorOutputMsg:
+	case events.InferiorOutputMsg:
 		if data.Data == "" {
 			break
 		}
@@ -556,7 +558,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.outputWidget.AppendInferior(data.Data)
 		}
 		// Mirror into the debugger console when enabled (default on for Delve).
-		if a.gdbWidget != nil && a.State().GdbTargetPrint() {
+		if a.gdbWidget != nil && a.Debug().GdbTargetPrint() {
 			a.gdbWidget.AppendTargetText(data.Data)
 		}
 		a.RequestFrame()

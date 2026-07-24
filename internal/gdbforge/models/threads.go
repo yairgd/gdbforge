@@ -1,26 +1,24 @@
 package models
 
-import "github.com/yairgd/gdbforge/internal/mcp"
-
 // ThreadList is the shared thread snapshot for GUI and MCP/AI.
 type ThreadList struct {
-	items []mcp.ThreadInfo
+	items []ThreadInfo
 }
 
 // Set replaces the list from a GDB -thread-info parse.
-func (t *ThreadList) Set(items []mcp.ThreadInfo) {
+func (t *ThreadList) Set(items []ThreadInfo) {
 	if t == nil {
 		return
 	}
-	t.items = append([]mcp.ThreadInfo(nil), items...)
+	t.items = append([]ThreadInfo(nil), items...)
 }
 
 // Items returns a copy of the current threads.
-func (t *ThreadList) Items() []mcp.ThreadInfo {
+func (t *ThreadList) Items() []ThreadInfo {
 	if t == nil || len(t.items) == 0 {
 		return nil
 	}
-	return append([]mcp.ThreadInfo(nil), t.items...)
+	return append([]ThreadInfo(nil), t.items...)
 }
 
 // Len returns the number of threads.

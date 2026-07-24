@@ -21,6 +21,20 @@ This document maps the **gdbforge** repository packages to their responsibilitie
 
 ---
 
+## FRAMEWORK vs APP
+
+| Kind | Path | Notes |
+|------|------|-------|
+| FRAMEWORK | `internal/termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Reusable TUI / host |
+| APP | `internal/gdb`, `dlv`, `mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
+| APP events | `internal/gdbforge/events` | `GdbOutputMsg`, `InferiorOutputMsg` (not in `core`) |
+| APP state | `internal/gdbforge/debugstate` | Debugger fields formerly on `platform.AppState` |
+| APP DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers/string helpers |
+
+Import guardrails: `task check-imports`.
+
+---
+
 ## Repository tree
 
 ```text
@@ -34,14 +48,22 @@ gdbforge/
 │   ├── commands/          # Command tree, parser, DSL, key bindings ★
 │   ├── collections/       # Shared trie (keys + command children) ★
 │   ├── platform/          # Buffer, Logger, AppContext ★
-│   ├── gdbforge/              # App layer: models, domain, layouts, widgets ★
-│   │   ├── models/
+│   ├── luahost/           # Lua VM + framework API (APP wires gdb/dlv) ★
+│   ├── ptyx/              # PTY sessions (FRAMEWORK) ★
+│   ├── gdbforge/              # App layer ★
+│   │   ├── models/        # Break/thread/stack DTOs
+│   │   ├── parse/         # MI parsers (not in mcp)
+│   │   ├── mitext/        # MI string unescape / prompt tokens
+│   │   ├── debugstate/    # Debugger AppState fields
+│   │   ├── events/        # GdbOutputMsg / InferiorOutputMsg
 │   │   ├── domain/
 │   │   ├── layout/
-│   │   └── widgets/
-│   ├── core/              # UI-agnostic domain logic ★
+│   │   ├── persist/
+│   │   └── widgets/       # Debugger panes (no gdb/mcp imports)
+│   ├── core/              # UI-agnostic domain + generic PTY/exec events ★
 │   ├── gdb/               # GDB MI2 backend ★
 │   ├── dlv/               # Delve CLI backend ★
+│   ├── mcp/               # HTTP/MCP surface (thin; parsers elsewhere)
 │   ├── playground/        # Experiments (not production)
 │   └── tests/
 ├── docs/                  # gdbforge documentation ★

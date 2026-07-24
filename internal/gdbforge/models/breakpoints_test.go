@@ -3,12 +3,11 @@ package models
 import (
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 func TestBreakpointListMergeKeepsDisabled(t *testing.T) {
 	var b BreakpointList
-	b.MergeFromGDB([]mcp.BreakInfo{
+	b.MergeFromGDB([]BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 	})
 	cmd, ok := b.ToggleEnableAt(0)
@@ -45,7 +44,7 @@ func TestBreakpointListToggleInsertClear(t *testing.T) {
 
 func TestBreakpointListDelete(t *testing.T) {
 	var b BreakpointList
-	b.MergeFromGDB([]mcp.BreakInfo{
+	b.MergeFromGDB([]BreakInfo{
 		{Number: 3, Enabled: true, File: "/tmp/a.c", Line: 5},
 	})
 	cmd, ok := b.DeleteAt(0)
@@ -56,7 +55,7 @@ func TestBreakpointListDelete(t *testing.T) {
 
 func TestBreakpointListToggleEnableAtFileLine(t *testing.T) {
 	var b BreakpointList
-	b.MergeFromGDB([]mcp.BreakInfo{
+	b.MergeFromGDB([]BreakInfo{
 		{Number: 2, Enabled: true, File: "/tmp/a.c", Line: 10},
 	})
 	cmd, idx, ok := b.ToggleEnableAtFileLine("/tmp/a.c", 10, false)

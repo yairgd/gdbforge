@@ -5,6 +5,8 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
@@ -64,7 +66,7 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 	a.inferiorCancelSub = cancel
 	screen := a.Screen()
 	log := a.ctx.Log.Named("inferior-io")
-	go coalesceInferiorOutput(ch, func(msg core.InferiorOutputMsg) {
+	go coalesceInferiorOutput(ch, func(msg events.InferiorOutputMsg) {
 		ev := tcell.NewEventInterrupt(msg)
 		for i := 0; i < inferiorPostRetries; i++ {
 			if err := screen.PostEvent(ev); err == nil {
@@ -82,7 +84,7 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 
 // coalesceInferiorOutput batches PTY chunks so a busy UI event queue is less
 // likely to drop program stdout (PostEvent returns ErrEventQFull under flood).
-func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(core.InferiorOutputMsg), onExit func()) {
+func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.InferiorOutputMsg), onExit func()) {
 	var pending strings.Builder
 	var flushTimer *time.Timer
 	var flushC <-chan time.Time
@@ -107,7 +109,7 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(core.Inferior
 		}
 		data := pending.String()
 		pending.Reset()
-		post(core.InferiorOutputMsg{Data: data})
+		post(events.InferiorOutputMsg{Data: data})
 	}
 	arm := func() {
 		if flushTimer != nil {
@@ -129,7 +131,7 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(core.Inferior
 			}
 			if msg.Err != nil {
 				flush()
-				post(core.InferiorOutputMsg{Err: msg.Err})
+				post(events.InferiorOutputMsg{Err: msg.Err})
 				continue
 			}
 			if msg.Data == "" {

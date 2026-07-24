@@ -211,4 +211,3 @@ func TestPushRawHidesDownloadStatusShowsLoadText(t *testing.T) {
 		}
 	}
 }
-

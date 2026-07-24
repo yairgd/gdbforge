@@ -9,15 +9,22 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
+// InferiorCtl is debugger run-state used while sending break/clear under a live inferior.
+// Implemented by gdbforge/debugstate.State (not platform.AppState).
+type InferiorCtl interface {
+	InferiorRunning() bool
+	ContinueAfterClear() bool
+}
+
 // SendCmd writes a GDB CLI/MI command on the shared PTY.
 //
 // While the inferior is running, sync GDB will not process break/clear until
 // interrupted — so we send Ctrl-C, then the command. Auto-resume with
 // continue applies only to breakpoint insert (so the new break can be hit)
-// and, optionally, to remove when AppState.ContinueAfterClear is set.
+// and, optionally, to remove when InferiorCtl.ContinueAfterClear is set.
 // Other commands (frame, thread, …) stay stopped after the interrupt —
 // never send a surprise continue.
-func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
+func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd string) {
 	if sess == nil || cmd == "" {
 		return
 	}
@@ -25,7 +32,7 @@ func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			running := state != nil && state.InferiorRunning()
+			running := ctl != nil && ctl.InferiorRunning()
 			if running {
 				if err := pw.SendRaw("\x03"); err != nil {
 					return err
@@ -38,7 +45,7 @@ func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
 				return nil
 			}
 			if IsBreakRemoveCmd(cmd) {
-				if state != nil && state.ContinueAfterClear() {
+				if ctl != nil && ctl.ContinueAfterClear() {
 					return pw.Send("continue")
 				}
 				return nil
@@ -49,8 +56,8 @@ func SendCmd(sess core.Session, state *platform.AppState, cmd string) {
 			return nil
 		})
 	}
-	if state != nil {
-		state.WithPTYOwner(platform.PTYOwnerApp, send)
+	if app != nil {
+		app.WithPTYOwner(platform.PTYOwnerApp, send)
 	} else {
 		send()
 	}

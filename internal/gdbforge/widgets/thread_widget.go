@@ -2,11 +2,12 @@ package widgets
 
 import (
 	"fmt"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"path/filepath"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -20,9 +21,9 @@ type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
-	state    *platform.AppState
+	state    *debugstate.State
 
-	items    []mcp.ThreadInfo
+	items    []models.ThreadInfo
 	selected int
 
 	// mouseDown tracks primary-button press so we activate on release, not on
@@ -36,7 +37,7 @@ type ThreadWidget struct {
 	HasBreakAt func(file string, line int) bool
 
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
-	OnActivate func(mcp.ThreadInfo)
+	OnActivate func(models.ThreadInfo)
 }
 
 func NewThreadWidget() *ThreadWidget {
@@ -58,7 +59,7 @@ func NewThreadWidget() *ThreadWidget {
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
-func (w *ThreadWidget) SetAppState(st *platform.AppState) {
+func (w *ThreadWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
 
@@ -202,12 +203,12 @@ func (w *ThreadWidget) activateSelected() {
 // SetItems replaces the thread list and rebuilds the viewport.
 // Keeps the previously selected thread ID when still present; otherwise
 // prefers the GDB current thread.
-func (w *ThreadWidget) SetItems(items []mcp.ThreadInfo) {
+func (w *ThreadWidget) SetItems(items []models.ThreadInfo) {
 	prevID := ""
 	if w.selected >= 0 && w.selected < len(w.items) {
 		prevID = w.items[w.selected].ID
 	}
-	w.items = append([]mcp.ThreadInfo(nil), items...)
+	w.items = append([]models.ThreadInfo(nil), items...)
 	w.selected = 0
 	if prevID != "" {
 		for i, it := range w.items {
@@ -318,8 +319,8 @@ func (w *ThreadWidget) Draw(c termui.Canvas) {
 
 func (w *ThreadWidget) Selected() int { return w.selected }
 
-func (w *ThreadWidget) Items() []mcp.ThreadInfo {
-	return append([]mcp.ThreadInfo(nil), w.items...)
+func (w *ThreadWidget) Items() []models.ThreadInfo {
+	return append([]models.ThreadInfo(nil), w.items...)
 }
 
 func (w *ThreadWidget) LinesForTest() []string {
@@ -335,4 +336,3 @@ func (w *ThreadWidget) LinesForTest() []string {
 func (w *ThreadWidget) ViewportLeftForTest() int {
 	return w.viewport.Left
 }
-

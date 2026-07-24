@@ -1,27 +1,17 @@
-package mcp
+package parse
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"regexp"
 	"strconv"
 )
 
 var threadIDChunkRe = regexp.MustCompile(`\{id="`)
 
-// ThreadInfo is one row from -thread-info.
-type ThreadInfo struct {
-	ID      string
-	State   string
-	Name    string
-	File    string
-	Line    int
-	Func    string
-	Current bool
-}
-
 // ParseThreadInfo extracts threads from -thread-info MI output.
-func ParseThreadInfo(raw string) []ThreadInfo {
+func ParseThreadInfo(raw string) []models.ThreadInfo {
 	currentID := extractQuotedField(raw, "current-thread-id")
-	var out []ThreadInfo
+	var out []models.ThreadInfo
 	idxs := threadIDChunkRe.FindAllStringIndex(raw, -1)
 	for i, loc := range idxs {
 		start := loc[0]
@@ -42,7 +32,7 @@ func ParseThreadInfo(raw string) []ThreadInfo {
 		if lm := lineFieldRe.FindStringSubmatch(chunk); len(lm) >= 2 {
 			line, _ = strconv.Atoi(lm[1])
 		}
-		out = append(out, ThreadInfo{
+		out = append(out, models.ThreadInfo{
 			ID:      id,
 			State:   extractQuotedField(chunk, "state"),
 			Name:    extractQuotedField(chunk, "name"),

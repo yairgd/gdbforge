@@ -1,10 +1,11 @@
 package widgets
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -19,7 +20,7 @@ func TestBreakpointWidgetEmptyMessage(t *testing.T) {
 func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 	w := NewBreakpointWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 	})
 	if lines := w.LinesForTest(); len(lines) != 1 || lines[0] != "  1  y  /tmp/a.c:10" {
@@ -37,7 +38,7 @@ func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 
 func TestBreakpointWidgetDeleteIntent(t *testing.T) {
 	w := NewBreakpointWidget()
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 3, Enabled: true, File: "/tmp/a.c", Line: 5},
 	})
 	var gotIdx int = -1
@@ -51,14 +52,14 @@ func TestBreakpointWidgetDeleteIntent(t *testing.T) {
 }
 
 func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
-	st := platform.NewAppState()
+	st := debugstate.New(platform.NewAppState())
 	st.SetBreakColor(tcell.ColorPurple)
 	st.SetBreakDisabledColor(tcell.ColorAqua)
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
 	w := NewBreakpointWidget()
 	w.SetAppState(st)
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
 		{Number: 2, Enabled: false, File: "/tmp/a.c", Line: 2},
 	})
@@ -84,7 +85,7 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 }
 
 func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
-	st := platform.NewAppState()
+	st := debugstate.New(platform.NewAppState())
 	st.SetBreakColor(tcell.ColorRed)
 	st.SetBreakDisabledColor(tcell.ColorAqua)
 	st.SetMarkColor(tcell.ColorNavy)
@@ -94,7 +95,7 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 
 	w := NewBreakpointWidget()
 	w.SetAppState(st)
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
 		{Number: 2, Enabled: true, File: "a.c", Line: 2},
 	})
@@ -126,12 +127,12 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 	w := NewBreakpointWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
-	var got mcp.BreakInfo
-	w.OnActivate = func(bp mcp.BreakInfo) { got = bp }
+	var got models.BreakInfo
+	w.OnActivate = func(bp models.BreakInfo) { got = bp }
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -149,12 +150,12 @@ func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 func TestBreakpointWidgetWheelActivates(t *testing.T) {
 	w := NewBreakpointWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.BreakInfo{
+	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
-	var got mcp.BreakInfo
-	w.OnActivate = func(bp mcp.BreakInfo) { got = bp }
+	var got models.BreakInfo
+	w.OnActivate = func(bp models.BreakInfo) { got = bp }
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.Number != 2 {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)

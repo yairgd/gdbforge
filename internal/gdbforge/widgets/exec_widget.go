@@ -10,12 +10,12 @@ import (
 // The app owns ExecClient and send policy; it paints via Append/HandleEvent
 // and handles OnSubmit / OnInterrupt / OnEOF intents.
 type ExecWidget struct {
-	console *termui.ConsolePane
-	lineBuf string
-	pending bool // last buffer line is an incomplete PTY line
-	ended   bool // PTY/process exited; next key dismisses
-	onClose   func()
-	onDismiss func()
+	console     *termui.ConsolePane
+	lineBuf     string
+	pending     bool // last buffer line is an incomplete PTY line
+	ended       bool // PTY/process exited; next key dismisses
+	onClose     func()
+	onDismiss   func()
 	onSubmit    func(cmd string)
 	onInterrupt func()
 	onEOF       func()

@@ -125,7 +125,6 @@ func TestConfirmGateObserve(t *testing.T) {
 	}
 }
 
-
 func TestMapBreakCmd(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"-break-delete 3", "clear 3"},

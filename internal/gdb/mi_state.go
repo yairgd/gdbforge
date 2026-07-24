@@ -3,20 +3,22 @@ package gdb
 import (
 	"strconv"
 	"strings"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 )
 
 // MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
 type MiUpdate struct {
-	DisplayLines         []string // console (~), make/shell raw PTY text, errors
-	TargetLines          []string // inferior target stream (@) — legacy MI path
-	PromptReady          bool
+	DisplayLines []string // console (~), make/shell raw PTY text, errors
+	TargetLines  []string // inferior target stream (@) — legacy MI path
+	PromptReady  bool
 	// PromptLine is the exact MI prompt record GDB emitted (e.g. "(gdb)").
 	// Empty unless PromptReady. UI must paint this text — never invent a prompt.
-	PromptLine           string
-	State                GdbState
-	ErrorMsg             string
-	Stopped              *MiStopMsg
-	BreakpointsChanged   bool
+	PromptLine         string
+	State              GdbState
+	ErrorMsg           string
+	Stopped            *MiStopMsg
+	BreakpointsChanged bool
 	// InferiorPID is set on =thread-group-started (non-empty).
 	InferiorPID string
 	// InferiorExited is set on =thread-group-exited.
@@ -216,36 +218,23 @@ func displayHasSignalMsg(lines []string) bool {
 
 // IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").
 func IsCtrlCQuitLog(s string) bool {
-	return isCtrlCQuitLog(s)
+	return mitext.IsCtrlCQuitLog(s)
 }
 
-// MI prompt record GDB emits over MI (exact line token after TrimSpace).
+// Re-export MI prompt helpers from gdbforge/mitext for backend callers.
 const (
-	MIPromptToken = "(gdb)"
-	// MIPromptLiveHost is MIPromptToken plus one trailing space for the caret.
-	MIPromptLiveHost = MIPromptToken + " "
+	MIPromptToken    = mitext.MIPromptToken
+	MIPromptLiveHost = mitext.MIPromptLiveHost
 )
 
 // IsMIPromptRecord reports whether line is GDB's MI prompt record.
-// Used to recognize — not invent — the prompt.
-func IsMIPromptRecord(line string) bool {
-	return line == MIPromptToken
-}
+func IsMIPromptRecord(line string) bool { return mitext.IsMIPromptRecord(line) }
 
-// IsBareMIPromptHost reports a scrollback line that is only the MI prompt
-// token (optional trailing space from a console-stream echo).
-func IsBareMIPromptHost(line string) bool {
-	return strings.TrimSpace(line) == MIPromptToken
-}
+// IsBareMIPromptHost reports a scrollback line that is only the MI prompt token.
+func IsBareMIPromptHost(line string) bool { return mitext.IsBareMIPromptHost(line) }
 
 // LivePromptHost returns fromGDB with exactly one trailing space for input.
-// Empty fromGDB yields empty (do not invent a token).
-func LivePromptHost(fromGDB string) string {
-	if fromGDB == "" {
-		return ""
-	}
-	return strings.TrimRight(fromGDB, " ") + " "
-}
+func LivePromptHost(fromGDB string) string { return mitext.LivePromptHost(fromGDB) }
 
 func isCtrlCQuitLog(s string) bool {
 	t := strings.TrimSpace(s)

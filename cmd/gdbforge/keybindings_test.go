@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/platform"
 )

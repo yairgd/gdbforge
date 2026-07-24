@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -8,6 +9,7 @@ import (
 
 func (a *DebuggerApp) InitB() error {
 	a.ctx = platform.NewAppContext()
+	a.debug = debugstate.New(a.State())
 
 	fileSink, err := platform.NewFileSink("gdbforge.log")
 	if err != nil {

@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	completeIdle = 80 * time.Millisecond
-	completeMax  = 1500 * time.Millisecond
+	completeIdle  = 80 * time.Millisecond
+	completeMax   = 1500 * time.Millisecond
 	completeDrain = 20 * time.Millisecond
 )
 

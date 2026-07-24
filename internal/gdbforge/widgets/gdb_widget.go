@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -22,7 +22,7 @@ func NewGDBWidget() *GDBWidget {
 	// No standing Prompt: Draw must not invent "(gdb)" while waiting.
 	console.Prompt = ""
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	w := &GDBWidget{console: console, promptStyleToken: gdb.MIPromptToken}
+	w := &GDBWidget{console: console, promptStyleToken: mitext.MIPromptToken}
 	console.LineStyle = w.lineStyle
 	return w
 }
@@ -33,7 +33,7 @@ func (m *GDBWidget) SetPromptStyleToken(token string) {
 		return
 	}
 	if token == "" {
-		token = gdb.MIPromptToken
+		token = mitext.MIPromptToken
 	}
 	m.promptStyleToken = token
 }
@@ -53,12 +53,12 @@ func (m *GDBWidget) lineStyle(line string) tcell.Style {
 		return st.Foreground(tcell.ColorTeal).Bold(true)
 	}
 	// Ctrl-C feedback from GDB log stream (&"Quit" / &"❌️ Quit"), not UI text.
-	if gdb.IsCtrlCQuitLog(line) {
+	if mitext.IsCtrlCQuitLog(line) {
 		return st.Foreground(tcell.ColorRed).Bold(true)
 	}
 	tok := m.promptStyleToken
 	if tok == "" {
-		tok = gdb.MIPromptToken
+		tok = mitext.MIPromptToken
 	}
 	if strings.HasPrefix(line, tok) {
 		return st.Foreground(tcell.ColorYellow)
@@ -263,7 +263,7 @@ func (m *GDBWidget) AttachGdbPrompt(fromGDB string) {
 	if m == nil || m.console == nil {
 		return
 	}
-	host := gdb.LivePromptHost(fromGDB)
+	host := mitext.LivePromptHost(fromGDB)
 	if host == "" {
 		return
 	}
@@ -274,7 +274,7 @@ func (m *GDBWidget) AttachGdbPrompt(fromGDB string) {
 	n := buf.NumLines()
 	if n > 0 {
 		last := buf.Line(n - 1)
-		bare := gdb.IsBareMIPromptHost(last) || strings.TrimSpace(last) == strings.TrimSpace(fromGDB)
+		bare := mitext.IsBareMIPromptHost(last) || strings.TrimSpace(last) == strings.TrimSpace(fromGDB)
 		if bare {
 			buf.SetLine(n-1, host)
 			m.console.SetLivePrompt(true)
@@ -296,11 +296,11 @@ func (m *GDBWidget) StripTrailingGdbPrompt() {
 	}
 	tok := m.promptStyleToken
 	if tok == "" {
-		tok = gdb.MIPromptToken
+		tok = mitext.MIPromptToken
 	}
 	for buf.NumLines() > 0 {
 		last := buf.Line(buf.NumLines() - 1)
-		bare := gdb.IsBareMIPromptHost(last) || strings.TrimSpace(last) == tok
+		bare := mitext.IsBareMIPromptHost(last) || strings.TrimSpace(last) == tok
 		if strings.TrimSpace(last) != "" && !bare {
 			return
 		}
@@ -314,7 +314,7 @@ func (m *GDBWidget) StripTrailingGdbPrompt() {
 
 // PaintMiDisplay applies DisplayLines / Ctrl-C quit logs from an MI update.
 // confirming suppresses attaching a new (gdb) host (quit prompt owns the line).
-func (m *GDBWidget) PaintMiDisplay(upd gdb.MiUpdate, confirming, includeTarget bool) {
+func (m *GDBWidget) PaintMiDisplay(upd MiPaintUpdate, confirming, includeTarget bool) {
 	if m == nil || m.console == nil {
 		return
 	}
@@ -325,7 +325,7 @@ func (m *GDBWidget) PaintMiDisplay(upd gdb.MiUpdate, confirming, includeTarget b
 	var rest []string
 	painted := false
 	for _, line := range lines {
-		if gdb.IsCtrlCQuitLog(line) {
+		if mitext.IsCtrlCQuitLog(line) {
 			m.console.EchoSubmit(line)
 			painted = true
 			continue

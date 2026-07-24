@@ -1,6 +1,9 @@
 # Lua API (`gdbforge.*`)
 
-User-facing reference for scripting gdbforge. In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
+User-facing reference for scripting gdbforge.
+
+**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`) are installed by `cmd/gdbforge` via `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
+ In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
 
 Scripts live under `./.gdbforge/lua/**/*.lua` (nested dirs OK). Each file gets its own Lua VM. Basename without `.lua` is the `:lua` command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
 

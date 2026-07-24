@@ -4,22 +4,21 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 // BreakpointList is the shared breakpoint model for GUI and MCP/AI.
 // It keeps disabled rows that are absent from GDB. Controllers send the
 // returned MI/CLI commands; views only display Items().
 type BreakpointList struct {
-	items []mcp.BreakInfo
+	items []BreakInfo
 }
 
 // Items returns a copy of all rows (enabled and disabled).
-func (b *BreakpointList) Items() []mcp.BreakInfo {
+func (b *BreakpointList) Items() []BreakInfo {
 	if b == nil || len(b.items) == 0 {
 		return nil
 	}
-	return append([]mcp.BreakInfo(nil), b.items...)
+	return append([]BreakInfo(nil), b.items...)
 }
 
 // Clear removes all rows (e.g. UI reset after kill / inferior exit).
@@ -31,11 +30,11 @@ func (b *BreakpointList) Clear() {
 }
 
 // Enabled returns breakpoints currently active in GDB.
-func (b *BreakpointList) Enabled() []mcp.BreakInfo {
+func (b *BreakpointList) Enabled() []BreakInfo {
 	if b == nil {
 		return nil
 	}
-	var out []mcp.BreakInfo
+	var out []BreakInfo
 	for _, it := range b.items {
 		if it.Enabled {
 			out = append(out, it)
@@ -53,9 +52,9 @@ func (b *BreakpointList) Len() int {
 }
 
 // At returns the row at i, or false.
-func (b *BreakpointList) At(i int) (mcp.BreakInfo, bool) {
+func (b *BreakpointList) At(i int) (BreakInfo, bool) {
 	if b == nil || i < 0 || i >= len(b.items) {
-		return mcp.BreakInfo{}, false
+		return BreakInfo{}, false
 	}
 	return b.items[i], true
 }
@@ -78,21 +77,21 @@ func (b *BreakpointList) HasEnabledAt(file string, line int) bool {
 }
 
 // MergeFromGDB syncs live GDB breakpoints without dropping locally disabled rows.
-func (b *BreakpointList) MergeFromGDB(gdbItems []mcp.BreakInfo) {
+func (b *BreakpointList) MergeFromGDB(gdbItems []BreakInfo) {
 	if b == nil {
 		return
 	}
-	keyOf := func(it mcp.BreakInfo) string {
+	keyOf := func(it BreakInfo) string {
 		return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
 	}
-	gdbByKey := make(map[string]mcp.BreakInfo, len(gdbItems))
+	gdbByKey := make(map[string]BreakInfo, len(gdbItems))
 	for _, g := range gdbItems {
 		g.Enabled = true
 		gdbByKey[keyOf(g)] = g
 	}
 
 	placed := make(map[string]bool)
-	out := make([]mcp.BreakInfo, 0, len(b.items)+len(gdbItems))
+	out := make([]BreakInfo, 0, len(b.items)+len(gdbItems))
 	for _, local := range b.items {
 		k := keyOf(local)
 		if g, ok := gdbByKey[k]; ok {
@@ -118,7 +117,7 @@ func (b *BreakpointList) MergeFromGDB(gdbItems []mcp.BreakInfo) {
 }
 
 // BreakLoc formats file:line for GDB break/clear.
-func BreakLoc(it mcp.BreakInfo) string {
+func BreakLoc(it BreakInfo) string {
 	file := it.File
 	if file == "" {
 		file = "?"
@@ -188,7 +187,7 @@ func (b *BreakpointList) ToggleEnableAtFileLine(file string, line int, codeHasEn
 		if !codeHasEnabled {
 			return "", -1, false
 		}
-		b.items = append(b.items, mcp.BreakInfo{
+		b.items = append(b.items, BreakInfo{
 			File:    file,
 			Line:    line,
 			Enabled: true,
@@ -210,7 +209,7 @@ func (b *BreakpointList) ToggleInsertClear(file string, line int) (cmd string, o
 		b.removeAtFileLine(file, line)
 		return "clear " + loc, true
 	}
-	b.items = append(b.items, mcp.BreakInfo{
+	b.items = append(b.items, BreakInfo{
 		File:    file,
 		Line:    line,
 		Enabled: true,

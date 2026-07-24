@@ -184,8 +184,6 @@ func (rt *Runtime) SetGDB(fn GDBFunc) {
 	gf := rt.L.GetGlobal("gdbforge")
 	if tbl, ok := gf.(*lua.LTable); ok {
 		rt.L.SetField(tbl, "gdb", rt.L.NewFunction(rt.luaGDB))
-		rt.L.SetField(tbl, "sleep", rt.L.NewFunction(rt.luaSleep))
-		rt.L.SetField(tbl, "lua_dir", rt.L.NewFunction(rt.luaLuaDir))
 	}
 }
 

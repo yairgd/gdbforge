@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
+
+	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 // syncBreakpointViews pushes the shared BreakpointList to BP + Code views and
@@ -34,7 +34,7 @@ func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
 	if a.isDLV() {
 		cmd = dlv.MapBreakCmd(cmd)
 	}
-	gdb.SendCmd(a.GDB(), a.State(), cmd)
+	gdb.SendCmd(a.GDB(), a.State(), a.Debug(), cmd)
 	if a.isDLV() {
 		// Do not Query("breakpoints") immediately — after exit Delve may ask
 		// [Y/n]? and the query line would be consumed as the answer.
@@ -45,7 +45,7 @@ func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
 }
 
 // restoreSavedBreakpoints reloads ./.gdbforge/breakpoints.yaml into GDB + UI.
-func (a *DebuggerApp) restoreSavedBreakpoints(saved []mcp.BreakInfo) {
+func (a *DebuggerApp) restoreSavedBreakpoints(saved []models.BreakInfo) {
 	if a == nil || len(saved) == 0 || a.breakpoints == nil {
 		return
 	}
@@ -53,7 +53,6 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []mcp.BreakInfo) {
 	if sess == nil {
 		return
 	}
-	st := a.State()
 
 	// Merge current GDB BPs first (e.g. from -x) so we do not duplicate.
 	if items, ok := a.fetchBreakInfos(); ok {
@@ -67,7 +66,7 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []mcp.BreakInfo) {
 		if a.breakpoints.IndexOfFileLine(it.File, it.Line) >= 0 {
 			continue
 		}
-		gdb.SendCmd(sess, st, breakInsertCmd(it.File, it.Line))
+		gdb.SendCmd(sess, a.State(), a.Debug(), breakInsertCmd(it.File, it.Line))
 	}
 
 	items, ok := a.fetchBreakInfos()
@@ -91,7 +90,7 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []mcp.BreakInfo) {
 		if !ok || !cur.Enabled || cur.Number < 1 {
 			continue
 		}
-		gdb.SendCmd(sess, st, fmt.Sprintf("disable %d", cur.Number))
+		gdb.SendCmd(sess, a.State(), a.Debug(), fmt.Sprintf("disable %d", cur.Number))
 	}
 	a.onBreakpointsChanged()
 }
@@ -165,7 +164,7 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 }
 
 // applyBreakInfos merges GDB -break-list into the shared model and syncs views.
-func (a *DebuggerApp) applyBreakInfos(gdbItems []mcp.BreakInfo) {
+func (a *DebuggerApp) applyBreakInfos(gdbItems []models.BreakInfo) {
 	if a.breakpoints == nil {
 		a.breakpoints = &models.BreakpointList{}
 	}

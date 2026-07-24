@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -140,19 +141,19 @@ func (app *DebuggerApp) SetEqualAlwaysOff(args ...any) {
 }
 
 func (app *DebuggerApp) SetClearOutputOn(args ...any) {
-	app.State().SetClearOutput(true)
+	app.Debug().SetClearOutput(true)
 }
 
 func (app *DebuggerApp) SetClearOutputOff(args ...any) {
-	app.State().SetClearOutput(false)
+	app.Debug().SetClearOutput(false)
 }
 
 func (app *DebuggerApp) SetContinueAfterClearOn(args ...any) {
-	app.State().SetContinueAfterClear(true)
+	app.Debug().SetContinueAfterClear(true)
 }
 
 func (app *DebuggerApp) SetContinueAfterClearOff(args ...any) {
-	app.State().SetContinueAfterClear(false)
+	app.Debug().SetContinueAfterClear(false)
 }
 
 func (app *DebuggerApp) SetEscToCodeOn(args ...any) {
@@ -164,28 +165,28 @@ func (app *DebuggerApp) SetEscToCodeOff(args ...any) {
 }
 
 func (app *DebuggerApp) SetBreakMainOn(args ...any) {
-	app.State().SetBreakMain(true)
+	app.Debug().SetBreakMain(true)
 	app.maybeBreakMain()
 }
 
 func (app *DebuggerApp) SetBreakMainOff(args ...any) {
-	app.State().SetBreakMain(false)
+	app.Debug().SetBreakMain(false)
 }
 
 func (app *DebuggerApp) SetGdbListenPrintOn(args ...any) {
-	app.State().SetGdbListenPrint(true)
+	app.Debug().SetGdbListenPrint(true)
 }
 
 func (app *DebuggerApp) SetGdbListenPrintOff(args ...any) {
-	app.State().SetGdbListenPrint(false)
+	app.Debug().SetGdbListenPrint(false)
 }
 
 func (app *DebuggerApp) SetGdbTargetPrintOn(args ...any) {
-	app.State().SetGdbTargetPrint(true)
+	app.Debug().SetGdbTargetPrint(true)
 }
 
 func (app *DebuggerApp) SetGdbTargetPrintOff(args ...any) {
-	app.State().SetGdbTargetPrint(false)
+	app.Debug().SetGdbTargetPrint(false)
 }
 
 // SetInferiorTTYCmd handles:
@@ -267,7 +268,7 @@ func (app *DebuggerApp) SetBreakColor(args ...any) {
 		}
 		return
 	}
-	app.State().SetBreakColor(c)
+	app.Debug().SetBreakColor(c)
 	app.rebuildCodeBreakGutters()
 	app.RequestFrame()
 }
@@ -284,7 +285,7 @@ func (app *DebuggerApp) SetBreakDisabledColor(args ...any) {
 		}
 		return
 	}
-	app.State().SetBreakDisabledColor(c)
+	app.Debug().SetBreakDisabledColor(c)
 	app.rebuildCodeBreakGutters()
 	app.RequestFrame()
 }
@@ -301,7 +302,7 @@ func (app *DebuggerApp) SetPCColor(args ...any) {
 		}
 		return
 	}
-	app.State().SetPCColor(c)
+	app.Debug().SetPCColor(c)
 	app.RequestFrame()
 }
 
@@ -317,7 +318,7 @@ func (app *DebuggerApp) SetStackBreakColor(args ...any) {
 		}
 		return
 	}
-	app.State().SetStackBreakColor(c)
+	app.Debug().SetStackBreakColor(c)
 	app.RequestFrame()
 }
 

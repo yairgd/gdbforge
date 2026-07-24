@@ -2,14 +2,15 @@ package dlv
 
 import (
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"os/exec"
+	"path/filepath"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 )
 
 // Simulates the app bridge: Subscribe -> collect InferiorOutputMsg payloads.
@@ -43,7 +44,7 @@ func TestBridgeLikeSubscribeGetsStdout(t *testing.T) {
 	go func() {
 		defer close(done)
 		for msg := range ch {
-			_ = core.InferiorOutputMsg{Data: msg.Data, Err: msg.Err}
+			_ = events.InferiorOutputMsg{Data: msg.Data, Err: msg.Err}
 			mu.Lock()
 			got.WriteString(msg.Data)
 			s := got.String()

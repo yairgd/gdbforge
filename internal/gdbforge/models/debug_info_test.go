@@ -3,12 +3,11 @@ package models
 import (
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/mcp"
 )
 
 func TestThreadListSetItems(t *testing.T) {
 	var list ThreadList
-	list.Set([]mcp.ThreadInfo{{ID: "1", Func: "main"}})
+	list.Set([]ThreadInfo{{ID: "1", Func: "main"}})
 	got := list.Items()
 	if len(got) != 1 || got[0].ID != "1" {
 		t.Fatalf("items=%v", got)
@@ -21,7 +20,7 @@ func TestThreadListSetItems(t *testing.T) {
 
 func TestCallStackFirstWithFile(t *testing.T) {
 	var cs CallStack
-	cs.Set([]mcp.StackFrame{
+	cs.Set([]StackFrame{
 		{Level: 0, Func: "foo"},
 		{Level: 1, Func: "main", File: "/tmp/a.c", Line: 10},
 	})

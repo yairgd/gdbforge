@@ -26,7 +26,7 @@ func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
 	if cw := a.focusedCode(); cw != nil {
 		return cw
 	}
-	if path := a.State().CurrentFile(); path != "" {
+	if path := a.Debug().CurrentFile(); path != "" {
 		if w, _ := a.ensureCodeBuffer(path); w != nil {
 			return w
 		}
@@ -246,7 +246,7 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	sendCmd := cmd
 	if a.isDLV() {
 		if isDlvRunCmd(cmd) && a.State() != nil {
-			a.State().SetInferiorRunning(true)
+			a.Debug().SetInferiorRunning(true)
 		}
 	} else {
 		sendCmd = gdb.CLIExecToMI(cmd)

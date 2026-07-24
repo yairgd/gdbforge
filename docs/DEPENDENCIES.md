@@ -8,6 +8,7 @@ This document describes **Go module dependencies** (third-party libraries) and *
 
 ## Table of contents
 
+- [FRAMEWORK vs APP](#framework-vs-app)
 - [Quick answer: `internal/termui`](#quick-answer-internaltermui)
 - [External dependencies (go.mod)](#external-dependencies-gomod)
 - [Internal package graph](#internal-package-graph)
@@ -16,7 +17,21 @@ This document describes **Go module dependencies** (third-party libraries) and *
 - [Forbidden edges](#forbidden-edges)
 - [Verifying imports locally](#verifying-imports-locally)
 
+
 ---
+
+## FRAMEWORK vs APP
+
+The repo is split so a future non-debugger TUI app can reuse the same host without pulling GDB/Delve.
+
+| Layer | Packages | Role |
+|-------|----------|------|
+| **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
+| **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg`, `InferiorOutputMsg`) |
+
+**Composition root:** only `cmd/gdbforge` (and tests) should wire APP packages into FRAMEWORK surfaces.
+
+**Lua:** `luahost` installs framework APIs at `New`. Debugger Lua bindings (`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `cmd/gdbforge` via `wireUserLuaAPI`.
 
 ## Quick answer: `internal/termui`
 
@@ -84,8 +99,8 @@ flowchart BT
 
     termui --> tcell
     widgets --> termui
-    widgets --> core
-    widgets --> gdb
+    widgets --> mitext["gdbforge/mitext"]
+    widgets --> events["gdbforge/events"]
     ptyx --> core
     ptyx --> ptyLib
     gdb --> core
@@ -122,10 +137,13 @@ flowchart BT
 | **`internal/ptyx`** | stdlib, `creack/pty`, `core` | `termui`, `tcell` |
 | **`internal/gdb`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
 | **`internal/execcli`** | stdlib, `ptyx`, `core` | `termui`, `tcell` |
-| **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb` |
-| **`internal/gdbforge/widgets`** | `termui`, `core`, `gdb`, stdlib | — (debugger panes) |
-| **`internal/gdbforge`** | stdlib only | `termui`, `gdb` — app state / modes |
-| **`cmd/gdbforge`** | `termui`, `gdbforge`, widgets, `core`, `gdb`, `execcli`, `mcp` | — (composition root) |
+| **`internal/mcp`** | stdlib, `core` (net/http) | `termui`, `tcell`, `gdb`, widgets |
+| **`internal/gdbforge/mitext`** | stdlib | — (debugger MI string helpers; used by `gdb` + widgets) |
+| **`internal/luahost`** | stdlib, gopher-lua | `gdb`, `dlv`, `mcp`, `gdbforge` (app wires debugger Lua) |
+| **`internal/platform`** | stdlib, `termui` (as needed) | `gdb`, `dlv`, `mcp`, `gdbforge` |
+| **`internal/gdbforge/widgets`** | `termui`, `platform`, `gdbforge/mitext`, `gdbforge/events`, stdlib | `gdb`, `mcp`, `dlv` |
+| **`internal/gdbforge/*`** | app helpers (`models`, `parse`, `debugstate`, `events`, …) | must not be imported by FRAMEWORK packages |
+| **`cmd/gdbforge`** | FRAMEWORK + APP packages | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
 **Heuristic:** if code can be unit-tested without a terminal, it belongs in **`core`** / **`ptyx`** / **`mcp`**, not in **`termui`**.
@@ -148,16 +166,23 @@ Build all commands: `task build` or `go build ./cmd/...`.
 These import directions are **architectural violations** — do not add them:
 
 ```text
-core   ──X──>  termui | tcell
-ptyx   ──X──>  termui | tcell
-gdb    ──X──>  termui | tcell
-mcp    ──X──>  termui | tcell | gdb
-termui ──X──>  core | gdb | ptyx
+FRAMEWORK (termui|platform|commands|collections|ptyx|luahost|core)
+        ──X──>  gdb | dlv | mcp | gdbforge/*
+
+dlv     ──X──>  termui
+widgets ──X──>  gdb | mcp
+mcp     ──X──>  termui | tcell | gdb | widgets
+termui  ──X──>  gdb | ptyx | gdbforge
+core    ──X──>  termui | tcell | gdb | ptyx
+ptyx    ──X──>  termui | tcell
+gdb     ──X──>  termui | tcell
 ```
 
-**Why:** debugger backends and domain logic must stay UI-agnostic so you can swap tcell for another renderer, add a web UI, or run GDB I/O in tests without a terminal.
+**Why:** FRAMEWORK must stay reusable for non-debugger apps; backends stay UI-agnostic.
 
-**How data crosses the boundary:** `core.PtyOutputMsg` / `GdbOutputMsg` / `ExecOutputMsg` and `core.Session`, consumed by `cmd/gdbforge` or widgets — not by importing `core` from `termui`.
+**How data crosses the boundary:** generic `core.PtyOutputMsg` / `ExecOutputMsg`; debugger UI payloads in `internal/gdbforge/events` (`GdbOutputMsg`, `InferiorOutputMsg`); composition in `cmd/gdbforge`.
+
+**Automated check:** `task check-imports` (or `./scripts/check_imports.sh`).
 
 ---
 
@@ -180,6 +205,9 @@ done
 To check for forbidden imports:
 
 ```bash
+task check-imports
+# or: ./scripts/check_imports.sh
+
 go list -f '{{.ImportPath}} imports {{.Imports}}' ./internal/... ./cmd/...
 ```
 

@@ -1,6 +1,7 @@
-package mcp
+package parse
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,24 +14,10 @@ var (
 	fileLineRe  = regexp.MustCompile(`([^:]+):(\d+)\s*$`)
 )
 
-// BreakInfo is one row from -break-list (enabled or disabled).
-type BreakInfo struct {
-	Number  int
-	Enabled bool
-	File    string // fullname preferred, else file / pending path
-	Line    int    // 1-based
-}
-
-// BreakLoc is an enabled breakpoint location for CodeWidget red marks.
-type BreakLoc struct {
-	File string
-	Line int
-}
-
 // ParseBreakList extracts breakpoint rows from -break-list output.
 // Includes pending breakpoints (original-location / pending="file:line").
-func ParseBreakList(raw string) []BreakInfo {
-	var out []BreakInfo
+func ParseBreakList(raw string) []models.BreakInfo {
+	var out []models.BreakInfo
 	idxs := bkptChunkRe.FindAllStringIndex(raw, -1)
 	for i, loc := range idxs {
 		start := loc[0]
@@ -73,7 +60,7 @@ func ParseBreakList(raw string) []BreakInfo {
 		if file == "" || line < 1 {
 			continue
 		}
-		out = append(out, BreakInfo{
+		out = append(out, models.BreakInfo{
 			Number:  num,
 			Enabled: !strings.Contains(chunk, `enabled="n"`),
 			File:    unescapeMI(file),
@@ -99,16 +86,9 @@ func parseFileLineLoc(s string) (file string, line int, ok bool) {
 	return m[1], ln, true
 }
 
-// EnabledBreakLocs returns file:line for enabled breakpoints only.
-func EnabledBreakLocs(items []BreakInfo) []BreakLoc {
-	var out []BreakLoc
-	for _, it := range items {
-		if !it.Enabled {
-			continue
-		}
-		out = append(out, BreakLoc{File: it.File, Line: it.Line})
-	}
-	return out
+// EnabledBreakMarks returns file:line for enabled breakpoints only.
+func EnabledBreakMarks(items []models.BreakInfo) []models.BreakMark {
+	return models.EnabledBreakMarks(items)
 }
 
 func extractQuotedField(s, key string) string {

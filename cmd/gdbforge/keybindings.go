@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
+	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -300,7 +301,7 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	if a.hasBreakAt(fr.File, fr.Line) {
 		cmd = "clear " + loc
 	}
-	gdb.SendCmd(sess, a.State(), cmd)
+	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 	a.onBreakpointsChanged()
 	a.RequestFrame()
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -31,18 +32,18 @@ type CodeWidget struct {
 	viewport *termui.Viewport
 	buf      *platform.Buffer
 
-	state *platform.AppState
+	state *debugstate.State
 
 	// onBreakToggle is Space — insert/clear breakpoint at cursor (app sends GDB).
 	onBreakToggle func(path string, line int)
 	// onToggleEnable is "e" — enable/disable at cursor.
 	onToggleEnable func()
 
-	path     string
-	pcLine   int // 1-based program counter
-	selLine  int // 1-based cursor / bold line
-	rawLines []string
-	hiLines  []string // chroma ANSI lines (same length as rawLines)
+	path       string
+	pcLine     int // 1-based program counter
+	selLine    int // 1-based cursor / bold line
+	rawLines   []string
+	hiLines    []string         // chroma ANSI lines (same length as rawLines)
 	bpLines    map[int]struct{} // enabled breakpoints → breakColor bg
 	bpDisabled map[int]struct{} // disabled breakpoints → breakDisabledColor bg
 	bpNums     map[int][]int    // line → GDB breakpoint numbers (any state)
@@ -72,7 +73,7 @@ func NewCodeWidget() *CodeWidget {
 }
 
 // SetAppState wires break/mark colors for gutters.
-func (w *CodeWidget) SetAppState(state *platform.AppState) {
+func (w *CodeWidget) SetAppState(state *debugstate.State) {
 	w.state = state
 }
 
@@ -344,7 +345,7 @@ func isSharedLibPath(path string) bool {
 //
 // A nil slice means "no update" (failed refresh) so existing marks stay.
 // A non-nil empty slice clears marks (no breakpoints for this file).
-func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
+func (w *CodeWidget) SetBreakInfos(items []models.BreakInfo) {
 	if items == nil {
 		return
 	}
@@ -371,10 +372,10 @@ func (w *CodeWidget) SetBreakInfos(items []mcp.BreakInfo) {
 
 // SetBreakpointLines marks enabled breakpoint lines (tests / simple callers).
 func (w *CodeWidget) SetBreakpointLines(lines []int) {
-	items := make([]mcp.BreakInfo, 0, len(lines))
+	items := make([]models.BreakInfo, 0, len(lines))
 	for i, ln := range lines {
 		if ln > 0 {
-			items = append(items, mcp.BreakInfo{
+			items = append(items, models.BreakInfo{
 				Number:  i + 1,
 				Line:    ln,
 				Enabled: true,

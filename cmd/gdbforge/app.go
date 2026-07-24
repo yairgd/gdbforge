@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+
 	"sync/atomic"
 
 	"github.com/yairgd/gdbforge/internal/commands"
@@ -9,6 +10,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -42,6 +44,7 @@ type DebuggerApp struct {
 	completionView termui.CompletionView
 	completionBar  *termui.CompletionBarWidget // concrete chrome; also CompletionView
 	ctx            platform.AppContext
+	debug          *debugstate.State
 	miLog          *platform.NamedLogger
 
 	cfg               SessionConfig
@@ -57,7 +60,7 @@ type DebuggerApp struct {
 	// dlvConfirm tracks Delve [Y/n]? prompts (suspended BP after exit, etc.).
 	dlvConfirm dlv.ConfirmGate
 	// dlvBPDeferred is set when a BP refresh was skipped while dlvConfirm is active.
-	dlvBPDeferred bool
+	dlvBPDeferred        bool
 	pendingFrameSync     bool
 	pendingFrameLevel    int // Delve: level to show after frame/up/down (see pendingFrameLevelSet)
 	pendingFrameLevelSet bool
@@ -93,7 +96,7 @@ type DebuggerApp struct {
 	breakpoints *models.BreakpointList
 	// bpSnapshot is the last user-visible BP list for quit save. Kept across
 	// clearBreakpointViews (kill/exit UI reset) so q / Ctrl-D can still persist.
-	bpSnapshot       []mcp.BreakInfo
+	bpSnapshot       []models.BreakInfo
 	bpSnapshotSet    bool
 	threads          *models.ThreadList
 	callstack        *models.CallStack
@@ -115,10 +118,10 @@ type DebuggerApp struct {
 	completionForGDB bool
 
 	// Lua / gdbforge scripting
-	luaScratch *widgets.LuaWidget
-	luaSnake   *widgets.LuaWidget
-	luaTetris  *widgets.LuaWidget
-	activeLua  *widgets.LuaWidget
+	luaScratch      *widgets.LuaWidget
+	luaSnake        *widgets.LuaWidget
+	luaTetris       *widgets.LuaWidget
+	activeLua       *widgets.LuaWidget
 	luaCmds         map[string]*luahost.Runtime
 	luaUser         *luahost.Runtime
 	luaUserRuntimes []*luahost.Runtime
@@ -208,4 +211,12 @@ func (a *DebuggerApp) saveBreakpointsOnQuit() {
 		}
 	}
 	_ = persist.SaveBreakpoints(".", items)
+}
+
+// Debug returns gdbforge-private debugger session state.
+func (a *DebuggerApp) Debug() *debugstate.State {
+	if a == nil {
+		return nil
+	}
+	return a.debug
 }

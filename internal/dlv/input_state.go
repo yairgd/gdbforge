@@ -1,12 +1,12 @@
 package dlv
 
 import (
+	"github.com/yairgd/gdbforge/internal/platform"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 // State mirrors gdb.GdbState values used by the console paint path.
@@ -20,12 +20,12 @@ const (
 
 // Update is produced as complete Delve CLI lines arrive (peer of gdb.MiUpdate).
 type Update struct {
-	DisplayLines       []string
-	PromptReady        bool
-	PromptLine         string
+	DisplayLines []string
+	PromptReady  bool
+	PromptLine   string
 	// ConfirmReady is set when Delve waits for a yes/no answer (not a bare (dlv) prompt).
-	ConfirmReady bool
-	ConfirmHost  string
+	ConfirmReady       bool
+	ConfirmHost        string
 	State              State
 	ErrorMsg           string
 	Stopped            *gdb.MiStopMsg
@@ -70,7 +70,7 @@ func (m *InputState) PushRaw(data string) Update {
 		m.consumeLine(line, &out)
 	}
 	// Prompt / yesno may arrive without a trailing newline while waiting for input.
-	plainBuf := strings.TrimSpace(termui.StripANSI(m.lineBuf))
+	plainBuf := strings.TrimSpace(platform.StripANSI(m.lineBuf))
 	if plainBuf == PromptToken {
 		m.lineBuf = ""
 		out.PromptReady = true
@@ -89,7 +89,7 @@ func (m *InputState) PushRaw(data string) Update {
 
 func (m *InputState) consumeLine(line string, out *Update) {
 	raw := strings.TrimRight(line, "\r")
-	plain := strings.TrimSpace(termui.StripANSI(raw))
+	plain := strings.TrimSpace(platform.StripANSI(raw))
 	if plain == "" {
 		return
 	}
@@ -234,7 +234,7 @@ func splitFileLine(s string) (file string, line int, ok bool) {
 // ResolveSourcePath turns Delve relative paths (./hello.go) into absolute ones
 // so CodeWidget can open them regardless of how the binary was built.
 func ResolveSourcePath(p string) string {
-	p = strings.TrimSpace(termui.StripANSI(p))
+	p = strings.TrimSpace(platform.StripANSI(p))
 	if p == "" {
 		return p
 	}
@@ -250,12 +250,12 @@ func ResolveSourcePath(p string) string {
 
 // IsPromptRecord reports whether line is Delve's interactive prompt.
 func IsPromptRecord(line string) bool {
-	return strings.TrimSpace(termui.StripANSI(line)) == PromptToken
+	return strings.TrimSpace(platform.StripANSI(line)) == PromptToken
 }
 
 // IsBarePromptHost reports a scrollback line that is only the Delve prompt.
 func IsBarePromptHost(line string) bool {
-	return strings.TrimSpace(termui.StripANSI(line)) == PromptToken
+	return strings.TrimSpace(platform.StripANSI(line)) == PromptToken
 }
 
 // LivePromptHost returns fromDLV with exactly one trailing space for input.

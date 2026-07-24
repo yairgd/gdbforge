@@ -2,6 +2,7 @@ package main
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/gdbforge/layout"
 )
 

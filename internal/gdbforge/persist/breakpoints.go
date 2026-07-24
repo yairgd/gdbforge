@@ -1,11 +1,11 @@
 package persist
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/yairgd/gdbforge/internal/mcp"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,7 +38,7 @@ func BreakpointsPath(dir string) string {
 
 // SaveBreakpoints writes items as YAML under dir/.gdbforge/.
 // Creates the directory if needed. An empty list still writes a valid file.
-func SaveBreakpoints(dir string, items []mcp.BreakInfo) error {
+func SaveBreakpoints(dir string, items []models.BreakInfo) error {
 	doc := BreakpointsDoc{Breakpoints: make([]BreakpointEntry, 0, len(items))}
 	for _, it := range items {
 		if it.File == "" || it.Line < 1 {
@@ -72,7 +72,7 @@ func SaveBreakpoints(dir string, items []mcp.BreakInfo) error {
 
 // LoadBreakpoints reads dir/.gdbforge/breakpoints.yaml.
 // Missing file returns (nil, nil).
-func LoadBreakpoints(dir string) ([]mcp.BreakInfo, error) {
+func LoadBreakpoints(dir string) ([]models.BreakInfo, error) {
 	path := BreakpointsPath(dir)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -85,12 +85,12 @@ func LoadBreakpoints(dir string) ([]mcp.BreakInfo, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	out := make([]mcp.BreakInfo, 0, len(doc.Breakpoints))
+	out := make([]models.BreakInfo, 0, len(doc.Breakpoints))
 	for _, e := range doc.Breakpoints {
 		if e.File == "" || e.Line < 1 {
 			continue
 		}
-		out = append(out, mcp.BreakInfo{
+		out = append(out, models.BreakInfo{
 			File:    e.File,
 			Line:    e.Line,
 			Enabled: e.Enabled,

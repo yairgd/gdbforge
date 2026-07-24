@@ -1,10 +1,11 @@
 package widgets
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -14,7 +15,7 @@ func TestThreadWidgetSetItems(t *testing.T) {
 	if got := w.LinesForTest(); len(got) != 1 || got[0] != "no threads" {
 		t.Fatalf("empty=%v", got)
 	}
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", File: "/tmp/a.c", Line: 10, Current: true},
 		{ID: "2", State: "running", File: "b.c", Line: 2},
 	})
@@ -29,7 +30,7 @@ func TestCallStackWidgetSetItems(t *testing.T) {
 	if got := w.LinesForTest(); len(got) != 1 || got[0] != "no frames" {
 		t.Fatalf("empty=%v", got)
 	}
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "/tmp/hello.c", Line: 12},
 		{Level: 1, Func: "start", File: "crt.c", Line: 3},
 	})
@@ -42,13 +43,13 @@ func TestCallStackWidgetSetItems(t *testing.T) {
 func TestThreadWidgetActivateEnter(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
 	w.selected = 1
-	var got mcp.ThreadInfo
-	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	var got models.ThreadInfo
+	w.OnActivate = func(th models.ThreadInfo) { got = th }
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -60,13 +61,13 @@ func TestThreadWidgetActivateEnter(t *testing.T) {
 func TestCallStackWidgetActivateEnter(t *testing.T) {
 	w := NewCallStackWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
 	})
 	w.selected = 1
-	var got mcp.StackFrame
-	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	var got models.StackFrame
+	w.OnActivate = func(fr models.StackFrame) { got = fr }
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -78,12 +79,12 @@ func TestCallStackWidgetActivateEnter(t *testing.T) {
 func TestCallStackWidgetActivateOnMove(t *testing.T) {
 	w := NewCallStackWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
 	})
-	var got mcp.StackFrame
-	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	var got models.StackFrame
+	w.OnActivate = func(fr models.StackFrame) { got = fr }
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -95,12 +96,12 @@ func TestCallStackWidgetActivateOnMove(t *testing.T) {
 func TestThreadWidgetActivateOnMove(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	var got mcp.ThreadInfo
-	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	var got models.ThreadInfo
+	w.OnActivate = func(th models.ThreadInfo) { got = th }
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -112,12 +113,12 @@ func TestThreadWidgetActivateOnMove(t *testing.T) {
 func TestCallStackWidgetWheelActivates(t *testing.T) {
 	w := NewCallStackWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "foo"},
 	})
-	var got mcp.StackFrame
-	w.OnActivate = func(fr mcp.StackFrame) { got = fr }
+	var got models.StackFrame
+	w.OnActivate = func(fr models.StackFrame) { got = fr }
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.Func != "foo" {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
@@ -133,7 +134,7 @@ func TestCallStackWidgetSelectedFrame(t *testing.T) {
 	if _, ok := w.SelectedFrame(); ok {
 		t.Fatal("empty list should have no frame")
 	}
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "/tmp/a.c", Line: 10},
 		{Level: 1, Func: "foo", File: "/tmp/b.c", Line: 20},
 	})
@@ -149,7 +150,7 @@ func TestCallStackWidgetSelectedFrame(t *testing.T) {
 }
 
 func TestCallStackWidgetProgramPointStyle(t *testing.T) {
-	st := platform.NewAppState()
+	st := debugstate.New(platform.NewAppState())
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
 	st.SetStopLocation("/tmp/a.c", 10)
@@ -158,7 +159,7 @@ func TestCallStackWidgetProgramPointStyle(t *testing.T) {
 
 	w := NewCallStackWidget()
 	w.SetAppState(st)
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 10},
 		{Level: 1, Func: "foo", File: "/tmp/b.c", Line: 20},
 	})
@@ -177,7 +178,7 @@ func TestCallStackWidgetProgramPointStyle(t *testing.T) {
 }
 
 func TestThreadWidgetProgramPointStyle(t *testing.T) {
-	st := platform.NewAppState()
+	st := debugstate.New(platform.NewAppState())
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
 	st.SetCurrentLocation("/tmp/a.c", 10)
@@ -185,7 +186,7 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 
 	w := NewThreadWidget()
 	w.SetAppState(st)
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", File: "a.c", Line: 10, Current: true},
 		{ID: "2", State: "stopped", File: "a.c", Line: 10, Current: false},
 	})
@@ -206,12 +207,12 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 func TestThreadWidgetWheelActivates(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	var got mcp.ThreadInfo
-	w.OnActivate = func(th mcp.ThreadInfo) { got = th }
+	var got models.ThreadInfo
+	w.OnActivate = func(th models.ThreadInfo) { got = th }
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.ID != "2" {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
@@ -225,7 +226,7 @@ func TestThreadWidgetWheelActivates(t *testing.T) {
 func TestListWidgetsMouseSyncSelection(t *testing.T) {
 	bp := NewBreakpointWidget()
 	bp.SetFocused(true)
-	bp.SetItems([]mcp.BreakInfo{
+	bp.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "a.c", Line: 1},
 		{Number: 2, Enabled: true, File: "a.c", Line: 2},
 	})
@@ -237,7 +238,7 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 
 	th := NewThreadWidget()
 	th.SetFocused(true)
-	th.SetItems([]mcp.ThreadInfo{
+	th.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped"},
 		{ID: "2", State: "running"},
 	})
@@ -249,7 +250,7 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 
 	cs := NewCallStackWidget()
 	cs.SetFocused(true)
-	cs.SetItems([]mcp.StackFrame{
+	cs.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "start"},
 	})
@@ -263,12 +264,12 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 	w := NewCallStackWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.StackFrame{
+	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "start"},
 	})
 	var n int
-	w.OnActivate = func(fr mcp.StackFrame) { n++ }
+	w.OnActivate = func(fr models.StackFrame) { n++ }
 
 	// Press + drag motion samples must not activate.
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.ButtonPrimary, 0))
@@ -287,7 +288,7 @@ func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 func TestThreadWidgetHorizontalScrollKeys(t *testing.T) {
 	w := NewThreadWidget()
 	w.SetFocused(true)
-	w.SetItems([]mcp.ThreadInfo{
+	w.SetItems([]models.ThreadInfo{
 		{ID: "thread-with-a-very-long-identifier-0001", State: "stopped-waiting", File: "/tmp/a.c", Line: 99, Current: true},
 		{ID: "2", State: "running", File: "b.c", Line: 2},
 	})

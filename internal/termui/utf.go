@@ -1,6 +1,7 @@
 package termui
 
 import (
+	"github.com/yairgd/gdbforge/internal/platform"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -71,22 +72,7 @@ func (c Canvas) DrawANSIText(localX, localY, skipCols int, text string, baseStyl
 
 // StripANSI removes OSC/CSI/SGR sequences, leaving printable text only.
 func StripANSI(text string) string {
-	var b strings.Builder
-	b.Grow(len(text))
-	style := tcell.StyleDefault
-	for i := 0; i < len(text); {
-		if text[i] == 0x1b {
-			next, _, ok := consumeEscape(text, i, style, style)
-			if ok {
-				i = next
-				continue
-			}
-		}
-		r, size := utf8.DecodeRuneInString(text[i:])
-		b.WriteRune(r)
-		i += size
-	}
-	return b.String()
+	return platform.StripANSI(text)
 }
 
 // ANSIByteIndexAtVisible maps a visible cell column to a byte offset in text.

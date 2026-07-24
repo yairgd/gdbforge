@@ -2,6 +2,7 @@ package widgets
 
 import (
 	tcell "github.com/gdamore/tcell/v2"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -12,7 +13,7 @@ type FileListWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
 	buf      *platform.Buffer
-	state    *platform.AppState
+	state    *debugstate.State
 
 	paths    []string
 	selected int
@@ -39,7 +40,7 @@ func NewFileListWidget() *FileListWidget {
 	return w
 }
 
-func (w *FileListWidget) SetAppState(st *platform.AppState) {
+func (w *FileListWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
 

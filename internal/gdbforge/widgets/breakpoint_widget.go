@@ -2,9 +2,10 @@ package widgets
 
 import (
 	"fmt"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -23,9 +24,9 @@ type BreakpointWidget struct {
 	viewport *termui.Viewport
 	buf      *platform.Buffer
 
-	state *platform.AppState
+	state *debugstate.State
 
-	items    []mcp.BreakInfo
+	items    []models.BreakInfo
 	selected int
 
 	// mouseDown tracks primary-button press so we activate on release, not on
@@ -34,7 +35,7 @@ type BreakpointWidget struct {
 	pressSelected int
 
 	// OnActivate is called when the user selects a row.
-	OnActivate func(mcp.BreakInfo)
+	OnActivate func(models.BreakInfo)
 	// OnToggle is e — enable/disable at selected index.
 	OnToggle func(index int)
 	// OnDelete is d — remove selected index.
@@ -60,13 +61,13 @@ func NewBreakpointWidget() *BreakpointWidget {
 }
 
 // SetAppState wires mark / break colors for painting.
-func (w *BreakpointWidget) SetAppState(st *platform.AppState) {
+func (w *BreakpointWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
 
 // SetItems replaces the painted list (from the shared model).
-func (w *BreakpointWidget) SetItems(items []mcp.BreakInfo) {
-	w.items = append([]mcp.BreakInfo(nil), items...)
+func (w *BreakpointWidget) SetItems(items []models.BreakInfo) {
+	w.items = append([]models.BreakInfo(nil), items...)
 	if w.selected >= len(w.items) {
 		w.selected = len(w.items) - 1
 	}
@@ -129,7 +130,7 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
 }
 
-func (w *BreakpointWidget) atProgramPoint(it mcp.BreakInfo) bool {
+func (w *BreakpointWidget) atProgramPoint(it models.BreakInfo) bool {
 	if w.state == nil {
 		return false
 	}

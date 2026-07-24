@@ -5,6 +5,9 @@ import (
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -27,7 +30,7 @@ func (a *DebuggerApp) startGdbConsoleBridge() {
 	ch, cancel := sess.Subscribe()
 	a.gdbCancelSub = cancel
 	screen := a.Screen()
-	go coalesceGdbOutput(ch, func(msg core.GdbOutputMsg) {
+	go coalesceGdbOutput(ch, func(msg events.GdbOutputMsg) {
 		_ = screen.PostEvent(tcell.NewEventInterrupt(msg))
 	}, func() {
 		// Ignore closes from an old bridge (e.g. Delve --tty restart).
@@ -38,7 +41,7 @@ func (a *DebuggerApp) startGdbConsoleBridge() {
 	})
 }
 
-func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(core.GdbOutputMsg), onExit func()) {
+func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(events.GdbOutputMsg), onExit func()) {
 	var pending strings.Builder
 	var flushTimer *time.Timer
 	var flushC <-chan time.Time
@@ -63,7 +66,7 @@ func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(core.GdbOutputMsg)
 		}
 		data := pending.String()
 		pending.Reset()
-		post(core.GdbOutputMsg{Data: data})
+		post(events.GdbOutputMsg{Data: data})
 	}
 	arm := func() {
 		if flushTimer != nil {
@@ -85,7 +88,7 @@ func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(core.GdbOutputMsg)
 			}
 			if msg.Err != nil {
 				flush()
-				post(core.GdbOutputMsg{Err: msg.Err})
+				post(events.GdbOutputMsg{Err: msg.Err})
 				continue
 			}
 			if msg.Data == "" {
@@ -216,7 +219,7 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 	}
 	if isDlvRunCmd(cmd) {
 		if a.State() != nil {
-			a.State().SetInferiorRunning(true)
+			a.Debug().SetInferiorRunning(true)
 		}
 	}
 	// Keep Delve CLI as-is (no MI mapping).
@@ -245,7 +248,7 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 			a.withGdbUIOwner(func() { _ = a.dlvClient.Send("n") })
 			return
 		}
-		running := a.State() != nil && a.State().InferiorRunning()
+		running := a.State() != nil && a.Debug().InferiorRunning()
 		if !running {
 			return
 		}
@@ -262,7 +265,7 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 // onGdbConsoleSuspend handles Ctrl-Z like GDB: SIGTSTP the inferior while it
 // is running; otherwise suspend gdbforge (job control, shell `fg` to resume).
 func (a *DebuggerApp) onGdbConsoleSuspend() {
-	running := a.State() != nil && a.State().InferiorRunning()
+	running := a.State() != nil && a.Debug().InferiorRunning()
 	if running {
 		if a.gdbClient != nil {
 			a.withGdbUIOwner(func() { _ = a.gdbClient.SuspendInferior() })
@@ -346,17 +349,22 @@ func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
 	if a.gdbClient != nil {
 		a.gdbClient.Quit.Observe(upd)
 	}
-	silent := a.State() != nil && a.State().SuppressGdbConsole()
+	silent := a.State() != nil && a.Debug().SuppressGdbConsole()
 	confirming := a.gdbClient != nil && a.gdbClient.Quit.Confirming()
 	if !silent && a.gdbWidget != nil {
-		includeTarget := a.State() != nil && a.State().GdbTargetPrint()
-		a.gdbWidget.PaintMiDisplay(upd, confirming, includeTarget)
+		includeTarget := a.State() != nil && a.Debug().GdbTargetPrint()
+		a.gdbWidget.PaintMiDisplay(widgets.MiPaintUpdate{
+			DisplayLines: upd.DisplayLines,
+			TargetLines:  upd.TargetLines,
+			PromptReady:  upd.PromptReady,
+			PromptLine:   upd.PromptLine,
+		}, confirming, includeTarget)
 	}
 	a.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged)
 }
 
 func (a *DebuggerApp) applyDlvUpdate(upd dlv.Update) {
-	silent := a.State() != nil && a.State().SuppressGdbConsole()
+	silent := a.State() != nil && a.Debug().SuppressGdbConsole()
 	a.dlvConfirm.Observe(upd)
 	confirming := a.dlvConfirm.Confirming()
 	if !silent && a.gdbWidget != nil {
@@ -412,7 +420,7 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 	}
 	if state == gdb.Running {
 		if a.State() != nil {
-			a.State().SetInferiorRunning(true)
+			a.Debug().SetInferiorRunning(true)
 		}
 	}
 	if breakpointsChanged {
@@ -421,7 +429,7 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 }
 
 // handleDebuggerOutputMsg routes coalesced PTY output to the active backend parser.
-func (a *DebuggerApp) handleDebuggerOutputMsg(msg core.GdbOutputMsg) {
+func (a *DebuggerApp) handleDebuggerOutputMsg(msg events.GdbOutputMsg) {
 	if msg.Data == "" {
 		return
 	}
@@ -439,7 +447,7 @@ func (a *DebuggerApp) handleDebuggerOutputMsg(msg core.GdbOutputMsg) {
 }
 
 // handleGdbOutputMsg is kept as an alias for existing call sites / tests.
-func (a *DebuggerApp) handleGdbOutputMsg(msg core.GdbOutputMsg) {
+func (a *DebuggerApp) handleGdbOutputMsg(msg events.GdbOutputMsg) {
 	a.handleDebuggerOutputMsg(msg)
 }
 

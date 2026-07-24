@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"os/exec"
+	"path/filepath"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
@@ -143,7 +144,7 @@ func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
 	a.dlvInputState = dlv.NewInputState()
 
 	if boot := client.TakeStartupOutput(); boot != "" && a.gdbWidget != nil {
-		a.handleDebuggerOutputMsg(core.GdbOutputMsg{Data: boot})
+		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
 	}
 	a.startGdbConsoleBridge()
 
