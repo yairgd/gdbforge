@@ -2,6 +2,7 @@ package dlv
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -67,6 +68,63 @@ func TestInputStateExited(t *testing.T) {
 		t.Fatal("exited stop should not need UI refresh")
 	}
 }
+
+func TestInputStateYesNoPromptNoNewline(t *testing.T) {
+	st := NewInputState()
+	u := st.PushRaw("Command failed: Process 1 has exited with status 0\n")
+	if u.ConfirmReady {
+		t.Fatal("error line alone should not confirm")
+	}
+	u = st.PushRaw("Set a suspended breakpoint (Delve will try to set this breakpoint when process restarts) [Y/n]?")
+	if !u.ConfirmReady {
+		t.Fatal("expected ConfirmReady")
+	}
+	if !strings.Contains(u.ConfirmHost, "[Y/n]?") {
+		t.Fatalf("host: %q", u.ConfirmHost)
+	}
+	if !strings.HasSuffix(u.ConfirmHost, " ") {
+		t.Fatalf("host should end with space: %q", u.ConfirmHost)
+	}
+	if st.lineBuf != "" {
+		t.Fatalf("lineBuf should be cleared, got %q", st.lineBuf)
+	}
+}
+
+func TestInputStateYesNoPromptDuplicated(t *testing.T) {
+	st := NewInputState()
+	q := "Set a suspended breakpoint (Delve will try to set this breakpoint when process restarts) [Y/n]?"
+	u := st.PushRaw(q + q)
+	if !u.ConfirmReady {
+		t.Fatal("expected ConfirmReady for duplicated prompt")
+	}
+	if !LooksLikeYesNoPrompt(u.ConfirmHost) {
+		t.Fatalf("host: %q", u.ConfirmHost)
+	}
+}
+
+func TestInputStateYesNoPromptWithNewline(t *testing.T) {
+	st := NewInputState()
+	u := st.PushRaw("Set a suspended breakpoint … [Y/n]?\n")
+	if !u.ConfirmReady || u.ConfirmHost == "" {
+		t.Fatalf("confirm: ready=%v host=%q", u.ConfirmReady, u.ConfirmHost)
+	}
+	if u.PromptReady {
+		t.Fatal("should not also set PromptReady")
+	}
+}
+
+func TestConfirmGateObserve(t *testing.T) {
+	var g ConfirmGate
+	g.Observe(Update{ConfirmReady: true, ConfirmHost: "Quit? [Y/n]? "})
+	if !g.Confirming() || g.Host() == "" {
+		t.Fatalf("after confirm: confirming=%v host=%q", g.Confirming(), g.Host())
+	}
+	g.Observe(Update{PromptReady: true, PromptLine: PromptToken})
+	if g.Confirming() {
+		t.Fatal("prompt should clear confirming")
+	}
+}
+
 
 func TestMapBreakCmd(t *testing.T) {
 	tests := []struct{ in, want string }{

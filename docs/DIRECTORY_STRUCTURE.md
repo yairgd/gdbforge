@@ -255,7 +255,9 @@ Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp
 | File | Responsibility |
 |------|----------------|
 | `client.go` | `Client` embeds `*ptyx.Client`; waits for `(dlv)` on startup |
-| `input_state.go` | Stream splitter: `PushRaw` → `Update` (stops, prompts, BP notifies) |
+| `input_state.go` | Stream splitter: `PushRaw` → `Update` (stops, prompts, `[Y/n]?`, BP notifies) |
+| `confirm.go` | `ConfirmGate` for Delve yes/no prompts (suspended breakpoint after exit) |
+| `complete.go` | Console Tab: command names + `funcs ^<prefix>` locspec completion |
 | `parse.go` | Text parsers for `breakpoints` / `stack` / `goroutines` → MCP row types |
 
 Selected with `gdbforge -g dlv`. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb).

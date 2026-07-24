@@ -346,7 +346,8 @@ func (m *GDBWidget) PaintMiDisplay(upd gdb.MiUpdate, confirming, includeTarget b
 }
 
 // PaintDlvDisplay paints Delve CLI output (peer of PaintMiDisplay).
-func (m *GDBWidget) PaintDlvDisplay(displayLines []string, promptReady bool, promptLine string) {
+// confirming suppresses attaching a new (dlv) host (yes/no prompt owns the line).
+func (m *GDBWidget) PaintDlvDisplay(displayLines []string, promptReady bool, promptLine string, confirming bool) {
 	if m == nil || m.console == nil {
 		return
 	}
@@ -356,10 +357,10 @@ func (m *GDBWidget) PaintDlvDisplay(displayLines []string, promptReady bool, pro
 		m.StripTrailingGdbPrompt()
 		painted = true
 	}
-	if promptReady {
+	if promptReady && !confirming {
 		m.AttachGdbPrompt(promptLine)
 	}
-	if painted || promptReady {
+	if painted || (promptReady && !confirming) {
 		m.console.FollowTailAndScroll()
 	}
 }

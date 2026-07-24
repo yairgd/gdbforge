@@ -5,6 +5,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -104,7 +105,8 @@ func isCtrlD(ev *tcell.EventKey) bool {
 
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	// GDB console insert: pass all keys through so typing is native (Space, n,
-	// etc.). Only Esc leaves insert mode; Tab runs MI -complete + wildmenu.
+	// etc.). Only Esc leaves insert mode; Tab runs completion + wildmenu
+	// (MI -complete for GDB, command-name list for Delve).
 	if a.focusedIsGdb() {
 		if key, ok := platform.KeyFromEvent(ev); ok {
 			if key.Key == tcell.KeyEscape {
@@ -244,16 +246,24 @@ func (a *DebuggerApp) leaveCompletionMode() {
 	a.SetMode(platform.ModeCommand)
 }
 
-// gdbTabComplete runs MI -complete for the GDB input line and feeds the same
+// gdbTabComplete runs completion for the GDB/Delve input line and feeds the same
 // CompletionMsg / wildmenu path used by cmdline trie Completer.
 func (a *DebuggerApp) gdbTabComplete() {
 	if a.gdbWidget == nil {
 		return
 	}
 	text := a.gdbWidget.InputText()
-	res := gdb.Complete(a.GDB(), a.State(), text)
+	var res gdb.CompleteResult
+	if a.isDLV() {
+		if a.dlvConfirm.Confirming() {
+			return
+		}
+		res = dlv.Complete(a.GDB(), a.State(), text)
+	} else {
+		res = gdb.Complete(a.GDB(), a.State(), text)
+	}
 
-	// Expand to GDB's longest common prefix when it grows the line.
+	// Expand to longest common prefix when it grows the line.
 	if res.Completion != "" && res.Completion != text {
 		a.gdbWidget.ApplyCompletion(res.Completion)
 		text = res.Completion
@@ -296,7 +306,16 @@ func (a *DebuggerApp) refreshGDBCompletionMenu() {
 		a.leaveCompletionMode()
 		return
 	}
-	res := gdb.Complete(a.GDB(), a.State(), text)
+	var res gdb.CompleteResult
+	if a.isDLV() {
+		if a.dlvConfirm.Confirming() {
+			a.leaveCompletionMode()
+			return
+		}
+		res = dlv.Complete(a.GDB(), a.State(), text)
+	} else {
+		res = gdb.Complete(a.GDB(), a.State(), text)
+	}
 	names := res.Matches
 	if len(names) == 0 && res.Completion != "" && res.Completion != text {
 		names = []string{res.Completion}
@@ -312,8 +331,8 @@ func (a *DebuggerApp) publishGDBCompletionMenu(text string, names []string) {
 	menu := gdb.MenuNames(text, names)
 	// After file:, attach signatures from -symbol-info-functions
 	// ("foo" → "foo(int, char *)"); apply still inserts bare name.
-	// Skip the heavy MI query when not completing a linespec.
-	if gdb.CompletingLinespec(text) {
+	// Skip the heavy MI query when not completing a linespec, and never under Delve.
+	if !a.isDLV() && gdb.CompletingLinespec(text) {
 		if sigs := gdb.FunctionSignatures(a.GDB(), a.State()); len(sigs) > 0 {
 			menu = gdb.EnrichLinespecMenuNames(text, menu, sigs)
 		}

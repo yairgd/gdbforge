@@ -187,6 +187,19 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 	if cmd == "" {
 		cmd = w.LastHistory()
 	}
+
+	// Answer Delve [Y/n]? without treating the reply as a new CLI command.
+	if a.dlvConfirm.Confirming() {
+		send := func() { _ = c.Send(cmd) }
+		if cmd != "" {
+			w.EchoSubmit(cmd)
+		}
+		a.withGdbUIOwner(send)
+		w.ClearInput()
+		w.FollowTailAndScroll()
+		return
+	}
+
 	if dlv.IsStackNavCmd(cmd) {
 		a.codeNavGen++
 		a.dlvSuppressStopUI++
@@ -227,6 +240,15 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
 	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
 	if a.isDLV() && a.dlvClient != nil {
+		// At a Delve yes/no prompt, cancel with "n" — do not SIGINT-spam dlv.
+		if a.dlvConfirm.Confirming() {
+			a.withGdbUIOwner(func() { _ = a.dlvClient.Send("n") })
+			return
+		}
+		running := a.State() != nil && a.State().InferiorRunning()
+		if !running {
+			return
+		}
 		_ = a.dlvClient.Interrupt()
 		a.RequestFrame()
 		return
@@ -335,10 +357,29 @@ func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
 
 func (a *DebuggerApp) applyDlvUpdate(upd dlv.Update) {
 	silent := a.State() != nil && a.State().SuppressGdbConsole()
+	a.dlvConfirm.Observe(upd)
+	confirming := a.dlvConfirm.Confirming()
 	if !silent && a.gdbWidget != nil {
-		a.gdbWidget.PaintDlvDisplay(upd.DisplayLines, upd.PromptReady, upd.PromptLine)
+		a.gdbWidget.PaintDlvDisplay(upd.DisplayLines, upd.PromptReady, upd.PromptLine, confirming)
+		if upd.ConfirmReady {
+			host := upd.ConfirmHost
+			if host == "" {
+				host = a.dlvConfirm.Host()
+			}
+			a.gdbWidget.BeginLiveHost(nil, host)
+		}
 	}
-	a.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged)
+	// Defer BP list Query while Delve waits for y/n (Query would steal the answer).
+	bpChanged := upd.BreakpointsChanged
+	if bpChanged && confirming {
+		a.dlvBPDeferred = true
+		bpChanged = false
+	}
+	a.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, bpChanged)
+	if upd.PromptReady && a.dlvBPDeferred {
+		a.dlvBPDeferred = false
+		a.onBreakpointsChanged()
+	}
 }
 
 func (a *DebuggerApp) applyStopAndPromptSideEffects(

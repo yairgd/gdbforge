@@ -125,13 +125,16 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - Missing/.so src — centered "not available" + path
 - Status line — full file path when focused
 
-**GDB console**
+**GDB / Delve console**
 
 - Insert mode to type CLI; Enter submits; Tab completes (wildmenu); unique Tab completion appends a trailing space (e.g. `ju` → `jump `)
+- **Tab (GDB):** MI `-complete` (commands, files, symbols)
+- **Tab (Delve `-g dlv`):** command names from a static list; for `b` / `break` / `trace` / … locspecs, runs `funcs ^<prefix>` (e.g. `b main.` → `main.main`). File:`line` locspecs are not completed yet
 - Enter on empty line repeats the last command
-- `n`/`s`/`c` keys and typed `next`/`step`/`continue` use MI `-exec-*` (no CLI source dump — Code pane follows `*stopped`)
-- Ctrl-C interrupt; Ctrl-Z suspend / Ctrl-D quit (any mode); Ctrl-L clear; Ctrl-V / middle-click paste
-- `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` prompt
+- `n`/`s`/`c` keys and typed `next`/`step`/`continue` use MI `-exec-*` under GDB (no CLI source dump — Code pane follows `*stopped`); under Delve they are plain CLI
+- Ctrl-C interrupt (only when the inferior is running under Delve); Ctrl-Z suspend / Ctrl-D quit (any mode); Ctrl-L clear; Ctrl-V / middle-click paste
+- After exit, Delve may ask `Set a suspended breakpoint … [Y/n]?` — answer `y`/`n` on the live host (Ctrl-C sends `n`)
+- `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` / `(dlv)` prompt
 - Mouse drag selects scrollback; double-click word / triple-click line; Ctrl-C copies selection
 
 **Breakpoints (`:b breakpoint`)**

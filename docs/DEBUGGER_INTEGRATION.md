@@ -620,7 +620,7 @@ Delve plugs into the **same** architecture as GDB — no new control plane:
 |-------|------|
 | CLI | `gdbforge -g dlv [-d dlv] prog [args…]` |
 | `internal/dlv.Client` | Implements `core.Session` over `ptyx` (`dlv exec -- prog…`) |
-| `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `> file:line` stops, BP lines |
+| `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `[Y/n]?` confirms, `> file:line` stops, BP lines |
 | Console | Same `GDBWidget`; prompt token `(dlv)` |
 | Pane refresh | Local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
 
@@ -635,6 +635,10 @@ flowchart LR
 ```
 
 **MVP limits:** Delve CLI output parsing is less structured than MI (known debt). `:edit` source-file list from `-file-list-exec-source-files` is skipped under Delve. MCP/`:AI` tools remain GDB-oriented; the shared `Query` helper still drives pane refreshes with prompt token `(dlv)`.
+
+**Interactive yes/no:** After the inferior exits, Delve may ask `Set a suspended breakpoint … [Y/n]?`. gdbforge detects that prompt (including when it arrives without a trailing newline), paints it as a live host (same idea as GDB quit confirm), and answers with the next console submit. While confirming, breakpoint `Query("breakpoints")` is deferred so the query line cannot be consumed as `y`/`n`. Ctrl-C at a yes/no prompt sends `n` (cancel); SIGINT/`^C` is only used when the inferior is actually running.
+
+**Tab completion:** GDB console Tab uses MI `-complete`. Under Delve, Tab completes **command names** from a static list, and for `break`/`b`/`trace`/… locspecs it runs `funcs ^<prefix>` (e.g. `b main.` → `main.main`). Symbol completion is prefix-based via Delve’s `funcs` regex — not a full MI-style completer. File:`line` locspecs are not completed yet.
 
 Examples:
 

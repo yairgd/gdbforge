@@ -35,6 +35,12 @@ func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
 		cmd = dlv.MapBreakCmd(cmd)
 	}
 	gdb.SendCmd(a.GDB(), a.State(), cmd)
+	if a.isDLV() {
+		// Do not Query("breakpoints") immediately — after exit Delve may ask
+		// [Y/n]? and the query line would be consumed as the answer.
+		a.dlvBPDeferred = true
+		return
+	}
 	a.onBreakpointsChanged()
 }
 

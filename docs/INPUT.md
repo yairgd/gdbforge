@@ -118,25 +118,27 @@ flowchart TB
 
 ### Widget-level handling
 
-GDB console keys are handled by shared termui pieces, then GDB-specific callbacks:
+GDB / Delve console keys are handled by shared termui pieces, then backend-specific callbacks:
 
 | Layer | File | Owns |
 |-------|------|------|
 | `InputLine` | `termui/input_line.go` | Editing + history chords |
 | `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
-| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit; MI |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit |
+| `cmd/gdbforge/input.go` | Tab → `gdbTabComplete` | GDB: MI `-complete`; Delve: `dlv.Complete` (commands + `funcs`) |
 | `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
 
 When the GDB pane is focused (insert):
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Echo `(gdb) cmd` to scrollback, send to GDB, clear input line |
+| `Enter` | Echo `(gdb)`/`(dlv) cmd` to scrollback, send to debugger, clear input line |
+| `Tab` | Wildmenu completion — GDB MI `-complete`; Delve command names + `funcs ^<prefix>` for `b`/`break`/… (e.g. `b main.`) |
 | `Backspace` / `Delete` | Edit input (`InputLine`) |
 | `Left` / `Right`, `Home` / `End` | Move cursor (`Ctrl-B/F/A/E`) |
 | `Up` / `Down` | Local readline-style history (`Ctrl-P/N`) |
-| `Ctrl+C` | Copy selection if any; otherwise SIGINT (`\x03`) |
-| `Ctrl+D` | Send `q` to GDB |
+| `Ctrl+C` | Copy selection if any; otherwise interrupt (Delve: only if inferior running; at `[Y/n]?` sends `n`) |
+| `Ctrl+D` | Send `q` / quit |
 | `Ctrl+L` | Clear scrollback (screen reset — prompt returns to top-left) |
 | `Ctrl+Z` | Global: SIGTSTP inferior if running, else suspend gdbforge (job control; `fg` to resume) |
 | `Ctrl+V` | Paste **CLIPBOARD** into the input line |
@@ -149,7 +151,7 @@ When the GDB pane is focused (insert):
 
 **Normal mode:** `<C-o>` jumps back to the previous widget after `:b` / `:e` / `:!` (see [EXEC_SHELL.md](EXEC_SHELL.md)).
 
-The `(gdb)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Look stays a native GDB session (not chat labels).
+The `(gdb)` / `(dlv)` prompt walks down line-by-line under the scrollback while there is free space, then pins to the bottom and scrolls when the pane is full. Delve `[Y/n]?` confirms (e.g. suspended breakpoint after exit) use the same live-host path as GDB quit confirm. Look stays a native debugger session (not chat labels).
 
 Example: `CmdWidget` (`cmd_widget.go`) — uses the same `ClipboardIO` bridge as Viewport / ConsolePane:
 
@@ -415,5 +417,5 @@ When not in normal mode, keys go to the focused console or Lua widget (after glo
 
 - [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree, DSL, parser, tab completion
 - [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) — CmdLine placement
-- [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB input forwarding
+- [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB/Delve input forwarding, Delve Tab/`funcs` completion, yes/no confirms
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) — adding event handlers

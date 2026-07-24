@@ -583,6 +583,10 @@ func (a *DebuggerApp) onBreakpointsChanged() {
 // BreakpointsChangedMsg. It coalesces bursts into one in-flight -break-list
 // plus at most one trailing refresh (no timer).
 func (a *DebuggerApp) onBreakpointsChangedMsg(_ BreakpointsChangedMsg) {
+	if a.isDLV() && a.dlvConfirm.Confirming() {
+		a.dlvBPDeferred = true
+		return
+	}
 	a.bpRefreshMu.Lock()
 	if a.bpRefreshRunning {
 		a.bpRefreshPending = true

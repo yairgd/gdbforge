@@ -54,6 +54,10 @@ type DebuggerApp struct {
 	gdbBridgeGen  atomic.Uint64
 	gdbInputState *gdb.GdbInputState
 	dlvInputState *dlv.InputState
+	// dlvConfirm tracks Delve [Y/n]? prompts (suspended BP after exit, etc.).
+	dlvConfirm dlv.ConfirmGate
+	// dlvBPDeferred is set when a BP refresh was skipped while dlvConfirm is active.
+	dlvBPDeferred bool
 	pendingFrameSync     bool
 	pendingFrameLevel    int // Delve: level to show after frame/up/down (see pendingFrameLevelSet)
 	pendingFrameLevelSet bool

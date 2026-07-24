@@ -23,6 +23,9 @@ type Update struct {
 	DisplayLines       []string
 	PromptReady        bool
 	PromptLine         string
+	// ConfirmReady is set when Delve waits for a yes/no answer (not a bare (dlv) prompt).
+	ConfirmReady bool
+	ConfirmHost  string
 	State              State
 	ErrorMsg           string
 	Stopped            *gdb.MiStopMsg
@@ -66,12 +69,18 @@ func (m *InputState) PushRaw(data string) Update {
 		m.lineBuf = m.lineBuf[i+1:]
 		m.consumeLine(line, &out)
 	}
-	// Prompt may arrive without a trailing newline while waiting for input.
+	// Prompt / yesno may arrive without a trailing newline while waiting for input.
 	plainBuf := strings.TrimSpace(termui.StripANSI(m.lineBuf))
 	if plainBuf == PromptToken {
 		m.lineBuf = ""
 		out.PromptReady = true
 		out.PromptLine = PromptToken
+		m.state = Done
+		out.State = Done
+	} else if LooksLikeYesNoPrompt(plainBuf) {
+		m.lineBuf = ""
+		out.ConfirmReady = true
+		out.ConfirmHost = ConfirmLiveHost(plainBuf)
 		m.state = Done
 		out.State = Done
 	}
@@ -89,6 +98,14 @@ func (m *InputState) consumeLine(line string, out *Update) {
 	case plain == PromptToken:
 		out.PromptReady = true
 		out.PromptLine = PromptToken
+		m.state = Done
+		out.State = Done
+
+	case LooksLikeYesNoPrompt(plain):
+		// Delve sometimes ends the question with a newline; treat as confirm host,
+		// not scrollback-only (so the UI can attach a live caret).
+		out.ConfirmReady = true
+		out.ConfirmHost = ConfirmLiveHost(plain)
 		m.state = Done
 		out.State = Done
 
