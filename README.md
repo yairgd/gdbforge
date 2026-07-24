@@ -101,6 +101,7 @@ More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./
 |-----|----------|
 | **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** | Full user manual (same material as `:help`) |
 | **[docs/LUA_API.md](docs/LUA_API.md)** | `gdbforge.*` Lua reference for script authors |
+| **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
 | **[lua/README.md](lua/README.md)** | Installable Lua workflow catalog |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 

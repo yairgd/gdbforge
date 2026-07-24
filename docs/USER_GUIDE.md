@@ -235,3 +235,5 @@ Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only
 - `:b about` — version and license
 - `:help` — in-app summary of this guide
 - [LUA_API.md](LUA_API.md) — Lua / `gdbforge.*` reference
+- [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) — how GDB/Delve PTYs, `:b io`, and external terminals connect
+- [../lua/README.md](../lua/README.md) — installable Lua workflows

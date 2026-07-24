@@ -271,13 +271,14 @@ Selected with `gdbforge -g dlv`. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRAT
 | `README.md` | Documentation index |
 | `OVERVIEW.md` | Vision and comparison |
 | `ARCHITECTURE.md` | High-level architecture |
+| `PTY_ARCHITECTURE.md` | Dual PTY master/slave, `:b io`, external tty, Delve TCP |
 | `UI_ARCHITECTURE.md` | Widget/canvas/grid details |
 | `WINDOW_MANAGEMENT.md` | Splits, tabs, CmdLine |
 | `RENDERING.md` | Grid, cells, diff rendering |
 | `INPUT.md` | Keyboard, modes, commands |
 | `COMMAND_SYSTEM.md` | Command tree, DSL, rest-args |
 | `EXEC_SHELL.md` | `:!` exec panes, jump list |
-| `DEBUGGER_INTEGRATION.md` | GDB and future backends |
+| `DEBUGGER_INTEGRATION.md` | GDB MI / Delve details (see also PTY_ARCHITECTURE) |
 | `PLUGINS.md` | Lua extensibility plans |
 | `DIRECTORY_STRUCTURE.md` | This file |
 | `DEPENDENCIES.md` | Go module + internal package rules |

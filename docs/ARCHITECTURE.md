@@ -4,7 +4,7 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 
 **gdbforge is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
 
-**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
+**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
 ---
 
@@ -125,7 +125,7 @@ flowchart LR
     GDB -.->|"-inferior-tty-set"| Target
 ```
 
-GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
+GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
 
 ---
 
@@ -892,5 +892,6 @@ Detailed tracker: [ROADMAP.md](ROADMAP.md).
 | Cells, borders, Unicode | [RENDERING.md](RENDERING.md) |
 | Keyboard, modes | [INPUT.md](INPUT.md) |
 | Command tree, DSL, parser | [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
-| GDB MI2 | [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
+| PTY master/slave, IO, external tty | [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| GDB MI2 / Delve details | [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 | Package map | [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md) |

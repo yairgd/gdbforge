@@ -2,7 +2,7 @@
 
 gdbforge connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2** (`gdb.GDBClient`): one PTY for GDB/MI, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY` + `-inferior-tty-set`). The GDB session is **owned by `DebuggerApp`** and shared by the GDB console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
 
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
+**Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
 ---
 
@@ -179,6 +179,8 @@ flowchart LR
 GDB and exec (`:!`) both use `*ptyx.Client` owned by the app. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` / `InferiorOutputMsg` for interrupt routing.
 
 ## Inferior I/O (dual PTY)
+
+> **Architecture overview (master/slave, Delve TCP, external terminal diagrams):** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md).
 
 There is **no** GDB MI command that writes program stdin. gdbforge allocates a bare PTY (`ptyx.OpenTTY`), keeps the **master** in-process, and tells GDB to attach the inferior to the **slave**:
 

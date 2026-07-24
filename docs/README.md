@@ -17,13 +17,14 @@ Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencast:
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |
+| **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)** | Architects, backend contributors | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal, TCP headless |
 | **[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)** | UI contributors | Widgets, canvas, grid, layout, focus |
 | **[WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)** | UI contributors | Splits, tabs, workspace, command line |
 | **[RENDERING.md](RENDERING.md)** | Rendering contributors | Cells, borders, Unicode, diff rendering |
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
-| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans |
+| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua architecture; API details in [LUA_API.md](LUA_API.md) |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
@@ -66,6 +67,7 @@ Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedd
 | Lua API | [/doc/LUA_API.md](http://127.0.0.1:8765/doc/LUA_API.md) |
 | Overview | [/doc/OVERVIEW.md](http://127.0.0.1:8765/doc/OVERVIEW.md) |
 | Architecture | [/doc/ARCHITECTURE.md](http://127.0.0.1:8765/doc/ARCHITECTURE.md) |
+| PTY / I/O architecture | [/doc/PTY_ARCHITECTURE.md](http://127.0.0.1:8765/doc/PTY_ARCHITECTURE.md) |
 | Developer guide | [/doc/DEVELOPER_GUIDE.md](http://127.0.0.1:8765/doc/DEVELOPER_GUIDE.md) |
 | Diagrams index | [/diagrams](http://127.0.0.1:8765/diagrams) |
 
