@@ -1,0 +1,82 @@
+/* Override pages-themes / Primer light chrome when site.css is also loaded. */
+
+html,
+body,
+.container-lg,
+.markdown-body {
+  background: var(--bg, #0f1419) !important;
+  color: var(--text, #e6edf3) !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  color: var(--text, #e6edf3) !important;
+  border-color: var(--border, #30363d) !important;
+}
+
+.markdown-body a {
+  color: var(--accent, #58a6ff) !important;
+}
+
+.markdown-body code,
+.markdown-body tt {
+  background: var(--surface, #1a2332) !important;
+  color: var(--text, #e6edf3) !important;
+}
+
+.markdown-body pre,
+.markdown-body .highlight,
+.markdown-body .highlight pre {
+  background: var(--surface, #1a2332) !important;
+  color: var(--text, #e6edf3) !important;
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  border-color: var(--border, #30363d) !important;
+}
+
+.markdown-body table tr {
+  background: transparent !important;
+  border-color: var(--border, #30363d) !important;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.markdown-body blockquote {
+  color: var(--muted, #8b949e) !important;
+  border-left-color: var(--border, #30363d) !important;
+}
+
+.markdown-body hr {
+  background: var(--border, #30363d) !important;
+  border: 0;
+  height: 1px;
+}
+
+/* Primer header link */
+.container-lg > h1 > a {
+  color: var(--text, #e6edf3) !important;
+}
+
+footer.site-footer,
+.footer {
+  color: var(--muted, #8b949e) !important;
+}
+
+div.mermaid {
+  background: var(--surface, #1a2332);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}

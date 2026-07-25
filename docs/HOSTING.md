@@ -175,7 +175,9 @@ Open `http://127.0.0.1:8766/gdbforge/` when previewing with the default project 
 2. Open **Settings → Pages → Build and deployment**.
 3. Set **Source** to **GitHub Actions** — **not** “Deploy from a branch” / folder `/docs`.
 
-Branch `/docs` + Jekyll serves raw Markdown poorly (`*.md` as text, no `/doc/…` tree, no Mermaid viewer). This project’s site is the **`docserve --export`** artifact from Actions.
+Branch `/docs` + Jekyll can work for reading Markdown, but needs `docs/_includes/head-custom.html` (dark CSS + Mermaid). Prefer **GitHub Actions** + `docserve --export` for the full viewer (`/doc/*.html`, diagram pages).
+
+If Source is **Deploy from a branch → /docs**, push `docs/_includes/head-custom.html` and hard-refresh; Mermaid fences and dark background load from `docs/www/`.
 
 ### URLs after a successful Actions deploy
 
