@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"fmt"
+	"regexp"
 	"runtime/debug"
 	"strings"
 
@@ -11,9 +12,10 @@ import (
 )
 
 const (
-	aboutProductVersion = "0.1.0"
 	// AboutEmail is the public contact shown on the About page.
 	AboutEmail = "yairgd@gmail.com"
+	// AboutNotForRelease is shown when the binary was not stamped from a release tag.
+	AboutNotForRelease = "not for release"
 )
 
 // AboutWidget is a passive, scrollable built-in page (Logger-style Viewport).
@@ -25,7 +27,9 @@ type AboutWidget struct {
 }
 
 // NewAboutWidget caches build info once into a read-only buffer.
-func NewAboutWidget() *AboutWidget {
+// version should be the link-time stamp (main.version), typically a tag like
+// "v1.0.0". Non-release builds show AboutNotForRelease.
+func NewAboutWidget(version string) *AboutWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -38,7 +42,7 @@ func NewAboutWidget() *AboutWidget {
 		viewport:   vp,
 		buf:        buf,
 	}
-	for _, line := range buildAboutLines(readVCSBuildInfo()) {
+	for _, line := range buildAboutLines(FormatAboutVersion(version), readVCSBuildInfo()) {
 		buf.AppendLine(line)
 	}
 	vp.Home()
@@ -99,7 +103,37 @@ func readVCSBuildInfo() vcsBuildInfo {
 	return info
 }
 
-func buildAboutLines(b vcsBuildInfo) []string {
+var (
+	// releaseTagRe matches v1.0.0 / 1.0.0 / v1.0.0-rc.1 (not git-describe -N-gSHA).
+	releaseTagRe     = regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`)
+	gitDescribeExtra = regexp.MustCompile(`-\d+-g[0-9a-f]+$`)
+)
+
+// FormatAboutVersion maps the link-time version stamp to the About display.
+// Release tags look like "v1.0.0" or "v1.0.0-rc.1". Anything else (empty,
+// "dev", git-describe with -N-gSHA, …) is not a release build.
+func FormatAboutVersion(version string) string {
+	v := strings.TrimSpace(version)
+	if !isReleaseVersionTag(v) {
+		return AboutNotForRelease
+	}
+	if !strings.HasPrefix(v, "v") {
+		return "v" + v
+	}
+	return v
+}
+
+func isReleaseVersionTag(v string) bool {
+	if v == "" || v == "dev" {
+		return false
+	}
+	if gitDescribeExtra.MatchString(v) {
+		return false
+	}
+	return releaseTagRe.MatchString(v)
+}
+
+func buildAboutLines(version string, b vcsBuildInfo) []string {
 	return []string{
 		"gdbforge",
 		"",
@@ -107,7 +141,7 @@ func buildAboutLines(b vcsBuildInfo) []string {
 		"for Embedded Linux and C/C++ developers.",
 		"",
 		"Version:",
-		"    " + aboutProductVersion,
+		"    " + version,
 		"",
 		"Build:",
 		"    Git SHA: " + b.Revision,

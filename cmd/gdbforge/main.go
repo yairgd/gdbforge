@@ -7,9 +7,11 @@ import (
 	"os"
 )
 
-// version is set at link time by release builds:
+// version is set at link time by release builds / task build from a git tag:
 //
 //	go build -ldflags "-X main.version=v1.0.0" ./cmd/gdbforge
+//
+// Default "dev" means a non-release binary (:b about shows "not for release").
 var version = "dev"
 
 func main() {

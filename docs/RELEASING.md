@@ -12,7 +12,7 @@ Automated builds and GitHub Releases are driven by [`.github/workflows/release.y
 
 Targets: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64` (`CGO_ENABLED=0`).
 
-Binaries are named `gdbforge-<version>-<os>-<arch>` with a `.sha256` sidecar. The version is stamped via `-ldflags -X main.version=…` (`gdbforge -version`).
+Binaries are named `gdbforge-<version>-<os>-<arch>` with a `.sha256` sidecar. The version is stamped via `-ldflags -X main.version=…` (`gdbforge -version` and **`:b about`**). Local `task build` uses `git describe --tags --exact-match` when you are on a tag; otherwise it stamps `dev` and About shows **not for release**.
 
 ## Test without junking `main`
 

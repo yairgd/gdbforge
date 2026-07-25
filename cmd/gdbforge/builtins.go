@@ -22,7 +22,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.fileBuffers = make(map[string]*widgets.CodeWidget)
 	a.bufferListed = make(map[string]struct{})
 
-	a.aboutWidget = widgets.NewAboutWidget()
+	a.aboutWidget = widgets.NewAboutWidget(version)
 	a.registerBuiltin("about", a.aboutWidget)
 
 	a.helpWidget = widgets.NewHelpWidget()
