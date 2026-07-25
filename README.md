@@ -22,17 +22,10 @@
 
 ## Demo
 
-Screencast of gdbforge debugging a **Cortex-R5** core on an **MPSoC** (Xilinx/AMD Zynq UltraScale+ style), attached through a **SEGGER J-Link** probe:
+[![gdbforge demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo-r5.mp4)
 
-[![gdbforge demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo.mp4)
-
-Full-quality video: [gdbforge-demo.mp4](docs/media/gdbforge-demo.mp4) (~8 MB).
-
-What the session shows:
-
-- Multi-pane UI (Code, GDB console, Threads, Call Stack) while stepping a deep call stack on the R5
-- Target bring-up via the Lua plugin [`lua/r5_debug`](lua/r5_debug): spawns **JLinkGDBServer** in the background (`gdbforge.spawn`), waits for the GDB port, then runs the usual attach sequence without stealing the Code pane
-- Sample program: [`examples/stack_demo.c`](examples/stack_demo.c)
+- **[gdbforge-demo-r5.mp4](docs/media/gdbforge-demo-r5.mp4)** — original demo on a **Cortex-R5** (MPSoC / SEGGER J-Link): multi-pane UI stepping a deep call stack, with [`lua/r5_debug`](lua/r5_debug) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample program: [`examples/stack_demo.c`](examples/stack_demo.c).
+- **[gdbforge-demo-linux-app.mp4](docs/media/gdbforge-demo-linux-app.mp4)** — Linux app session showing **external terminal** print vs the **internal IO** (`:b io`) pane.
 
 ```bash
 mkdir -p .gdbforge/lua
@@ -41,6 +34,23 @@ cp -r lua/r5_debug .gdbforge/lua/
 ```
 
 More installable workflows (Go/`dlv_ext_port`, embedded/`remotegdb`, GDB tty, R5, games): [`lua/README.md`](lua/README.md) — install, env vars (`GDBFORGE_TERMINAL=mate-terminal`, …), and how to use each script.
+
+## Host skeleton (`cmd/demo`)
+
+The repo is split so **gdbforge is one app** on a reusable TUI host. A second binary, **`cmd/demo`**, is the minimal showcase of that host — same chrome (modes, `:` cmdline, panes, layouts) and **no GDB/Delve**. Use it as a skeleton when building another product (trader dashboard, ops console, …) on the same framework.
+
+```bash
+go build -o bin/demo ./cmd/demo
+./bin/demo
+```
+
+| Layer | What to reuse |
+|-------|----------------|
+| **FRAMEWORK** | `termui`, `platform`, `commands`, `ptyx`, `luahost`, … |
+| **Skeleton** | `cmd/demo` (+ optional `internal/demo`) — copy / rename as `cmd/<your-app>` |
+| **Debugger app** | `cmd/gdbforge` + `internal/gdb` / `dlv` / `gdbforge/*` — do **not** import these from a non-debugger app |
+
+Recipe: wire `TermApp` + command tree + your domain packages; keep debugger imports out of the host. Details and import rules: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) (`FRAMEWORK vs APP`, `task check-imports`).
 
 ## Problems it solves
 
@@ -102,6 +112,7 @@ More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./
 | **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** | Full user manual (same material as `:help`) |
 | **[docs/LUA_API.md](docs/LUA_API.md)** | `gdbforge.*` Lua reference for script authors |
 | **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
+| **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | FRAMEWORK vs APP split; `cmd/demo` as host skeleton |
 | **[lua/README.md](lua/README.md)** | Installable Lua workflow catalog |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 
