@@ -107,11 +107,12 @@ main {
 }
 
 .mermaid-wrap {
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   padding: 1.5rem;
   margin: 1rem 0;
   overflow-x: auto;
+  border: 1px solid var(--border);
 }
 
 .mermaid-standalone {

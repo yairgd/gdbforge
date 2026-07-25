@@ -72,7 +72,7 @@ async function initLibs() {
   marked.setOptions({ gfm: true, breaks: true });
   mermaid.initialize({
     startOnLoad: false,
-    theme: "default",
+    theme: "dark",
     securityLevel: "loose",
   });
 }
