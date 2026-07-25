@@ -36,6 +36,33 @@ func joinBase(base, path string) string {
 	return strings.TrimSuffix(base, "/") + path
 }
 
+// diagramPageFile maps a source name (e.g. data_flow.mermaid) to the static HTML
+// filename GitHub Pages can serve as text/html (unknown .mermaid triggers downloads).
+func diagramPageFile(mermaidName string) string {
+	base := strings.TrimSuffix(mermaidName, ".mermaid")
+	if base == mermaidName || base == "" {
+		return mermaidName + ".html"
+	}
+	return base + ".html"
+}
+
+// diagramSourceName maps a diagrams URL leaf back to the .mermaid source file.
+func diagramSourceName(pageLeaf string) string {
+	pageLeaf = strings.TrimSuffix(pageLeaf, "/")
+	switch {
+	case strings.HasSuffix(pageLeaf, ".html"):
+		base := strings.TrimSuffix(pageLeaf, ".html")
+		if strings.HasSuffix(base, ".mermaid") {
+			return base
+		}
+		return base + ".mermaid"
+	case strings.HasSuffix(pageLeaf, ".mermaid"):
+		return pageLeaf
+	default:
+		return pageLeaf + ".mermaid"
+	}
+}
+
 func (s *docServer) navLinks(base string) string {
 	parts := []string{fmt.Sprintf(`<a href="%s">Index</a>`, html.EscapeString(joinBase(base, "/")))}
 	for _, name := range s.listDocPages() {
@@ -139,7 +166,7 @@ func (s *docServer) diagramsIndexHTML(base string) []byte {
 	list.WriteString(`<article class="markdown-body"><h2>Mermaid diagrams</h2>`)
 	list.WriteString(`<p>Standalone diagram pages (sources in <code>docs/diagrams/</code>).</p><ul class="diagram-list">`)
 	for _, n := range names {
-		href := joinBase(base, "/diagrams/"+url.PathEscape(n))
+		href := joinBase(base, "/diagrams/"+url.PathEscape(diagramPageFile(n)))
 		fmt.Fprintf(&list, `<li><a href="%s">%s</a></li>`, html.EscapeString(href), html.EscapeString(n))
 	}
 	list.WriteString(`</ul></article>`)
@@ -160,6 +187,6 @@ func (s *docServer) diagramPageHTML(name, base string) []byte {
 			html.EscapeString(string(src)),
 		)
 	}
-	seo := s.seoFor(name, "Mermaid diagram: "+name+" (gdbforge documentation).", "/diagrams/"+name, base)
+	seo := s.seoFor(name, "Mermaid diagram: "+name+" (gdbforge documentation).", "/diagrams/"+diagramPageFile(name), base)
 	return pageShell(seo, attrs, s.navLinks(base), placeholder)
 }

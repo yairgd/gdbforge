@@ -72,7 +72,7 @@ func (s *docServer) export(outDir, base string) error {
 	}
 
 	for _, name := range s.listDiagrams() {
-		dst := filepath.Join(outDir, "diagrams", name)
+		dst := filepath.Join(outDir, "diagrams", diagramPageFile(name))
 		if err := os.WriteFile(dst, s.diagramPageHTML(name, base), 0o644); err != nil {
 			return fmt.Errorf("write diagram page %s: %w", name, err)
 		}
@@ -105,7 +105,7 @@ func (s *docServer) writeSEOFiles(outDir, base string) error {
 		paths = append(paths, "/doc/"+name)
 	}
 	for _, name := range s.listDiagrams() {
-		paths = append(paths, "/diagrams/"+name)
+		paths = append(paths, "/diagrams/"+diagramPageFile(name))
 	}
 
 	sm := sitemapXML(s.siteOrigin, base, paths)

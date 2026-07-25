@@ -215,12 +215,13 @@ func (s *docServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		p := filepath.Join(s.docsRoot, "diagrams", name)
+		srcName := diagramSourceName(name)
+		p := filepath.Join(s.docsRoot, "diagrams", srcName)
 		if !fileExists(p) {
 			http.NotFound(w, r)
 			return
 		}
-		s.sendHTML(w, s.diagramPageHTML(name, s.base))
+		s.sendHTML(w, s.diagramPageHTML(srcName, s.base))
 	case strings.HasPrefix(path, "/raw/"):
 		s.sendRaw(w, strings.TrimPrefix(path, "/raw/"))
 	case strings.HasPrefix(path, "/www/"):

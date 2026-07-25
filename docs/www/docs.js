@@ -126,6 +126,15 @@ async function renderMermaidInPage() {
   }
 }
 
+function diagramPagePath(mermaidName) {
+  const name = String(mermaidName || "");
+  if (name.endsWith(".html")) {
+    return `diagrams/${encodeURIComponent(name)}`;
+  }
+  const base = name.endsWith(".mermaid") ? name.slice(0, -".mermaid".length) : name;
+  return `diagrams/${encodeURIComponent(base + ".html")}`;
+}
+
 function fixInternalDocLinks(html) {
   const base = getBase();
   const basePrefix = base === "/" ? "/" : base;
@@ -145,9 +154,9 @@ function fixInternalDocLinks(html) {
       }
       return `href="${siteUrl(`doc/${encodeURIComponent(name)}`)}${fragment}"`;
     }
-    if (href.startsWith("diagrams/") && href.endsWith(".mermaid")) {
+    if (href.includes("diagrams/") && href.endsWith(".mermaid")) {
       const name = href.split("/").pop();
-      return `href="${siteUrl(`diagrams/${encodeURIComponent(name)}`)}${fragment}"`;
+      return `href="${siteUrl(diagramPagePath(name))}${fragment}"`;
     }
     return match;
   });
@@ -218,7 +227,7 @@ function parseDiagramList() {
 
 async function renderDiagramIndex(container, names) {
   const items = names
-    .map((n) => `<li><a href="${siteUrl(`diagrams/${encodeURIComponent(n)}`)}">${escapeHtml(n)}</a></li>`)
+    .map((n) => `<li><a href="${siteUrl(diagramPagePath(n))}">${escapeHtml(n)}</a></li>`)
     .join("");
   container.innerHTML = `
     <h2>Mermaid diagrams</h2>

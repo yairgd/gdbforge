@@ -67,7 +67,7 @@ Environment variable:
 | Developer guide | `/doc/DEVELOPER_GUIDE.md` |
 | Any `.md` file | `/doc/<filename>.md` |
 | Diagrams index | `/diagrams` |
-| Single diagram | `/diagrams/<name>.mermaid` |
+| Single diagram | `/diagrams/<name>.html` (source remains `docs/diagrams/<name>.mermaid`) |
 | Raw markdown | `/raw/<filename>.md` |
 
 Links between Markdown files in the HTML viewer resolve to `/doc/<name>.md` automatically.
@@ -131,7 +131,8 @@ _site/
   raw/diagrams/*
   www/site.css, docs.js
   diagrams/index.html
-  diagrams/*.mermaid
+  diagrams/*.html          # HTML shells (.mermaid filenames download on Pages)
+  raw/diagrams/*.mermaid
 ```
 
 ### SEO included in export
