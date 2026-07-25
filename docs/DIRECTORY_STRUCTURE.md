@@ -50,7 +50,8 @@ gdbforge/
 │   ├── platform/          # Buffer, Logger, AppContext ★
 │   ├── luahost/           # Lua VM + framework API (APP wires gdb/dlv) ★
 │   ├── ptyx/              # PTY sessions (FRAMEWORK) ★
-│   ├── gdbforge/              # App layer ★
+│   ├── demo/               # Host showcase app (no debugger) ★
+│   ├── gdbforge/              # Debugger app layer ★
 │   │   ├── models/        # Break/thread/stack DTOs
 │   │   ├── parse/         # MI parsers (not in mcp)
 │   │   ├── mitext/        # MI string unescape / prompt tokens
@@ -81,6 +82,7 @@ gdbforge/
 | Path | Binary | Purpose |
 |------|--------|---------|
 | `cmd/gdbforge/` | `gdbforge` | **gdbforge** debugger app (`package main`, split across files) |
+| `cmd/demo/` | `demo` | Host showcase (gdbforge-like UI, basic commands; no GDB) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 
 ### `cmd/gdbforge` layout

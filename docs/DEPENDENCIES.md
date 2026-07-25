@@ -26,12 +26,26 @@ The repo is split so a future non-debugger TUI app can reuse the same host witho
 
 | Layer | Packages | Role |
 |-------|----------|------|
-| **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
+| **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `execcli`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
 | **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg`, `InferiorOutputMsg`) |
+| **APP (demo)** | `internal/demo`, `cmd/demo` | Host showcase — same chrome, basic commands; no debugger |
 
 **Composition root:** only `cmd/gdbforge` (and tests) should wire APP packages into FRAMEWORK surfaces.
 
-**Lua:** `luahost` installs framework APIs at `New`. Debugger Lua bindings (`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `cmd/gdbforge` via `wireUserLuaAPI`.
+### Second app (`cmd/demo`)
+
+A host showcase binary lives at `cmd/demo` (+ `internal/demo`). It reuses FRAMEWORK packages only (`termui`, `commands`, `platform`, …) and must **not** import `gdb`, `dlv`, `mcp`, or `gdbforge/*`.
+
+Recipe for another product binary:
+
+1. Add `cmd/<app>` as composition root and optional `internal/<domain>/…`.
+2. Wire `termui.TermApp` + `commands.CommandRegistry` + basic `:window` / `:quit` / `:help`.
+3. Run `task check-imports`.
+
+`internal/mcp` is **debugger-app** (GDB tools), not reusable host.
+
+
+**Lua:** `luahost` installs framework APIs at `New`. Debugger Lua bindings (`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `cmd/gdbforge` via `gdbforge/luadebug.Install`.
 
 ## Quick answer: `internal/termui`
 

@@ -23,23 +23,18 @@ type OnRegister func(name string, rt *Runtime)
 
 // Runtime wraps one Lua VM bound to a Pane and optional command registry hook.
 type Runtime struct {
-	mu               sync.Mutex
-	L                *lua.LState
-	pane             Pane
-	registered       map[string]*lua.LFunction
-	onRegister       OnRegister
-	openBuffer       OpenBufferFunc
-	run              RunFunc
-	spawn            SpawnFunc
-	openExternalTTY  OpenExternalTTYFunc
-	setInferiorTTY   SetInferiorTTYFunc
-	spawnTerminal    SpawnTerminalFunc
-	dlvConnect       DlvConnectFunc
-	spawnDlvHeadless SpawnDlvHeadlessFunc
-	program          ProgramFunc
-	gdb              GDBFunc
-	scriptDir        string // directory of the loaded user script (lua_dir())
-	lastErr          string
+	mu              sync.Mutex
+	L               *lua.LState
+	pane            Pane
+	registered      map[string]*lua.LFunction
+	onRegister      OnRegister
+	openBuffer      OpenBufferFunc
+	run             RunFunc
+	spawn           SpawnFunc
+	openExternalTTY OpenExternalTTYFunc
+	spawnTerminal   SpawnTerminalFunc
+	scriptDir       string // directory of the loaded user script (lua_dir())
+	lastErr         string
 }
 
 // New creates a Runtime and installs the gdbforge / pane APIs.
@@ -76,6 +71,29 @@ func (rt *Runtime) SetScriptDir(dir string) {
 	rt.mu.Lock()
 	rt.scriptDir = dir
 	rt.mu.Unlock()
+}
+
+// AppendPrint writes a line to the bound pane (for app-installed Lua APIs).
+// Must not take rt.mu: host Lua funcs run under CallNamed/LoadString which
+// already hold the lock — re-locking deadlocks the UI (e.g. :lua dlv_ext_port).
+func (rt *Runtime) AppendPrint(line string) {
+	if rt.pane != nil {
+		rt.pane.AppendPrint(line)
+	}
+}
+
+// SetGdbforgeFunc installs or replaces gdbforge.<name> with fn.
+// Used by app packages (e.g. luadebug) to add domain APIs without baking them into the host.
+func (rt *Runtime) SetGdbforgeFunc(name string, fn lua.LGFunction) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.L == nil || name == "" || fn == nil {
+		return
+	}
+	gf := rt.L.GetGlobal("gdbforge")
+	if tbl, ok := gf.(*lua.LTable); ok {
+		rt.L.SetField(tbl, name, rt.L.NewFunction(fn))
+	}
 }
 
 // LastError returns the last Lua error string (empty if none).
@@ -190,8 +208,8 @@ func (rt *Runtime) installAPI() {
 	gf := L.NewTable()
 	L.SetGlobal("gdbforge", gf)
 
-	// Framework API only. Debugger bindings (gdb, dlv_*, set_inferior_tty, program)
-	// are installed by the app via SetGDB / SetDlvConnect / … after New.
+	// Host API only. Debugger bindings (gdb, dlv_*, set_inferior_tty, program)
+	// are installed by the app via gdbforge/luadebug.Install after New.
 	L.SetField(gf, "print", L.NewFunction(rt.luaPrint))
 	L.SetField(gf, "clear", L.NewFunction(rt.luaClear))
 	L.SetField(gf, "register", L.NewFunction(rt.luaRegister))

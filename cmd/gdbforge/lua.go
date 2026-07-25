@@ -4,10 +4,11 @@ import (
 	"sort"
 	"strings"
 
-	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/luadebug"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
@@ -193,33 +194,35 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 		return a.SpawnExec(argv)
 	})
 	rt.SetOpenExternalTTY(a.OpenExternalTTY)
-	rt.SetSetInferiorTTY(a.SetInferiorTTY)
 	rt.SetSpawnTerminal(a.SpawnTerminal)
-	rt.SetDlvConnect(a.ConnectDlv)
-	rt.SetSpawnDlvHeadless(a.SpawnDlvHeadless)
-	rt.SetProgram(a.SessionProgram)
-	rt.SetGDB(func(cmd string) {
-		cmd = strings.TrimSpace(cmd)
-		if cmd == "" {
-			return
-		}
-		if a.gdbWidget != nil {
-			a.gdbWidget.EchoSubmit(cmd)
-			a.gdbWidget.FollowTailAndScroll()
-		}
-		if a.isDLV() {
-			if a.dlvClient == nil {
+	luadebug.Install(rt, luadebug.Hooks{
+		SetInferiorTTY:   a.SetInferiorTTY,
+		DlvConnect:       a.ConnectDlv,
+		SpawnDlvHeadless: a.SpawnDlvHeadless,
+		Program:          a.SessionProgram,
+		GDB: func(cmd string) {
+			cmd = strings.TrimSpace(cmd)
+			if cmd == "" {
 				return
 			}
-			a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
-		} else {
-			if a.gdbClient == nil {
-				return
+			if a.gdbWidget != nil {
+				a.gdbWidget.EchoSubmit(cmd)
+				a.gdbWidget.FollowTailAndScroll()
 			}
-			sendCmd := gdb.CLIExecToMI(cmd)
-			a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
-		}
-		a.RequestFrame()
+			if a.isDLV() {
+				if a.dlvClient == nil {
+					return
+				}
+				a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
+			} else {
+				if a.gdbClient == nil {
+					return
+				}
+				sendCmd := gdb.CLIExecToMI(cmd)
+				a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+			}
+			a.RequestFrame()
+		},
 	})
 }
 

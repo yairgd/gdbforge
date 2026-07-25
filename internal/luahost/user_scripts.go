@@ -28,24 +28,8 @@ type SpawnFunc func(argv []string) error
 // OpenExternalTTYFunc opens a real terminal holding a pts and returns its path.
 type OpenExternalTTYFunc func() (string, error)
 
-// SetInferiorTTYFunc routes program stdio to path ("internal" restores IO pane).
-type SetInferiorTTYFunc func(path string) error
-
 // SpawnTerminalFunc opens a real terminal emulator running argv.
 type SpawnTerminalFunc func(argv []string) error
-
-// DlvConnectFunc replaces the local Delve session with `dlv connect addr`.
-type DlvConnectFunc func(addr string) error
-
-// SpawnDlvHeadlessFunc opens an external terminal running headless dlv for the
-// current session program (+ optional extraArgs), listening on port.
-type SpawnDlvHeadlessFunc func(port string, extraArgs []string) error
-
-// ProgramFunc returns the debuggee path from the current session (may be "").
-type ProgramFunc func() string
-
-// GDBFunc sends one GDB CLI command (same path as the GDB console).
-type GDBFunc func(cmd string)
 
 // SetOpenBuffer installs gdbforge.open_buffer(name) for user scripts.
 func (rt *Runtime) SetOpenBuffer(fn OpenBufferFunc) {
@@ -103,20 +87,6 @@ func (rt *Runtime) SetOpenExternalTTY(fn OpenExternalTTYFunc) {
 	}
 }
 
-// SetSetInferiorTTY installs gdbforge.set_inferior_tty(path).
-func (rt *Runtime) SetSetInferiorTTY(fn SetInferiorTTYFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.setInferiorTTY = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "set_inferior_tty", rt.L.NewFunction(rt.luaSetInferiorTTY))
-	}
-}
-
 // SetSpawnTerminal installs gdbforge.spawn_terminal(...) — real terminal + argv.
 func (rt *Runtime) SetSpawnTerminal(fn SpawnTerminalFunc) {
 	rt.mu.Lock()
@@ -128,62 +98,6 @@ func (rt *Runtime) SetSpawnTerminal(fn SpawnTerminalFunc) {
 	gf := rt.L.GetGlobal("gdbforge")
 	if tbl, ok := gf.(*lua.LTable); ok {
 		rt.L.SetField(tbl, "spawn_terminal", rt.L.NewFunction(rt.luaSpawnTerminal))
-	}
-}
-
-// SetDlvConnect installs gdbforge.dlv_connect(addr) — `dlv connect` to headless.
-func (rt *Runtime) SetDlvConnect(fn DlvConnectFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.dlvConnect = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "dlv_connect", rt.L.NewFunction(rt.luaDlvConnect))
-	}
-}
-
-// SetSpawnDlvHeadless installs gdbforge.spawn_dlv_headless(port).
-func (rt *Runtime) SetSpawnDlvHeadless(fn SpawnDlvHeadlessFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.spawnDlvHeadless = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "spawn_dlv_headless", rt.L.NewFunction(rt.luaSpawnDlvHeadless))
-	}
-}
-
-// SetProgram installs gdbforge.program() — debuggee path from session startup.
-func (rt *Runtime) SetProgram(fn ProgramFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.program = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "program", rt.L.NewFunction(rt.luaProgram))
-	}
-}
-
-// SetGDB installs gdbforge.gdb(cmd) for console-style GDB sends.
-func (rt *Runtime) SetGDB(fn GDBFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.gdb = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "gdb", rt.L.NewFunction(rt.luaGDB))
 	}
 }
 
@@ -380,22 +294,6 @@ func (rt *Runtime) luaOpenExternalTTY(L *lua.LState) int {
 	return 1
 }
 
-func (rt *Runtime) luaSetInferiorTTY(L *lua.LState) int {
-	path := strings.TrimSpace(L.CheckString(1))
-	if rt.setInferiorTTY == nil {
-		L.RaiseError("gdbforge.set_inferior_tty: not available")
-		return 0
-	}
-	if err := rt.setInferiorTTY(path); err != nil {
-		L.RaiseError("%s", err.Error())
-		return 0
-	}
-	if rt.pane != nil {
-		rt.pane.AppendPrint("inferior tty: " + path)
-	}
-	return 0
-}
-
 func (rt *Runtime) luaSpawnTerminal(L *lua.LState) int {
 	n := L.GetTop()
 	argv := make([]string, 0, n)
@@ -421,65 +319,6 @@ func (rt *Runtime) luaSpawnTerminal(L *lua.LState) int {
 		rt.pane.AppendPrint("spawn_terminal: " + strings.Join(argv, " "))
 	}
 	return 0
-}
-
-func (rt *Runtime) luaDlvConnect(L *lua.LState) int {
-	addr := strings.TrimSpace(L.CheckString(1))
-	if rt.dlvConnect == nil {
-		L.RaiseError("gdbforge.dlv_connect: not available")
-		return 0
-	}
-	if err := rt.dlvConnect(addr); err != nil {
-		L.RaiseError("%s", err.Error())
-		return 0
-	}
-	if rt.pane != nil {
-		rt.pane.AppendPrint("dlv_connect: " + addr)
-	}
-	return 0
-}
-
-func (rt *Runtime) luaSpawnDlvHeadless(L *lua.LState) int {
-	port := "2345"
-	var extra []string
-	n := L.GetTop()
-	if n >= 1 {
-		port = strings.TrimSpace(L.ToString(1))
-	}
-	if port == "" {
-		port = "2345"
-	}
-	for i := 2; i <= n; i++ {
-		s := strings.TrimSpace(L.ToString(i))
-		if s != "" {
-			extra = append(extra, s)
-		}
-	}
-	if rt.spawnDlvHeadless == nil {
-		L.RaiseError("gdbforge.spawn_dlv_headless: not available")
-		return 0
-	}
-	if err := rt.spawnDlvHeadless(port, extra); err != nil {
-		L.RaiseError("%s", err.Error())
-		return 0
-	}
-	if rt.pane != nil {
-		msg := "spawn_dlv_headless :" + port
-		if len(extra) > 0 {
-			msg += " -- " + strings.Join(extra, " ")
-		}
-		rt.pane.AppendPrint(msg)
-	}
-	return 0
-}
-
-func (rt *Runtime) luaProgram(L *lua.LState) int {
-	if rt.program == nil {
-		L.Push(lua.LString(""))
-		return 1
-	}
-	L.Push(lua.LString(rt.program()))
-	return 1
 }
 
 // wait_port(host_port [, timeout_sec]) → true if TCP accepts.
@@ -520,17 +359,6 @@ func (rt *Runtime) luaWaitPort(L *lua.LState) int {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-func (rt *Runtime) luaGDB(L *lua.LState) int {
-	cmd := strings.TrimSpace(L.CheckString(1))
-	if cmd == "" {
-		return 0
-	}
-	if rt.gdb != nil {
-		rt.gdb(cmd)
-	}
-	return 0
 }
 
 func (rt *Runtime) luaSleep(L *lua.LState) int {

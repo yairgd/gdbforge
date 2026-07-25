@@ -3,6 +3,9 @@ package luahost
 import (
 	"strings"
 	"testing"
+	"time"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 type memPane struct {
@@ -130,4 +133,38 @@ func TestTetrisScriptLoads(t *testing.T) {
 	rt.DispatchTick(0.5)
 	rt.DispatchDraw()
 	rt.DispatchKey("h")
+}
+
+// Regression: app-installed Lua funcs (luadebug) call AppendPrint while CallNamed
+// holds rt.mu. Re-locking AppendPrint froze :lua dlv_ext_port.
+func TestAppendPrintFromHostFuncUnderCallNamed(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	rt.SetGdbforgeFunc("probe", func(L *lua.LState) int {
+		rt.AppendPrint("from-host-func")
+		return 0
+	})
+	if err := rt.LoadString(`
+gdbforge.register("run", function()
+  gdbforge.probe()
+end)
+`, "probe"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("run") }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("deadlock: AppendPrint under CallNamed")
+	}
+	if len(p.lines) == 0 || p.lines[len(p.lines)-1] != "from-host-func" {
+		t.Fatalf("lines=%v", p.lines)
+	}
 }

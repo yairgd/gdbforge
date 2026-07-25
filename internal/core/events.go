@@ -22,8 +22,3 @@ type ExecOutputMsg struct {
 }
 
 func (ExecOutputMsg) Type() string { return "ExecOutputMsg" }
-
-type ConsoleOutput struct{ Text string }
-type TargetOutput struct{ Text string }
-type LogOutput struct{ Text string }
-type BreakpointHit struct{ Line int }
