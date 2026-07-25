@@ -6,17 +6,21 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
 const (
-	inferiorOutputFlushInterval = 16 * time.Millisecond
-	inferiorOutputFlushMaxBytes = 64 * 1024
-	inferiorPostRetry           = 50 * time.Millisecond
-	inferiorPostRetries         = 40 // ~2s before dropping a coalesced chunk
+	// Coalesce aggressively so a printf storm becomes ~20 UI events/sec, not thousands.
+	inferiorOutputFlushInterval = 50 * time.Millisecond
+	inferiorOutputFlushMaxBytes = 256 * 1024
+	// Cap pending coalesced text; keep head + tail so Ctrl-C era context remains.
+	inferiorPendingHardMax = 1024 * 1024
+	// PostEvent backpressure: block (do not drop immediately) so the PTY reader stalls.
+	inferiorPostRetry   = 5 * time.Millisecond
+	inferiorPostRetries = 400 // ~2s before dropping a coalesced chunk
 )
 
 // wireInferiorIO attaches the dedicated program PTY to the IO view and
@@ -72,6 +76,7 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 			if err := screen.PostEvent(ev); err == nil {
 				return
 			}
+			// Backpressure: stop draining the PTY subscriber until the UI accepts.
 			time.Sleep(inferiorPostRetry)
 		}
 		if log != nil {
@@ -88,6 +93,7 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.Inferi
 	var pending strings.Builder
 	var flushTimer *time.Timer
 	var flushC <-chan time.Time
+	dropped := 0
 
 	disarm := func() {
 		if flushTimer == nil {
@@ -102,6 +108,24 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.Inferi
 		flushTimer = nil
 		flushC = nil
 	}
+	trimPending := func() {
+		if pending.Len() <= inferiorPendingHardMax {
+			return
+		}
+		s := pending.String()
+		keepHead := inferiorPendingHardMax / 4
+		keepTail := inferiorPendingHardMax - keepHead - 80
+		if keepTail < 1024 {
+			keepTail = inferiorPendingHardMax / 2
+			keepHead = inferiorPendingHardMax - keepTail
+		}
+		marker := "\n... [output truncated under flood] ...\n"
+		dropped += len(s) - keepHead - keepTail
+		pending.Reset()
+		pending.WriteString(s[:keepHead])
+		pending.WriteString(marker)
+		pending.WriteString(s[len(s)-keepTail:])
+	}
 	flush := func() {
 		disarm()
 		if pending.Len() == 0 {
@@ -109,6 +133,10 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.Inferi
 		}
 		data := pending.String()
 		pending.Reset()
+		if dropped > 0 {
+			data = "... [earlier output truncated under flood] ...\n" + data
+			dropped = 0
+		}
 		post(events.InferiorOutputMsg{Data: data})
 	}
 	arm := func() {
@@ -138,6 +166,7 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.Inferi
 				continue
 			}
 			pending.WriteString(msg.Data)
+			trimPending()
 			if pending.Len() >= inferiorOutputFlushMaxBytes {
 				flush()
 			} else {

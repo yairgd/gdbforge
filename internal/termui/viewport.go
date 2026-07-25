@@ -25,8 +25,8 @@ type Viewport struct {
 	CursorCol  int
 
 	// Last canvas size seen during Draw (used for scrolling).
-	width  int
-	height int
+	width      int
+	height     int
 	followTail bool
 	// padTop is blank rows above content when follow-tail and the buffer is
 	// shorter than the viewport (bottom-align short buffers). Unused today

@@ -64,8 +64,8 @@ func NewConsolePane(paneName string) *ConsolePane {
 	return p
 }
 
-func (p *ConsolePane) Input() *InputLine { return p.input }
-func (p *ConsolePane) Viewport() *Viewport { return p.out }
+func (p *ConsolePane) Input() *InputLine        { return p.input }
+func (p *ConsolePane) Viewport() *Viewport      { return p.out }
 func (p *ConsolePane) Buffer() *platform.Buffer { return p.buf }
 
 func (p *ConsolePane) SetClipboard(io ClipboardIO) {

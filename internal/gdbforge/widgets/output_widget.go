@@ -12,7 +12,10 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-const outputTabWidth = 8
+const (
+	outputTabWidth      = 8
+	outputScrollbackMax = 8000 // drop oldest under printf flood
+)
 
 // OutputWidget is the IO console view: inferior stdout with terminal-like
 // \n / \r / \t handling and ANSI colors. Built on ConsolePane (same scrollback
@@ -136,6 +139,9 @@ func (w *OutputWidget) AppendInferior(data string) {
 		return
 	}
 	w.writeTarget(data)
+	if w.buf != nil {
+		w.buf.TrimTo(outputScrollbackMax)
+	}
 	w.console.FollowTailAndScroll()
 }
 

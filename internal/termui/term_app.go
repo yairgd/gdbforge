@@ -185,26 +185,99 @@ func (app *TermApp) Run() {
 			app.uiEvents <- app.screen.PollEvent()
 		}
 	}()
+	paintTicker := time.NewTicker(16 * time.Millisecond)
+	defer paintTicker.Stop()
+	dirty := false
 	for !app.exit {
 		select {
-		// events from termui events
 		case ev := <-app.events:
 			app.HandleCoreEvents(ev)
-		// event from tcell
+			dirty = true
 		case ev := <-app.uiEvents:
-			app.HandleEvent(ev)
+			batch := drainUIEvents(app.uiEvents, ev, 96)
+			urgent := app.handleUIEventBatch(batch)
+			dirty = true
+			if urgent {
+				app.present()
+				dirty = false
+			}
+		case <-paintTicker.C:
+			if dirty {
+				app.present()
+				dirty = false
+			}
 		}
-
-		app.Draw(Canvas{
-			rect: app.canvas.Rect(),
-			grid: app.frontBuffer,
-		})
-
-		app.frontBuffer.Draw(app.screen)
-		app.frontBuffer.ApplySystemCursor(app.screen)
-		app.screen.Show()
 	}
+}
 
+// drainUIEvents takes first plus any events already queued (up to max).
+func drainUIEvents(ch <-chan tcell.Event, first tcell.Event, max int) []tcell.Event {
+	if max < 1 {
+		max = 1
+	}
+	batch := make([]tcell.Event, 0, max)
+	batch = append(batch, first)
+	for len(batch) < max {
+		select {
+		case ev := <-ch:
+			batch = append(batch, ev)
+		default:
+			return batch
+		}
+	}
+	return batch
+}
+
+// handleUIEventBatch processes keys/mouse/resize before interrupts so Ctrl-C
+// is not stuck behind a flood of output PostEvents.
+// Returns true if the batch needs an immediate paint (input / resize).
+func (app *TermApp) handleUIEventBatch(batch []tcell.Event) bool {
+	urgent := false
+	var keys, mice, resizes, interrupts, other []tcell.Event
+	for _, ev := range batch {
+		switch ev.(type) {
+		case *tcell.EventKey:
+			keys = append(keys, ev)
+			urgent = true
+		case *tcell.EventMouse:
+			mice = append(mice, ev)
+			urgent = true
+		case *tcell.EventResize:
+			resizes = append(resizes, ev)
+			urgent = true
+		case *tcell.EventInterrupt:
+			interrupts = append(interrupts, ev)
+		default:
+			other = append(other, ev)
+			urgent = true
+		}
+	}
+	for _, ev := range keys {
+		app.HandleEvent(ev)
+	}
+	for _, ev := range mice {
+		app.HandleEvent(ev)
+	}
+	for _, ev := range resizes {
+		app.HandleEvent(ev)
+	}
+	for _, ev := range other {
+		app.HandleEvent(ev)
+	}
+	for _, ev := range interrupts {
+		app.HandleEvent(ev)
+	}
+	return urgent
+}
+
+func (app *TermApp) present() {
+	app.Draw(Canvas{
+		rect: app.canvas.Rect(),
+		grid: app.frontBuffer,
+	})
+	app.frontBuffer.Draw(app.screen)
+	app.frontBuffer.ApplySystemCursor(app.screen)
+	app.screen.Show()
 }
 
 func (app *TermApp) UpdateCanvas() Canvas {

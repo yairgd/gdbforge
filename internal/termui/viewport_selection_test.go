@@ -98,4 +98,3 @@ func TestFollowTailPadsShortBufferToBottom(t *testing.T) {
 		t.Fatalf("click on last content row mapped to line %d", pos.line)
 	}
 }
-

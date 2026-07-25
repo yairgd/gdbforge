@@ -86,12 +86,20 @@ func (t *TTY) Subscribe() (<-chan core.PtyOutputMsg, func()) {
 
 func (t *TTY) broadcast(msg core.PtyOutputMsg) {
 	t.subMu.Lock()
-	defer t.subMu.Unlock()
+	subs := make([]chan core.PtyOutputMsg, 0, len(t.subs))
 	for ch := range t.subs {
-		select {
-		case ch <- msg:
-		default:
-		}
+		subs = append(subs, ch)
+	}
+	t.subMu.Unlock()
+	for _, ch := range subs {
+		// Blocking send applies backpressure: when the UI/coalescer is behind,
+		// the master reader stalls, the kernel PTY buffer fills, and the
+		// inferior's printf blocks — like a real terminal.
+		// Recover if cancel closed the channel mid-send.
+		func() {
+			defer func() { _ = recover() }()
+			ch <- msg
+		}()
 	}
 }
 

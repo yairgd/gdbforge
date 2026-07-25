@@ -317,6 +317,20 @@ Ctrl-C while the inferior is **running** typically interrupts via the **debugger
 
 ---
 
+## `:b io` flood vs `:set inferior-tty`
+
+Internal IO (`ptyx.TTY` → coalesce → UI `PostEvent` → `OutputWidget`) shares the **same event loop** that paints panes and handles keys. gdbforge applies backpressure and prioritizes Ctrl-C so a `printf` storm should not hard-freeze the app, but **display smoothness will not match mate-terminal/kitty**. That is a **known GUI limitation** of embedding a line console in the debugger TUI.
+
+**Prefer `:set inferior-tty` when you need:**
+
+- Smooth scrolling under high-rate stdout
+- A real VT (curses / alternate screen / full-screen TUI)
+- Program I/O isolated from debugger chrome redraw
+
+Bare `:set inferior-tty` opens `GDBFORGE_TERMINAL` and points GDB at that pts (`-inferior-tty-set`, live). `:set inferior-tty internal` restores `:b io`. Details: [USER_GUIDE.md](USER_GUIDE.md#why-set-inferior-tty-external-stdio), [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets).
+
+---
+
 ## Key source map
 
 | Concern | Path |

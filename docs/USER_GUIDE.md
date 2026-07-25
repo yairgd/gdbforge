@@ -161,12 +161,24 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - Default: program stdin/stdout on a **dedicated PTY** (GDB: `-inferior-tty-set`; Delve: `dlv exec --tty`); debugger console uses a separate PTY
 - Type here while the inferior is running; Enter sends to the program
 - PgUp/PgDn scroll; Ctrl-L clear; Ctrl-C → program interrupt; ANSI colors
-- **Not a VT emulator** — for TUI/curses targets use an external terminal:
+- **Not a VT emulator** — for TUI/curses targets use an external terminal
+- **High-rate stdout (GUI limit):** `:b io` shares gdbforge’s UI event loop. A tight `printf` storm stays **interruptible** (Ctrl-C works; the PTY applies backpressure), but scrolling/paint will **not** feel as smooth as mate-terminal/kitty. Prefer an external tty for flood-heavy or full-screen programs — that is expected, not a bug.
+
+### Why `:set inferior-tty` (external stdio)
+
+Route program stdin/stdout to a **real terminal emulator** (`GDBFORGE_TERMINAL`) instead of `:b io`:
+
+| Advantage | What you get |
+|-----------|----------------|
+| **Smooth high-volume output** | The emulator owns the PTY master — built for flood scroll/paint |
+| **Real VT / TUI** | curses, menus, alternate screen, correct `isatty` |
+| **Responsive input under load** | Keys and display live in that window; gdbforge stays free for GDB/Delve |
+| **Clear separation** | Debugger chrome (`:b gdb`, source, BPs) stays in gdbforge; program I/O next door |
 
 | | GDB | Delve (`-g dlv`) |
 |--|-----|------------------|
 | `:set inferior-tty` | Live `-inferior-tty-set` | Restarts session with `--tty` |
-| Recommended TUI flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [prog args…]` (alias `dlv_port`) — headless dlv in another window + connect; I/O stays there |
+| Recommended TUI / flood flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [prog args…]` (alias `dlv_port`) — headless dlv in another window + connect; I/O stays there |
 | Env | `GDBFORGE_INFERIOR_TTY`, `GDBFORGE_TERMINAL` | same |
 
 - When external, `:b io` shows a note only (type in the other window). Closing that window does not auto-rewire — `:set inferior-tty internal`

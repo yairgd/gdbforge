@@ -209,7 +209,17 @@ Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitSc
 
 ### External terminal stdio (TUI targets)
 
-The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gdbforge itself, htop, games, …) route stdio to a **real terminal** instead.
+The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gdbforge itself, htop, games, …) **or** programs that flood stdout, route stdio to a **real terminal** instead.
+
+**`:b io` vs `:set inferior-tty`**
+
+| | `:b io` (internal) | `:set inferior-tty` (external) |
+|--|--------------------|--------------------------------|
+| Best for | Normal debug prints, short interactive prompts | TUI/curses, high-rate `printf`, anything that needs a real VT |
+| Smoothness under flood | Interruptible (Ctrl-C / backpressure), paint less smooth than a dedicated emulator — **known GUI limit** | Emulator owns display; typically smooth like “native GDB + xterm” |
+| Who holds PTY master | gdbforge (`ptyx.TTY`) → UI event loop | `GDBFORGE_TERMINAL` (mate-terminal, kitty, …) |
+
+**Advantages of `:set inferior-tty`:** smooth high-volume output, real VT features, program I/O does not compete with gdbforge’s debugger panes for redraw, live attach on GDB (`-inferior-tty-set` without restart).
 
 | Mode | How | IO pane |
 |------|-----|---------|

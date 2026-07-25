@@ -59,6 +59,21 @@ func (b *Buffer) AppendLine(line string) {
 	b.lines = append(b.lines, line)
 }
 
+// TrimTo keeps at most max lines by dropping the oldest. max <= 0 is a no-op.
+func (b *Buffer) TrimTo(max int) {
+	if max <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.lines) <= max {
+		return
+	}
+	drop := len(b.lines) - max
+	copy(b.lines, b.lines[drop:])
+	b.lines = b.lines[:max]
+}
+
 func (b *Buffer) AppendText(text string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
