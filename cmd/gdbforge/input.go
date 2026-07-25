@@ -181,6 +181,127 @@ func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	return true
 }
 
+// handleSearchKey owns keys while ModeSearch ('/' cmdline) is active.
+// Same edit line as command mode, but no tab-completion / command parse —
+// edits live-preview matches on searchTarget; Enter commits.
+func (a *DebuggerApp) handleSearchKey(ev *tcell.EventKey) bool {
+	a.completionForGDB = false
+	a.clearCompletion()
+	a.cmdWidget.HandleEvent(ev)
+	if !a.cmdWidget.Active() && a.Mode() == platform.ModeSearch {
+		a.SetMode(platform.ModeNormal)
+	}
+	a.RequestFrame()
+	return true
+}
+
+func (a *DebuggerApp) onSearchCmdChange(text string) {
+	if a.cmdWidget == nil || a.cmdWidget.Kind() != termui.CmdKindSearch {
+		return
+	}
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+		a.searchTarget = host
+	}
+	if host == nil {
+		return
+	}
+	pat := ""
+	runes := []rune(text)
+	if len(runes) > 1 {
+		pat = string(runes[1:])
+	}
+	host.SetSearchColor(a.State().SearchColor())
+	host.SetSearchPattern(pat)
+}
+
+func (a *DebuggerApp) onSearchCmdSubmit(pattern string) {
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+	}
+	if host == nil {
+		return
+	}
+	host.SetSearchColor(a.State().SearchColor())
+	host.CommitSearch(pattern)
+	a.searchTarget = host // keep for */# on same pane
+}
+
+func (a *DebuggerApp) searchNextMatch() {
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+	}
+	if host == nil {
+		return
+	}
+	host.SetSearchColor(a.State().SearchColor())
+	if host.SearchNext() {
+		a.RequestFrame()
+	}
+}
+
+func (a *DebuggerApp) searchPrevMatch() {
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+	}
+	if host == nil {
+		return
+	}
+	host.SetSearchColor(a.State().SearchColor())
+	if host.SearchPrev() {
+		a.RequestFrame()
+	}
+}
+
+// resolveSearchHost returns the /search target for the last active (focused)
+// pane — the one with the green/blue status bar. Falls back to the active
+// CodeWidget when the focused pane has no viewport.
+func (a *DebuggerApp) resolveSearchHost() termui.SearchHost {
+	if host := a.searchHostOf(a.focusedWidget()); host != nil {
+		return host
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		return cw
+	}
+	return nil
+}
+
+func (a *DebuggerApp) searchHostOf(w termui.Widget) termui.SearchHost {
+	if w == nil {
+		return nil
+	}
+	if host, ok := w.(termui.SearchHost); ok {
+		return host
+	}
+	switch t := w.(type) {
+	case *widgets.CodeWidget:
+		return t
+	case *widgets.BreakpointWidget:
+		return t.Viewport()
+	case *widgets.ThreadWidget:
+		return t.Viewport()
+	case *widgets.CallStackWidget:
+		return t.Viewport()
+	case *widgets.FileListWidget:
+		return t.Viewport()
+	case *widgets.HelpWidget:
+		return t.Viewport()
+	case *widgets.GDBWidget:
+		return t.Viewport()
+	case *widgets.OutputWidget:
+		return t.Viewport()
+	case *termui.LoggerWidget:
+		return t.Viewport()
+	case interface{ Viewport() *termui.Viewport }:
+		return t.Viewport()
+	}
+	return nil
+}
+
 // handleCompletionKey owns keys while the wildmenu is open (ModeCompletion).
 // Tab/arrows only move selection. Letters/backspace edit the source line
 // (GDB console or cmdline) and re-query completions into the menu — no local filter.
@@ -391,7 +512,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	wheel := ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0
 	inCmd := a.cmdLineContains(x, y)
 
-	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
+	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeSearch || a.Mode() == platform.ModeCompletion {
 		// Middle-click paste into the cmdline (Linux terminal convention).
 		if a.cmdWidget != nil && ev.Buttons()&tcell.ButtonMiddle != 0 {
 			a.cmdWidget.HandleEvent(ev)
@@ -403,7 +524,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 			return
 		}
 		if (primary || wheel) && !inCmd {
-			// Click/wheel outside the cmdline: leave command mode (like Esc),
+			// Click/wheel outside the cmdline: leave command/search mode (like Esc),
 			// then fall through so the pane under the pointer can take focus.
 			a.leaveCommandMode()
 		} else {
@@ -453,6 +574,7 @@ func (a *DebuggerApp) enterCommandMode() {
 	if a.tab != nil {
 		a.tab.SetInsertActive(false)
 	}
+	a.searchTarget = nil
 	if a.cmdWidget != nil && !a.cmdWidget.Active() {
 		a.cmdWidget.Activate()
 	}
@@ -460,10 +582,36 @@ func (a *DebuggerApp) enterCommandMode() {
 	a.RequestFrame()
 }
 
-// leaveCommandMode exits ':' / wildmenu (same as Esc).
-func (a *DebuggerApp) leaveCommandMode() {
+// enterSearchMode activates the '/' cmdline (same as pressing '/').
+// Captures the last active (focused) pane — green/blue status — as search target.
+func (a *DebuggerApp) enterSearchMode() {
+	a.leaveLuaMode()
 	a.completionForGDB = false
 	a.clearCompletion()
+	if a.tab != nil {
+		a.tab.SetInsertActive(false)
+	}
+	a.searchTarget = a.resolveSearchHost()
+	if a.searchTarget != nil {
+		a.searchTarget.SetSearchColor(a.State().SearchColor())
+	}
+	if a.cmdWidget != nil {
+		a.cmdWidget.ActivateSearch()
+	}
+	a.SetMode(platform.ModeSearch)
+	a.RequestFrame()
+}
+
+// leaveCommandMode exits ':' / '/' / wildmenu (same as Esc).
+func (a *DebuggerApp) leaveCommandMode() {
+	wasSearch := a.Mode() == platform.ModeSearch ||
+		(a.cmdWidget != nil && a.cmdWidget.Kind() == termui.CmdKindSearch)
+	a.completionForGDB = false
+	a.clearCompletion()
+	if wasSearch && a.searchTarget != nil {
+		a.searchTarget.RevertSearch()
+		// Keep searchTarget so */# still work on the committed pattern.
+	}
 	if a.cmdWidget != nil {
 		a.cmdWidget.Deativate()
 	}
@@ -497,9 +645,16 @@ func (a *DebuggerApp) clickCmdLine(screenX int) {
 	if a.Mode() == platform.ModeCompletion {
 		a.completionForGDB = false
 		a.clearCompletion()
-		a.SetMode(platform.ModeCommand)
-		if a.cmdWidget != nil && !a.cmdWidget.Active() {
-			a.cmdWidget.Activate()
+		if a.cmdWidget != nil && a.cmdWidget.Kind() == termui.CmdKindSearch {
+			a.SetMode(platform.ModeSearch)
+			if !a.cmdWidget.Active() {
+				a.cmdWidget.ActivateSearch()
+			}
+		} else {
+			a.SetMode(platform.ModeCommand)
+			if a.cmdWidget != nil && !a.cmdWidget.Active() {
+				a.cmdWidget.Activate()
+			}
 		}
 	}
 	a.cmdWidget.SetCursorAtLocalX(screenX - originX)

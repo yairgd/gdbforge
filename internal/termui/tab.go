@@ -252,6 +252,14 @@ func (t *TabWidget) DeleteFocus() bool {
 	return false
 }
 
+// OnlyFocus keeps only the focused pane (Vim Ctrl-W o / :only).
+func (t *TabWidget) OnlyFocus() bool {
+	if tree := t.ActiveTree(); tree != nil {
+		return tree.OnlyFocus()
+	}
+	return false
+}
+
 // NewTabTwoHozSplitWins creates a tab with a horizontal split: top over bottom.
 func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
 	tree := NewWidgetTree(top)

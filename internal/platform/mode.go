@@ -13,6 +13,7 @@ const (
 	ModeNormal Mode = iota
 	ModeInsert
 	ModeCommand
+	ModeSearch     // '/' cmdline: live buffer search (muxed with ModeCommand on CmdWidget)
 	ModeCompletion // wildmenu: CompletionMenu + CompletionView (bar) receive keys
 	ModeLua        // LuaWidget owns keys (Esc leaves)
 )
@@ -93,6 +94,9 @@ type AppState struct {
 	// mutedColor is dim/empty-list foreground. Default DefaultMutedColor;
 	// :set mutedcolor.
 	mutedColor tcell.Color
+	// searchColor is the /search match background. Default DefaultSearchColor;
+	// :set searchcolor.
+	searchColor tcell.Color
 
 	// escToCode: Esc leaves insert and focuses the CodeWidget leaf (default true).
 	// :set esctocode / :set noesctocode.
@@ -114,6 +118,7 @@ func NewAppState() *AppState {
 		markDimColor:  DefaultMarkDimColor,
 		codeSelColor:  DefaultCodeSelColor,
 		mutedColor:    DefaultMutedColor,
+		searchColor:   DefaultSearchColor,
 		escToCode:     true,
 	}
 }
@@ -338,6 +343,21 @@ func (a *AppState) SetMutedColor(c tcell.Color) {
 	a.mu.Unlock()
 }
 
+func (a *AppState) SearchColor() tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.searchColor == tcell.ColorDefault {
+		return DefaultSearchColor
+	}
+	return a.searchColor
+}
+
+func (a *AppState) SetSearchColor(c tcell.Color) {
+	a.mu.Lock()
+	a.searchColor = c
+	a.mu.Unlock()
+}
+
 // ParseColorName maps a user color name to a tcell.Color (case-insensitive).
 func ParseColorName(name string) (tcell.Color, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
@@ -361,10 +381,16 @@ func ParseColorName(name string) (tcell.Color, bool) {
 		return tcell.ColorGreen, true
 	case "yellow":
 		return tcell.ColorYellow, true
+	case "orange":
+		return tcell.ColorOrange, true
+	case "darkorange":
+		return tcell.ColorDarkOrange, true
 	case "cyan", "aqua":
 		return tcell.ColorAqua, true
 	case "magenta", "purple":
 		return tcell.ColorPurple, true
+	case "fuchsia":
+		return tcell.ColorFuchsia, true
 	case "darkslategray", "darkslategrey", "slategray", "slategrey":
 		return tcell.ColorDarkSlateGray, true
 	case "teal":

@@ -84,6 +84,13 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if s.MutedColor() != DefaultMutedColor {
 		t.Fatal("mutedcolor default")
 	}
+	if s.SearchColor() != DefaultSearchColor {
+		t.Fatal("searchcolor default darkorange")
+	}
+	s.SetSearchColor(tcell.ColorAqua)
+	if s.SearchColor() != tcell.ColorAqua {
+		t.Fatal("searchcolor set")
+	}
 	if c, ok := ParseColorName("darkblue"); !ok || c != tcell.ColorDarkBlue {
 		t.Fatal("ParseColorName darkblue")
 	}

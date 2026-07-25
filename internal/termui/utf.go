@@ -26,8 +26,10 @@ func (c Canvas) ClearLineRange(localY, x1, x2 int, style tcell.Style) {
 // control sequences. skipCols skips leading visible cells (horizontal scroll).
 // If selected is non-nil, it is called with the byte offset of each printable
 // rune; a true result draws that cell in reverse.
+// If decorate is non-nil, it may adjust the style for each absolute visible
+// column (before skipCols), e.g. search-match backgrounds.
 // Returns the number of visible cells written.
-func (c Canvas) DrawANSIText(localX, localY, skipCols int, text string, baseStyle tcell.Style, selected func(bufByte int) bool) int {
+func (c Canvas) DrawANSIText(localX, localY, skipCols int, text string, baseStyle tcell.Style, selected func(bufByte int) bool, decorate func(absVisCol int, st tcell.Style) tcell.Style) int {
 	style := baseStyle
 	col := localX
 	visible := 0
@@ -53,12 +55,16 @@ func (c Canvas) DrawANSIText(localX, localY, skipCols int, text string, baseStyl
 		}
 		i += size
 
+		absVis := visible
 		if visible < skipCols {
 			visible++
 			continue
 		}
 		if col < c.W() {
 			st := style
+			if decorate != nil {
+				st = decorate(absVis, st)
+			}
 			if selected != nil && selected(byteCol) {
 				st = st.Reverse(true)
 			}

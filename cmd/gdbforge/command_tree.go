@@ -16,13 +16,13 @@ import (
 //	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
 //	          gdbtargetprint, nogdbtargetprint, inferior-tty,
 //	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
-//	          pccolor, stackbreakcolor, codeselcolor, mutedcolor
+//	          pccolor, stackbreakcolor, codeselcolor, mutedcolor, searchcolor
 //	/ → layout <name>  (default | panels | classic)
 //	/ → b <name>   (switch buffer: about, logger, gdb, snake, tetris, lua, …)
 //	/ → lua <func> [args…]  (gdbforge.register'd Lua commands)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
 //	/ → help         (Viewport user manual)
-//	/ → vs, split, clear, quit
+//	/ → vs, split, only, clear, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",
@@ -68,6 +68,7 @@ func (a *DebuggerApp) ExapData() {
 			commands.CmdRest("stackbreakcolor", a.SetStackBreakColor),
 			commands.CmdRest("codeselcolor", a.SetCodeSelColor),
 			commands.CmdRest("mutedcolor", a.SetMutedColor),
+			commands.CmdRest("searchcolor", a.SetSearchColor),
 		).
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
 		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
@@ -76,6 +77,7 @@ func (a *DebuggerApp) ExapData() {
 		Leaf("help", a.OnHelp).
 		Leaf("vs", a.SplitVertical).
 		Leaf("split", a.SplitHorizontal).
+		Leaf("only", a.OnlyFocus).
 		Leaf("clear", a.ClearFocus).
 		Leaf("quit", a.Quit)
 }

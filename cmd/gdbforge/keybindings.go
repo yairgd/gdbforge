@@ -39,6 +39,10 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"<C-w>j", "<C-w><Down>",
 	)
 	a.keyBindings.Bind(
+		commands.NewCommand("only-window", func(args ...any) { a.OnlyFocus() }),
+		"<C-w>o", "<C-w><C-o>",
+	)
+	a.keyBindings.Bind(
 		commands.NewCommand("jump-back", a.JumpBack),
 		"<C-o>",
 	)
@@ -50,6 +54,18 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 	a.keyBindings.Bind(
 		commands.NewCommand("command-mode", func(args ...any) { a.enterCommandMode() }),
 		":",
+	)
+	a.keyBindings.Bind(
+		commands.NewCommand("search-mode", func(args ...any) { a.enterSearchMode() }),
+		"/",
+	)
+	a.keyBindings.Bind(
+		commands.NewCommand("search-next", func(args ...any) { a.searchNextMatch() }),
+		"*",
+	)
+	a.keyBindings.Bind(
+		commands.NewCommand("search-prev", func(args ...any) { a.searchPrevMatch() }),
+		"#",
 	)
 	a.keyBindings.Bind(
 		commands.NewCommand("insert-gdb", func(args ...any) { a.activateGdbInsertMode() }),

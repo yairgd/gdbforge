@@ -53,6 +53,10 @@ func NewCallStackWidget() *CallStackWidget {
 		buf:        buf,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.SetOnSearchJump(func(lineIdx int) {
+		w.viewport.CursorLine = lineIdx
+		w.syncSelectedFromViewport()
+	})
 	w.initKeyBindings()
 	w.rebuild()
 	return w
@@ -325,6 +329,10 @@ func (w *CallStackWidget) SetClipboard(io termui.ClipboardIO) {
 
 func (w *CallStackWidget) Draw(c termui.Canvas) {
 	w.viewport.Draw(c)
+}
+
+func (w *CallStackWidget) Viewport() *termui.Viewport {
+	return w.viewport
 }
 
 func (w *CallStackWidget) Selected() int { return w.selected }

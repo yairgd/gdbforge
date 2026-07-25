@@ -136,6 +136,8 @@ func (p *ConsolePane) initKeyBindings() {
 	p.BindKeyFunc("clear", func(args ...any) { p.Clear() }, "<C-l>")
 	p.BindKeyFunc("scroll-up", func(args ...any) { p.out.ScrollPageUp(10) }, "<PgUp>")
 	p.BindKeyFunc("scroll-down", func(args ...any) { p.out.ScrollPageDown(10) }, "<PgDn>")
+	p.BindKeyFunc("scroll-home", func(args ...any) { p.out.ScrollHome() }, "<Home>")
+	p.BindKeyFunc("scroll-end", func(args ...any) { p.out.ScrollEnd() }, "<End>")
 }
 
 func (p *ConsolePane) submit() {
@@ -365,7 +367,7 @@ func (p *ConsolePane) Draw(c Canvas) {
 			hostStyle = p.LineStyle(host)
 		}
 		if p.out.ANSI {
-			promptCols = c.DrawANSIText(0, inputY, 0, host, hostStyle, nil)
+			promptCols = c.DrawANSIText(0, inputY, 0, host, hostStyle, nil, nil)
 		} else {
 			col := 0
 			for _, ch := range host {

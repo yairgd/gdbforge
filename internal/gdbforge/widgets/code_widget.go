@@ -22,6 +22,9 @@ import (
 const (
 	pcMarker    = "━━▶"
 	pcGutterPad = "   "
+	// codeGutterCols is the visible width of "━━▶ ####│ " (mark + space + 4-digit
+	// line + │ + space). Must match rebuildBuffer gutter layout.
+	codeGutterCols = 10
 )
 
 // CodeWidget is a scrollable source view. The app calls ShowLocation on stops / :edit.
@@ -68,6 +71,10 @@ func NewCodeWidget() *CodeWidget {
 		buf:        buf,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.SetSearchContentOffset(codeGutterCols)
+	vp.SetOnSearchJump(func(lineIdx int) {
+		w.moveSelTo(lineIdx + 1)
+	})
 	w.initKeyBindings()
 	return w
 }
@@ -131,6 +138,75 @@ func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	}
 	_ = line
 	return st
+}
+
+// SetSearchPattern updates the live /search highlight (does not commit).
+func (w *CodeWidget) SetSearchPattern(pattern string) {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	w.viewport.SetSearchColor(w.searchColor())
+	w.viewport.SetSearchPattern(pattern)
+}
+
+// CommitSearch stores pattern as the lasting highlight and jumps to a match.
+func (w *CodeWidget) CommitSearch(pattern string) {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	w.viewport.SetSearchColor(w.searchColor())
+	// Keep viewport cursor aligned with selLine before commit jump.
+	if w.selLine >= 1 {
+		w.viewport.CursorLine = w.selLine - 1
+	}
+	w.viewport.CommitSearch(pattern)
+}
+
+// RevertSearch restores the last committed pattern (Esc from /search).
+func (w *CodeWidget) RevertSearch() {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	w.viewport.RevertSearch()
+}
+
+// SearchPattern returns the live search text.
+func (w *CodeWidget) SearchPattern() string {
+	if w == nil || w.viewport == nil {
+		return ""
+	}
+	return w.viewport.SearchPattern()
+}
+
+// SearchNext moves the cursor to the next matching line (wraps). Uses * in normal mode.
+func (w *CodeWidget) SearchNext() bool {
+	if w == nil || w.viewport == nil {
+		return false
+	}
+	w.viewport.SetSearchColor(w.searchColor())
+	if w.selLine >= 1 {
+		w.viewport.CursorLine = w.selLine - 1
+	}
+	return w.viewport.SearchNext()
+}
+
+// SearchPrev moves the cursor to the previous matching line (wraps). Uses # in normal mode.
+func (w *CodeWidget) SearchPrev() bool {
+	if w == nil || w.viewport == nil {
+		return false
+	}
+	w.viewport.SetSearchColor(w.searchColor())
+	if w.selLine >= 1 {
+		w.viewport.CursorLine = w.selLine - 1
+	}
+	return w.viewport.SearchPrev()
+}
+
+func (w *CodeWidget) SetSearchColor(c tcell.Color) {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	w.viewport.SetSearchColor(c)
 }
 
 func (w *CodeWidget) moveSel(delta int) {
@@ -293,6 +369,9 @@ func (w *CodeWidget) Clear() {
 	w.bpDisabled = nil
 	w.bpNums = nil
 	w.PaneName = "Code"
+	if w.viewport != nil {
+		w.viewport.CommitSearch("")
+	}
 	w.buf.Clear()
 	w.viewport.Left = 0
 	w.viewport.Top = 0
@@ -432,6 +511,13 @@ func (w *CodeWidget) codeSelColor() tcell.Color {
 		return w.state.CodeSelColor()
 	}
 	return platform.DefaultCodeSelColor
+}
+
+func (w *CodeWidget) searchColor() tcell.Color {
+	if w.state != nil {
+		return w.state.SearchColor()
+	}
+	return platform.DefaultSearchColor
 }
 
 // RebuildBuffer refreshes gutter ANSI from current AppState break colors.

@@ -103,6 +103,18 @@ func (app *DebuggerApp) ClearFocus(args ...any) {
 	app.RequestFrame()
 }
 
+// OnlyFocus closes every pane except the focused one (Vim Ctrl-W o / :only).
+func (app *DebuggerApp) OnlyFocus(args ...any) {
+	if app.tab == nil {
+		return
+	}
+	if !app.tab.OnlyFocus() {
+		return
+	}
+	app.rememberCodeLeafFromFocus()
+	app.RequestRedraw()
+}
+
 // OnHelp opens the Viewport user manual in the focused pane (:help).
 func (app *DebuggerApp) OnHelp(args ...any) {
 	if app.helpWidget == nil || app.tab == nil {
@@ -351,6 +363,22 @@ func (app *DebuggerApp) SetMutedColor(args ...any) {
 		return
 	}
 	app.State().SetMutedColor(c)
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetSearchColor(args ...any) {
+	name := joinCmdArgs(args)
+	if name == "" {
+		return
+	}
+	c, ok := platform.ParseColorName(name)
+	if !ok {
+		if app.ctx.Log != nil {
+			app.ctx.Log.Named("set").Error("unknown searchcolor: " + name)
+		}
+		return
+	}
+	app.State().SetSearchColor(c)
 	app.RequestFrame()
 }
 

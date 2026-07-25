@@ -57,3 +57,31 @@ func TestLeafMarkNilClears(t *testing.T) {
 		t.Fatal("nil clear")
 	}
 }
+
+func TestOnlyFocusKeepsFocusedLeaf(t *testing.T) {
+	a := &stubPane{id: "a"}
+	b := &stubPane{id: "b"}
+	c := &stubPane{id: "c"}
+	tree := NewWidgetTree(a)
+	tree.Split(Horizontal, b)
+	tree.FocusWidget(b)
+	tree.Split(Vertical, c) // focus stays on b's side; c is new leaf
+	tree.FocusWidget(b)
+	if !tree.OnlyFocus() {
+		t.Fatal("OnlyFocus")
+	}
+	leaves := CollectLeaves(tree.Root())
+	if len(leaves) != 1 {
+		t.Fatalf("leaves=%d", len(leaves))
+	}
+	if tree.FocusedWidget() != b {
+		t.Fatalf("focus=%v want b", tree.FocusedWidget())
+	}
+	if tree.Root().Widget != b {
+		t.Fatal("root should be focused leaf")
+	}
+	// Idempotent when already alone.
+	if !tree.OnlyFocus() {
+		t.Fatal("OnlyFocus alone")
+	}
+}

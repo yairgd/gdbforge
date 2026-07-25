@@ -40,6 +40,7 @@ type DebuggerApp struct {
 
 	tab            *termui.TabWidget
 	cmdWidget      *termui.CmdWidget
+	searchTarget   termui.SearchHost // last focused pane's /search host
 	completionMenu *termui.CompletionMenu
 	completionView termui.CompletionView
 	completionBar  *termui.CompletionBarWidget // concrete chrome; also CompletionView

@@ -61,7 +61,10 @@ func NewOutputWidget() *OutputWidget {
 
 func (w *OutputWidget) initKeyBindings() {
 	vp := w.console.Viewport()
-	// Avoid Up/Down/Home/End — those belong to InputLine when stdin is enabled.
+	// Avoid Up/Down — those belong to InputLine when stdin is enabled.
+	// Home/End scroll the buffer (Ctrl-A / Ctrl-E still move the input caret).
+	w.BindKeyFunc("home", func(args ...any) { vp.ScrollHome() }, "<Home>")
+	w.BindKeyFunc("end", func(args ...any) { vp.ScrollEnd() }, "<End>")
 	w.BindKeyFunc("page-up", func(args ...any) { vp.ScrollPageUp(10) }, "<PgUp>")
 	w.BindKeyFunc("page-down", func(args ...any) { vp.ScrollPageDown(10) }, "<PgDn>")
 	w.BindKeyFunc("clear", func(args ...any) { w.Clear() }, "<C-l>")
@@ -376,6 +379,13 @@ func (w *OutputWidget) Draw(c termui.Canvas) {
 		}
 	}
 	w.console.Draw(c)
+}
+
+func (w *OutputWidget) Viewport() *termui.Viewport {
+	if w == nil || w.console == nil {
+		return nil
+	}
+	return w.console.Viewport()
 }
 
 func (w *OutputWidget) DrawStatusLine(c termui.Canvas, active bool) {

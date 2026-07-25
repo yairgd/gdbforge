@@ -53,6 +53,10 @@ func NewThreadWidget() *ThreadWidget {
 		buf:        buf,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.SetOnSearchJump(func(lineIdx int) {
+		w.viewport.CursorLine = lineIdx
+		w.syncSelectedFromViewport()
+	})
 	w.initKeyBindings()
 	w.rebuild()
 	return w
@@ -315,6 +319,10 @@ func (w *ThreadWidget) SetClipboard(io termui.ClipboardIO) {
 
 func (w *ThreadWidget) Draw(c termui.Canvas) {
 	w.viewport.Draw(c)
+}
+
+func (w *ThreadWidget) Viewport() *termui.Viewport {
+	return w.viewport
 }
 
 func (w *ThreadWidget) Selected() int { return w.selected }

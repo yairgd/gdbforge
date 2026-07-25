@@ -113,6 +113,8 @@ func buildHelpLines() []string {
 		"=== Global keys (normal mode) ===",
 		"",
 		"    :              enter command mode",
+		"    /              search in focused pane (live highlight; Enter commits)",
+		"    * / #          next / previous search match (n stays GDB next)",
 		"    i              focus GDB leaf and enter insert",
 		"    Esc            leave insert; focus last non-Code/non-GDB pane",
 		"                   if one was active, else the Code/logo leaf",
@@ -126,6 +128,8 @@ func buildHelpLines() []string {
 		"    e              enable/disable breakpoint at Code cursor",
 		"    Ctrl-W h/j/k/l focus left / down / up / right",
 		"    Ctrl-W arrows  same as hjkl",
+		"    Ctrl-W o       only — close other panes, keep focused",
+		"    Ctrl-W Ctrl-O  same as Ctrl-W o",
 		"    Ctrl-O         jump back after :b / :edit / :!",
 		"",
 		"=== Colon commands ===",
@@ -146,6 +150,7 @@ func buildHelpLines() []string {
 		"    :layout classic    full-width Code over GDB",
 		"    :layout            re-apply wide",
 		"    :vs / :split       vertical / horizontal split",
+		"    :only              keep focused pane only (Ctrl-W o)",
 		"",
 		"Settings (:set …):",
 		"    equalalways / noequalalways",
@@ -189,6 +194,7 @@ func buildHelpLines() []string {
 		"        matches that row (━━▶ / real PC). Selected BP at stop stays green.",
 		"    codeselcolor <name>        Code browse cursor bg (default darkblue)",
 		"    mutedcolor <name>          empty-list / dim text (default gray)",
+		"    searchcolor <name>         /search match bg (default darkorange)",
 		"",
 		"Other:",
 		"    :! <cmd>           run shell in an Exec pane",
@@ -431,6 +437,10 @@ func (w *HelpWidget) SetClipboard(io termui.ClipboardIO) {
 
 func (w *HelpWidget) Draw(c termui.Canvas) {
 	w.viewport.Draw(c)
+}
+
+func (w *HelpWidget) Viewport() *termui.Viewport {
+	return w.viewport
 }
 
 func (w *HelpWidget) LinesForTest() []string {

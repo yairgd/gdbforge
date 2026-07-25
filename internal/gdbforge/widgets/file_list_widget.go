@@ -35,6 +35,10 @@ func NewFileListWidget() *FileListWidget {
 		buf:        buf,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.SetOnSearchJump(func(lineIdx int) {
+		w.viewport.CursorLine = lineIdx
+		w.syncSelectedFromViewport()
+	})
 	w.initKeyBindings()
 	w.rebuild()
 	return w
@@ -205,6 +209,10 @@ func (w *FileListWidget) Draw(c termui.Canvas) {
 
 func (w *FileListWidget) Paths() []string {
 	return append([]string(nil), w.paths...)
+}
+
+func (w *FileListWidget) Viewport() *termui.Viewport {
+	return w.viewport
 }
 
 func (w *FileListWidget) Selected() int {

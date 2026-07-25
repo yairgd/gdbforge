@@ -634,6 +634,25 @@ func (t *WidgetTree) DeleteFocus() bool {
 	return false
 }
 
+// OnlyFocus collapses the tree to the focused leaf (Vim Ctrl-W o / :only).
+// Other panes are removed from the layout; the focused widget fills the tab.
+func (t *WidgetTree) OnlyFocus() bool {
+	leaf := t.FocusedLeaf()
+	if leaf == nil {
+		return false
+	}
+	if leaf.parent == nil && t.root == leaf {
+		return true // already alone
+	}
+	leaf.parent = nil
+	t.root = leaf
+	t.focus = leaf
+	if t.equalAlways {
+		ComputeRatios(t.root)
+	}
+	return true
+}
+
 func VerticalOverlap(a, b Rect) bool {
 	return a.Y() < b.Bottom() &&
 		b.Y() < a.Bottom()

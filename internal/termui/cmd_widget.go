@@ -9,27 +9,43 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
+// CmdKind selects how the cmdline mux behaves after Activate / ActivateSearch.
+type CmdKind int
+
+const (
+	CmdKindCommand CmdKind = iota // leading ':' — parse / complete / execute
+	CmdKindSearch                 // leading '/' — live buffer search
+)
+
 type CmdWidget struct {
 	BaseWidget
 
-	history   History
-	parser    *commands.CommandParser
-	clipboard ClipboardIO
-	active    bool
-	text      string
-	cursor    int
+	history       History
+	searchHistory History
+	parser        *commands.CommandParser
+	clipboard     ClipboardIO
+	active        bool
+	kind          CmdKind
+	text          string
+	cursor        int
 
 	// onExecute runs a successfully parsed command (app controller).
 	// When set, submit does not call parser.Execute in the view.
 	onExecute func()
+	// onChange runs after any edit while active (live /search preview).
+	onChange func(text string)
+	// onSearchSubmit runs on Enter in search kind with the pattern (no leading '/').
+	onSearchSubmit func(pattern string)
 }
 
 func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 	return &CmdWidget{
-		BaseWidget: BaseWidget{cursor: NewNativeCursor()},
-		history:    NewMemoryHistory(),
-		parser:     commands.NewCommandParser(reg),
-		active:     false,
+		BaseWidget:    BaseWidget{cursor: NewNativeCursor()},
+		history:       NewMemoryHistory(),
+		searchHistory: NewMemoryHistory(),
+		parser:        commands.NewCommandParser(reg),
+		active:        false,
+		kind:          CmdKindCommand,
 	}
 }
 
@@ -37,6 +53,16 @@ func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 // The app should call ExecuteParsed from this callback.
 func (c *CmdWidget) SetOnExecute(fn func()) {
 	c.onExecute = fn
+}
+
+// SetOnChange registers a callback after cmdline text edits (search live preview).
+func (c *CmdWidget) SetOnChange(fn func(text string)) {
+	c.onChange = fn
+}
+
+// SetOnSearchSubmit registers the Enter handler for search mode.
+func (c *CmdWidget) SetOnSearchSubmit(fn func(pattern string)) {
+	c.onSearchSubmit = fn
 }
 
 // ExecuteParsed runs the last successfully Parse'd command action.
@@ -52,15 +78,47 @@ func (c *CmdWidget) SetClipboard(io ClipboardIO) {
 	c.clipboard = io
 }
 
-// Active reports whether the cmdline is editing (command / completion mode).
+// Active reports whether the cmdline is editing (command / search / completion).
 func (c *CmdWidget) Active() bool { return c.active }
 
-// Text returns the current cmdline contents (including leading ':').
+// Kind reports whether the cmdline is in command or search mux mode.
+func (c *CmdWidget) Kind() CmdKind { return c.kind }
+
+// Text returns the current cmdline contents (including leading ':' or '/').
 func (c *CmdWidget) Text() string { return c.text }
+
+// Pattern returns the editable text after the leading prefix rune.
+func (c *CmdWidget) Pattern() string {
+	runes := []rune(c.text)
+	if len(runes) <= 1 {
+		return ""
+	}
+	return string(runes[1:])
+}
+
+func (c *CmdWidget) prefix() rune {
+	if c.kind == CmdKindSearch {
+		return '/'
+	}
+	return ':'
+}
+
+func (c *CmdWidget) hist() History {
+	if c.kind == CmdKindSearch {
+		return c.searchHistory
+	}
+	return c.history
+}
 
 func (c *CmdWidget) emit(ev Event) {
 	if c.Events != nil {
 		c.Events <- ev
+	}
+}
+
+func (c *CmdWidget) notifyChange() {
+	if c.onChange != nil {
+		c.onChange(c.text)
 	}
 }
 
@@ -119,11 +177,12 @@ func (c *CmdWidget) replaceToken(name string) {
 	suffix := string(runes[end:])
 	c.text = prefix + name + suffix
 	c.cursor = len([]rune(prefix + name))
+	c.notifyChange()
 }
 
 // ApplyCompletion replaces the current token with name (wildmenu accept).
 func (c *CmdWidget) ApplyCompletion(name string) {
-	if name == "" {
+	if name == "" || c.kind != CmdKindCommand {
 		return
 	}
 	c.replaceToken(name)
@@ -131,28 +190,40 @@ func (c *CmdWidget) ApplyCompletion(name string) {
 
 // CompletionNames returns Tab candidates for the current cmdline token.
 func (c *CmdWidget) CompletionNames() []string {
-	if c == nil || !c.active {
+	if c == nil || !c.active || c.kind != CmdKindCommand {
 		return nil
 	}
 	c.syncParser()
 	return c.parser.SuggestionNames()
 }
+
+// Activate opens command mode (leading ':').
 func (c *CmdWidget) Activate() {
 	c.active = true
+	c.kind = CmdKindCommand
 	c.text = ":"
 	c.cursor = 1
-
 }
+
+// ActivateSearch opens search mode (leading '/').
+func (c *CmdWidget) ActivateSearch() {
+	c.active = true
+	c.kind = CmdKindSearch
+	c.text = "/"
+	c.cursor = 1
+}
+
 func (c *CmdWidget) Deativate() {
 	c.active = false
 	c.text = ""
 	c.cursor = 0
+	c.kind = CmdKindCommand
 	c.history.ResetNavigation()
-
+	c.searchHistory.ResetNavigation()
 }
 
 // SetCursorAtLocalX places the caret from a click x relative to the cmdline left edge.
-// Column 0 is the leading ':'; the caret never moves onto or before it.
+// Column 0 is the leading prefix; the caret never moves onto or before it.
 func (c *CmdWidget) SetCursorAtLocalX(localX int) {
 	if !c.active {
 		return
@@ -186,7 +257,7 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 		}
 		if isCopyCutKey(e) {
-			// No mark selection on cmdline: copy/cut the editable text after ':'.
+			// No mark selection on cmdline: copy/cut the editable text after prefix.
 			c.copyEditable()
 			if e.Key() == tcell.KeyCtrlX || (e.Modifiers()&tcell.ModCtrl != 0 && (e.Rune() == 'x' || e.Rune() == 'X')) {
 				c.clearEditable()
@@ -208,6 +279,9 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 
 		case tcell.KeyTAB:
+			if c.kind != CmdKindCommand {
+				return
+			}
 			c.syncParser()
 			names := c.parser.SuggestionNames()
 			token := c.parser.CurrentToken()
@@ -256,10 +330,16 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 
 		case tcell.KeyEnter:
-
-			c.history.Add(c.text)
-			c.history.ResetNavigation()
-			c.submitCommand()
+			c.hist().Add(c.text)
+			c.hist().ResetNavigation()
+			if c.kind == CmdKindSearch {
+				pat := c.Pattern()
+				if c.onSearchSubmit != nil {
+					c.onSearchSubmit(pat)
+				}
+			} else {
+				c.submitCommand()
+			}
 
 			c.active = false
 			c.text = ""
@@ -268,59 +348,51 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			return
 
 		case tcell.KeyUp:
-
-			c.text = c.history.Prev()
-
-			if c.text != "" && !strings.HasPrefix(c.text, ":") {
-				c.text = ":" + c.text
+			pfx := string(c.prefix())
+			c.text = c.hist().Prev()
+			if c.text != "" && !strings.HasPrefix(c.text, pfx) {
+				c.text = pfx + c.text
 			}
-
 			c.cursor = len([]rune(c.text))
+			c.notifyChange()
 			return
 
 		case tcell.KeyDown:
-
-			c.text = c.history.Next()
-
-			if c.text != "" && !strings.HasPrefix(c.text, ":") {
-				c.text = ":" + c.text
+			pfx := string(c.prefix())
+			c.text = c.hist().Next()
+			if c.text != "" && !strings.HasPrefix(c.text, pfx) {
+				c.text = pfx + c.text
 			}
-
 			c.cursor = len([]rune(c.text))
+			c.notifyChange()
 			return
 
 		case tcell.KeyLeft:
-
-			if c.cursor > 1 { // keep cursor after ':'
+			if c.cursor > 1 { // keep cursor after prefix
 				c.cursor--
 			}
-
 			return
 
 		case tcell.KeyRight:
-
 			if c.cursor < len([]rune(c.text)) {
 				c.cursor++
 			}
-
 			return
 
 		case tcell.KeyCtrlA:
-
-			c.cursor = 1 // after ':'
+			c.cursor = 1 // after prefix
 			return
 
 		case tcell.KeyCtrlE:
-
 			c.cursor = len([]rune(c.text))
 			return
 
 		case tcell.KeyBackspace, tcell.KeyBackspace2:
-
 			r := []rune(c.text)
+			pfx := c.prefix()
 
-			// deleting ':' exits command mode
-			if len(r) == 1 && r[0] == ':' {
+			// deleting prefix exits cmdline mode
+			if len(r) == 1 && r[0] == pfx {
 				c.emit(SubmitMsg{
 					Text:  "exit from command mode",
 					CmdID: CmdExitMode,
@@ -333,32 +405,27 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			}
 
 			if c.cursor > 1 {
-
 				r = append(r[:c.cursor-1], r[c.cursor:]...)
 				c.cursor--
-
 				c.text = string(r)
+				c.notifyChange()
 			}
 
 			return
 
 		default:
-
 			ch := e.Rune()
-
 			if ch == 0 {
 				return
 			}
 
 			r := []rune(c.text)
-
 			r = append(r, 0)
 			copy(r[c.cursor+1:], r[c.cursor:])
 			r[c.cursor] = ch
-
 			c.text = string(r)
 			c.cursor++
-
+			c.notifyChange()
 			return
 		}
 	case *tcell.EventClipboard:
@@ -413,6 +480,7 @@ func (c *CmdWidget) pasteText(text string) {
 	out = append(out, runes[c.cursor:]...)
 	c.text = string(out)
 	c.cursor += len(ins)
+	c.notifyChange()
 }
 
 func (c *CmdWidget) editableText() string {
@@ -431,8 +499,9 @@ func (c *CmdWidget) clearEditable() {
 	if !c.active {
 		return
 	}
-	c.text = ":"
+	c.text = string(c.prefix())
 	c.cursor = 1
+	c.notifyChange()
 }
 
 func (m *CmdWidget) Draw(c Canvas) {

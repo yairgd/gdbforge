@@ -60,6 +60,19 @@ type Viewport struct {
 	// When set, it takes precedence over LineStyle.
 	RowStyle func(lineIdx int, line string) tcell.Style
 
+	// CellStyle optionally adjusts each painted cell's style. absVisCol is the
+	// absolute visible column in the buffer line (0 = leftmost, before Left scroll).
+	// Used for substring highlights (e.g. /search matches) without whole-line bg.
+	CellStyle func(lineIdx int, absVisCol int, st tcell.Style) tcell.Style
+
+	// /search state (see viewport_search.go). searchContentOffset skips a leading
+	// gutter (CodeWidget). onSearchJump syncs list-pane selection rows.
+	searchPattern       string
+	searchCommitted     string
+	searchColor         tcell.Color
+	searchContentOffset int
+	onSearchJump        func(lineIdx int)
+
 	// ANSI enables per-cell ANSI/SGR rendering (OSC/CSI sequences are not drawn).
 	ANSI bool
 
@@ -139,6 +152,11 @@ func (v *Viewport) Draw(c Canvas) {
 			lineNum := line
 			drawn := c.DrawANSIText(0, row, v.Left, full, lineStyle, func(bufByte int) bool {
 				return v.containsSel(lineNum, bufByte)
+			}, func(absVisCol int, st tcell.Style) tcell.Style {
+				if v.CellStyle != nil {
+					st = v.CellStyle(lineNum, absVisCol, st)
+				}
+				return v.applySearchStyle(lineNum, absVisCol, st)
 			})
 			if drawn < width {
 				c.ClearLineRange(row, drawn, width, lineStyle)
@@ -165,6 +183,10 @@ func (v *Viewport) Draw(c Canvas) {
 		for col, ch := range visible {
 			bufCol := start + col
 			st := lineStyle
+			if v.CellStyle != nil {
+				st = v.CellStyle(line, bufCol, st)
+			}
+			st = v.applySearchStyle(line, bufCol, st)
 			if v.containsSel(line, bufCol) {
 				st = selStyle
 			}
@@ -323,14 +345,14 @@ func (v *Viewport) ScrollHome() {
 	v.leaveFollowTail()
 	v.Home()
 	v.extendSelectionAfterScroll(-1)
-	v.EnsureVisible(v.width, v.height)
+	v.EnsureCursorVisible()
 }
 
 func (v *Viewport) ScrollEnd() {
 	v.End()
 	v.maybeFollowTail()
 	v.extendSelectionAfterScroll(1)
-	v.EnsureVisible(v.width, v.height)
+	v.EnsureCursorVisible()
 }
 
 // extendSelectionAfterScroll keeps an existing mark while scrolling, and while
@@ -617,7 +639,7 @@ func (v *Viewport) handleKey(key *tcell.EventKey) {
 		return
 	}
 
-	v.EnsureVisible(v.width, v.height)
+	v.EnsureCursorVisible()
 }
 
 func (v *Viewport) followPadTop() int {
@@ -862,12 +884,11 @@ func (v *Viewport) Home() {
 }
 
 func (v *Viewport) End() {
-
 	if v.Buffer == nil {
 		return
 	}
 
-	last := v.Buffer.NumLines() - 1
+	last := v.lineLimit() - 1
 	if last < 0 {
 		last = 0
 	}
@@ -882,6 +903,7 @@ func (v *Viewport) End() {
 		maxTop = last - h + 1
 	}
 	v.Top = maxTop
+	v.Left = 0
 }
 
 func (v *Viewport) Center(line int, pageHeight int) {

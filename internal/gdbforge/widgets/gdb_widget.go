@@ -210,6 +210,13 @@ func (m *GDBWidget) Draw(c termui.Canvas) {
 	m.console.Draw(c)
 }
 
+func (m *GDBWidget) Viewport() *termui.Viewport {
+	if m == nil || m.console == nil {
+		return nil
+	}
+	return m.console.Viewport()
+}
+
 func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
 	if m == nil || m.console == nil {
 		return

@@ -55,6 +55,12 @@ func (a *DebuggerApp) InitB() error {
 	a.cmdWidget.SetOnExecute(func() {
 		_ = a.cmdWidget.ExecuteParsed()
 	})
+	a.cmdWidget.SetOnChange(func(text string) {
+		a.onSearchCmdChange(text)
+	})
+	a.cmdWidget.SetOnSearchSubmit(func(pattern string) {
+		a.onSearchCmdSubmit(pattern)
+	})
 	a.AddWidget(a.cmdWidget)
 
 	a.InitKeyBindings()
@@ -64,6 +70,7 @@ func (a *DebuggerApp) InitB() error {
 	a.RegisterModeHandler(platform.ModeNormal, a.withGlobalKeys(a.handleNormalKey))
 	a.RegisterModeHandler(platform.ModeInsert, a.withGlobalKeys(a.handleInsertKey))
 	a.RegisterModeHandler(platform.ModeCommand, a.withGlobalKeys(a.handleCommandKey))
+	a.RegisterModeHandler(platform.ModeSearch, a.withGlobalKeys(a.handleSearchKey))
 	a.RegisterModeHandler(platform.ModeCompletion, a.withGlobalKeys(a.handleCompletionKey))
 	a.RegisterModeHandler(platform.ModeLua, a.withGlobalKeys(a.handleLuaKey))
 

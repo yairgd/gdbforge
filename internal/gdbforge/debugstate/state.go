@@ -305,6 +305,13 @@ func (s *State) MutedColor() tcell.Color {
 	return platform.DefaultMutedColor
 }
 
+func (s *State) SearchColor() tcell.Color {
+	if s.app != nil {
+		return s.app.SearchColor()
+	}
+	return platform.DefaultSearchColor
+}
+
 func (s *State) SetMarkColor(c tcell.Color) {
 	if s != nil && s.app != nil {
 		s.app.SetMarkColor(c)

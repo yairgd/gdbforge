@@ -20,4 +20,8 @@ var (
 	DefaultCodeSelColor = tcell.ColorDarkBlue
 	// DefaultMutedColor is dim/empty-list foreground text.
 	DefaultMutedColor = tcell.ColorGray
+	// DefaultSearchColor is the background for /search match substrings.
+	// Dark orange stays visible on both light terminals and dark chroma themes
+	// (plain yellow washes out on white). Override with :set searchcolor.
+	DefaultSearchColor = tcell.ColorDarkOrange
 )
