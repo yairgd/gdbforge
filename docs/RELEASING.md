@@ -6,9 +6,9 @@ Automated builds and GitHub Releases are driven by [`.github/workflows/release.y
 
 | Trigger | Result |
 |---------|--------|
-| Push tag `v*` (e.g. `v1.0.0`) | Cross-build binaries → GitHub Release with assets |
-| Push tag with a hyphen (e.g. `v1.0.0-rc.1`) | Same, but marked **prerelease** |
-| Actions → **Release** → Run workflow (`dry_run=true`) | Build only; upload workflow **artifacts** (no Release) |
+| Push tag `v*` (e.g. `v1.0.0`) | Cross-build binaries → GitHub Release with assets **and** refresh GitHub Pages (`docserve --export _site`) |
+| Push tag with a hyphen (e.g. `v1.0.0-rc.1`) | Same, but marked **prerelease** (Pages still updates) |
+| Actions → **Release** → Run workflow (`dry_run=true`) | Build only; upload workflow **artifacts** (no Release, **no** Pages) |
 
 Targets: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64` (`CGO_ENABLED=0`).
 
@@ -53,10 +53,11 @@ git tag -a v1.0.0 -m "gdbforge v1.0.0"
 git push origin v1.0.0
 ```
 
-Watch **Actions → Release**; the GitHub Release page fills in with notes + binaries.
+Watch **Actions → Release**; the GitHub Release page fills in with notes + binaries, and the **Deploy docs to GitHub Pages** job publishes the static site.
 
 ## Notes
 
 - Do **not** put auto-release on every push to `main` — tags keep history clean.
-- Docs Pages stay on [docs.yml](../.github/workflows/docs.yml) (`push` to `main` under `docs/`).
+- Day-to-day docs still deploy via [docs.yml](../.github/workflows/docs.yml) (`push` to `main` under `docs/`). A release **also** redeploys Pages so the site matches the tagged tree.
+- Pages needs **Settings → Pages → Source = GitHub Actions**. Private repos need a plan that allows private Pages (or make the repo public).
 - Prefer annotated tags (`git tag -a`) for releases.
