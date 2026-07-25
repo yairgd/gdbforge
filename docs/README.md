@@ -59,19 +59,19 @@ The prototype registers a split workspace, a functional `:` command line with **
 # or: go run ./cmd/docserve
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedded Mermaid. **GitHub Pages:** see [HOSTING.md](HOSTING.md#github-pages).
+Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedded Mermaid. **GitHub Pages** (docserve static export via Actions — not Jekyll `/docs`): see [HOSTING.md](HOSTING.md#github-pages).
 
-| Page | URL |
-|------|-----|
-| User guide | [/doc/USER_GUIDE.md](http://127.0.0.1:8765/doc/USER_GUIDE.md) |
-| Lua API | [/doc/LUA_API.md](http://127.0.0.1:8765/doc/LUA_API.md) |
-| Overview | [/doc/OVERVIEW.md](http://127.0.0.1:8765/doc/OVERVIEW.md) |
-| Architecture | [/doc/ARCHITECTURE.md](http://127.0.0.1:8765/doc/ARCHITECTURE.md) |
-| PTY / I/O architecture | [/doc/PTY_ARCHITECTURE.md](http://127.0.0.1:8765/doc/PTY_ARCHITECTURE.md) |
-| Developer guide | [/doc/DEVELOPER_GUIDE.md](http://127.0.0.1:8765/doc/DEVELOPER_GUIDE.md) |
-| Diagrams index | [/diagrams](http://127.0.0.1:8765/diagrams) |
+| Page | Local (`docserve`) | GitHub Pages |
+|------|--------------------|--------------|
+| User guide | [/doc/USER_GUIDE.html](http://127.0.0.1:8765/doc/USER_GUIDE.html) | [/doc/USER_GUIDE.html](doc/USER_GUIDE.html) |
+| Lua API | [/doc/LUA_API.html](http://127.0.0.1:8765/doc/LUA_API.html) | [/doc/LUA_API.html](doc/LUA_API.html) |
+| Overview | [/doc/OVERVIEW.html](http://127.0.0.1:8765/doc/OVERVIEW.html) | [/doc/OVERVIEW.html](doc/OVERVIEW.html) |
+| Architecture | [/doc/ARCHITECTURE.html](http://127.0.0.1:8765/doc/ARCHITECTURE.html) | [/doc/ARCHITECTURE.html](doc/ARCHITECTURE.html) |
+| PTY / I/O architecture | [/doc/PTY_ARCHITECTURE.html](http://127.0.0.1:8765/doc/PTY_ARCHITECTURE.html) | [/doc/PTY_ARCHITECTURE.html](doc/PTY_ARCHITECTURE.html) |
+| Developer guide | [/doc/DEVELOPER_GUIDE.html](http://127.0.0.1:8765/doc/DEVELOPER_GUIDE.html) | [/doc/DEVELOPER_GUIDE.html](doc/DEVELOPER_GUIDE.html) |
+| Diagrams index | [/diagrams/](http://127.0.0.1:8765/diagrams/) | [/diagrams/](diagrams/) |
 
-Markdown and Mermaid render in the browser via CDN (marked + mermaid). No build step required.
+Do **not** open `*.md` on Pages — those are sources (or raw text). Use the **`.html`** viewer URLs above.
 
 ---
 

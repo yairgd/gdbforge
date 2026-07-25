@@ -63,6 +63,33 @@ func diagramSourceName(pageLeaf string) string {
 	}
 }
 
+// docPageFile maps a Markdown source (e.g. OVERVIEW.md) to a static HTML filename.
+// Publishing HTML as *.md makes GitHub Pages serve text/markdown (raw text in the browser).
+func docPageFile(mdName string) string {
+	base := strings.TrimSuffix(mdName, ".md")
+	if base == mdName || base == "" {
+		return mdName + ".html"
+	}
+	return base + ".html"
+}
+
+// docSourceName maps a /doc/ URL leaf back to the .md source file.
+func docSourceName(pageLeaf string) string {
+	pageLeaf = strings.TrimSuffix(pageLeaf, "/")
+	switch {
+	case strings.HasSuffix(pageLeaf, ".html"):
+		base := strings.TrimSuffix(pageLeaf, ".html")
+		if strings.HasSuffix(base, ".md") {
+			return base
+		}
+		return base + ".md"
+	case strings.HasSuffix(pageLeaf, ".md"):
+		return pageLeaf
+	default:
+		return pageLeaf + ".md"
+	}
+}
+
 func (s *docServer) navLinks(base string) string {
 	parts := []string{fmt.Sprintf(`<a href="%s">Index</a>`, html.EscapeString(joinBase(base, "/")))}
 	for _, name := range s.listDocPages() {
@@ -70,7 +97,7 @@ func (s *docServer) navLinks(base string) string {
 			continue
 		}
 		label := strings.ReplaceAll(strings.TrimSuffix(name, ".md"), "_", " ")
-		href := joinBase(base, "/doc/"+url.PathEscape(name))
+		href := joinBase(base, "/doc/"+url.PathEscape(docPageFile(name)))
 		parts = append(parts, fmt.Sprintf(`<a href="%s">%s</a>`, href, html.EscapeString(label)))
 	}
 	parts = append(parts, fmt.Sprintf(`<a href="%s">Diagrams</a>`, html.EscapeString(joinBase(base, "/diagrams/"))))
@@ -151,7 +178,7 @@ func (s *docServer) docPageHTML(name, base string) []byte {
 	md, _ := s.readMarkdown(name)
 	title := titleFromMarkdown(md, fallback)
 	desc := descriptionFromMarkdown(md)
-	seo := s.seoFor(title, desc, "/doc/"+name, base)
+	seo := s.seoFor(title, desc, "/doc/"+docPageFile(name), base)
 	attrs := fmt.Sprintf(`data-page="doc" data-md="%s"`, html.EscapeString(name))
 	return pageShell(seo, attrs, s.navLinks(base), s.prerenderDoc(name, base))
 }

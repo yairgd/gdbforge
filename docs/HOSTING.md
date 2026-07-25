@@ -62,15 +62,15 @@ Environment variable:
 | Page | URL |
 |------|-----|
 | Index | `/` |
-| Overview | `/doc/OVERVIEW.md` |
-| Architecture | `/doc/ARCHITECTURE.md` |
-| Developer guide | `/doc/DEVELOPER_GUIDE.md` |
-| Any `.md` file | `/doc/<filename>.md` |
-| Diagrams index | `/diagrams` |
-| Single diagram | `/diagrams/<name>.html` (source remains `docs/diagrams/<name>.mermaid`) |
+| Overview | `/doc/OVERVIEW.html` |
+| Architecture | `/doc/ARCHITECTURE.html` |
+| Developer guide | `/doc/DEVELOPER_GUIDE.html` |
+| Any doc page | `/doc/<name>.html` (source: `docs/<name>.md`) |
+| Diagrams index | `/diagrams/` |
+| Single diagram | `/diagrams/<name>.html` (source: `docs/diagrams/<name>.mermaid`) |
 | Raw markdown | `/raw/<filename>.md` |
 
-Links between Markdown files in the HTML viewer resolve to `/doc/<name>.md` automatically.
+Links between Markdown files in the HTML viewer resolve to `/doc/<name>.html` automatically.
 
 ### How it works
 
@@ -126,7 +126,7 @@ _site/
   robots.txt
   sitemap.xml          # when --site-origin is set
   index.html           # pre-rendered Markdown + SEO meta
-  doc/*.md             # HTML shells with pre-rendered body
+  doc/*.html           # HTML shells (do not publish as *.md — Pages serves those as text)
   raw/*.md
   raw/diagrams/*
   www/site.css, docs.js
@@ -169,17 +169,29 @@ Open `http://127.0.0.1:8766/gdbforge/` when previewing with the default project 
 
 ## GitHub Pages
 
-### One-time setup
+### One-time setup (required)
 
 1. Push this repository to GitHub.
 2. Open **Settings → Pages → Build and deployment**.
-3. Set **Source** to **GitHub Actions**.
+3. Set **Source** to **GitHub Actions** — **not** “Deploy from a branch” / folder `/docs`.
+
+Branch `/docs` + Jekyll serves raw Markdown poorly (`*.md` as text, no `/doc/…` tree, no Mermaid viewer). This project’s site is the **`docserve --export`** artifact from Actions.
+
+### URLs after a successful Actions deploy
+
+| Kind | Example |
+|------|---------|
+| Index | `https://yairgd.github.io/gdbforge/` |
+| Doc page | `https://yairgd.github.io/gdbforge/doc/OVERVIEW.html` |
+| Diagram | `https://yairgd.github.io/gdbforge/diagrams/data_flow.html` |
+
+Avoid `…/doc/OVERVIEW.md` and `…/OVERVIEW.md` on Pages — those are not the HTML viewer.
 
 ### Automatic deploy
 
 Workflow: `.github/workflows/docs.yml`
 
-- Triggers on push to `main` when `docs/**` or `cmd/docserve/**` changes.
+- Triggers on push to `main` when `docs/**` or `cmd/docserve/**` changes (also **workflow_dispatch** from any branch).
 - Runs `go run ./cmd/docserve --export _site --base /<repo-name>/`.
 - Publishes `_site/` to GitHub Pages.
 
@@ -195,7 +207,7 @@ Manual deploy:
 
 ```bash
 go run ./cmd/docserve --export _site --base /gdbforge/
-# upload _site/ contents to gh-pages branch or Pages artifact
+# upload _site/ contents via Actions (upload-pages-artifact), not by committing HTML into docs/
 ```
 
 ---

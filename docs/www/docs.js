@@ -126,6 +126,15 @@ async function renderMermaidInPage() {
   }
 }
 
+function docPagePath(mdName) {
+  const name = String(mdName || "");
+  if (name.endsWith(".html")) {
+    return `doc/${encodeURIComponent(name)}`;
+  }
+  const base = name.endsWith(".md") ? name.slice(0, -".md".length) : name;
+  return `doc/${encodeURIComponent(base + ".html")}`;
+}
+
 function diagramPagePath(mermaidName) {
   const name = String(mermaidName || "");
   if (name.endsWith(".html")) {
@@ -152,7 +161,7 @@ function fixInternalDocLinks(html) {
       if (name === "README.md") {
         return `href="${siteUrl("")}${fragment}"`;
       }
-      return `href="${siteUrl(`doc/${encodeURIComponent(name)}`)}${fragment}"`;
+      return `href="${siteUrl(docPagePath(name))}${fragment}"`;
     }
     if (href.includes("diagrams/") && href.endsWith(".mermaid")) {
       const name = href.split("/").pop();

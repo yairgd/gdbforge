@@ -61,7 +61,7 @@ func (s *docServer) export(outDir, base string) error {
 		if name == "README.md" {
 			continue
 		}
-		dst := filepath.Join(outDir, "doc", name)
+		dst := filepath.Join(outDir, "doc", docPageFile(name))
 		if err := os.WriteFile(dst, s.docPageHTML(name, base), 0o644); err != nil {
 			return fmt.Errorf("write doc page %s: %w", name, err)
 		}
@@ -102,7 +102,7 @@ func (s *docServer) writeSEOFiles(outDir, base string) error {
 		if name == "README.md" {
 			continue
 		}
-		paths = append(paths, "/doc/"+name)
+		paths = append(paths, "/doc/"+docPageFile(name))
 	}
 	for _, name := range s.listDiagrams() {
 		paths = append(paths, "/diagrams/"+diagramPageFile(name))

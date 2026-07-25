@@ -169,7 +169,7 @@ func rewriteDocLinks(md, base string) string {
 			if name == "README.md" {
 				href = joinBase(base, "/")
 			} else {
-				href = joinBase(base, "/doc/"+name)
+				href = joinBase(base, "/doc/"+docPageFile(name))
 			}
 		case strings.Contains(href, "diagrams/") && strings.HasSuffix(href, ".mermaid"):
 			href = joinBase(base, "/diagrams/"+diagramPageFile(name))

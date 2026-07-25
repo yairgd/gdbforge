@@ -83,7 +83,7 @@ func runDocServer(host string, port int, strict bool, srv *docServer) {
 		if name == "README.md" {
 			continue
 		}
-		log.Printf("  %s: http://%s:%d/doc/%s", name, host, boundPort, url.PathEscape(name))
+		log.Printf("  %s: http://%s:%d/doc/%s", name, host, boundPort, url.PathEscape(docPageFile(name)))
 	}
 	log.Printf("  Diagrams: http://%s:%d/diagrams", host, boundPort)
 	log.Println("Press Ctrl+C to stop.")
@@ -200,6 +200,9 @@ func (s *docServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		s.sendHTML(w, s.readmeHTML(s.base))
 	case strings.HasPrefix(path, "/doc/"):
 		s.sendDocPage(w, strings.TrimPrefix(path, "/doc/"))
+	case strings.HasSuffix(path, ".html") && strings.Count(path, "/") == 1:
+		// Convenience: /OVERVIEW.html → same as /doc/OVERVIEW.html
+		s.sendDocPage(w, strings.TrimPrefix(path, "/"))
 	case strings.HasSuffix(path, ".md") && strings.Count(path, "/") == 1:
 		s.sendDocPage(w, strings.TrimPrefix(path, "/"))
 	case path == "/diagrams":
@@ -277,7 +280,12 @@ func (s *docServer) sendHTML(w http.ResponseWriter, body []byte) {
 
 func (s *docServer) sendDocPage(w http.ResponseWriter, name string) {
 	name, _ = url.PathUnescape(name)
-	if strings.Contains(name, "/") || strings.Contains(name, "..") || !strings.HasSuffix(name, ".md") {
+	if strings.Contains(name, "/") || strings.Contains(name, "..") {
+		http.NotFound(w, nil)
+		return
+	}
+	name = docSourceName(name)
+	if !strings.HasSuffix(name, ".md") {
 		http.NotFound(w, nil)
 		return
 	}
