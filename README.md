@@ -22,10 +22,11 @@
 
 ## Demo
 
-[![gdbforge demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo-r5.mp4)
+[![gdbforge R5 demo](docs/media/gdbforge-demo.gif)](docs/media/gdbforge-demo-r5.mp4)
 
-- **[gdbforge-demo-r5.mp4](docs/media/gdbforge-demo-r5.mp4)** — original demo on a **Cortex-R5** (MPSoC / SEGGER J-Link): multi-pane UI stepping a deep call stack, with [`lua/r5_debug`](lua/r5_debug) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample program: [`examples/stack_demo.c`](examples/stack_demo.c).
-- **[gdbforge-demo-linux-app.mp4](docs/media/gdbforge-demo-linux-app.mp4)** — Linux app session showing **external terminal** print vs the **internal IO** (`:b io`) pane.
+- **[gdbforge-demo-r5.mp4](docs/media/gdbforge-demo-r5.mp4)** / [gif](docs/media/gdbforge-demo-r5.gif) — original demo on a **Cortex-R5** (MPSoC / SEGGER J-Link): multi-pane UI stepping a deep call stack, with [`lua/r5_debug`](lua/r5_debug) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample program: [`examples/stack_demo.c`](examples/stack_demo.c).
+- **[gdbforge-demo-linux-app.mp4](docs/media/gdbforge-demo-linux-app.mp4)** / [gif](docs/media/gdbforge-demo-linux-app.gif) — Linux app session showing **external terminal** print vs the **internal IO** (`:b io`) pane.
+- **[gdbforge-debug-itself.mp4](docs/media/gdbforge-debug-itself.mp4)** — gdbforge debugging **itself** (dogfooding): attach to a live gdbforge session and step through its own Go code.
 
 ```bash
 mkdir -p .gdbforge/lua
