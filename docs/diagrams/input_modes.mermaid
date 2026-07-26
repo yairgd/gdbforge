@@ -4,4 +4,6 @@ stateDiagram-v2
     FocusMode --> NormalMode : unfocus / Esc (planned)
     NormalMode --> CommandMode : press colon
     CommandMode --> NormalMode : Esc
+    NormalMode --> SearchMode : press slash
+    SearchMode --> NormalMode : Esc / Enter
     FocusMode --> CommandMode : press colon (planned)

@@ -435,16 +435,16 @@ PTY exclusivity is still enforced by `ptyx.WithWrite`; `PTYOwner` is the **statu
 
 ## Planned window operations
 
-| Command | Action |
-|---------|--------|
-| `:split` / `:vsplit` | Split focused pane horizontally / vertically |
-| `:close` | Close focused pane (collapse split) |
-| `:focus left/right/up/down` | Move focus |
-| `:tabnew` / `:tabclose` / `:tabn` | Tab management |
-| `:only` | Collapse to single pane |
-| `:resize +N/-N` | Adjust split ratio |
+| Command | Action | Status |
+|---------|--------|--------|
+| `:split` / `:vsplit` | Split focused pane horizontally / vertically | **Done** (`:vs` / `:split`) |
+| `:close` | Close focused pane (collapse split) | Partial |
+| `:focus left/right/up/down` | Move focus | **Done** (`:window` / Ctrl-W) |
+| `:tabnew` / `:tabclose` / `:tabn` | Tab management | Planned |
+| `:only` | Collapse to single pane | **Done** (`:only` / Ctrl-W o) |
+| `:resize +N/-N` | Adjust split ratio | Planned |
 
-These will be implemented in the command router ([INPUT.md](INPUT.md)) and call into `WidgetTree` / `TabWidget` APIs.
+Remaining items call into `WidgetTree` / `TabWidget` APIs from the command router ([INPUT.md](INPUT.md)).
 
 ---
 

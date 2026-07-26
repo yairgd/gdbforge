@@ -83,9 +83,10 @@ sequenceDiagram
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`); **Ctrl-C** interrupts via the debugger PTY (GDB/dlv); **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
-   - **`ModeNormal`** — `:` enters command mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n`/`s`/`c` → MI `-exec-next`/`-exec-step`/`-exec-continue`); other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
+   - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n`/`s`/`c` → MI `-exec-next`/`-exec-step`/`-exec-continue`); **`*`/`#`** next/prev `/` search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
    - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z / Ctrl-D).
+   - **`ModeSearch`** — all keys go to `CmdWidget` in search kind; live highlight on the focused `SearchHost`; Enter commits; Esc reverts.
    - **`ModeCompletion`** — wildmenu: arrows cycle; Esc → prior mode; typed keys edit source line and re-query.
    - **`ModeLua`** — keys go to the active `LuaWidget` until Esc.
 
@@ -244,6 +245,8 @@ stateDiagram-v2
     FocusMode --> NormalMode : unfocus / Esc (planned)
     NormalMode --> CommandMode : press colon
     CommandMode --> NormalMode : Esc
+    NormalMode --> SearchMode : press slash
+    SearchMode --> NormalMode : Esc / Enter
     FocusMode --> CommandMode : press colon (planned)
 ```
 
@@ -253,10 +256,10 @@ stateDiagram-v2
 |------|------------|---------|--------|
 | **Normal** | Trie + focused `FocusKeyHandler` | Navigation, key sequences, workspace input | **Implemented** |
 | **Insert** | Focused console (GDB/IO/exec) or Code-gated `n`/`s`/`c` | Type into debugger / program; Esc → normal | **Implemented** |
-| **Command** | `CmdWidget` | `:` UI commands | **Implemented** |
+| **Command** | `CmdWidget` (`CmdKindCommand`) | `:` UI commands | **Implemented** |
+| **Search** | `CmdWidget` (`CmdKindSearch`) + `SearchHost` pane | `/` live buffer search; `*`/`#` next/prev | **Implemented** |
 | **Completion** | Wildmenu + source line edit | Tab completion (`ModeCompletion`) | **Implemented** |
 | **Lua** | Active `LuaWidget` | `:b snake` / `:b tetris` / `:b lua` games & scripts | **Implemented** |
-| **Search** | TBD | Search prompt (e.g. `/` in source) | Reserved |
 
 Mode state lives in **`platform.AppState`** on `TermApp` (`State()`):
 
@@ -269,6 +272,7 @@ const (
     ModeCommand
     ModeCompletion
     ModeLua
+    ModeSearch
 )
 ```
 
@@ -279,11 +283,12 @@ const (
 - Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
 - Insert mode is pane-local typing (GDB CLI, IO stdin, exec shell).
 - Command mode is for UI operations, not debugger commands.
+- Search mode muxes the same `CmdWidget` with a leading `/` (separate history; no Tab). Target is the focused pane's `SearchHost` (`viewport_search.go`). `*` / `#` jump matches; **`n` remains GDB next**.
 - Ctrl-Z / Ctrl-D are mode-independent (GDB-like job control / quit).
 
 **Gaps:**
 
-- `ModeSearch` is reserved but not routed yet.
+- Dedicated Focus mode (pane-local keys exclusive of global) is still planned.
 - `NewTabTwoHozSplitWins` creates a horizontal split of its two widgets.
 
 ---
@@ -374,7 +379,10 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB 
 | `s` | GDB step via MI `-exec-step` (normal; also insert when CodeWidget focused) | Implemented |
 | `c` | GDB continue via MI `-exec-continue` (normal; also insert when CodeWidget focused) | Implemented |
 | `:` | Enter command mode | Implemented |
+| `/` | Enter search mode (focused pane) | Implemented |
+| `*` / `#` | Next / previous `/` search match | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
+| `Ctrl+W o` | Only focused pane | Implemented |
 | `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |
 | `Ctrl+D` | Send `q` to GDB (confirm if inferior alive) | Implemented |
 | `Ctrl+Z` | Suspend inferior if running, else suspend gdbforge (**any mode**) | Implemented |

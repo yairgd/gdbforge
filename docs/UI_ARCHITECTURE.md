@@ -365,7 +365,8 @@ Current behavior:
 |------|-------------------------|
 | `ModeNormal` | Key bindings (partial match) + `TabWidget` → focused leaf |
 | `ModeInsert` | Focused leaf widget (e.g. GDB console) |
-| `ModeCommand` | `CmdWidget` only |
+| `ModeCommand` | `CmdWidget` (`CmdKindCommand`) only |
+| `ModeSearch` | `CmdWidget` (`CmdKindSearch`) + live highlight on focused `SearchHost` |
 | `ModeCompletion` | `CompletionBarWidget` wildmenu (Esc → `ModeCommand`) |
 
 **Planned behavior** (see [INPUT.md](INPUT.md)):
@@ -454,9 +455,11 @@ Application keys handled by `DebuggerApp` (`HandleKey`):
 | Key / context | Action |
 |---------------|--------|
 | `:` (normal mode) | Enter command mode, activate `CmdWidget` |
-| `<C-w>…` (normal mode) | Focus movement via trie |
+| `/` (normal mode) | Enter search mode (`ActivateSearch`); target = focused pane |
+| `*` / `#` (normal mode) | Next / previous `/` search match (`n` stays GDB next) |
+| `<C-w>…` (normal mode) | Focus movement / `:only` via trie |
 | Other keys (normal mode) | Trie partial match, then `TabWidget.HandleEvent` |
-| All keys (command mode) | `CmdWidget.HandleEvent` |
+| All keys (command / search mode) | `CmdWidget.HandleEvent` |
 
 ### Domain event bus
 
@@ -545,7 +548,7 @@ sequenceDiagram
 | `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
-| `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` input, tab complete, emits `SubmitMsg` on event bus |
+| `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` / `/` cmdline mux (`CmdKindCommand` / `CmdKindSearch`), tab complete for `:`, emits execute / search callbacks |
 | `TabWidget` | `internal/termui/tab.go` | Tab container forwarding to a per-tab `WidgetTree` |
 
 Widget hierarchy target:

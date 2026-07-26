@@ -297,7 +297,7 @@ Startup **`panels`** layout: Code over GDB (left, **2/3**); right IO (top half) 
 
 ## CmdWidget integration
 
-`CmdWidget` (`internal/termui/cmd_widget.go`) holds a `CommandParser` for Tab sync / completions. **Execute** is owned by the app (`SetOnExecute` → `ExecuteParsed()`).
+`CmdWidget` (`internal/termui/cmd_widget.go`) is a **muxed** cmdline: **`CmdKindCommand`** (`:`) and **`CmdKindSearch`** (`/`). It holds a `CommandParser` for Tab sync / completions on the command kind only (search has its own history and **no** Tab). **Execute** for `:` is owned by the app (`SetOnExecute` → `ExecuteParsed()`). Search Enter / live edits call `SetOnSearchSubmit` / `SetOnChange` → focused pane `SearchHost` ([INPUT.md](INPUT.md)).
 
 ```mermaid
 sequenceDiagram

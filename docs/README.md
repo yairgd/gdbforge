@@ -155,11 +155,11 @@ Details: [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md).
 | Canvas / Grid / Cell borders | Implemented |
 | GDB MI2 PTY client | Prototype |
 | Root layout (TabBar + Workspace + CmdLine) | Partial |
-| Interaction modes (Normal / Command) | Partial |
+| Interaction modes (Normal / Command / Search) | Implemented |
 | Key-sequence trie (`Ctrl+W` focus) | Partial |
 | Diff rendering | Planned |
-| Focus mode / search mode | Planned |
-| Lua plugins | Planned |
+| Focus mode | Planned |
+| Lua plugins | Partial (host + games; more APIs planned) |
 
 Full tracker: [ROADMAP.md](ROADMAP.md).
 

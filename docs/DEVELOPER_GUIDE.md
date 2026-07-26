@@ -411,7 +411,7 @@ Always update docs when changing architecture-visible behavior.
 |---------|-------|
 | Event loop + bus | `term_app.go` |
 | App API / dispatch | `term_app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
-| Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) |
+| Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) — includes `ModeSearch` |
 | Key-sequence bindings | `internal/commands` + `cmd/gdbforge/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
@@ -419,7 +419,8 @@ Always update docs when changing architecture-visible behavior.
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
-| Command line | `cmd_widget.go`, `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
+| Command / search line | `cmd_widget.go` (`CmdKindCommand` / `CmdKindSearch`), `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
+| Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `cmd/gdbforge/input.go` — [INPUT.md](INPUT.md) / [USER_GUIDE.md](USER_GUIDE.md) |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
 | Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |

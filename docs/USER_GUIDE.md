@@ -29,6 +29,10 @@ Type into the focused console (usually GDB). Enter with `i` (focuses GDB) or by 
 
 Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for completion, Enter to run, Esc to cancel.
 
+**Search**
+
+Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. After a search, `*` / `#` jump next / previous match — **`n` stays GDB next** (not Vim-style next-match).
+
 **Completion**
 
 After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cycle; type letters to narrow (CompletionMenu); Enter accepts; Esc cancels. The completion bar is a replaceable view over that menu.
@@ -46,6 +50,8 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | Key | Action |
 |-----|--------|
 | `:` | enter command mode |
+| `/` | search in focused pane (live highlight; Enter commits) |
+| `*` / `#` | next / previous search match (`n` stays GDB next) |
 | `i` | focus GDB leaf and enter insert |
 | `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
 | `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |
@@ -56,6 +62,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | `e` | enable/disable breakpoint at Code cursor |
 | Ctrl-W h/j/k/l | focus left / down / up / right |
 | Ctrl-W arrows | same as hjkl |
+| Ctrl-W o | only — close other panes, keep focused |
 | Ctrl-O | jump back after `:b` / `:edit` / `:!` |
 
 ### Colon commands
@@ -77,6 +84,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `:layout classic` — full-width Code over GDB
 - `:layout` — re-apply wide
 - `:vs` / `:split` — vertical / horizontal split
+- `:only` — keep focused pane only (same as Ctrl-W o)
 
 **Settings (`:set …`)**
 
@@ -102,6 +110,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `stackbreakcolor <name>` — green mark at stop PC on Breakpoints / Call Stack #0 / current Thread (default green)
 - `codeselcolor <name>` — Code browse cursor bg (default darkblue)
 - `mutedcolor <name>` — empty-list / dim text (default gray)
+- `searchcolor <name>` — `/` search match background (default darkorange)
 
 **Other**
 

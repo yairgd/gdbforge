@@ -105,7 +105,7 @@ Dates are indicative — adjust as development progresses.
 | CmdLine dispatch | `SubmitMsg` on event bus → `HandleCoreEvents` by `CommandID` |
 | Focus indicators | Bold border on focused pane |
 | Focus movement | `Ctrl+W` + arrow keys — **partial (trie wired)** |
-| Mode router | Normal / Command — **partial**; Focus / Search planned |
+| Mode router | Normal / Command / Search — **done**; Focus mode still planned |
 
 ### M2 — Rendering efficiency
 
