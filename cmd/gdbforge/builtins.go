@@ -194,9 +194,13 @@ func (a *DebuggerApp) registerBuiltin(name string, w termui.Widget) {
 const widgetJumpMax = 32
 
 // swapFocusedWidget replaces the focused pane's widget and pushes the previous
-// one onto the jump list (for Ctrl-O).
+// one onto the jump list (for Ctrl-O). Refuses when the focused leaf is the
+// fixed GDB layout slot and w is not gdbWidget.
 func (a *DebuggerApp) swapFocusedWidget(w termui.Widget) bool {
 	if a.tab == nil || w == nil {
+		return false
+	}
+	if a.isGdbLeaf(a.focusedLeaf()) && w != a.gdbWidget {
 		return false
 	}
 	prev := a.focusedWidget()
@@ -228,11 +232,16 @@ func (a *DebuggerApp) pushWidgetJump(w termui.Widget) {
 }
 
 // JumpBack restores the previous widget in the focused pane (Vim Ctrl-O).
+// Leaves the jump stack untouched when the focused leaf is the GDB slot and
+// the restore target is not gdbWidget.
 func (a *DebuggerApp) JumpBack(args ...any) {
 	if a.tab == nil || len(a.widgetJump) == 0 {
 		return
 	}
 	prev := a.widgetJump[len(a.widgetJump)-1]
+	if a.isGdbLeaf(a.focusedLeaf()) && prev != a.gdbWidget {
+		return
+	}
 	a.widgetJump = a.widgetJump[:len(a.widgetJump)-1]
 	if a.tab.ReplaceFocusedWidget(prev) {
 		a.RequestFrame()

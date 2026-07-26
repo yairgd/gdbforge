@@ -628,27 +628,30 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 }
 
 // placeCodeInSlot puts w into the code leaf, replacing LogoWidget or an older CodeWidget.
+// Never places code onto the fixed GDB layout leaf.
 func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
 	a.primaryCode = w
-	if cw := a.focusedCode(); cw != nil {
-		if cw != w {
-			_ = a.tab.ReplaceFocusedWidget(w)
+	if !a.isGdbLeaf(a.focusedLeaf()) {
+		if cw := a.focusedCode(); cw != nil {
+			if cw != w {
+				_ = a.tab.ReplaceFocusedWidget(w)
+			}
+			a.rememberCodeLeafFromFocus()
+			return
 		}
-		a.rememberCodeLeafFromFocus()
-		return
-	}
-	if _, ok := a.focusedWidget().(*widgets.LogoWidget); ok {
-		_ = a.tab.ReplaceFocusedWidget(w)
-		a.rememberCodeLeafFromFocus()
-		return
+		if _, ok := a.focusedWidget().(*widgets.LogoWidget); ok {
+			_ = a.tab.ReplaceFocusedWidget(w)
+			a.rememberCodeLeafFromFocus()
+			return
+		}
 	}
 	// Prefer the remembered code leaf so call-stack / BP focus still updates
 	// the source pane (ReplaceMatchingLeafWidget only scans non-focused leaves
 	// and can miss when the mark points at a specific split).
-	if leaf := a.findCodeLeaf(); leaf != nil {
+	if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) {
 		leaf.SetWidget(w)
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 		return

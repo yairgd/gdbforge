@@ -299,6 +299,8 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 **Implemented today:** Vim-like `:b name` switches among builtins (`help`, `about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic` (`internal/gdbforge/layout`).
 
+The layout **`"gdb"` leaf is a fixed slot**: `:b` / `:edit` / `:help` / `:!` / Ctrl-O refuse to replace `GDBWidget` there. Focus another pane first to open a different view. `:b gdb` / `i` still focus (and restore) GDB on that leaf.
+
 The longer-term `:buffer` idea selects which **application model** to display — it does not open a text file (except via the `:e` path above).
 
 ```text

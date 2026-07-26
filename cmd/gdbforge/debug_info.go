@@ -111,7 +111,7 @@ func (a *DebuggerApp) placeLogoInCodeSlot() {
 		logo = widgets.NewLogoWidget()
 		a.logoWidget = logo
 	}
-	if _, ok := a.focusedWidget().(*widgets.CodeWidget); ok {
+	if _, ok := a.focusedWidget().(*widgets.CodeWidget); ok && !a.isGdbLeaf(a.focusedLeaf()) {
 		_ = a.tab.ReplaceFocusedWidget(logo)
 		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
 		return

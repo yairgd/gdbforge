@@ -211,8 +211,8 @@ func (w *LuaWidget) Draw(c termui.Canvas) {
 	// Overlay last print lines at the bottom if any.
 	if n := len(w.logLines); n > 0 && c.H() > 0 {
 		maxShow := c.H()
-		if maxShow > 3 {
-			maxShow = 3
+		if maxShow > c.H() - 1 {
+			maxShow = c.H()-1
 		}
 		start := n - maxShow
 		if start < 0 {

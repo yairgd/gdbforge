@@ -1,37 +1,18 @@
--- remotegdb — debug a binary on an embedded Linux board via scp + gdbserver + GDB.
+-- remotegdb — scp (if needed) + start gdbserver on board + GDB target remote.
 --
--- Install:
---   mkdir -p .gdbforge/lua
---   cp -r /path/to/gdbforge/lua/remotegdb .gdbforge/lua/
---
--- Typical session (GDB backend — not Delve):
---   ./bin/gdbforge ./hello          # or rely on GDBFORGE_REMOTE_APP / :lua arg
+-- Usage (GDB backend):
 --   :lua remotegdb
 --   :lua remotegdb ./hello
 --   :lua remotegdb ./hello 192.168.20.50 1234
 --
--- Flow:
---   1) Resolve local app (arg → GDBFORGE_REMOTE_APP → gdbforge.program())
---   2) Compare local vs remote MD5; scp to /tmp only if missing or changed
---   3) Open a terminal: ssh -t user@host 'gdbserver :PORT /tmp/<app>'
---   4) wait_port on the board, then: file <app> ; target remote host:PORT
---
--- Env (all optional — edit defaults below or export before gdbforge):
---   GDBFORGE_REMOTE_APP    local binary path (placeholder if unset)
---   GDBFORGE_REMOTE_HOST   board IP/hostname          (default 192.168.20.50)
---   GDBFORGE_REMOTE_USER   ssh user                   (default root)
---   GDBFORGE_REMOTE_PORT   gdbserver listen port      (default 1234)
---   GDBFORGE_REMOTE_DIR    remote directory           (default /tmp)
---   GDBFORGE_TERMINAL      mate-terminal|kitty|xterm|… (external ssh window)
---
--- Requires: ssh, scp, md5sum (or md5) on the host; gdbserver on the board PATH.
+-- Env (optional):
+--   GDBFORGE_REMOTE_APP GDBFORGE_REMOTE_HOST GDBFORGE_REMOTE_USER
+--   GDBFORGE_REMOTE_PORT GDBFORGE_REMOTE_DIR
 
--- Placeholder: set your board defaults here, or override with env / :lua args.
 local DEFAULT_HOST = "192.168.20.50"
 local DEFAULT_USER = "root"
 local DEFAULT_PORT = "1234"
 local DEFAULT_DIR = "/tmp"
--- Leave empty to force GDBFORGE_REMOTE_APP / session program / :lua arg.
 local DEFAULT_APP = ""
 
 local function trim(s)
@@ -59,38 +40,35 @@ local function shell_quote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
--- Run a shell command; return exit code (0 = ok) and combined stdout+stderr text.
+-- gopher-lua: popen close() returns exit status number (0 = ok), not true.
 local function run_cmd(cmd)
   local f = io.popen(cmd .. " 2>&1", "r")
   if not f then
     return 1, "io.popen failed"
   end
   local out = f:read("*a") or ""
-  local ok, _, code = f:close()
-  if ok == true or code == 0 then
+  local status = f:close()
+  if status == true or status == 0 then
     return 0, out
   end
-  if type(code) == "number" then
-    return code, out
+  if type(status) == "number" then
+    return status, out
   end
   return 1, out
 end
 
 local function local_md5(path)
-  local code, out = run_cmd("md5sum " .. shell_quote(path))
-  if code ~= 0 then
-    code, out = run_cmd("md5 -q " .. shell_quote(path))
+  local code, out = run_cmd("/usr/bin/md5sum " .. shell_quote(path))
+  local hash = tostring(out or ""):match("([0-9a-fA-F]+)")
+  if hash then
+    return hash, out
   end
-  if code ~= 0 then
-    return nil, out
-  end
-  local hash = out:match("([0-9a-fA-F]+)")
-  return hash, out
+  return nil, out ~= "" and out or ("md5 failed, status=" .. tostring(code))
 end
 
 local function remote_md5(user, host, remote_path)
   local remote = string.format(
-    "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s md5sum %s 2>/dev/null || ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s md5 -q %s 2>/dev/null",
+    "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s /usr/bin/md5sum %s 2>/dev/null || ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s md5 -q %s 2>/dev/null",
     user, host, shell_quote(remote_path),
     user, host, shell_quote(remote_path)
   )
@@ -131,7 +109,6 @@ local function ensure_deployed(local_app, user, host, remote_path)
     gdbforge.print(trim(out))
     return false
   end
-  -- Ensure executable bit on target.
   run_cmd(string.format(
     "ssh -o BatchMode=yes %s@%s chmod +x %s",
     user, host, shell_quote(remote_path)
@@ -150,9 +127,6 @@ function main(app, host, port)
   end
   if app == "" then
     gdbforge.print("ERROR: set app path — :lua remotegdb ./myapp")
-    gdbforge.print("  or export GDBFORGE_REMOTE_APP=./myapp")
-    gdbforge.print("  or start: gdbforge ./myapp")
-    gdbforge.print("  or edit DEFAULT_APP in remotegdb.lua")
     return
   end
 
@@ -170,27 +144,51 @@ function main(app, host, port)
   local addr = host .. ":" .. port
 
   gdbforge.print("remotegdb: " .. app .. " → " .. user .. "@" .. host .. ":" .. remote_path)
-  gdbforge.print("gdbserver port " .. port .. " (terminal: GDBFORGE_TERMINAL=" ..
-    (os.getenv("GDBFORGE_TERMINAL") or "auto") .. ")")
 
+  -- 1) copy (md5)
   if not ensure_deployed(app, user, host, remote_path) then
     return
   end
 
-  local remote_cmd = string.format("gdbserver :%s %s", port, remote_path)
-  gdbforge.print("opening terminal: ssh -t " .. user .. "@" .. host .. " " .. remote_cmd)
-  gdbforge.spawn_terminal("ssh", "-t", user .. "@" .. host, remote_cmd)
+  -- 2) open gdbserver on the target (no host spawn / no external terminal)
+local start = string.format(
+  "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
+  user, host,
+  shell_quote(string.format(
+    "pids=$(pidof gdbserver 2>/dev/null); " ..
+    "if [ -n \"$pids\" ]; then kill $pids 2>/dev/null; fi; " ..
+    "killall gdbserver 2>/dev/null; " ..
+    "sleep 0.3; " ..
+    "nohup gdbserver :%s %s >/tmp/gdbserver.log 2>&1 </dev/null &",
+    port, remote_path
+  ))
+)
+  gdbforge.print("starting gdbserver on target …")
+  local code, out = run_cmd(start)
+  if code ~= 0 then
+    gdbforge.print("ERROR: could not start gdbserver: " .. tostring(out))
+    return
+  end
 
   gdbforge.print("waiting for " .. addr .. " …")
   if not gdbforge.wait_port(addr, 30) then
     gdbforge.print("ERROR: nothing listening on " .. addr)
-    gdbforge.print("  check the ssh/gdbserver window, board IP, firewall, gdbserver PATH")
     return
   end
 
+  -- >>> ADD THESE LINES HERE <<<
+  gdbforge.spawn("ssh", "-o", "BatchMode=yes",
+    user .. "@" .. host,
+    "tail -n +1 -f /tmp/gdbserver.log")
+  gdbforge.print("inferior log: :b exec  (ssh tail -f /tmp/gdbserver.log)")
+  -- >>> END ADD <<<
+  
+
+  -- 3) target remote  4) break main  5) continue
   gdbforge.open_buffer("gdb")
   gdbforge.gdb("file " .. app)
   gdbforge.gdb("target remote " .. addr)
-  gdbforge.print("attached — symbols from " .. app .. "; remote " .. addr)
-  gdbforge.print("next: break main ; continue   (or set BPs then c)")
+  gdbforge.gdb("break main")
+  gdbforge.gdb("continue")
+  gdbforge.print("remotegdb: attached, break main, continue")
 end

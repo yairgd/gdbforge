@@ -97,6 +97,30 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	}
 }
 
+// focusedLeaf returns the focused leaf in the active tab tree.
+func (a *DebuggerApp) focusedLeaf() *termui.Node {
+	if a.tab == nil {
+		return nil
+	}
+	tree := a.tab.ActiveTree()
+	if tree == nil {
+		return nil
+	}
+	return tree.FocusedLeaf()
+}
+
+// isGdbLeaf reports whether leaf is the layout's GDB slot (marked "gdb" or
+// currently showing gdbWidget). That leaf must not host other widgets.
+func (a *DebuggerApp) isGdbLeaf(leaf *termui.Node) bool {
+	if leaf == nil || a.tab == nil {
+		return false
+	}
+	if m := a.tab.LeafMark(leafMarkGDB); m != nil && m == leaf {
+		return true
+	}
+	return a.gdbWidget != nil && leaf.GetWidget() == a.gdbWidget
+}
+
 // focusIsCodeOrGdb reports whether the focused pane is Code/Logo or GDB (or empty).
 // Other panes keep their own Up/Down/Space handling.
 func (a *DebuggerApp) focusIsCodeOrGdb() bool {
