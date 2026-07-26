@@ -72,6 +72,7 @@ export GDBFORGE_REMOTE_HOST=192.168.20.50
 export GDBFORGE_REMOTE_USER=root
 export GDBFORGE_REMOTE_PORT=1234
 export GDBFORGE_REMOTE_APP=./hello   # optional if you pass argv / start with the binary
+export GDBFORGE_REMOTE_APP_ARGS='-p /dev/ff/ -z'  # optional inferior argv for gdbserver
 
 ./bin/gdbforge ./hello               # GDB backend (default)
 # then:
@@ -85,7 +86,7 @@ export GDBFORGE_REMOTE_APP=./hello   # optional if you pass argv / start with th
 1. Resolves **local app**: `:lua` arg → `GDBFORGE_REMOTE_APP` → `gdbforge.program()` → `DEFAULT_APP` in the script  
 2. MD5 local vs remote (`ssh … md5sum`); **scp only if missing or different**  
 3. `chmod +x` on the remote path (default `/tmp/<basename>`)  
-4. `spawn_terminal`: `ssh -t user@host 'gdbserver :PORT /tmp/app'`  
+4. Starts `gdbserver :PORT /tmp/app [GDBFORGE_REMOTE_APP_ARGS…]` on the board (stdout → log; optional `ssh tail`)  
 5. `wait_port("host:PORT")` then `file <app>` + `target remote host:PORT`
 
 Edit placeholders at the top of [`remotegdb/remotegdb.lua`](remotegdb/remotegdb.lua) (`DEFAULT_HOST`, `DEFAULT_APP`, …) if you prefer not to use env vars.
@@ -95,6 +96,7 @@ Edit placeholders at the top of [`remotegdb/remotegdb.lua`](remotegdb/remotegdb.
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `GDBFORGE_REMOTE_APP` | _(empty)_ | Local binary path |
+| `GDBFORGE_REMOTE_APP_ARGS` | _(empty)_ | Inferior argv after the binary (`gdbserver :PORT prog [args…]`), e.g. `-p /dev/ff/ -z` |
 | `GDBFORGE_REMOTE_HOST` | `192.168.20.50` | Board IP / hostname |
 | `GDBFORGE_REMOTE_USER` | `root` | SSH user |
 | `GDBFORGE_REMOTE_PORT` | `1234` | gdbserver listen port on the board |

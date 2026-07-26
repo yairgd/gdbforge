@@ -8,12 +8,14 @@
 -- Env (optional):
 --   GDBFORGE_REMOTE_APP GDBFORGE_REMOTE_HOST GDBFORGE_REMOTE_USER
 --   GDBFORGE_REMOTE_PORT GDBFORGE_REMOTE_DIR
+--   GDBFORGE_REMOTE_APP_ARGS   inferior argv after the binary (e.g. "-p /dev/ff/ -z")
 
 local DEFAULT_HOST = "192.168.20.50"
 local DEFAULT_USER = "root"
 local DEFAULT_PORT = "1234"
 local DEFAULT_DIR = "/tmp"
 local DEFAULT_APP = ""
+local DEFAULT_APP_ARGS = ""
 
 local function trim(s)
   return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
@@ -140,10 +142,19 @@ function main(app, host, port)
   end
   local user = env("GDBFORGE_REMOTE_USER", DEFAULT_USER)
   local rdir = env("GDBFORGE_REMOTE_DIR", DEFAULT_DIR):gsub("/+$", "")
+  local app_args = env("GDBFORGE_REMOTE_APP_ARGS", DEFAULT_APP_ARGS)
   local remote_path = rdir .. "/" .. basename(app)
   local addr = host .. ":" .. port
+  -- gdbserver :PORT prog [args…] — append inferior argv after the remote binary.
+  local remote_cmd = remote_path
+  if app_args ~= "" then
+    remote_cmd = remote_path .. " " .. app_args
+  end
 
   gdbforge.print("remotegdb: " .. app .. " → " .. user .. "@" .. host .. ":" .. remote_path)
+  if app_args ~= "" then
+    gdbforge.print("app args: " .. app_args)
+  end
 
   -- 1) copy (md5)
   if not ensure_deployed(app, user, host, remote_path) then
@@ -151,18 +162,18 @@ function main(app, host, port)
   end
 
   -- 2) open gdbserver on the target (no host spawn / no external terminal)
-local start = string.format(
-  "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
-  user, host,
-  shell_quote(string.format(
-    "pids=$(pidof gdbserver 2>/dev/null); " ..
-    "if [ -n \"$pids\" ]; then kill $pids 2>/dev/null; fi; " ..
-    "killall gdbserver 2>/dev/null; " ..
-    "sleep 0.3; " ..
-    "nohup gdbserver :%s %s >/tmp/gdbserver.log 2>&1 </dev/null &",
-    port, remote_path
-  ))
-)
+  local start = string.format(
+    "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
+    user, host,
+    shell_quote(string.format(
+      "pids=$(pidof gdbserver 2>/dev/null); " ..
+      "if [ -n \"$pids\" ]; then kill $pids 2>/dev/null; fi; " ..
+      "killall gdbserver 2>/dev/null; " ..
+      "sleep 0.3; " ..
+      "nohup gdbserver :%s %s >/tmp/gdbserver.log 2>&1 </dev/null &",
+      port, remote_cmd
+    ))
+  )
   gdbforge.print("starting gdbserver on target …")
   local code, out = run_cmd(start)
   if code ~= 0 then
@@ -176,13 +187,10 @@ local start = string.format(
     return
   end
 
-  -- >>> ADD THESE LINES HERE <<<
   gdbforge.spawn("ssh", "-o", "BatchMode=yes",
     user .. "@" .. host,
     "tail -n +1 -f /tmp/gdbserver.log")
   gdbforge.print("inferior log: :b exec  (ssh tail -f /tmp/gdbserver.log)")
-  -- >>> END ADD <<<
-  
 
   -- 3) target remote  4) break main  5) continue
   gdbforge.open_buffer("gdb")
