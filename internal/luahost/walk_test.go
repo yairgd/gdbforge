@@ -171,7 +171,7 @@ func TestResolveEmbeddedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"r5_debug", "remotegdb", "dlv_ext_port", "snake", "tetris"}
+	want := []string{"r5_baremetal_jlink", "r5_openamp_jlink", "remotegdb", "dlv_ext_port", "snake", "tetris"}
 	cmds := map[string]ResolvedScript{}
 	for _, s := range got {
 		cmds[s.Cmd] = s
@@ -184,8 +184,8 @@ func TestResolveEmbeddedCatalog(t *testing.T) {
 			t.Fatalf("missing embedded cmd %q in %v", name, cmds)
 		}
 	}
-	// Sidecar beside r5_debug.lua
-	dir := filepath.Dir(cmds["r5_debug"].Path)
+	// Sidecar beside cortex_r5 scripts
+	dir := filepath.Dir(cmds["r5_baremetal_jlink"].Path)
 	if _, err := os.Stat(filepath.Join(dir, "r5_target.xml")); err != nil {
 		t.Fatal(err)
 	}

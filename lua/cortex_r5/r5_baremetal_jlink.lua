@@ -19,6 +19,14 @@ local PORT = os.getenv("GDBFORGE_JLINK_PORT") or "2334"
 local TDESC = os.getenv("GDBFORGE_TDESC")
   or (gdbforge.lua_dir() .. "/r5_target.xml")
 
+function help()
+  gdbforge.print("r5_baremetal_jlink — spawn JLinkGDBServer, target remote, load, break main")
+  gdbforge.print("Usage: :lua r5_baremetal_jlink")
+  gdbforge.print("Env: GDBFORGE_JLINK GDBFORGE_JLINK_DEVICE GDBFORGE_JLINK_PORT GDBFORGE_TDESC")
+  gdbforge.print("Defaults: device=XCZU3CG_R5_0 port=2334 tdesc=script dir r5_target.xml")
+  gdbforge.print("After: :b exec for JLink logs")
+end
+
 function main()
   gdbforge.print("starting JLinkGDBServer …")
   gdbforge.spawn(

@@ -6,6 +6,13 @@
 -- Opens a real terminal, points GDB -inferior-tty-set at that pts.
 -- Delve: prefer :lua dlv_ext_port (see lua/README.md).
 
+function help()
+  gdbforge.print("external_tty — open a real terminal and set GDB inferior-tty")
+  gdbforge.print("Usage: :lua external_tty")
+  gdbforge.print("Env: GDBFORGE_TERMINAL")
+  gdbforge.print("Delve: prefer :lua dlv_ext_port")
+end
+
 function main()
   local pts = gdbforge.open_external_tty()
   gdbforge.print("using " .. pts)

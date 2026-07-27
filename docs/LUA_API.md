@@ -31,9 +31,12 @@ Built-in workflows (`remotegdb`, `r5_debug`, …) work with no copy; override on
 | Top-level script body | Runs once when the script is loaded / `:lua name` first needs it |
 | `gdbforge.register("name", fn)` | Exposes `fn` as `:lua name [args…]` |
 | `main(...)` (optional convention) | Many catalog scripts define `main` and register it |
+| `help()` (optional convention) | `:lua name help` (also `-h` / `--help`) — prints usage to `:b io`; skips `main` |
 | ModeLua pane (`:lua snake` / games) | `on_key`, draw via `pane.*`, optional tick — see games under `lua/games/` |
 
 `:lua <func> [args]` calls a registered function; string args are passed as Lua strings.
+
+`:lua <func> help` loads the script VM (if needed) and calls global `help()` when present. Output uses `gdbforge.print` → **`:b io`**. If `help()` is missing, the host prints `no help() for <func>`.
 
 ---
 
@@ -54,6 +57,13 @@ Register `fn` so `:lua name` invokes it. `name` must be a non-empty string; `fn`
 ### `gdbforge.sleep(seconds)`
 
 Block the Lua VM for `seconds` (number, may be fractional). Used while waiting for ports/probes.
+Respects job cancel: **Ctrl-C** during an async `:lua` job aborts sleep with an error.
+
+Automation `:lua <name>` runs **off the UI thread** so the TUI stays responsive. Only one job at a time; a second `:lua` while busy prints a notice. **Ctrl-C** cancels the job: aborts the Lua VM (including after a blocking call returns), interrupts `sleep` / `wait_port`, and kills any in-flight `gdbforge.system` process group. Prefer `gdbforge.system` over `io.popen` for ssh/scp so Ctrl-C can stop them immediately.
+
+### `gdbforge.system(cmd)` → `status, output`
+
+Run a shell command (`sh -c`). Returns exit status (number) and combined stdout+stderr (string). On job cancel, the process group is SIGKILL'd and Lua raises an error. Catalog scripts (`remotegdb`, `r5_openamp_jlink`) use this for remote `ssh`/`scp`.
 
 ### `gdbforge.lua_dir()`
 

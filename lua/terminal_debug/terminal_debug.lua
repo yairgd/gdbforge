@@ -14,6 +14,15 @@
 --
 -- For Go + Delve prefer :lua dlv_ext_port (see lua/README.md).
 
+function help()
+  gdbforge.print("terminal_debug — external tty for inferior stdio (GDB)")
+  gdbforge.print("Usage: :lua terminal_debug [prog] [run]")
+  gdbforge.print("  :lua terminal_debug ./myprog")
+  gdbforge.print("  :lua terminal_debug ./myprog run")
+  gdbforge.print("Env: GDBFORGE_TERMINAL GDBFORGE_INFERIOR_TTY")
+  gdbforge.print("For Go + Delve prefer :lua dlv_ext_port")
+end
+
 function main(prog, action)
   local pts = gdbforge.open_external_tty()
   gdbforge.print("external tty: " .. pts)

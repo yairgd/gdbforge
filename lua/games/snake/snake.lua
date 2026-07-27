@@ -129,6 +129,14 @@ end)
 
 -- :lua snake / :b snake create-or-focus this script's pane (no boot widget).
 -- :lua snake snake1 opens a second independent instance.
+function help()
+  gdbforge.print("snake — ModeLua demo pane")
+  gdbforge.print("Usage: :lua snake [bufname]")
+  gdbforge.print("  :lua snake          create-or-focus buffer snake")
+  gdbforge.print("  :lua snake snake1   second instance")
+  gdbforge.print("Keys: arrows; Esc leaves ModeLua; r restart")
+end
+
 function main()
   gdbforge.print("Snake — arrows; Esc leaves")
   gdbforge.open_buffer("snake")

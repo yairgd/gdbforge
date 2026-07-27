@@ -11,6 +11,14 @@ local DEFAULT_HOST = "192.168.20.50"
 local DEFAULT_USER = "root"
 local DEFAULT_LOG  = "/tmp/gdbserver.log"
 
+function help()
+  gdbforge.print("remotegdb_log — ssh tail -f board gdbserver log in an external terminal")
+  gdbforge.print("Usage: :lua remotegdb_log [host] [user] [logpath]")
+  gdbforge.print("Env: GDBFORGE_REMOTE_HOST GDBFORGE_REMOTE_USER GDBFORGE_REMOTE_LOG")
+  gdbforge.print("     GDBFORGE_TERMINAL")
+  gdbforge.print("Defaults: host=192.168.20.50 user=root log=/tmp/gdbserver.log")
+end
+
 local function trim(s)
   return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end

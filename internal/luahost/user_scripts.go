@@ -1,11 +1,14 @@
 package luahost
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	lua "github.com/yuin/gopher-lua"
@@ -350,7 +353,14 @@ func (rt *Runtime) luaWaitPort(L *lua.LState) int {
 	}
 	addr := net.JoinHostPort(host, port)
 	deadline := time.Now().Add(time.Duration(timeout * float64(time.Second)))
+	ctx := rt.JobContext()
 	for {
+		select {
+		case <-ctx.Done():
+			L.RaiseError("%s", ErrJobCancelled.Error())
+			return 0
+		default:
+		}
 		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
@@ -361,7 +371,12 @@ func (rt *Runtime) luaWaitPort(L *lua.LState) int {
 			L.Push(lua.LFalse)
 			return 1
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			L.RaiseError("%s", ErrJobCancelled.Error())
+			return 0
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 }
 
@@ -373,8 +388,89 @@ func (rt *Runtime) luaSleep(L *lua.LState) int {
 	if sec > 60 {
 		sec = 60
 	}
-	time.Sleep(time.Duration(sec * float64(time.Second)))
+	ctx := rt.JobContext()
+	deadline := time.Now().Add(time.Duration(sec * float64(time.Second)))
+	for time.Now().Before(deadline) {
+		remaining := time.Until(deadline)
+		slice := 50 * time.Millisecond
+		if remaining < slice {
+			slice = remaining
+		}
+		if slice <= 0 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			L.RaiseError("%s", ErrJobCancelled.Error())
+			return 0
+		case <-time.After(slice):
+		}
+	}
 	return 0
+}
+
+// gdbforge.system(cmd) → status (number), output (string)
+// Runs via sh -c; stdout+stderr combined. On job cancel, kills the process group.
+func (rt *Runtime) luaSystem(L *lua.LState) int {
+	cmdLine := strings.TrimSpace(L.CheckString(1))
+	if cmdLine == "" {
+		L.RaiseError("gdbforge.system: empty command")
+		return 0
+	}
+	ctx := rt.JobContext()
+	select {
+	case <-ctx.Done():
+		L.RaiseError("%s", ErrJobCancelled.Error())
+		return 0
+	default:
+	}
+
+	cmd := exec.Command("sh", "-c", cmdLine)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Start(); err != nil {
+		L.Push(lua.LNumber(127))
+		L.Push(lua.LString(err.Error()))
+		return 2
+	}
+	rt.sysMu.Lock()
+	rt.sysCmd = cmd
+	rt.sysMu.Unlock()
+	defer func() {
+		rt.sysMu.Lock()
+		if rt.sysCmd == cmd {
+			rt.sysCmd = nil
+		}
+		rt.sysMu.Unlock()
+	}()
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case <-ctx.Done():
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Process.Kill()
+		}
+		<-done
+		L.RaiseError("%s", ErrJobCancelled.Error())
+		return 0
+	case err := <-done:
+		code := 0
+		if err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else {
+				code = 1
+			}
+		}
+		L.Push(lua.LNumber(code))
+		L.Push(lua.LString(buf.String()))
+		return 2
+	}
 }
 
 func (rt *Runtime) luaLuaDir(L *lua.LState) int {

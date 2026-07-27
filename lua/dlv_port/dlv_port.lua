@@ -8,6 +8,14 @@
 --   :lua dlv_port 12345
 --   :lua dlv_port 12345 p1 p2 p3
 
+function help()
+  gdbforge.print("dlv_port — alias of dlv_ext_port (headless Delve + connect)")
+  gdbforge.print("Usage: gdbforge -g dlv ./prog")
+  gdbforge.print("       :lua dlv_port [port] [extra prog args…]")
+  gdbforge.print("Env: GDBFORGE_TERMINAL")
+  gdbforge.print("Default port: 2345")
+end
+
 function main(port, ...)
   port = tostring(port or "2345")
   local addr = "127.0.0.1:" .. port

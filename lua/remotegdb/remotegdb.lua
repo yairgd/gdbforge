@@ -18,6 +18,16 @@ local DEFAULT_DIR = "/tmp"
 local DEFAULT_APP = ""
 local DEFAULT_APP_ARGS = ""
 
+function help()
+  gdbforge.print("remotegdb — scp (if md5 differs) + ssh gdbserver + target remote")
+  gdbforge.print("Usage: :lua remotegdb [app] [host] [port]")
+  gdbforge.print("  :lua remotegdb ./hello")
+  gdbforge.print("  :lua remotegdb ./hello 192.168.20.50 1234")
+  gdbforge.print("Env: GDBFORGE_REMOTE_APP GDBFORGE_REMOTE_HOST GDBFORGE_REMOTE_USER")
+  gdbforge.print("     GDBFORGE_REMOTE_PORT GDBFORGE_REMOTE_DIR GDBFORGE_REMOTE_APP_ARGS")
+  gdbforge.print("Defaults: host=192.168.20.50 user=root port=1234 dir=/tmp")
+end
+
 local function trim(s)
   return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -43,21 +53,10 @@ local function shell_quote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
--- gopher-lua: popen close() returns exit status number (0 = ok), not true.
+-- gopher-lua: prefer cancellable host API (Ctrl-C kills process group).
 local function run_cmd(cmd)
-  local f = io.popen(cmd .. " 2>&1", "r")
-  if not f then
-    return 1, "io.popen failed"
-  end
-  local out = f:read("*a") or ""
-  local status = f:close()
-  if status == true or status == 0 then
-    return 0, out
-  end
-  if type(status) == "number" then
-    return status, out
-  end
-  return 1, out
+  local code, out = gdbforge.system(cmd)
+  return tonumber(code) or 1, out or ""
 end
 
 local function local_md5(path)

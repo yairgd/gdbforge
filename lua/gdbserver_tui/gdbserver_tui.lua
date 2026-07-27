@@ -7,6 +7,15 @@
 --   :lua gdbserver_tui ./bin/gdbforge 2345
 -- Inferior stdio is the external terminal. For a remote board use :lua remotegdb.
 
+function help()
+  gdbforge.print("gdbserver_tui — local gdbserver in external terminal + target remote")
+  gdbforge.print("Usage: :lua gdbserver_tui [prog] [port]")
+  gdbforge.print("  :lua gdbserver_tui ./bin/gdbforge 2345")
+  gdbforge.print("Env: GDBFORGE_TERMINAL")
+  gdbforge.print("Defaults: prog=./hello port=2345")
+  gdbforge.print("Remote board: use :lua remotegdb")
+end
+
 function main(prog, port)
   prog = prog or "./hello"
   port = port or "2345"

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -40,11 +42,19 @@ func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	return true
 }
 
-// tryGlobalInterrupt handles Ctrl-C in any mode/focus: interrupt the debugger
-// session (GDB/dlv PTY ^C — same as console Ctrl-C when the inferior is running).
+// tryGlobalInterrupt handles Ctrl-C in any mode/focus.
+// If a :lua worker job is running, cancel it (unblocks sleep/wait_port).
+// Otherwise interrupt the debugger session (GDB/dlv PTY ^C).
 func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	if !isCtrlC(ev) {
 		return false
+	}
+	if a.cancelLuaJob() {
+		if a.outputWidget != nil {
+			a.outputWidget.AppendHostLine("cancelled (Ctrl-C)")
+		}
+		a.RequestFrame()
+		return true
 	}
 	a.onGdbConsoleInterrupt()
 	a.RequestFrame()
@@ -763,6 +773,33 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		a.syncThreadViews()
 		a.syncCallStackViews()
 		a.syncCodeFromCallstack()
+		a.RequestFrame()
+	case luaUIMsg:
+		func() {
+			defer func() {
+				if data.done != nil {
+					close(data.done)
+				}
+			}()
+			if data.fn != nil {
+				data.fn()
+			}
+		}()
+	case luaJobDoneMsg:
+		if data.err != nil {
+			msg := data.err.Error()
+			// Ctrl-C already printed "cancelled (Ctrl-C)"; skip duplicate.
+			if !errors.Is(data.err, luahost.ErrJobCancelled) &&
+				!strings.Contains(msg, "cancelled") &&
+				!strings.Contains(msg, "context canceled") {
+				if a.outputWidget != nil {
+					a.outputWidget.AppendHostLine(data.name + ": " + msg)
+				}
+				if a.ctx.Log != nil {
+					a.ctx.Log.Named("lua").Error(data.name + ": " + msg)
+				}
+			}
+		}
 		a.RequestFrame()
 	case string:
 		// GDB PTY closed (q / quit / -gdb-exit) — leave the app.

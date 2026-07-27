@@ -194,6 +194,14 @@ end)
 
 -- :lua tetris / :b tetris create-or-focus this script's pane (no boot widget).
 -- :lua tetris tetris1 opens a second independent instance.
+function help()
+  gdbforge.print("tetris — ModeLua demo pane")
+  gdbforge.print("Usage: :lua tetris [bufname]")
+  gdbforge.print("  :lua tetris           create-or-focus buffer tetris")
+  gdbforge.print("  :lua tetris tetris1   second instance")
+  gdbforge.print("Keys: h/l move, k/Up rotate, j/Down soft, space hard; Esc leaves")
+end
+
 function main()
   gdbforge.print("Tetris — h/l move, k rotate, j soft, space hard; Esc leaves")
   gdbforge.open_buffer("tetris")

@@ -2,12 +2,19 @@
 package luahost
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	lua "github.com/yuin/gopher-lua"
 )
+
+// ErrJobCancelled is returned / raised when a Lua job is stopped (Ctrl-C).
+var ErrJobCancelled = errors.New("lua job cancelled")
 
 // Pane is the surface a Lua script draws/prints into (implemented by LuaWidget).
 type Pane interface {
@@ -40,6 +47,10 @@ type Runtime struct {
 	scriptDir       string // directory of the loaded user script (lua_dir())
 	scriptPath      string // full path of the loaded user script (empty for embedded)
 	lastErr         string
+	// jobCtx is set for the duration of an async CallNamed (sleep/wait_port/system + L.SetContext).
+	jobCtx context.Context
+	sysMu  sync.Mutex
+	sysCmd *exec.Cmd // active gdbforge.system process (process group); killed on cancel
 }
 
 // New creates a Runtime and installs the gdbforge / pane APIs.
@@ -95,6 +106,40 @@ func (rt *Runtime) SetScriptPath(path string) {
 // Must not take rt.mu: may run under CallNamed (open_buffer create-or-focus).
 func (rt *Runtime) ScriptPath() string {
 	return rt.scriptPath
+}
+
+// SetJobContext installs the cancel context for cooperative host APIs during CallNamed.
+// Must not take rt.mu: set from the worker around CallNamed which already locks.
+func (rt *Runtime) SetJobContext(ctx context.Context) {
+	if rt == nil {
+		return
+	}
+	rt.jobCtx = ctx
+}
+
+// JobContext returns the active job context, or context.Background().
+func (rt *Runtime) JobContext() context.Context {
+	if rt == nil || rt.jobCtx == nil {
+		return context.Background()
+	}
+	return rt.jobCtx
+}
+
+// KillSystem SIGKILLs the process group of an in-flight gdbforge.system (if any).
+// Safe to call from the UI thread while CallNamed holds rt.mu on the worker.
+func (rt *Runtime) KillSystem() {
+	if rt == nil {
+		return
+	}
+	rt.sysMu.Lock()
+	cmd := rt.sysCmd
+	rt.sysMu.Unlock()
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	pid := cmd.Process.Pid
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
 }
 
 // HasPaneHooks reports whether this script defines on_key or on_tick
@@ -215,11 +260,39 @@ func (rt *Runtime) CallNamed(name string, args ...string) error {
 		rt.setErr(err)
 		return err
 	}
+	// Abort Lua after cancel even when not blocked in sleep/wait_port/system
+	// (e.g. next instruction after a stuck io.popen returns).
+	if ctx := rt.jobCtx; ctx != nil {
+		rt.L.SetContext(ctx)
+		defer rt.L.RemoveContext()
+	}
 	rt.L.Push(fn)
 	for _, a := range args {
 		rt.L.Push(lua.LString(a))
 	}
 	err := rt.L.PCall(len(args), lua.MultRet, nil)
+	if err != nil && rt.jobCtx != nil && rt.jobCtx.Err() != nil {
+		err = ErrJobCancelled
+	}
+	rt.setErr(err)
+	return err
+}
+
+// CallHelp invokes global help() when present (for :lua <name> help).
+func (rt *Runtime) CallHelp() error {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.L == nil {
+		return fmt.Errorf("lua runtime closed")
+	}
+	v := rt.L.GetGlobal("help")
+	if v.Type() != lua.LTFunction {
+		err := fmt.Errorf("no help() in script")
+		rt.setErr(err)
+		return err
+	}
+	rt.L.Push(v)
+	err := rt.L.PCall(0, 0, nil)
 	rt.setErr(err)
 	return err
 }
@@ -275,6 +348,7 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "wait_port", L.NewFunction(rt.luaWaitPort))
 	L.SetField(gf, "lua_dir", L.NewFunction(rt.luaLuaDir))
 	L.SetField(gf, "sleep", L.NewFunction(rt.luaSleep))
+	L.SetField(gf, "system", L.NewFunction(rt.luaSystem))
 
 	pane := L.NewTable()
 	L.SetGlobal("pane", pane)

@@ -1,6 +1,7 @@
 package luahost
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -285,5 +286,170 @@ end)
 	}
 	if len(p.lines) == 0 || p.lines[len(p.lines)-1] != "from-host-func" {
 		t.Fatalf("lines=%v", p.lines)
+	}
+}
+
+func TestCallHelp(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	if err := rt.CallHelp(); err == nil || !strings.Contains(err.Error(), "no help()") {
+		t.Fatalf("want no help() error, got %v", err)
+	}
+
+	src := `
+function help()
+  gdbforge.print("usage here")
+end
+function main()
+  gdbforge.print("main-ran")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("demo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.CallHelp(); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.lines) != 1 || p.lines[0] != "usage here" {
+		t.Fatalf("help print=%v", p.lines)
+	}
+	// CallHelp must not run main.
+	if err := rt.CallNamed("demo"); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.lines) != 2 || p.lines[1] != "main-ran" {
+		t.Fatalf("after main lines=%v", p.lines)
+	}
+}
+
+func TestSleepRespectsJobCancel(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rt.SetJobContext(ctx)
+
+	src := `
+function main()
+  gdbforge.sleep(30)
+  gdbforge.print("finished")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("slow"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("slow") }()
+	time.Sleep(80 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "cancelled") {
+			t.Fatalf("want cancelled error, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("sleep did not abort on cancel")
+	}
+	for _, line := range p.lines {
+		if line == "finished" {
+			t.Fatal("main continued after cancel")
+		}
+	}
+}
+
+func TestSystemRespectsJobCancel(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rt.SetJobContext(ctx)
+
+	src := `
+function main()
+  gdbforge.system("sleep 30")
+  gdbforge.print("finished")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("sys"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("sys") }()
+	time.Sleep(80 * time.Millisecond)
+	cancel()
+	rt.KillSystem()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "cancelled") {
+			t.Fatalf("want cancelled error, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("system did not abort on cancel")
+	}
+	for _, line := range p.lines {
+		if line == "finished" {
+			t.Fatal("main continued after cancel")
+		}
+	}
+}
+
+func TestCallNamedStopsAfterCancelEvenWithoutHostAPI(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rt.SetJobContext(ctx)
+
+	src := `
+function main()
+  local n = 0
+  while true do
+    n = n + 1
+  end
+  gdbforge.print("finished")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("spin"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("spin") }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("want cancel error from SetContext")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Lua loop did not abort on cancel")
+	}
+	for _, line := range p.lines {
+		if line == "finished" {
+			t.Fatal("main continued after cancel")
+		}
 	}
 }

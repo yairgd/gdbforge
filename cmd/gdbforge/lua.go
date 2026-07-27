@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,18 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 	luacatalog "github.com/yairgd/gdbforge/lua"
 )
+
+// luaJobDoneMsg is posted when an async :lua CallNamed finishes.
+type luaJobDoneMsg struct {
+	name string
+	err  error
+}
+
+// luaUIMsg runs fn on the UI thread (worker → PostEvent → HandleInterrupt).
+type luaUIMsg struct {
+	fn   func()
+	done chan struct{}
+}
 
 // enterLuaMode focuses a Lua pane and routes all keys to it (ModeLua).
 func (a *DebuggerApp) enterLuaMode(w *widgets.LuaWidget) {
@@ -80,6 +93,7 @@ func (a *DebuggerApp) registerLuaCmd(name string, rt *luahost.Runtime) {
 // OnLua runs a gdbforge.register'd function: :lua name [args...]
 // Pane scripts (on_key/on_tick): :lua snake [bufname] create-or-focuses that
 // buffer (default via main() → open_buffer("snake"); :lua snake snake1 → new VM).
+// :lua name help|-h|--help calls global help() (if any) and skips main().
 func (a *DebuggerApp) OnLua(args ...any) {
 	if len(args) == 0 {
 		if a.ctx.Log != nil {
@@ -111,6 +125,16 @@ func (a *DebuggerApp) OnLua(args ...any) {
 			strArgs = append(strArgs, s)
 		}
 	}
+	if isLuaHelpRequest(strArgs) {
+		if err := rt.CallHelp(); err != nil {
+			rt.AppendPrint("no help() for " + name)
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("lua").Error(err.Error())
+			}
+		}
+		a.RequestFrame()
+		return
+	}
 	if buf := luaPaneInstanceName(rt, strArgs); buf != "" {
 		if !a.ensureLuaBuffer(buf, rt) && a.ctx.Log != nil {
 			a.ctx.Log.Named("lua").Error("cannot open lua pane: " + buf)
@@ -118,10 +142,98 @@ func (a *DebuggerApp) OnLua(args ...any) {
 		a.RequestFrame()
 		return
 	}
-	if err := rt.CallNamed(name, strArgs...); err != nil && a.ctx.Log != nil {
-		a.ctx.Log.Named("lua").Error(err.Error())
+	a.startLuaJob(rt, name, strArgs)
+}
+
+// startLuaJob runs CallNamed on a worker so the UI stays responsive.
+// One job at a time; Ctrl-C cancels context + kills gdbforge.system children.
+func (a *DebuggerApp) startLuaJob(rt *luahost.Runtime, name string, strArgs []string) {
+	if rt == nil || name == "" {
+		return
 	}
+	if a.luaJobBusy.Load() {
+		rt.AppendPrint("lua job already running — Ctrl-C to cancel")
+		a.RequestFrame()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.luaJobMu.Lock()
+	a.luaJobCancel = cancel
+	a.luaJobRT = rt
+	a.luaJobBusy.Store(true)
+	a.luaJobMu.Unlock()
+
+	rt.SetJobContext(ctx)
+	go func() {
+		a.luaOnWorker.Store(true)
+		err := rt.CallNamed(name, strArgs...)
+		a.luaOnWorker.Store(false)
+
+		a.luaJobMu.Lock()
+		a.luaJobCancel = nil
+		a.luaJobRT = nil
+		a.luaJobBusy.Store(false)
+		a.luaJobMu.Unlock()
+		rt.SetJobContext(nil)
+
+		if scr := a.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(luaJobDoneMsg{name: name, err: err}))
+		}
+	}()
 	a.RequestFrame()
+}
+
+// cancelLuaJob cancels the in-flight :lua worker job. Returns true if one was active.
+func (a *DebuggerApp) cancelLuaJob() bool {
+	a.luaJobMu.Lock()
+	cancel := a.luaJobCancel
+	rt := a.luaJobRT
+	a.luaJobMu.Unlock()
+	if cancel == nil {
+		return false
+	}
+	cancel()
+	if rt != nil {
+		rt.KillSystem()
+	}
+	return true
+}
+
+// callOnUI runs fn on the UI thread when invoked from the Lua worker.
+// Synchronous host APIs (open_buffer, gdb echo) need this to avoid racing the tree.
+func (a *DebuggerApp) callOnUI(fn func()) {
+	if fn == nil {
+		return
+	}
+	if !a.luaOnWorker.Load() {
+		fn()
+		return
+	}
+	scr := a.Screen()
+	if scr == nil {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	msg := luaUIMsg{fn: fn, done: done}
+	if err := scr.PostEvent(tcell.NewEventInterrupt(msg)); err != nil {
+		fn()
+		return
+	}
+	<-done
+}
+
+// isLuaHelpRequest is true for a sole rest arg help / -h / --help.
+func isLuaHelpRequest(strArgs []string) bool {
+	if len(strArgs) != 1 {
+		return false
+	}
+	switch strings.TrimSpace(strArgs[0]) {
+	case "help", "-h", "--help":
+		return true
+	default:
+		return false
+	}
 }
 
 // luaPaneInstanceName returns the buffer name for :lua <pane> <bufname>, or "".
@@ -133,6 +245,45 @@ func luaPaneInstanceName(rt *luahost.Runtime, strArgs []string) string {
 }
 
 func (a *DebuggerApp) luaCompletions(prefix string) []string {
+	fields := strings.Fields(prefix)
+	trailingSpace := len(prefix) > 0 && (prefix[len(prefix)-1] == ' ' || prefix[len(prefix)-1] == '\t')
+
+	// After a known script name, complete the next arg with help / -h / --help.
+	// Sync() passes the whole rest string as prefix (e.g. "remotegdb he");
+	// CmdWidget.replaceToken only replaces the last whitespace-separated token.
+	if len(fields) >= 1 && a.luaScriptKnown(fields[0]) {
+		switch {
+		case len(fields) == 1 && trailingSpace:
+			return []string{"help"}
+		case len(fields) >= 2 && !trailingSpace:
+			last := fields[len(fields)-1]
+			var out []string
+			for _, h := range []string{"help", "-h", "--help"} {
+				if strings.HasPrefix(h, last) {
+					out = append(out, h)
+				}
+			}
+			return out
+		case len(fields) >= 2 && trailingSpace:
+			return nil
+		}
+	}
+
+	return a.luaScriptNameCompletions(prefix)
+}
+
+func (a *DebuggerApp) luaScriptKnown(name string) bool {
+	if name == "" {
+		return false
+	}
+	if _, ok := a.luaCmds[name]; ok {
+		return true
+	}
+	_, ok := a.luaPending[name]
+	return ok
+}
+
+func (a *DebuggerApp) luaScriptNameCompletions(prefix string) []string {
 	var names []string
 	seen := map[string]struct{}{}
 	add := func(name string) {
@@ -253,14 +404,16 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 		}
 	})
 	rt.SetOpenBuffer(func(name string) {
-		a.openBufferForLua(name, rt)
+		a.callOnUI(func() { a.openBufferForLua(name, rt) })
 	})
 	rt.SetRun(func(argv []string) {
-		anyArgs := make([]any, len(argv))
-		for i, s := range argv {
-			anyArgs[i] = s
-		}
-		a.OnRun(anyArgs...)
+		a.callOnUI(func() {
+			anyArgs := make([]any, len(argv))
+			for i, s := range argv {
+				anyArgs[i] = s
+			}
+			a.OnRun(anyArgs...)
+		})
 	})
 	rt.SetSpawn(func(argv []string) error {
 		return a.SpawnExec(argv)
@@ -268,32 +421,42 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 	rt.SetOpenExternalTTY(a.OpenExternalTTY)
 	rt.SetSpawnTerminal(a.SpawnTerminal)
 	luadebug.Install(rt, luadebug.Hooks{
-		SetInferiorTTY:   a.SetInferiorTTY,
-		DlvConnect:       a.ConnectDlv,
+		SetInferiorTTY: func(path string) error {
+			var err error
+			a.callOnUI(func() { err = a.SetInferiorTTY(path) })
+			return err
+		},
+		DlvConnect: func(addr string) error {
+			var err error
+			a.callOnUI(func() { err = a.ConnectDlv(addr) })
+			return err
+		},
 		SpawnDlvHeadless: a.SpawnDlvHeadless,
 		Program:          a.SessionProgram,
 		GDB: func(cmd string) {
-			cmd = strings.TrimSpace(cmd)
-			if cmd == "" {
-				return
-			}
-			if a.gdbWidget != nil {
-				a.gdbWidget.EchoSubmit(cmd)
-				a.gdbWidget.FollowTailAndScroll()
-			}
-			if a.isDLV() {
-				if a.dlvClient == nil {
+			a.callOnUI(func() {
+				cmd = strings.TrimSpace(cmd)
+				if cmd == "" {
 					return
 				}
-				a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
-			} else {
-				if a.gdbClient == nil {
-					return
+				if a.gdbWidget != nil {
+					a.gdbWidget.EchoSubmit(cmd)
+					a.gdbWidget.FollowTailAndScroll()
 				}
-				sendCmd := gdb.CLIExecToMI(cmd)
-				a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
-			}
-			a.RequestFrame()
+				if a.isDLV() {
+					if a.dlvClient == nil {
+						return
+					}
+					a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
+				} else {
+					if a.gdbClient == nil {
+						return
+					}
+					sendCmd := gdb.CLIExecToMI(cmd)
+					a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+				}
+				a.RequestFrame()
+			})
 		},
 	})
 }

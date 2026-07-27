@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"sync"
-
 	"sync/atomic"
 
 	"github.com/yairgd/gdbforge/internal/commands"
@@ -125,6 +125,11 @@ type DebuggerApp struct {
 	luaPending      map[string]luahost.ResolvedScript // indexed at boot; loaded on first :lua
 	luaUser         *luahost.Runtime
 	luaUserRuntimes []*luahost.Runtime
+	luaJobMu        sync.Mutex
+	luaJobCancel    context.CancelFunc
+	luaJobRT        *luahost.Runtime // runtime running the current job (for KillSystem)
+	luaJobBusy      atomic.Bool
+	luaOnWorker     atomic.Bool // true while CallNamed runs on the worker goroutine
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -158,6 +163,7 @@ func (a *DebuggerApp) isDLV() bool {
 
 // Close tears down owned debugger/exec sessions.
 func (a *DebuggerApp) Close() {
+	a.cancelLuaJob()
 	a.saveBreakpointsOnQuit()
 	if a.gdbMcp != nil {
 		a.gdbMcp.Close()

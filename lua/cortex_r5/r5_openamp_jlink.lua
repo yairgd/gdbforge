@@ -33,6 +33,16 @@ local DEFAULT_HOST = "192.168.20.50"
 local DEFAULT_USER = "root"
 local REMOTE_FW_DIR = "/lib/firmware"
 
+function help()
+  gdbforge.print("r5_openamp_jlink — scp firmware to /lib/firmware, remoteproc start, J-Link attach")
+  gdbforge.print("Usage: :lua r5_openamp_jlink [firmware]")
+  gdbforge.print("  :lua r5_openamp_jlink ./z10")
+  gdbforge.print("Env (J-Link): GDBFORGE_JLINK GDBFORGE_JLINK_DEVICE GDBFORGE_JLINK_PORT GDBFORGE_TDESC")
+  gdbforge.print("Env (board):  GDBFORGE_REMOTE_HOST GDBFORGE_REMOTE_USER")
+  gdbforge.print("              GDBFORGE_R5_FW GDBFORGE_R5_FW_NAME")
+  gdbforge.print("Defaults: host=192.168.20.50 user=root device=XCZU3CG_R5_0 port=2334")
+end
+
 local function trim(s)
   return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -58,21 +68,10 @@ local function shell_quote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
--- gopher-lua: popen close() returns exit status number (0 = ok), not true.
+-- Prefer cancellable host API (Ctrl-C kills process group during ssh/scp).
 local function run_cmd(cmd)
-  local f = io.popen(cmd .. " 2>&1", "r")
-  if not f then
-    return 1, "io.popen failed"
-  end
-  local out = f:read("*a") or ""
-  local status = f:close()
-  if status == true or status == 0 then
-    return 0, out
-  end
-  if type(status) == "number" then
-    return status, out
-  end
-  return 1, out
+  local code, out = gdbforge.system(cmd)
+  return tonumber(code) or 1, out or ""
 end
 
 local function scp_to(local_path, user, host, remote_path)
