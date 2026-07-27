@@ -377,7 +377,7 @@ func (rt *Runtime) luaLuaDir(L *lua.LState) int {
 	// Do not lock: CallNamed holds rt.mu while running Lua.
 	dir := rt.scriptDir
 	if dir == "" {
-		dir = filepath.Join(".", ".gdbforge", UserLuaDir)
+		dir = filepath.Join(".", GdbforgeDir, UserLuaDir)
 	}
 	L.Push(lua.LString(dir))
 	return 1

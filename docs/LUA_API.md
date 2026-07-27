@@ -5,15 +5,23 @@ User-facing reference for scripting gdbforge.
 **Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
  In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
 
-Scripts live under `./.gdbforge/lua/**/*.lua` (nested dirs OK). Each file gets its own Lua VM. Basename without `.lua` is the `:lua` command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
+Scripts are discovered in this order (first basename wins; nested dirs OK):
+
+1. `./.gdbforge/lua/**/*.lua` (project)
+2. `~/.gdbforge/lua/**/*.lua` (user home)
+3. Embedded catalog shipped with the binary (same tree as [`../lua/`](../lua/))
+
+Each file gets its own Lua VM. Basename without `.lua` is the `:lua` command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
 
 ```bash
+# Optional override — project-local wins over home and embedded:
 mkdir -p .gdbforge/lua
-cp -r /path/to/gdbforge/lua/terminal_debug .gdbforge/lua/
+cp -r /path/to/custom/r5_debug .gdbforge/lua/
 # inside gdbforge:
-#   :lua terminal_debug
+#   :lua r5_debug
 ```
 
+Built-in workflows (`remotegdb`, `r5_debug`, …) work with no copy; override only when you need a local edit.
 ---
 
 ## Lifecycle

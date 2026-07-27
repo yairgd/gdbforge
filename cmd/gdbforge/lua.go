@@ -2,17 +2,17 @@ package main
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/luadebug"
-	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
+	luacatalog "github.com/yairgd/gdbforge/lua"
 )
 
 // enterLuaMode focuses a Lua pane and routes all keys to it (ModeLua).
@@ -133,22 +133,25 @@ func (a *DebuggerApp) maybeEnterLuaBuffer(w interface{}) {
 	a.enterLuaMode(lw)
 }
 
-// loadUserLuaScripts loads ./.gdbforge/lua/**/*.lua as :lua <basename> commands.
-// Nested trees match scripts/ layout (e.g. r5_debug/r5_debug.lua, games/snake/snake.lua).
-// Each file gets its own Runtime so pane callbacks do not clobber each other.
+// loadUserLuaScripts loads :lua <basename> commands from the 3-layer search:
+// 1) ./.gdbforge/lua  2) ~/.gdbforge/lua  3) embedded catalog (first basename wins).
+// Nested trees OK (e.g. r5_debug/r5_debug.lua). Each file gets its own Runtime.
 func (a *DebuggerApp) loadUserLuaScripts() {
 	if a.luaScratch == nil {
 		return
 	}
-	dir := filepath.Join(".", persist.DirName, luahost.UserLuaDir)
-	files, err := luahost.WalkLuaScripts(dir)
+	files, err := luahost.ResolveLuaScripts(luacatalog.FS)
 	if a.ctx.Log != nil {
 		log := a.ctx.Log.Named("lua")
 		if err != nil {
-			log.Error("walk " + dir + ": " + err.Error())
+			log.Error("resolve lua scripts: " + err.Error())
+			return
 		}
+	} else if err != nil {
+		return
 	}
 	n := 0
+	byOrigin := map[string]int{}
 	var firstErr error
 	for _, f := range files {
 		rt := luahost.New(a.luaScratch, a.registerLuaCmd)
@@ -157,6 +160,9 @@ func (a *DebuggerApp) loadUserLuaScripts() {
 			if firstErr == nil {
 				firstErr = err
 			}
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("lua").Error("load " + f.Path + " (" + f.Origin + "): " + err.Error())
+			}
 			rt.Close()
 			continue
 		}
@@ -164,16 +170,23 @@ func (a *DebuggerApp) loadUserLuaScripts() {
 		// Keep luaUser as last loaded for Close backward-compat.
 		a.luaUser = rt
 		n++
+		byOrigin[f.Origin]++
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("lua").Info(":lua " + f.Cmd + " from " + f.Origin + " (" + f.Path + ")")
+		}
 	}
 	if a.ctx.Log == nil {
 		return
 	}
 	log := a.ctx.Log.Named("lua")
 	if firstErr != nil {
-		log.Error("load " + dir + ": " + firstErr.Error())
+		log.Error("load lua scripts: " + firstErr.Error())
 	}
 	if n > 0 {
-		log.Info("loaded user lua scripts from " + dir)
+		log.Info("loaded " + strconv.Itoa(n) + " lua scripts" +
+			" (project=" + strconv.Itoa(byOrigin[luahost.OriginProject]) +
+			" home=" + strconv.Itoa(byOrigin[luahost.OriginHome]) +
+			" embedded=" + strconv.Itoa(byOrigin[luahost.OriginEmbedded]) + ")")
 	}
 }
 
