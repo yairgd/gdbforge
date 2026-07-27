@@ -739,6 +739,11 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			if data.stop != nil {
 				w := a.updateCodeAfterStop(data.stop)
 				a.applyCodeStop(w)
+				// Repaint all Code gutters from the model (fresh from the
+				// pre-stop -break-list query, or whatever Merge already holds).
+				if a.breakpoints != nil {
+					a.paintCodeBreakmarks(a.breakpoints.Items())
+				}
 				a.RequestFrame()
 				break
 			}
@@ -746,6 +751,11 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		a.applyCodeStop(data.widget)
 		a.RequestFrame()
 	case breakpointsUIMsg:
+		// refreshBreakpoints may have applied off-thread; push gutters again
+		// on the UI thread so a late Code buffer still gets marks.
+		if a.breakpoints != nil {
+			a.syncBreakpointViews()
+		}
 		a.RequestFrame()
 	case debugInfoUIMsg:
 		// Models were updated off-thread; push to views on the UI thread.

@@ -109,6 +109,10 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	stopCopy := *stop
 	go func() {
 		a.ensureSourceFiles()
+		// Re-query GDB/Delve breakpoints before painting Code. After file /
+		// target remote (e.g. :lua remotegdb) the shared model can be stale or
+		// path-mismatched; gutters must follow live -break-list / breakpoints.
+		a.refreshBreakpointsAfterStop()
 		if scr := a.Screen(); scr != nil {
 			// Apply Code on the UI thread after gen check (see codeRefreshMsg).
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
@@ -142,14 +146,16 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 	return nil
 }
 
-// showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters when new.
+// showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters.
 // Missing sources / shared libraries show a centered "not available" placeholder.
 // Replaces the startup LogoWidget in the code leaf when present.
+// Gutters come from BreakpointList (prefer a prior refreshBreakpointsAfterStop
+// so rows match live GDB -break-list after file/target remote).
 func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 	if file == "" {
 		return nil
 	}
-	w, created := a.ensureCodeBuffer(file)
+	w, _ := a.ensureCodeBuffer(file)
 	if w == nil {
 		return nil
 	}
@@ -158,7 +164,9 @@ func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
 	}
 	_ = w.ShowLocation(file, line)
 	a.Debug().SetCurrentLocation(file, line)
-	if created && !w.Unavailable() {
+	// Always re-apply gutters: reused buffers (remotegdb / Clear / prior :e) may
+	// have empty bpLines while BreakpointList still has rows.
+	if !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
 	}
 	a.placeCodeInSlot(w)
@@ -171,7 +179,7 @@ func (a *DebuggerApp) showCodeBrowse(file string, line int) *widgets.CodeWidget 
 	if file == "" {
 		return nil
 	}
-	w, created := a.ensureCodeBuffer(file)
+	w, _ := a.ensureCodeBuffer(file)
 	if w == nil {
 		return nil
 	}
@@ -180,7 +188,7 @@ func (a *DebuggerApp) showCodeBrowse(file string, line int) *widgets.CodeWidget 
 	}
 	_ = w.ShowSelection(file, line)
 	a.Debug().SetCurrentLocation(file, line)
-	if created && !w.Unavailable() {
+	if !w.Unavailable() {
 		a.paintCodeWidgetBreaks(w, file)
 	}
 	a.placeCodeInSlot(w)
@@ -744,6 +752,26 @@ func (a *DebuggerApp) refreshBreakpoints() {
 		return
 	}
 	a.applyBreakInfos(items)
+}
+
+// refreshBreakpointsAfterStop re-queries live breakpoints after *stopped.
+// Retries briefly: right after file/target remote the first -break-list capture
+// can be empty/stale while GDB is still settling.
+func (a *DebuggerApp) refreshBreakpointsAfterStop() {
+	if a.gdbMcp == nil {
+		return
+	}
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			time.Sleep(40 * time.Millisecond)
+		}
+		items, ok := a.fetchBreakInfos()
+		if !ok {
+			continue
+		}
+		a.applyBreakInfos(items)
+		return
+	}
 }
 
 func (a *DebuggerApp) fetchBreakInfos() ([]models.BreakInfo, bool) {
