@@ -281,9 +281,7 @@ func (rt *Runtime) luaSpawn(L *lua.LState) int {
 		L.RaiseError("%s", err.Error())
 		return 0
 	}
-	if rt.pane != nil {
-		rt.pane.AppendPrint("spawned: " + strings.Join(argv, " "))
-	}
+	rt.emitPrint("spawned: " + strings.Join(argv, " "))
 	return 0
 }
 
@@ -297,9 +295,7 @@ func (rt *Runtime) luaOpenExternalTTY(L *lua.LState) int {
 		L.RaiseError("%s", err.Error())
 		return 0
 	}
-	if rt.pane != nil {
-		rt.pane.AppendPrint("external tty: " + path)
-	}
+	rt.emitPrint("external tty: " + path)
 	L.Push(lua.LString(path))
 	return 1
 }
@@ -325,9 +321,7 @@ func (rt *Runtime) luaSpawnTerminal(L *lua.LState) int {
 		L.RaiseError("%s", err.Error())
 		return 0
 	}
-	if rt.pane != nil {
-		rt.pane.AppendPrint("spawn_terminal: " + strings.Join(argv, " "))
-	}
+	rt.emitPrint("spawn_terminal: " + strings.Join(argv, " "))
 	return 0
 }
 

@@ -136,6 +136,30 @@ func TestTetrisScriptLoads(t *testing.T) {
 	rt.DispatchKey("h")
 }
 
+func TestPrintSinkPreferredOverPane(t *testing.T) {
+	p := &memPane{w: 8, h: 4}
+	rt := New(p, nil)
+	defer rt.Close()
+	var got []string
+	rt.SetPrintSink(func(line string) { got = append(got, line) })
+	if err := rt.LoadString(`gdbforge.print("hi")`, "t"); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "hi" {
+		t.Fatalf("sink=%v paneLines=%v", got, p.lines)
+	}
+	if len(p.lines) != 0 {
+		t.Fatalf("pane should be unused while sink set: %v", p.lines)
+	}
+	rt.SetPrintSink(nil)
+	if err := rt.LoadString(`gdbforge.print("pane")`, "t2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.lines) == 0 || p.lines[len(p.lines)-1] != "pane" {
+		t.Fatalf("pane lines=%v", p.lines)
+	}
+}
+
 func TestHasPaneHooksAndScriptPath(t *testing.T) {
 	p := &memPane{w: 8, h: 4}
 	rt := New(p, nil)

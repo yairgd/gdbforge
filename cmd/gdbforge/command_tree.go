@@ -18,7 +18,7 @@ import (
 //	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
 //	          pccolor, stackbreakcolor, codeselcolor, mutedcolor, searchcolor
 //	/ → layout <name>  (default | panels | classic)
-//	/ → b <name>   (switch buffer: about, logger, gdb, lua, …; games after :lua)
+//	/ → b <name>   (switch buffer: about, logger, gdb, io, …; games after :lua)
 //	/ → lua <func> [args…]  (gdbforge.register'd Lua commands)
 //	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
 //	/ → help         (Viewport user manual)

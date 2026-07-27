@@ -148,6 +148,19 @@ func (w *OutputWidget) AppendInferior(data string) {
 	w.console.FollowTailAndScroll()
 }
 
+// AppendHostLine appends a host/script log line (e.g. gdbforge.print) with a [lua] prefix.
+func (w *OutputWidget) AppendHostLine(s string) {
+	s = strings.TrimRight(s, "\r\n")
+	if s == "" {
+		return
+	}
+	w.writeTarget("[lua] " + s + "\n")
+	if w.buf != nil {
+		w.buf.TrimTo(outputScrollbackMax)
+	}
+	w.console.FollowTailAndScroll()
+}
+
 // AppendRaw is an alias for AppendPty (GDB PTY path).
 func (w *OutputWidget) AppendRaw(data string) {
 	w.AppendPty(data)

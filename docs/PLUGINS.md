@@ -2,7 +2,7 @@
 
 gdbforge is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
-**Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick), `:lua` DSL, `gdbforge.*` API. Pane demos: `:lua snake` / `:lua tetris` (then `:b snake` / `:b tetris` to refocus; no boot-time game widgets). User extensions: `./.gdbforge/lua/**/*.lua` (nested dirs OK; copy from [`../lua/`](../lua/)) → `:lua <basename>`. Use `gdbforge.spawn` for JLink (no focus steal); `spawn_terminal` for gdbserver/TUI in a real terminal; `gdbforge.run` is interactive `:!`.
+**Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick for demos), `:lua` DSL, `gdbforge.*` API. Automation `gdbforge.print` → `:b io`. Pane demos: `:lua snake` / `:lua tetris` (then `:b` to refocus). User extensions: `./.gdbforge/lua/**/*.lua` → `:lua <basename>`. Use `gdbforge.spawn` for JLink; `spawn_terminal` for gdbserver/TUI; `gdbforge.run` is interactive `:!`.
 
 **User API reference:** **[LUA_API.md](LUA_API.md)**. Script catalog: [../lua/README.md](../lua/README.md).
 

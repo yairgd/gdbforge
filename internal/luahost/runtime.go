@@ -21,11 +21,15 @@ type Pane interface {
 // OnRegister is called when Lua runs gdbforge.register(name, fn).
 type OnRegister func(name string, rt *Runtime)
 
+// PrintSinkFunc receives gdbforge.print lines (e.g. OutputWidget). Prefer over pane.
+type PrintSinkFunc func(line string)
+
 // Runtime wraps one Lua VM bound to a Pane and optional command registry hook.
 type Runtime struct {
 	mu              sync.Mutex
 	L               *lua.LState
 	pane            Pane
+	printSink       PrintSinkFunc
 	registered      map[string]*lua.LFunction
 	onRegister      OnRegister
 	openBuffer      OpenBufferFunc
@@ -64,6 +68,13 @@ func (rt *Runtime) Close() {
 // Must not take rt.mu: open_buffer → adopt runs under CallNamed which holds the lock.
 func (rt *Runtime) SetPane(pane Pane) {
 	rt.pane = pane
+}
+
+// SetPrintSink installs a host print destination (e.g. :b io).
+// When set, gdbforge.print prefers the sink over pane.AppendPrint.
+// Must not take rt.mu: cleared under CallNamed during AdoptLuaWidget.
+func (rt *Runtime) SetPrintSink(fn PrintSinkFunc) {
+	rt.printSink = fn
 }
 
 // SetScriptDir sets the directory returned by gdbforge.lua_dir() (sidecar files).
@@ -108,10 +119,18 @@ func (rt *Runtime) Pane() Pane {
 	return rt.pane
 }
 
-// AppendPrint writes a line to the bound pane (for app-installed Lua APIs).
+// AppendPrint writes a line via print sink or bound pane.
 // Must not take rt.mu: host Lua funcs run under CallNamed/LoadString which
 // already hold the lock — re-locking deadlocks the UI (e.g. :lua dlv_ext_port).
 func (rt *Runtime) AppendPrint(line string) {
+	rt.emitPrint(line)
+}
+
+func (rt *Runtime) emitPrint(line string) {
+	if rt.printSink != nil {
+		rt.printSink(line)
+		return
+	}
 	if rt.pane != nil {
 		rt.pane.AppendPrint(line)
 	}
@@ -271,9 +290,7 @@ func (rt *Runtime) luaPrint(L *lua.LState) int {
 		parts = append(parts, L.ToString(i))
 	}
 	line := strings.Join(parts, "\t")
-	if rt.pane != nil {
-		rt.pane.AppendPrint(line)
-	}
+	rt.emitPrint(line)
 	return 0
 }
 

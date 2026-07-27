@@ -170,9 +170,6 @@ func (a *DebuggerApp) focusBufferWidget(w termui.Widget) {
 // 1) ./.gdbforge/lua  2) ~/.gdbforge/lua  3) embedded catalog (first basename wins).
 // Nested trees OK (e.g. r5_debug/r5_debug.lua). Each file gets its own Runtime.
 func (a *DebuggerApp) loadUserLuaScripts() {
-	if a.luaScratch == nil {
-		return
-	}
 	files, err := luahost.ResolveLuaScripts(luacatalog.FS)
 	if a.ctx.Log != nil {
 		log := a.ctx.Log.Named("lua")
@@ -187,7 +184,7 @@ func (a *DebuggerApp) loadUserLuaScripts() {
 	byOrigin := map[string]int{}
 	var firstErr error
 	for _, f := range files {
-		rt := luahost.New(a.luaScratch, a.registerLuaCmd)
+		rt := luahost.New(nil, a.registerLuaCmd)
 		a.wireUserLuaAPI(rt)
 		if err := rt.LoadScriptFile(f.Path, f.Cmd); err != nil {
 			if firstErr == nil {
@@ -228,6 +225,12 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 	if rt == nil {
 		return
 	}
+	rt.SetPrintSink(func(line string) {
+		if a.outputWidget != nil {
+			a.outputWidget.AppendHostLine(line)
+			a.RequestFrame()
+		}
+	})
 	rt.SetOpenBuffer(func(name string) {
 		a.openBufferForLua(name, rt)
 	})
@@ -380,9 +383,6 @@ func (a *DebuggerApp) ensureLuaBuffer(name string, rt *luahost.Runtime) bool {
 func (a *DebuggerApp) luaWidgetOwning(rt *luahost.Runtime) *widgets.LuaWidget {
 	if rt == nil {
 		return nil
-	}
-	if a.luaScratch != nil && a.luaScratch.Runtime() == rt {
-		return a.luaScratch
 	}
 	for _, w := range a.luaDynamic {
 		if w != nil && w.Runtime() == rt {

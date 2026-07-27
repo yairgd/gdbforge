@@ -119,7 +119,6 @@ type DebuggerApp struct {
 	completionForGDB bool
 
 	// Lua / gdbforge scripting
-	luaScratch      *widgets.LuaWidget
 	luaDynamic      []*widgets.LuaWidget // create-or-focus panes (:lua games, …)
 	activeLua       *widgets.LuaWidget
 	luaCmds         map[string]*luahost.Runtime
@@ -197,10 +196,6 @@ func (a *DebuggerApp) Close() {
 	}
 	a.luaUserRuntimes = nil
 	a.luaUser = nil
-	if a.luaScratch != nil {
-		a.luaScratch.Close()
-		a.luaScratch = nil
-	}
 }
 
 // saveBreakpointsOnQuit writes bpSnapshot to ./.gdbforge/breakpoints.yaml.

@@ -259,7 +259,7 @@ stateDiagram-v2
 | **Command** | `CmdWidget` (`CmdKindCommand`) | `:` UI commands | **Implemented** |
 | **Search** | `CmdWidget` (`CmdKindSearch`) + `SearchHost` pane | `/` live buffer search; `*`/`#` next/prev | **Implemented** |
 | **Completion** | Wildmenu + source line edit | Tab completion (`ModeCompletion`) | **Implemented** |
-| **Lua** | Active `LuaWidget` | `:lua snake` then `:b snake`; `:b lua` scratch | **Implemented** |
+| **Lua** | Active `LuaWidget` | `:lua snake` then `:b snake` (cell demos); `gdbforge.print` → `:b io` | **Implemented** |
 
 Mode state lives in **`platform.AppState`** on `TermApp` (`State()`):
 

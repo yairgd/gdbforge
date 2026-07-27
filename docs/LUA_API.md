@@ -31,7 +31,7 @@ Built-in workflows (`remotegdb`, `r5_debug`, …) work with no copy; override on
 | Top-level script body | Runs once when the script is loaded / `:lua name` first needs it |
 | `gdbforge.register("name", fn)` | Exposes `fn` as `:lua name [args…]` |
 | `main(...)` (optional convention) | Many catalog scripts define `main` and register it |
-| ModeLua pane (`:b lua` / games) | `on_key`, draw via `pane.*`, optional tick — see games under `lua/games/` |
+| ModeLua pane (`:lua snake` / games) | `on_key`, draw via `pane.*`, optional tick — see games under `lua/games/` |
 
 `:lua <func> [args]` calls a registered function; string args are passed as Lua strings.
 
@@ -41,11 +41,11 @@ Built-in workflows (`remotegdb`, `r5_debug`, …) work with no copy; override on
 
 ### `gdbforge.print(...)`
 
-Append a line to the Lua / messages pane (coerces args like `print`).
+Append a line to **`:b io`** (prefixed `[lua]`, coerces args like `print`). Same for automation scripts and ModeLua games — game panes are cell-only (`pane.set_cell`); use `:b io` to read/copy messages.
 
 ### `gdbforge.clear()`
 
-Clear the Lua pane buffer.
+Clear the bound Lua pane cell grid (game panes). Does not clear `:b io`.
 
 ### `gdbforge.register(name, fn)`
 
@@ -91,7 +91,7 @@ Under Delve (`-g dlv`), send Delve CLI (`break main.main`, `continue`, …), not
 
 ### `gdbforge.open_buffer(name)`
 
-Focus a known builtin/buffer (`"code"`, `"gdb"`, `"lua"`, `"io"`, `"callstack"`, …), or **create-or-focus** a ModeLua pane when the **calling script** defines `on_key` and/or `on_tick`:
+Focus a known builtin/buffer (`"code"`, `"gdb"`, `"io"`, `"callstack"`, …), or **create-or-focus** a ModeLua pane when the **calling script** defines `on_key` and/or `on_tick`:
 
 | Call | Result |
 |------|--------|
@@ -100,7 +100,7 @@ Focus a known builtin/buffer (`"code"`, `"gdb"`, `"lua"`, `"io"`, `"callstack"`,
 | `open_buffer("snake1")` from the same script | Create a **second** pane with a new VM loaded from the same script file |
 | `open_buffer("gdb")` / unknown name from automation (no pane hooks) | Focus existing, or error — no create |
 
-`:b snake` works only **after** `:lua snake` (or `open_buffer`) has created the pane — it is not listed beforehand. Only `:b lua` scratch is preliminary.
+`:b snake` works only **after** `:lua snake` (or `open_buffer`) has created the pane — it is not listed beforehand. There is no `:b lua` scratch pane.
 
 **Second instance (independent game state):**
 
@@ -209,13 +209,10 @@ Used by dynamic Lua panes (`:lua snake` / `:b snake`, custom scripts). From `mai
 
 ```lua
 -- .gdbforge/lua/hello/hello.lua
-local function main(who)
+function main(who)
   who = who or "world"
-  gdbforge.print("hello, " .. who)
-  gdbforge.open_buffer("lua")
+  gdbforge.print("hello, " .. who)  -- appears on :b io
 end
-
-gdbforge.register("hello", main)
 ```
 
 ```text

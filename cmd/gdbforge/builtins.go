@@ -144,15 +144,6 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.fileListWidget.OnOpen = a.openSourcePath
 
 	a.luaCmds = make(map[string]*luahost.Runtime)
-	reg := a.registerLuaCmd
-	var errLua error
-	a.luaScratch, errLua = widgets.NewLuaWidget("Lua", luahost.ScratchScript, reg)
-	if errLua != nil {
-		return errLua
-	}
-	a.luaScratch.SetFrameRequester(a.RequestFrame)
-	a.registerBuiltin("lua", a.luaScratch)
-
 	a.loadUserLuaScripts()
 
 	a.registerLayouts()
