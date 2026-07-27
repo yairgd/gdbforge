@@ -212,9 +212,14 @@ Optional: `:b exec` for J-Link logs. Does **not** use `GDBFORGE_TERMINAL` (backg
 ```text
 :lua snake
 :lua tetris
+# then: :b snake / :b tetris to refocus (not listed until created)
+
+# second independent game (separate VM / state):
+:lua snake snake1
+:b snake1
 ```
 
-Opens builtin game panes. No debugger env vars.
+Create-or-focus ModeLua game panes via `:lua` (no boot-time game widgets). Same buffer name shares one game; a different name (`snake1`) is a new instance. No debugger env vars.
 
 ---
 

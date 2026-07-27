@@ -34,6 +34,7 @@ type Runtime struct {
 	openExternalTTY OpenExternalTTYFunc
 	spawnTerminal   SpawnTerminalFunc
 	scriptDir       string // directory of the loaded user script (lua_dir())
+	scriptPath      string // full path of the loaded user script (empty for embedded)
 	lastErr         string
 }
 
@@ -60,10 +61,9 @@ func (rt *Runtime) Close() {
 }
 
 // SetPane updates the print/draw target (usually the owning widget).
+// Must not take rt.mu: open_buffer → adopt runs under CallNamed which holds the lock.
 func (rt *Runtime) SetPane(pane Pane) {
-	rt.mu.Lock()
 	rt.pane = pane
-	rt.mu.Unlock()
 }
 
 // SetScriptDir sets the directory returned by gdbforge.lua_dir() (sidecar files).
@@ -71,6 +71,41 @@ func (rt *Runtime) SetScriptDir(dir string) {
 	rt.mu.Lock()
 	rt.scriptDir = dir
 	rt.mu.Unlock()
+}
+
+// SetScriptPath records the loaded script file path (for pane clone / lazy :b).
+func (rt *Runtime) SetScriptPath(path string) {
+	rt.mu.Lock()
+	rt.scriptPath = path
+	rt.mu.Unlock()
+}
+
+// ScriptPath returns the loaded script file path, or empty for embedded chunks.
+// Must not take rt.mu: may run under CallNamed (open_buffer create-or-focus).
+func (rt *Runtime) ScriptPath() string {
+	return rt.scriptPath
+}
+
+// HasPaneHooks reports whether this script defines on_key or on_tick
+// (interactive ModeLua pane, not automation-only).
+// Must not take rt.mu: may run under CallNamed (open_buffer create-or-focus).
+func (rt *Runtime) HasPaneHooks() bool {
+	if rt.L == nil {
+		return false
+	}
+	if v := rt.L.GetGlobal("on_key"); v.Type() == lua.LTFunction {
+		return true
+	}
+	if v := rt.L.GetGlobal("on_tick"); v.Type() == lua.LTFunction {
+		return true
+	}
+	return false
+}
+
+// Pane returns the bound draw/print surface (may be nil).
+// Must not take rt.mu: may run under CallNamed.
+func (rt *Runtime) Pane() Pane {
+	return rt.pane
 }
 
 // AppendPrint writes a line to the bound pane (for app-installed Lua APIs).

@@ -91,7 +91,31 @@ Under Delve (`-g dlv`), send Delve CLI (`break main.main`, `continue`, …), not
 
 ### `gdbforge.open_buffer(name)`
 
-Focus/open a builtin or buffer by name without blindly stealing the wrong leaf when possible: `"code"`, `"gdb"`, `"lua"`, `"io"`, `"callstack"`, `"snake"`, …
+Focus a known builtin/buffer (`"code"`, `"gdb"`, `"lua"`, `"io"`, `"callstack"`, …), or **create-or-focus** a ModeLua pane when the **calling script** defines `on_key` and/or `on_tick`:
+
+| Call | Result |
+|------|--------|
+| `open_buffer("snake")` from a pane script | Create a `LuaWidget` named `snake` on first use (adopts this VM), then focus + ModeLua |
+| `open_buffer("snake")` again | Focus the same pane |
+| `open_buffer("snake1")` from the same script | Create a **second** pane with a new VM loaded from the same script file |
+| `open_buffer("gdb")` / unknown name from automation (no pane hooks) | Focus existing, or error — no create |
+
+`:b snake` works only **after** `:lua snake` (or `open_buffer`) has created the pane — it is not listed beforehand. Only `:b lua` scratch is preliminary.
+
+**Second instance (independent game state):**
+
+```text
+:lua snake           " buffer snake (default)
+:lua snake snake1    " buffer snake1 — separate VM; :b snake1 to refocus
+```
+
+```lua
+function main()
+  gdbforge.open_buffer("snake")   -- create-or-focus default pane
+  -- gdbforge.open_buffer("snake1")  -- optional second instance from script
+end
+```
+
 
 ---
 
@@ -176,7 +200,8 @@ Available as global `pane` (and mirrored under some hosts):
 | `pane.set_cell(x, y, ch [, fg [, bg]])` | Put character at 0-based cell (optional colors) |
 | `pane.size()` → `w, h` | Current pane dimensions |
 
-Used by `:b snake` / `:b tetris` and custom Lua widgets. Prefer `gdbforge.open_buffer("snake")` from `main()` so demos open their pane.
+Used by dynamic Lua panes (`:lua snake` / `:b snake`, custom scripts). From `main()`, call `gdbforge.open_buffer("name")` so the script creates or focuses its pane. For a second independent game: `:lua snake snake1` (or `open_buffer("snake1")` from Lua).
+
 
 ---
 

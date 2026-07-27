@@ -206,7 +206,7 @@ func (a *DebuggerApp) codeBufferForB() *widgets.CodeWidget {
 }
 
 // OnBuffer switches to an existing builtin or open file buffer (:b name).
-// Does not create file buffers — use :e for that.
+// Pane scripts (snake, tetris, …) are created lazily on first :b.
 func (a *DebuggerApp) OnBuffer(args ...any) {
 	name := joinCmdArgs(args)
 	if name == "" || a.tab == nil {
@@ -230,25 +230,7 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 		a.RequestFrame()
 		return
 	}
-	if w := a.builtins[name]; w != nil {
-		if a.swapFocusedWidget(w) {
-			a.maybeEnterLuaBuffer(w)
-			a.RequestFrame()
-		} else if _, ok := w.(*widgets.LuaWidget); ok {
-			a.maybeEnterLuaBuffer(w)
-			a.RequestFrame()
-		}
-		return
-	}
-	if w := a.findFileBuffer(name); w != nil {
-		if a.swapFocusedWidget(w) {
-			a.RequestFrame()
-		}
-		return
-	}
-	if a.ctx.Log != nil {
-		a.ctx.Log.Named("buffer").Error("no matching buffer: " + name)
-	}
+	a.openOrCreateBuffer(name, nil)
 }
 
 // OnEdit opens the project file list (:edit) or a source file (:edit name).

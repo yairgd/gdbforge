@@ -1,6 +1,7 @@
 package luahost
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -133,6 +134,100 @@ func TestTetrisScriptLoads(t *testing.T) {
 	rt.DispatchTick(0.5)
 	rt.DispatchDraw()
 	rt.DispatchKey("h")
+}
+
+func TestHasPaneHooksAndScriptPath(t *testing.T) {
+	p := &memPane{w: 8, h: 4}
+	rt := New(p, nil)
+	defer rt.Close()
+	if rt.HasPaneHooks() {
+		t.Fatal("empty runtime should not have pane hooks")
+	}
+	if err := rt.LoadString(`
+function on_tick(dt) end
+function main() end
+`, "pane"); err != nil {
+		t.Fatal(err)
+	}
+	if !rt.HasPaneHooks() {
+		t.Fatal("expected on_tick hook")
+	}
+	rt.SetScriptPath("/tmp/game.lua")
+	if rt.ScriptPath() != "/tmp/game.lua" {
+		t.Fatalf("ScriptPath=%q", rt.ScriptPath())
+	}
+}
+
+func TestSetPaneUnderCallNamed(t *testing.T) {
+	p1 := &memPane{w: 8, h: 4}
+	p2 := &memPane{w: 8, h: 4}
+	rt := New(p1, nil)
+	defer rt.Close()
+
+	rt.SetOpenBuffer(func(name string) {
+		if name != "g1" {
+			t.Errorf("name=%q", name)
+		}
+		if !rt.HasPaneHooks() {
+			t.Error("HasPaneHooks under CallNamed")
+		}
+		rt.SetPane(p2)
+		p2.AppendPrint("adopted")
+	})
+	if err := rt.LoadString(`
+function on_key(k) end
+gdbforge.register("go", function()
+  gdbforge.open_buffer("g1")
+end)
+`, "adopt"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("go") }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("deadlock: SetPane/HasPaneHooks under CallNamed")
+	}
+	if rt.Pane() != p2 {
+		t.Fatal("pane not adopted")
+	}
+	if len(p2.lines) == 0 || p2.lines[0] != "adopted" {
+		t.Fatalf("p2 lines=%v", p2.lines)
+	}
+}
+
+func TestLoadScriptFileOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/clone.lua"
+	src := `
+function on_key(k) end
+function main()
+  error("main should not run from LoadScriptFileOnly alone")
+end
+`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := &memPane{w: 4, h: 4}
+	rt := New(p, nil)
+	defer rt.Close()
+	if err := rt.LoadScriptFileOnly(path); err != nil {
+		t.Fatal(err)
+	}
+	if rt.ScriptPath() != path {
+		t.Fatalf("path=%q", rt.ScriptPath())
+	}
+	if !rt.HasPaneHooks() {
+		t.Fatal("expected on_key")
+	}
+	if rt.HasNamed("clone") {
+		t.Fatal("LoadScriptFileOnly must not EnsureCommand")
+	}
 }
 
 // Regression: app-installed Lua funcs (luadebug) call AppendPrint while CallNamed

@@ -52,6 +52,22 @@ func NewLuaWidget(title, src string, onRegister luahost.OnRegister) (*LuaWidget,
 	return w, nil
 }
 
+// AdoptLuaWidget binds an existing Runtime to a new pane (create-or-focus games).
+// The widget owns rt for Close; the caller must not Close rt separately.
+func AdoptLuaWidget(title string, rt *luahost.Runtime) *LuaWidget {
+	w := &LuaWidget{
+		BaseWidget: termui.BaseWidget{PaneName: title},
+		tickEvery:  100 * time.Millisecond,
+		rt:         rt,
+		useTick:    true,
+		lastTick:   time.Now(),
+	}
+	if rt != nil {
+		rt.SetPane(w)
+	}
+	return w
+}
+
 // Runtime returns the owned Lua host.
 func (w *LuaWidget) Runtime() *luahost.Runtime { return w.rt }
 

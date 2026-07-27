@@ -120,8 +120,7 @@ type DebuggerApp struct {
 
 	// Lua / gdbforge scripting
 	luaScratch      *widgets.LuaWidget
-	luaSnake        *widgets.LuaWidget
-	luaTetris       *widgets.LuaWidget
+	luaDynamic      []*widgets.LuaWidget // create-or-focus panes (:lua games, …)
 	activeLua       *widgets.LuaWidget
 	luaCmds         map[string]*luahost.Runtime
 	luaUser         *luahost.Runtime
@@ -185,6 +184,12 @@ func (a *DebuggerApp) Close() {
 		a.execClient = nil
 	}
 	a.leaveLuaMode()
+	for _, w := range a.luaDynamic {
+		if w != nil {
+			w.Close()
+		}
+	}
+	a.luaDynamic = nil
 	for _, rt := range a.luaUserRuntimes {
 		if rt != nil {
 			rt.Close()
@@ -192,10 +197,9 @@ func (a *DebuggerApp) Close() {
 	}
 	a.luaUserRuntimes = nil
 	a.luaUser = nil
-	for _, w := range []*widgets.LuaWidget{a.luaScratch, a.luaSnake, a.luaTetris} {
-		if w != nil {
-			w.Close()
-		}
+	if a.luaScratch != nil {
+		a.luaScratch.Close()
+		a.luaScratch = nil
 	}
 }
 

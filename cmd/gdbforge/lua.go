@@ -12,6 +12,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/gdbforge/internal/termui"
 	luacatalog "github.com/yairgd/gdbforge/lua"
 )
 
@@ -77,6 +78,8 @@ func (a *DebuggerApp) registerLuaCmd(name string, rt *luahost.Runtime) {
 }
 
 // OnLua runs a gdbforge.register'd function: :lua name [args...]
+// Pane scripts (on_key/on_tick): :lua snake [bufname] create-or-focuses that
+// buffer (default via main() → open_buffer("snake"); :lua snake snake1 → new VM).
 func (a *DebuggerApp) OnLua(args ...any) {
 	if len(args) == 0 {
 		if a.ctx.Log != nil {
@@ -102,10 +105,25 @@ func (a *DebuggerApp) OnLua(args ...any) {
 			strArgs = append(strArgs, s)
 		}
 	}
+	if buf := luaPaneInstanceName(rt, strArgs); buf != "" {
+		if !a.ensureLuaBuffer(buf, rt) && a.ctx.Log != nil {
+			a.ctx.Log.Named("lua").Error("cannot open lua pane: " + buf)
+		}
+		a.RequestFrame()
+		return
+	}
 	if err := rt.CallNamed(name, strArgs...); err != nil && a.ctx.Log != nil {
 		a.ctx.Log.Named("lua").Error(err.Error())
 	}
 	a.RequestFrame()
+}
+
+// luaPaneInstanceName returns the buffer name for :lua <pane> <bufname>, or "".
+func luaPaneInstanceName(rt *luahost.Runtime, strArgs []string) string {
+	if rt == nil || !rt.HasPaneHooks() || len(strArgs) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(strArgs[0])
 }
 
 func (a *DebuggerApp) luaCompletions(prefix string) []string {
@@ -131,6 +149,21 @@ func (a *DebuggerApp) maybeEnterLuaBuffer(w interface{}) {
 		return
 	}
 	a.enterLuaMode(lw)
+}
+
+func (a *DebuggerApp) focusBufferWidget(w termui.Widget) {
+	if w == nil || a.tab == nil {
+		return
+	}
+	if a.swapFocusedWidget(w) {
+		a.maybeEnterLuaBuffer(w)
+		a.RequestFrame()
+		return
+	}
+	if _, ok := w.(*widgets.LuaWidget); ok {
+		a.maybeEnterLuaBuffer(w)
+		a.RequestFrame()
+	}
 }
 
 // loadUserLuaScripts loads :lua <basename> commands from the 3-layer search:
@@ -195,7 +228,9 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 	if rt == nil {
 		return
 	}
-	rt.SetOpenBuffer(a.openBufferForLua)
+	rt.SetOpenBuffer(func(name string) {
+		a.openBufferForLua(name, rt)
+	})
 	rt.SetRun(func(argv []string) {
 		anyArgs := make([]any, len(argv))
 		for i, s := range argv {
@@ -240,8 +275,8 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 }
 
 // openBufferForLua focuses named panes without stealing the Code leaf via swap.
-// "code" / "gdb" use leaf marks; other names use OnBuffer.
-func (a *DebuggerApp) openBufferForLua(name string) {
+// "code" / "gdb" use leaf marks; other names use create-or-focus for pane scripts.
+func (a *DebuggerApp) openBufferForLua(name string, from *luahost.Runtime) {
 	name = strings.TrimSpace(name)
 	switch name {
 	case "code":
@@ -265,6 +300,115 @@ func (a *DebuggerApp) openBufferForLua(name string) {
 		a.SetMode(platform.ModeInsert)
 		a.RequestFrame()
 	default:
-		a.OnBuffer(name)
+		a.openOrCreateBuffer(name, from)
+	}
+}
+
+// openOrCreateBuffer focuses an existing buffer, or creates a Lua pane when
+// allowed: from a pane script's open_buffer, or lazy :b for known pane scripts.
+func (a *DebuggerApp) openOrCreateBuffer(name string, from *luahost.Runtime) {
+	if name == "" || a.tab == nil {
+		return
+	}
+	if w := a.builtins[name]; w != nil {
+		a.focusBufferWidget(w)
+		return
+	}
+	if w := a.findFileBuffer(name); w != nil {
+		if a.swapFocusedWidget(w) {
+			a.RequestFrame()
+		}
+		return
+	}
+	if from != nil {
+		// Lua open_buffer: create only when the caller is a pane script.
+		if from.HasPaneHooks() && a.ensureLuaBuffer(name, from) {
+			return
+		}
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("buffer").Error("no matching buffer: " + name)
+		}
+		return
+	}
+	// :b name — only existing builtins/files (pane scripts appear after :lua creates them).
+	if a.ctx.Log != nil {
+		a.ctx.Log.Named("buffer").Error("no matching buffer: " + name)
+	}
+}
+
+// ensureLuaBuffer create-or-focuses a LuaWidget for a pane script Runtime.
+// First call adopts rt; further names clone from ScriptPath() into a new VM.
+func (a *DebuggerApp) ensureLuaBuffer(name string, rt *luahost.Runtime) bool {
+	if name == "" || rt == nil || !rt.HasPaneHooks() {
+		return false
+	}
+	if w := a.builtins[name]; w != nil {
+		a.focusBufferWidget(w)
+		return true
+	}
+
+	var w *widgets.LuaWidget
+	if owner := a.luaWidgetOwning(rt); owner == nil {
+		w = widgets.AdoptLuaWidget(name, rt)
+		a.detachUserRuntime(rt)
+	} else {
+		path := rt.ScriptPath()
+		if path == "" {
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("lua").Error("cannot clone lua pane " + name + ": no script path")
+			}
+			return false
+		}
+		clone := luahost.New(nil, nil)
+		a.wireUserLuaAPI(clone)
+		if err := clone.LoadScriptFileOnly(path); err != nil {
+			clone.Close()
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("lua").Error("clone lua pane " + name + ": " + err.Error())
+			}
+			return false
+		}
+		w = widgets.AdoptLuaWidget(name, clone)
+	}
+	w.SetFrameRequester(a.RequestFrame)
+	a.registerBuiltin(name, w)
+	a.luaDynamic = append(a.luaDynamic, w)
+	a.focusBufferWidget(w)
+	return true
+}
+
+func (a *DebuggerApp) luaWidgetOwning(rt *luahost.Runtime) *widgets.LuaWidget {
+	if rt == nil {
+		return nil
+	}
+	if a.luaScratch != nil && a.luaScratch.Runtime() == rt {
+		return a.luaScratch
+	}
+	for _, w := range a.luaDynamic {
+		if w != nil && w.Runtime() == rt {
+			return w
+		}
+	}
+	return nil
+}
+
+// detachUserRuntime removes rt from luaUserRuntimes so Close won't double-free
+// after the runtime is adopted by a LuaWidget.
+func (a *DebuggerApp) detachUserRuntime(rt *luahost.Runtime) {
+	if rt == nil || len(a.luaUserRuntimes) == 0 {
+		return
+	}
+	out := a.luaUserRuntimes[:0]
+	for _, r := range a.luaUserRuntimes {
+		if r != rt {
+			out = append(out, r)
+		}
+	}
+	a.luaUserRuntimes = out
+	if a.luaUser == rt {
+		a.luaUser = nil
+		if n := len(out); n > 0 {
+			a.luaUser = out[n-1]
+		}
 	}
 }

@@ -182,15 +182,25 @@ func (rt *Runtime) LoadDir(dir string) (int, error) {
 // LoadScriptFile reads path, runs it, and EnsureCommand(cmd). Sets scriptDir
 // to the file's directory for gdbforge.lua_dir().
 func (rt *Runtime) LoadScriptFile(path, cmd string) error {
+	if err := rt.LoadScriptFileOnly(path); err != nil {
+		return err
+	}
+	if err := rt.EnsureCommand(cmd); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
+}
+
+// LoadScriptFileOnly reads and runs path without EnsureCommand (pane clones).
+// Sets scriptPath and scriptDir for gdbforge.lua_dir() / ScriptPath().
+func (rt *Runtime) LoadScriptFileOnly(path string) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
+	rt.SetScriptPath(path)
 	rt.SetScriptDir(filepath.Dir(path))
 	if err := rt.LoadString(string(src), path); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	if err := rt.EnsureCommand(cmd); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	return nil

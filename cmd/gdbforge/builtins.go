@@ -153,20 +153,6 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.luaScratch.SetFrameRequester(a.RequestFrame)
 	a.registerBuiltin("lua", a.luaScratch)
 
-	a.luaSnake, errLua = widgets.NewLuaWidget("Snake", luahost.SnakeScript, reg)
-	if errLua != nil {
-		return errLua
-	}
-	a.luaSnake.SetFrameRequester(a.RequestFrame)
-	a.registerBuiltin("snake", a.luaSnake)
-
-	a.luaTetris, errLua = widgets.NewLuaWidget("Tetris", luahost.TetrisScript, reg)
-	if errLua != nil {
-		return errLua
-	}
-	a.luaTetris.SetFrameRequester(a.RequestFrame)
-	a.registerBuiltin("tetris", a.luaTetris)
-
 	a.loadUserLuaScripts()
 
 	a.registerLayouts()

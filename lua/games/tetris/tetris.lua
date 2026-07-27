@@ -1,6 +1,7 @@
--- Tetris for gdbforge LuaWidget (:b tetris).
+-- Tetris for gdbforge LuaWidget (:lua tetris / :b tetris — create-or-focus).
 -- Also installable: cp -r scripts/games .gdbforge/lua/  →  :lua tetris
 -- Keys: h/l or arrows move, k/Up rotate, j/Down soft drop, space hard drop.
+-- Second instance: :lua tetris tetris1  (then :b tetris1); independent game state.
 
 local COLS, ROWS = 10, 18
 local board = {}
@@ -192,7 +193,8 @@ gdbforge.register("tetris_score", function()
   gdbforge.print("tetris score=" .. tostring(score))
 end)
 
--- :lua tetris (when copied under .gdbforge/lua/) opens the builtin game pane.
+-- :lua tetris / :b tetris create-or-focus this script's pane (no boot widget).
+-- :lua tetris tetris1 opens a second independent instance.
 function main()
   gdbforge.open_buffer("tetris")
 end

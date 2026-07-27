@@ -1,6 +1,7 @@
--- Snake for gdbforge LuaWidget (:b snake).
+-- Snake for gdbforge LuaWidget (:lua snake / :b snake — create-or-focus).
 -- Also installable: cp -r scripts/games .gdbforge/lua/  →  :lua snake
 -- Keys: Left/Right/Up/Down arrows (Esc leaves ModeLua).
+-- Second instance: :lua snake snake1  (then :b snake1); independent game state.
 
 local W, H = 20, 12
 local snake = { {x=5,y=5}, {x=4,y=5}, {x=3,y=5} }
@@ -127,7 +128,8 @@ gdbforge.register("snake_score", function()
   gdbforge.print("snake score=" .. tostring(score))
 end)
 
--- :lua snake (when copied under .gdbforge/lua/) opens the builtin game pane.
+-- :lua snake / :b snake create-or-focus this script's pane (no boot widget).
+-- :lua snake snake1 opens a second independent instance.
 function main()
   gdbforge.open_buffer("snake")
 end
