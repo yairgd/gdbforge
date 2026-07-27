@@ -92,7 +92,13 @@ func (a *DebuggerApp) OnLua(args ...any) {
 	if name == "" {
 		return
 	}
-	rt := a.luaCmds[name]
+	rt, err := a.ensureLuaRuntime(name)
+	if err != nil {
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("lua").Error(err.Error())
+		}
+		return
+	}
 	if rt == nil {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("lua").Error("unknown lua command: " + name)
@@ -129,15 +135,24 @@ func luaPaneInstanceName(rt *luahost.Runtime, strArgs []string) string {
 func (a *DebuggerApp) luaCompletions(prefix string) []string {
 	var names []string
 	seen := map[string]struct{}{}
-	for name := range a.luaCmds {
+	add := func(name string) {
+		if name == "" {
+			return
+		}
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
-			continue
+			return
 		}
 		if _, ok := seen[name]; ok {
-			continue
+			return
 		}
 		seen[name] = struct{}{}
 		names = append(names, name)
+	}
+	for name := range a.luaCmds {
+		add(name)
+	}
+	for name := range a.luaPending {
+		add(name)
 	}
 	sort.Strings(names)
 	return names
@@ -166,58 +181,64 @@ func (a *DebuggerApp) focusBufferWidget(w termui.Widget) {
 	}
 }
 
-// loadUserLuaScripts loads :lua <basename> commands from the 3-layer search:
-// 1) ./.gdbforge/lua  2) ~/.gdbforge/lua  3) embedded catalog (first basename wins).
-// Nested trees OK (e.g. r5_debug/r5_debug.lua). Each file gets its own Runtime.
+// loadUserLuaScripts indexes :lua <basename> commands from the 3-layer search
+// (project → home → embedded). VMs load lazily on first :lua / ensureLuaRuntime.
 func (a *DebuggerApp) loadUserLuaScripts() {
 	files, err := luahost.ResolveLuaScripts(luacatalog.FS)
-	if a.ctx.Log != nil {
-		log := a.ctx.Log.Named("lua")
-		if err != nil {
-			log.Error("resolve lua scripts: " + err.Error())
-			return
-		}
-	} else if err != nil {
-		return
-	}
-	n := 0
-	byOrigin := map[string]int{}
-	var firstErr error
-	for _, f := range files {
-		rt := luahost.New(nil, a.registerLuaCmd)
-		a.wireUserLuaAPI(rt)
-		if err := rt.LoadScriptFile(f.Path, f.Cmd); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			if a.ctx.Log != nil {
-				a.ctx.Log.Named("lua").Error("load " + f.Path + " (" + f.Origin + "): " + err.Error())
-			}
-			rt.Close()
-			continue
-		}
-		a.luaUserRuntimes = append(a.luaUserRuntimes, rt)
-		// Keep luaUser as last loaded for Close backward-compat.
-		a.luaUser = rt
-		n++
-		byOrigin[f.Origin]++
+	if err != nil {
 		if a.ctx.Log != nil {
-			a.ctx.Log.Named("lua").Info(":lua " + f.Cmd + " from " + f.Origin + " (" + f.Path + ")")
+			a.ctx.Log.Named("lua").Error("resolve lua scripts: " + err.Error())
 		}
-	}
-	if a.ctx.Log == nil {
 		return
 	}
-	log := a.ctx.Log.Named("lua")
-	if firstErr != nil {
-		log.Error("load lua scripts: " + firstErr.Error())
+	if a.luaPending == nil {
+		a.luaPending = make(map[string]luahost.ResolvedScript)
 	}
-	if n > 0 {
-		log.Info("loaded " + strconv.Itoa(n) + " lua scripts" +
-			" (project=" + strconv.Itoa(byOrigin[luahost.OriginProject]) +
-			" home=" + strconv.Itoa(byOrigin[luahost.OriginHome]) +
-			" embedded=" + strconv.Itoa(byOrigin[luahost.OriginEmbedded]) + ")")
+	byOrigin := map[string]int{}
+	for _, f := range files {
+		a.luaPending[f.Cmd] = f
+		byOrigin[f.Origin]++
 	}
+	if a.ctx.Log == nil || len(files) == 0 {
+		return
+	}
+	a.ctx.Log.Named("lua").Info("indexed " + strconv.Itoa(len(files)) + " lua scripts (lazy)" +
+		" (project=" + strconv.Itoa(byOrigin[luahost.OriginProject]) +
+		" home=" + strconv.Itoa(byOrigin[luahost.OriginHome]) +
+		" embedded=" + strconv.Itoa(byOrigin[luahost.OriginEmbedded]) + ")")
+}
+
+// ensureLuaRuntime returns a loaded Runtime for cmd, loading from luaPending on first use.
+func (a *DebuggerApp) ensureLuaRuntime(cmd string) (*luahost.Runtime, error) {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return nil, nil
+	}
+	if rt := a.luaCmds[cmd]; rt != nil {
+		return rt, nil
+	}
+	f, ok := a.luaPending[cmd]
+	if !ok {
+		return nil, nil
+	}
+	rt := luahost.New(nil, a.registerLuaCmd)
+	a.wireUserLuaAPI(rt)
+	if err := rt.LoadScriptFile(f.Path, f.Cmd); err != nil {
+		rt.Close()
+		return nil, err
+	}
+	a.luaUserRuntimes = append(a.luaUserRuntimes, rt)
+	a.luaUser = rt
+	delete(a.luaPending, cmd)
+	if a.ctx.Log != nil {
+		a.ctx.Log.Named("lua").Info(":lua " + f.Cmd + " loaded from " + f.Origin + " (" + f.Path + ")")
+	}
+	// Load may register extra names (e.g. snake_score); primary cmd is in luaCmds.
+	if a.luaCmds[cmd] == nil {
+		// EnsureCommand should have registered; recover if script only has main.
+		_ = rt.EnsureCommand(cmd)
+	}
+	return a.luaCmds[cmd], nil
 }
 
 // wireUserLuaAPI installs host callbacks shared by every user script Runtime.

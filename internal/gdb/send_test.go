@@ -31,10 +31,12 @@ func (f *fakeSess) WithWrite(_ context.Context, fn func(core.PTYWriter) error) e
 
 type stubCtl struct {
 	running, contAfterClear bool
+	suppressNotes           int
 }
 
-func (s *stubCtl) InferiorRunning() bool    { return s.running }
-func (s *stubCtl) ContinueAfterClear() bool { return s.contAfterClear }
+func (s *stubCtl) InferiorRunning() bool       { return s.running }
+func (s *stubCtl) ContinueAfterClear() bool    { return s.contAfterClear }
+func (s *stubCtl) NoteTransientStopSuppress() { s.suppressNotes++ }
 
 func TestSendCmdFrameWhileRunningDoesNotContinue(t *testing.T) {
 	sent := make(chan string, 8)
@@ -94,6 +96,24 @@ func TestSendCmdBreakWhileRunningStillContinues(t *testing.T) {
 	}
 	if got := <-sent; got != "continue" {
 		t.Fatalf("continue=%q", got)
+	}
+	if ctl.suppressNotes != 1 {
+		t.Fatalf("suppress notes=%d want 1", ctl.suppressNotes)
+	}
+}
+
+func TestSendCmdBreakWhileStoppedNoSuppress(t *testing.T) {
+	sent := make(chan string, 8)
+	sess := &fakeSess{sent: sent}
+	ctl := &stubCtl{running: false}
+
+	SendCmd(sess, nil, ctl, "break hello.c:10")
+
+	if got := <-sent; got != "break hello.c:10" {
+		t.Fatalf("cmd=%q", got)
+	}
+	if ctl.suppressNotes != 0 {
+		t.Fatalf("suppress notes=%d want 0", ctl.suppressNotes)
 	}
 }
 

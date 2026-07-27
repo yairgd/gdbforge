@@ -122,6 +122,7 @@ type DebuggerApp struct {
 	luaDynamic      []*widgets.LuaWidget // create-or-focus panes (:lua games, …)
 	activeLua       *widgets.LuaWidget
 	luaCmds         map[string]*luahost.Runtime
+	luaPending      map[string]luahost.ResolvedScript // indexed at boot; loaded on first :lua
 	luaUser         *luahost.Runtime
 	luaUserRuntimes []*luahost.Runtime
 }
@@ -196,6 +197,7 @@ func (a *DebuggerApp) Close() {
 	}
 	a.luaUserRuntimes = nil
 	a.luaUser = nil
+	a.luaPending = nil
 }
 
 // saveBreakpointsOnQuit writes bpSnapshot to ./.gdbforge/breakpoints.yaml.

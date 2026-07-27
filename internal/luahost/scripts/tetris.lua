@@ -115,7 +115,6 @@ end
 math.randomseed(os.time())
 reset_board()
 spawn()
-gdbforge.print("Tetris — h/l move, k rotate, j soft, space hard; Esc leaves")
 
 function on_key(k)
   if dead then
@@ -196,5 +195,6 @@ end)
 -- :lua tetris / :b tetris create-or-focus this script's pane (no boot widget).
 -- :lua tetris tetris1 opens a second independent instance.
 function main()
+  gdbforge.print("Tetris — h/l move, k rotate, j soft, space hard; Esc leaves")
   gdbforge.open_buffer("tetris")
 end

@@ -75,6 +75,12 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		return
 	}
 
+	// Break/clear while running: SendCmd Ctrl-C + continue. Skip stop UI so the
+	// Code blue browse cursor is not yanked to ━━▶ for that transient halt.
+	if a.Debug().ConsumeStopUISuppress() {
+		return
+	}
+
 	// Delve re-prints "> …" (often without [Breakpoint N]) on every `frame N` /
 	// call-stack select. That is not a new halt — never run stop UI unless the
 	// inferior was actually running (continue/next/step/…).

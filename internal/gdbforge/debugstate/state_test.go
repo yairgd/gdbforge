@@ -47,4 +47,12 @@ func TestDebugStateDefaultsAndSuppress(t *testing.T) {
 	if s.PCColor() != platform.DefaultPCColor {
 		t.Fatal("pccolor default")
 	}
+	if s.ConsumeStopUISuppress() {
+		t.Fatal("suppress should be empty")
+	}
+	s.NoteTransientStopSuppress()
+	s.NoteTransientStopSuppress()
+	if !s.ConsumeStopUISuppress() || !s.ConsumeStopUISuppress() || s.ConsumeStopUISuppress() {
+		t.Fatal("suppress consume mismatch")
+	}
 }

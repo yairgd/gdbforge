@@ -1,4 +1,5 @@
--- remotegdb — scp (if needed) + start gdbserver on board + GDB target remote.
+-- remotegdb — kill remote gdbserver if needed, scp (if md5 differs), start
+-- gdbserver on board, then GDB target remote.
 --
 -- Usage (GDB backend):
 --   :lua remotegdb
@@ -82,6 +83,23 @@ local function remote_md5(user, host, remote_path)
   return hash, out
 end
 
+local function stop_remote_gdbserver(user, host)
+  -- Running gdbserver holds the binary open; scp then fails (file busy / ETXTBSY).
+  -- Use pidof + kill only (no pkill/killall — not always on boards).
+  gdbforge.print("stopping remote gdbserver (if any) …")
+  run_cmd(string.format(
+    "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
+    user, host,
+    shell_quote(
+      "pids=$(pidof gdbserver 2>/dev/null); " ..
+      "if [ -n \"$pids\" ]; then " ..
+      "kill $pids 2>/dev/null; sleep 0.3; " ..
+      "kill -9 $pids 2>/dev/null; " ..
+      "fi; sleep 0.2"
+    )
+  ))
+end
+
 local function ensure_deployed(local_app, user, host, remote_path)
   local lhash, lerr = local_md5(local_app)
   if not lhash then
@@ -100,6 +118,8 @@ local function ensure_deployed(local_app, user, host, remote_path)
   else
     gdbforge.print("remote missing or unreachable hash — copying …")
   end
+
+  stop_remote_gdbserver(user, host)
 
   local scp = string.format(
     "scp -o BatchMode=yes -o ConnectTimeout=15 %s %s@%s:%s",
@@ -156,20 +176,17 @@ function main(app, host, port)
     gdbforge.print("app args: " .. app_args)
   end
 
-  -- 1) copy (md5)
+  -- 1) copy (md5) — kill gdbserver first when scp is needed (binary lock)
   if not ensure_deployed(app, user, host, remote_path) then
     return
   end
 
   -- 2) open gdbserver on the target (no host spawn / no external terminal)
+  stop_remote_gdbserver(user, host)
   local start = string.format(
     "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
     user, host,
     shell_quote(string.format(
-      "pids=$(pidof gdbserver 2>/dev/null); " ..
-      "if [ -n \"$pids\" ]; then kill $pids 2>/dev/null; fi; " ..
-      "killall gdbserver 2>/dev/null; " ..
-      "sleep 0.3; " ..
       "nohup gdbserver :%s %s >/tmp/gdbserver.log 2>&1 </dev/null &",
       port, remote_cmd
     ))

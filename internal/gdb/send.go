@@ -14,6 +14,9 @@ import (
 type InferiorCtl interface {
 	InferiorRunning() bool
 	ContinueAfterClear() bool
+	// NoteTransientStopSuppress arms one skip of stop UI for the Ctrl-C that
+	// SendCmd issues before break/clear + auto-continue (keeps Code browse).
+	NoteTransientStopSuppress()
 }
 
 // SendCmd writes a GDB CLI/MI command on the shared PTY.
@@ -46,11 +49,13 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 			}
 			if IsBreakRemoveCmd(cmd) {
 				if ctl != nil && ctl.ContinueAfterClear() {
+					ctl.NoteTransientStopSuppress()
 					return pw.Send("continue")
 				}
 				return nil
 			}
 			if IsBreakInsertCmd(cmd) {
+				ctl.NoteTransientStopSuppress()
 				return pw.Send("continue")
 			}
 			return nil

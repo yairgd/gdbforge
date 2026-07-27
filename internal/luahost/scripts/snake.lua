@@ -30,7 +30,6 @@ end
 
 math.randomseed(os.time())
 rand_food()
-gdbforge.print("Snake — arrows; Esc leaves")
 
 local function set_dir(dx, dy)
   if dead then return end
@@ -131,5 +130,6 @@ end)
 -- :lua snake / :b snake create-or-focus this script's pane (no boot widget).
 -- :lua snake snake1 opens a second independent instance.
 function main()
+  gdbforge.print("Snake — arrows; Esc leaves")
   gdbforge.open_buffer("snake")
 end

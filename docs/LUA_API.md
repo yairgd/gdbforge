@@ -11,7 +11,7 @@ Scripts are discovered in this order (first basename wins; nested dirs OK):
 2. `~/.gdbforge/lua/**/*.lua` (user home)
 3. Embedded catalog shipped with the binary (same tree as [`../lua/`](../lua/))
 
-Each file gets its own Lua VM. Basename without `.lua` is the `:lua` command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
+Each file gets its own Lua VM, loaded **lazily on first** `:lua <basename>` (indexed at startup only — snake/tetris do not run at init). Basename without `.lua` is the command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
 
 ```bash
 # Optional override — project-local wins over home and embedded:

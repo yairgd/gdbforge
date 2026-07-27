@@ -19,6 +19,9 @@ type State struct {
 	clearOutput        bool
 	continueAfterClear bool
 	inferiorRunning    bool
+	// stopUISuppress skips the next stop UI paint (Code ━━▶ / blue snap).
+	// Armed when SendCmd Ctrl-C + continue for break/clear while running.
+	stopUISuppress int
 
 	sourceFiles []string
 	currentFile string
@@ -155,6 +158,31 @@ func (s *State) SetInferiorRunning(v bool) {
 	s.mu.Lock()
 	s.inferiorRunning = v
 	s.mu.Unlock()
+}
+
+// NoteTransientStopSuppress arms one skip of Code/threads stop UI for the
+// next *stopped from a break/clear interrupt that will auto-continue.
+func (s *State) NoteTransientStopSuppress() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.stopUISuppress++
+	s.mu.Unlock()
+}
+
+// ConsumeStopUISuppress returns true once per NoteTransientStopSuppress.
+func (s *State) ConsumeStopUISuppress() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopUISuppress <= 0 {
+		return false
+	}
+	s.stopUISuppress--
+	return true
 }
 
 func (s *State) SourceFiles() []string {
