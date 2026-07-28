@@ -19,7 +19,9 @@ function help()
   gdbforge.print("Usage: :lua terminal_debug [prog] [run]")
   gdbforge.print("  :lua terminal_debug ./myprog")
   gdbforge.print("  :lua terminal_debug ./myprog run")
-  gdbforge.print("Env: GDBFORGE_TERMINAL GDBFORGE_INFERIOR_TTY")
+  gdbforge.print("Setup (copy-paste into shell / script):")
+  gdbforge.print("  export GDBFORGE_TERMINAL=mate-terminal")
+  gdbforge.print("  export GDBFORGE_INFERIOR_TTY=/dev/pts/N")
   gdbforge.print("For Go + Delve prefer :lua dlv_ext_port")
 end
 

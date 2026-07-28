@@ -286,6 +286,13 @@ func (p *ConsolePane) HandleEvent(ev tcell.Event) {
 			return
 		}
 		if e.Key() == tcell.KeyRune {
+			// Never treat Ctrl-letter / control bytes as typed stdin.
+			if e.Modifiers()&tcell.ModCtrl != 0 {
+				return
+			}
+			if e.Rune() < ' ' || e.Rune() == 0x7f {
+				return
+			}
 			p.input.InsertRune(e.Rune())
 		}
 

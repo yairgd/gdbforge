@@ -268,17 +268,19 @@ func (c *GDBClient) Interrupt() error {
 }
 
 // SuspendInferior delivers SIGTSTP like a terminal Ctrl-Z on the program's TTY.
-// Prefers writing ^Z to the inferior PTY; falls back to kill(pid, SIGTSTP).
+// Prefers kill(pid, SIGTSTP): writing ^Z alone often only echoes "^Z" on :b io
+// when the inferior is not the PTY foreground group. Falls back to PTY ^Z.
 func (c *GDBClient) SuspendInferior() error {
 	if c == nil {
 		return nil
 	}
-	if c.inferior != nil {
-		if err := c.inferior.SendRaw("\x1a"); err == nil {
-			return nil
-		}
+	if err := signalInferiorTSTP(c.Quit.InferiorPID()); err == nil {
+		return nil
 	}
-	return signalInferiorTSTP(c.Quit.InferiorPID())
+	if c.inferior != nil {
+		return c.inferior.SendRaw("\x1a")
+	}
+	return fmt.Errorf("suspend inferior: no pid and no tty")
 }
 
 func signalInferiorTSTP(pidStr string) error {

@@ -21,7 +21,8 @@ function help()
   gdbforge.print("  :lua dlv_ext_port")
   gdbforge.print("  :lua dlv_ext_port 12345")
   gdbforge.print("  :lua dlv_ext_port 12345 p1 p2")
-  gdbforge.print("Env: GDBFORGE_TERMINAL")
+  gdbforge.print("Setup (copy-paste into shell / script):")
+  gdbforge.print("  export GDBFORGE_TERMINAL=mate-terminal")
   gdbforge.print("Default port: 2345")
 end
 

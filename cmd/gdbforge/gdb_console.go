@@ -271,6 +271,7 @@ func (a *DebuggerApp) onGdbConsoleSuspend() {
 			a.withGdbUIOwner(func() { _ = a.gdbClient.SuspendInferior() })
 			return
 		}
+		// Delve: no MI pid tracking yet — ^Z on the inferior TTY (cooked mode).
 		if tty := a.inferiorTTY(); tty != nil {
 			a.sendInferior(tty, func() { _ = tty.SendRaw("\x1a") })
 			return
@@ -417,6 +418,12 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
 	if promptReady && a.isDLV() && a.dlvSuppressStopUI > 0 && stopped == nil {
 		a.dlvSuppressStopUI = 0
+	}
+	// (gdb)/(dlv) prompt means the inferior is stopped (or not started). Clear
+	// the running flag so Ctrl-Z suspends gdbforge instead of dumping ^Z into
+	// :b io (regression when a stop line was missed and the flag stayed true).
+	if promptReady && state != gdb.Running && a.State() != nil {
+		a.Debug().SetInferiorRunning(false)
 	}
 	if state == gdb.Running {
 		if a.State() != nil {

@@ -9,7 +9,8 @@
 function help()
   gdbforge.print("external_tty — open a real terminal and set GDB inferior-tty")
   gdbforge.print("Usage: :lua external_tty")
-  gdbforge.print("Env: GDBFORGE_TERMINAL")
+  gdbforge.print("Setup (copy-paste into shell / script):")
+  gdbforge.print("  export GDBFORGE_TERMINAL=mate-terminal")
   gdbforge.print("Delve: prefer :lua dlv_ext_port")
 end
 

@@ -79,9 +79,12 @@ func isCtrlZ(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyCtrlZ {
 		return true
 	}
-	// Some terminals report Ctrl-Z as a rune with ModCtrl.
-	if ev.Key() == tcell.KeyRune && (ev.Rune() == 'z' || ev.Rune() == 'Z') &&
-		ev.Modifiers()&tcell.ModCtrl != 0 {
+	// ASCII SUB (0x1A): some NewEventKey paths use Key(26) instead of KeyCtrlZ.
+	if ev.Key() == tcell.Key(0x1a) {
+		return true
+	}
+	// KeyCtrlZ events also carry Rune 'z' + ModCtrl; KeyRune+ModCtrl variants too.
+	if (ev.Rune() == 'z' || ev.Rune() == 'Z') && ev.Modifiers()&tcell.ModCtrl != 0 {
 		return true
 	}
 	return false
