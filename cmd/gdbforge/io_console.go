@@ -38,8 +38,8 @@ func (a *DebuggerApp) wireInferiorIO(tty *ptyx.TTY) {
 		a.sendInferior(tty, func() { _ = tty.SendRaw("\x03") })
 	})
 	a.outputWidget.SetOnSuspend(func() {
-		// Ctrl-Z on the program's terminal → SIGTSTP via ^Z on the inferior PTY.
-		a.sendInferior(tty, func() { _ = tty.SendRaw("\x1a") })
+		// Same policy as GDB console / global Ctrl-Z (not raw ^Z while stopped).
+		a.onGdbConsoleSuspend()
 	})
 	a.outputWidget.SetOnEOF(func() {
 		a.sendInferior(tty, func() { _ = tty.SendRaw("\x04") })

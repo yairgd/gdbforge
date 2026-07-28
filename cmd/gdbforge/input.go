@@ -84,6 +84,9 @@ func isCtrlZ(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.Key(0x1a) {
 		return true
 	}
+	if ev.Key() == tcell.KeyRune && ev.Rune() == 0x1a {
+		return true
+	}
 	// KeyCtrlZ events also carry Rune 'z' + ModCtrl; KeyRune+ModCtrl variants too.
 	if (ev.Rune() == 'z' || ev.Rune() == 'Z') && ev.Modifiers()&tcell.ModCtrl != 0 {
 		return true

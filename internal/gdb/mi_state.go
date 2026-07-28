@@ -118,6 +118,10 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 			}
 		}
 		out.Stopped = &stop
+		// Inferior is no longer running — clear so a same-batch (gdb) prompt
+		// does not leave State==Running and re-arm InferiorRunning (Ctrl-Z).
+		m.state = Done
+		out.State = Done
 		// Ctrl-C / signals: ensure the classic GDB one-liner appears even when
 		// ~ streams were fragmented or prefixed with a ^C PTY echo.
 		if stop.Reason == "signal-received" {

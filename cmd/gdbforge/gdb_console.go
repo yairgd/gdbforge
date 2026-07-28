@@ -419,15 +419,15 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 	if promptReady && a.isDLV() && a.dlvSuppressStopUI > 0 && stopped == nil {
 		a.dlvSuppressStopUI = 0
 	}
-	// (gdb)/(dlv) prompt means the inferior is stopped (or not started). Clear
-	// the running flag so Ctrl-Z suspends gdbforge instead of dumping ^Z into
-	// :b io (regression when a stop line was missed and the flag stayed true).
-	if promptReady && state != gdb.Running && a.State() != nil {
-		a.Debug().SetInferiorRunning(false)
-	}
-	if state == gdb.Running {
-		if a.State() != nil {
+	// InferiorRunning drives Ctrl-Z: SIGTSTP inferior vs Suspend gdbforge.
+	// A same-batch ^running + *stopped + (gdb) used to leave State==Running and
+	// re-arm the flag after onGdbStopped cleared it — Ctrl-Z then dumped ^Z on :b io.
+	if a.State() != nil {
+		if state == gdb.Running && stopped == nil && !promptReady {
 			a.Debug().SetInferiorRunning(true)
+		}
+		if promptReady || stopped != nil {
+			a.Debug().SetInferiorRunning(false)
 		}
 	}
 	if breakpointsChanged {

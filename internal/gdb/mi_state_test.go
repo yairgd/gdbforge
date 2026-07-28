@@ -174,14 +174,21 @@ func TestPushRawMakeKeepsANSIEscape(t *testing.T) {
 	}
 }
 
-func TestPushRawIgnoresUnhandledMIRecords(t *testing.T) {
+func TestPushRawRunningThenStoppedClearsRunningState(t *testing.T) {
 	st := NewGdbInputState()
-	u := st.PushRaw("=thread-group-added,id=\"i1\"\n^running\n")
-	if len(u.DisplayLines) != 0 {
-		t.Fatalf("MI notify must not paint, got %v", u.DisplayLines)
+	u := st.PushRaw(
+		"^running\n" +
+			`*stopped,reason="end-stepping-range",thread-id="1",frame={fullname="/tmp/hello.c",line="12"}` + "\n" +
+			"(gdb)\n",
+	)
+	if u.Stopped == nil {
+		t.Fatal("expected Stopped")
 	}
-	if u.State != Running {
-		t.Fatalf("state=%v want Running", u.State)
+	if !u.PromptReady {
+		t.Fatal("expected PromptReady")
+	}
+	if u.State != Done {
+		t.Fatalf("state=%v want Done after *stopped (Ctrl-Z InferiorRunning)", u.State)
 	}
 }
 
