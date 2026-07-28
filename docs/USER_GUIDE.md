@@ -31,7 +31,7 @@ Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for comple
 
 **Search**
 
-Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. After a search, `*` / `#` jump next / previous match — **`n` stays GDB next** (not Vim-style next-match).
+Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. After a search, `n` / `N` jump next / previous match. `*` / `#` search the word under the cursor (forward / backward). With no active pattern, `n` is still GDB next.
 
 **Completion**
 
@@ -51,7 +51,8 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 |-----|--------|
 | `:` | enter command mode |
 | `/` | search in focused pane (live highlight; Enter commits) |
-| `*` / `#` | next / previous search match (`n` stays GDB next) |
+| `*` / `#` | search word under cursor forward / backward |
+| `n` / `N` | next / previous search match (`n` = GDB next if no pattern) |
 | `i` | focus GDB leaf and enter insert |
 | `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
 | `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |

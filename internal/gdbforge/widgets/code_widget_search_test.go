@@ -41,3 +41,19 @@ func TestCodeWidgetSearchJump(t *testing.T) {
 		t.Fatalf("RevertSearch want foo, got %q", w.SearchPattern())
 	}
 }
+
+func TestCodeWidgetWordAtCursor(t *testing.T) {
+	w := NewCodeWidget()
+	w.rawLines = []string{
+		"int hello_world = 1;",
+		"  return hello_world;",
+	}
+	w.hiLines = append([]string(nil), w.rawLines...)
+	w.rebuildBuffer()
+	w.selLine = 1
+	w.viewport.CursorLine = 0
+	w.viewport.CursorCol = 0
+	if got := w.WordAtCursor(); got != "int" {
+		t.Fatalf("WordAtCursor=%q want int", got)
+	}
+}

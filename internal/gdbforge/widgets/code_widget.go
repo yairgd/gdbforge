@@ -178,7 +178,7 @@ func (w *CodeWidget) SearchPattern() string {
 	return w.viewport.SearchPattern()
 }
 
-// SearchNext moves the cursor to the next matching line (wraps). Uses * in normal mode.
+// SearchNext moves the cursor to the next matching line (wraps).
 func (w *CodeWidget) SearchNext() bool {
 	if w == nil || w.viewport == nil {
 		return false
@@ -190,7 +190,7 @@ func (w *CodeWidget) SearchNext() bool {
 	return w.viewport.SearchNext()
 }
 
-// SearchPrev moves the cursor to the previous matching line (wraps). Uses # in normal mode.
+// SearchPrev moves the cursor to the previous matching line (wraps).
 func (w *CodeWidget) SearchPrev() bool {
 	if w == nil || w.viewport == nil {
 		return false
@@ -200,6 +200,17 @@ func (w *CodeWidget) SearchPrev() bool {
 		w.viewport.CursorLine = w.selLine - 1
 	}
 	return w.viewport.SearchPrev()
+}
+
+// WordAtCursor returns the identifier/token under the browse cursor.
+func (w *CodeWidget) WordAtCursor() string {
+	if w == nil || w.viewport == nil {
+		return ""
+	}
+	if w.selLine >= 1 {
+		w.viewport.CursorLine = w.selLine - 1
+	}
+	return w.viewport.WordAtCursor()
 }
 
 func (w *CodeWidget) SetSearchColor(c tcell.Color) {

@@ -28,6 +28,11 @@ func (v *Viewport) ReadOnly() bool { return v.readOnly }
 
 func (v *Viewport) HasSelection() bool { return v.hasSel }
 
+// SelectedText returns the marked region with ANSI stripped for search/clipboard.
+func (v *Viewport) SelectedText() string {
+	return StripANSI(v.selectedText())
+}
+
 func (v *Viewport) selectedText() string {
 	if !v.hasSel || v.Buffer == nil {
 		return ""

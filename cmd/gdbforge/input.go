@@ -239,7 +239,7 @@ func (a *DebuggerApp) onSearchCmdSubmit(pattern string) {
 	}
 	host.SetSearchColor(a.State().SearchColor())
 	host.CommitSearch(pattern)
-	a.searchTarget = host // keep for */# on same pane
+	a.searchTarget = host // keep for n/N and */# on same pane
 }
 
 func (a *DebuggerApp) searchNextMatch() {
@@ -267,6 +267,105 @@ func (a *DebuggerApp) searchPrevMatch() {
 	host.SetSearchColor(a.State().SearchColor())
 	if host.SearchPrev() {
 		a.RequestFrame()
+	}
+}
+
+// searchWordMatch implements vim-ish * (dir>0) / # (dir<0):
+//   1. If a search pattern is already active → next/prev only (do not change it).
+//   2. Else if text is selected → commit selection as the pattern, then jump.
+//   3. Else → commit word under cursor, then jump.
+func (a *DebuggerApp) searchWordMatch(dir int) {
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+	}
+	if host == nil {
+		return
+	}
+	host.SetSearchColor(a.State().SearchColor())
+
+	// Keep an existing / or prior */# pattern; * / # only navigate.
+	if host.SearchPattern() != "" {
+		a.searchTarget = host
+		if dir < 0 {
+			a.searchPrevMatch()
+			return
+		}
+		a.searchNextMatch()
+		return
+	}
+
+	pattern := a.selectionAtSearchHost(host)
+	if pattern == "" {
+		pattern = a.wordAtSearchHost(host)
+	}
+	if pattern == "" {
+		return
+	}
+	host.CommitSearch(pattern)
+	a.searchTarget = host
+	moved := false
+	if dir < 0 {
+		moved = host.SearchPrev()
+	} else {
+		moved = host.SearchNext()
+	}
+	if moved {
+		a.RequestFrame()
+	}
+}
+
+// trySearchOrGdbNext is normal-mode n: prefer search-next when a pattern is
+// active (after / or */#), otherwise GDB next.
+func (a *DebuggerApp) trySearchOrGdbNext() bool {
+	if a.hasActiveSearchPattern() {
+		a.searchNextMatch()
+		return true
+	}
+	a.sendGdbExec("next")
+	return true
+}
+
+func (a *DebuggerApp) hasActiveSearchPattern() bool {
+	host := a.searchTarget
+	if host == nil {
+		host = a.resolveSearchHost()
+	}
+	if host == nil {
+		return false
+	}
+	return host.SearchPattern() != ""
+}
+
+func (a *DebuggerApp) wordAtSearchHost(host termui.SearchHost) string {
+	if host == nil {
+		return ""
+	}
+	if w, ok := host.(interface{ WordAtCursor() string }); ok {
+		return w.WordAtCursor()
+	}
+	return ""
+}
+
+func (a *DebuggerApp) selectionAtSearchHost(host termui.SearchHost) string {
+	if host == nil {
+		return ""
+	}
+	vp := a.viewportOfSearchHost(host)
+	if vp == nil || !vp.HasSelection() {
+		return ""
+	}
+	return strings.TrimSpace(vp.SelectedText())
+}
+
+func (a *DebuggerApp) viewportOfSearchHost(host termui.SearchHost) *termui.Viewport {
+	switch t := host.(type) {
+	case *termui.Viewport:
+		return t
+	case interface{ Viewport() *termui.Viewport }:
+		return t.Viewport()
+	default:
+		return nil
 	}
 }
 
@@ -623,7 +722,7 @@ func (a *DebuggerApp) leaveCommandMode() {
 	a.clearCompletion()
 	if wasSearch && a.searchTarget != nil {
 		a.searchTarget.RevertSearch()
-		// Keep searchTarget so */# still work on the committed pattern.
+		// Keep searchTarget so n/N and */# still work on the committed pattern.
 	}
 	if a.cmdWidget != nil {
 		a.cmdWidget.Deativate()

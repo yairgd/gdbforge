@@ -32,3 +32,38 @@ func TestViewportSearchSubstring(t *testing.T) {
 		t.Fatal("revert")
 	}
 }
+
+func TestViewportWordAtCursor(t *testing.T) {
+	buf := platform.NewBuffer()
+	buf.AppendLine("  hello_world  next")
+	buf.AppendLine("foo bar")
+	v := NewViewport(buf)
+	v.SetSearchContentOffset(0)
+	v.CursorLine = 0
+	v.CursorCol = 4 // on 'l' of hello
+	if got := v.WordAtCursor(); got != "hello_world" {
+		t.Fatalf("WordAtCursor=%q", got)
+	}
+	v.CursorCol = 0 // leading spaces → first identifier
+	if got := v.WordAtCursor(); got != "hello_world" {
+		t.Fatalf("col0 WordAtCursor=%q", got)
+	}
+}
+
+func TestViewportWordAtCursorSkipsPunctBanner(t *testing.T) {
+	buf := platform.NewBuffer()
+	buf.AppendLine("=== sdk_cpp_demo done ===")
+	buf.AppendLine("call sdk_cpp_demo()")
+	v := NewViewport(buf)
+	v.SetSearchContentOffset(0)
+	v.CursorLine = 0
+	v.CursorCol = 0
+	if got := v.WordAtCursor(); got != "sdk_cpp_demo" {
+		t.Fatalf("banner WordAtCursor=%q want sdk_cpp_demo", got)
+	}
+	// On the trailing === still prefer nearest identifier.
+	v.CursorCol = len("=== sdk_cpp_demo done ===") - 1
+	if got := v.WordAtCursor(); got != "done" {
+		t.Fatalf("trailing === WordAtCursor=%q want done", got)
+	}
+}

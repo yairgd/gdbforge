@@ -99,6 +99,131 @@ func (v *Viewport) SearchPrev() bool {
 	return v.searchJump(-1)
 }
 
+// WordAtCursor returns the identifier under the cursor on searchable content
+// (letters/digits/_). Punctuation runs like "===" are skipped so */# on a
+// banner line such as "=== sdk_cpp_demo done ===" searches sdk_cpp_demo.
+func (v *Viewport) WordAtCursor() string {
+	if v == nil || v.Buffer == nil {
+		return ""
+	}
+	content := v.searchContent(v.CursorLine)
+	if content == "" {
+		return ""
+	}
+	return identAtOrNear(content, v.contentByteAtCursor())
+}
+
+// identAtOrNear returns the isWordChar token at/near byte offset at.
+// Prefer the token under at; if that is punctuation/empty, the next identifier
+// forward, then the previous, then the first on the line.
+func identAtOrNear(line string, at int) string {
+	if line == "" {
+		return ""
+	}
+	if at < 0 {
+		at = 0
+	}
+	if at > len(line) {
+		at = len(line)
+	}
+	if w := identBoundsAt(line, at); w != "" {
+		return w
+	}
+	// Walk forward from at for an identifier start.
+	for i := at; i < len(line); {
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if isWordChar(r) {
+			return identBoundsAt(line, i)
+		}
+		i += size
+	}
+	// Walk backward.
+	for i := at; i > 0; {
+		r, size := utf8.DecodeLastRuneInString(line[:i])
+		i -= size
+		if isWordChar(r) {
+			return identBoundsAt(line, i)
+		}
+	}
+	// First identifier on the line.
+	for i := 0; i < len(line); {
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if isWordChar(r) {
+			return identBoundsAt(line, i)
+		}
+		i += size
+	}
+	return ""
+}
+
+// identBoundsAt returns the isWordChar span covering at, or "" if at is not
+// on an identifier.
+func identBoundsAt(line string, at int) string {
+	if at < 0 {
+		at = 0
+	}
+	if at >= len(line) {
+		if at == 0 {
+			return ""
+		}
+		at = len(line) - 1
+		// Snap back to rune start.
+		for at > 0 && !utf8.RuneStart(line[at]) {
+			at--
+		}
+	}
+	r, _ := utf8.DecodeRuneInString(line[at:])
+	if !isWordChar(r) {
+		return ""
+	}
+	s, e := wordBoundsAt(line, at)
+	if s >= e || s < 0 || e > len(line) {
+		return ""
+	}
+	// wordBoundsAt may return a punctuation token; require identifier class.
+	rr, _ := utf8.DecodeRuneInString(line[s:])
+	if !isWordChar(rr) {
+		return ""
+	}
+	return line[s:e]
+}
+
+// contentByteAtCursor maps CursorCol onto a byte offset in searchContent.
+func (v *Viewport) contentByteAtCursor() int {
+	content := v.searchContent(v.CursorLine)
+	if content == "" {
+		return 0
+	}
+	visCol := 0
+	if v.CursorLine >= 0 && v.CursorLine < v.Buffer.NumLines() {
+		raw := v.Buffer.Line(v.CursorLine)
+		switch {
+		case v.CursorCol <= 0:
+			visCol = 0
+		case v.ANSI:
+			if v.CursorCol >= len(raw) {
+				visCol = VisibleANSIWidth(raw)
+			} else {
+				visCol = VisibleANSIWidth(raw[:v.CursorCol])
+			}
+		default:
+			visCol = utf8.RuneCountInString(raw[:min(v.CursorCol, len(raw))])
+		}
+	}
+	col := visCol - v.searchContentOffset
+	if col < 0 {
+		col = 0
+	}
+	runes := []rune(content)
+	if len(runes) == 0 {
+		return 0
+	}
+	if col >= len(runes) {
+		col = len(runes) - 1
+	}
+	return len(string(runes[:col]))
+}
+
 func (v *Viewport) searchJump(dir int) bool {
 	if v == nil || v.searchPattern == "" || v.Buffer == nil {
 		return false

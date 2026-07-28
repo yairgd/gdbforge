@@ -83,7 +83,7 @@ sequenceDiagram
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`); **Ctrl-C** interrupts via the debugger PTY (GDB/dlv); **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
-   - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n`/`s`/`c` → MI `-exec-next`/`-exec-step`/`-exec-continue`); **`*`/`#`** next/prev `/` search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
+   - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
    - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z / Ctrl-D).
    - **`ModeSearch`** — all keys go to `CmdWidget` in search kind; live highlight on the focused `SearchHost`; Enter commits; Esc reverts.
@@ -257,7 +257,7 @@ stateDiagram-v2
 | **Normal** | Trie + focused `FocusKeyHandler` | Navigation, key sequences, workspace input | **Implemented** |
 | **Insert** | Focused console (GDB/IO/exec) or Code-gated `n`/`s`/`c` | Type into debugger / program; Esc → normal | **Implemented** |
 | **Command** | `CmdWidget` (`CmdKindCommand`) | `:` UI commands | **Implemented** |
-| **Search** | `CmdWidget` (`CmdKindSearch`) + `SearchHost` pane | `/` live buffer search; `*`/`#` next/prev | **Implemented** |
+| **Search** | `CmdWidget` (`CmdKindSearch`) + `SearchHost` pane | `/` live buffer search; `*`/`#` word; `n`/`N` next/prev | **Implemented** |
 | **Completion** | Wildmenu + source line edit | Tab completion (`ModeCompletion`) | **Implemented** |
 | **Lua** | Active `LuaWidget` | `:lua snake` then `:b snake` (cell demos); `gdbforge.print` → `:b io` | **Implemented** |
 
@@ -283,7 +283,7 @@ const (
 - Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
 - Insert mode is pane-local typing (GDB CLI, IO stdin, exec shell).
 - Command mode is for UI operations, not debugger commands.
-- Search mode muxes the same `CmdWidget` with a leading `/` (separate history; no Tab). Target is the focused pane's `SearchHost` (`viewport_search.go`). `*` / `#` jump matches; **`n` remains GDB next**.
+- Search mode muxes the same `CmdWidget` with a leading `/` (separate history; no Tab). Target is the focused pane's `SearchHost` (`viewport_search.go`). `*` / `#` search the word under the cursor; `n` / `N` jump matches (`n` is GDB next when no pattern is active).
 - Ctrl-Z / Ctrl-D are mode-independent (GDB-like job control / quit).
 
 **Gaps:**
@@ -380,7 +380,8 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB 
 | `c` | GDB continue via MI `-exec-continue` (normal; also insert when CodeWidget focused) | Implemented |
 | `:` | Enter command mode | Implemented |
 | `/` | Enter search mode (focused pane) | Implemented |
-| `*` / `#` | Next / previous `/` search match | Implemented |
+| `*` / `#` | Search word under cursor forward / back | Implemented |
+| `n` / `N` | Next / previous search match (`n` = GDB next if no pattern) | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
 | `Ctrl+W o` | Only focused pane | Implemented |
 | `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |

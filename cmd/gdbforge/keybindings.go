@@ -60,11 +60,11 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"/",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("search-next", func(args ...any) { a.searchNextMatch() }),
+		commands.NewCommand("search-word-next", func(args ...any) { a.searchWordMatch(1) }),
 		"*",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("search-prev", func(args ...any) { a.searchPrevMatch() }),
+		commands.NewCommand("search-word-prev", func(args ...any) { a.searchWordMatch(-1) }),
 		"#",
 	)
 	a.keyBindings.Bind(
@@ -100,9 +100,14 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		commands.NewHandledCommand("code-toggle-enable", a.tryCodeToggleEnable),
 		"e",
 	)
+	// n: next search match when a pattern is active, else GDB next.
 	a.keyBindings.Bind(
-		commands.NewCommand("gdb-next", func(args ...any) { a.sendGdbExec("next") }),
+		commands.NewHandledCommand("search-or-gdb-next", a.trySearchOrGdbNext),
 		"n",
+	)
+	a.keyBindings.Bind(
+		commands.NewCommand("search-prev-match", func(args ...any) { a.searchPrevMatch() }),
+		"N",
 	)
 	a.keyBindings.Bind(
 		commands.NewCommand("gdb-step", func(args ...any) { a.sendGdbExec("step") }),
