@@ -139,7 +139,7 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 		w.EchoSubmit(display)
 		w.ClearInput()
 		a.sendGdbQuitAction(act)
-		w.FollowTailAndScroll()
+		w.ForceFollowTailAndScroll()
 		return
 	}
 
@@ -158,7 +158,7 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 		}
 		w.ClearInput()
 		a.sendGdbQuitAction(act)
-		w.FollowTailAndScroll()
+		w.ForceFollowTailAndScroll()
 		return
 	}
 
@@ -176,7 +176,7 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 	}
 	a.withGdbUIOwner(send)
 	w.ClearInput()
-	w.FollowTailAndScroll()
+	w.ForceFollowTailAndScroll()
 }
 
 func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
@@ -199,7 +199,7 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 		}
 		a.withGdbUIOwner(send)
 		w.ClearInput()
-		w.FollowTailAndScroll()
+		w.ForceFollowTailAndScroll()
 		return
 	}
 
@@ -230,7 +230,7 @@ func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
 	}
 	a.withGdbUIOwner(send)
 	w.ClearInput()
-	w.FollowTailAndScroll()
+	w.ForceFollowTailAndScroll()
 }
 
 func (a *DebuggerApp) onGdbConsoleInterrupt() {
@@ -326,7 +326,7 @@ func (a *DebuggerApp) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
 	case gdb.QuitReprompt:
 		w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
 	default:
-		w.FollowTailAndScroll()
+		w.ForceFollowTailAndScroll()
 	}
 	a.sendGdbQuitAction(act)
 }
@@ -419,14 +419,16 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 	if promptReady && a.isDLV() && a.dlvSuppressStopUI > 0 && stopped == nil {
 		a.dlvSuppressStopUI = 0
 	}
-	// InferiorRunning drives Ctrl-Z: SIGTSTP inferior vs Suspend gdbforge.
-	// A same-batch ^running + *stopped + (gdb) used to leave State==Running and
-	// re-arm the flag after onGdbStopped cleared it — Ctrl-Z then dumped ^Z on :b io.
+	// InferiorRunning drives Ctrl-Z and runtime Space-break (Ctrl-C + continue).
+	// Prefer MI State==Running when present: a same-batch *stopped (Ctrl-C) then
+	// ^running (auto-continue after break) must leave the flag true, or the next
+	// Space only paints the UI and never installs the BP in GDB.
+	// *stopped alone sets State=Done, so prompt/stop still clear the flag (Ctrl-Z).
 	if a.State() != nil {
-		if state == gdb.Running && stopped == nil && !promptReady {
+		switch {
+		case state == gdb.Running:
 			a.Debug().SetInferiorRunning(true)
-		}
-		if promptReady || stopped != nil {
+		case promptReady || stopped != nil:
 			a.Debug().SetInferiorRunning(false)
 		}
 	}

@@ -277,6 +277,10 @@ func (a *DebuggerApp) searchPrevMatch() {
 // searchWordMatch implements vim * (dir>0) / # (dir<0): set pattern from the
 // word under the caret (prefer caret over a stale selection), then jump
 // next/prev. With no word, fall back to selection, then existing pattern.
+//
+// If the caret already sits on a highlight of the active pattern (e.g. after
+// /46 landed on "46" inside "1052946"), only navigate — do not expand to the
+// enclosing identifier.
 func (a *DebuggerApp) searchWordMatch(dir int) {
 	// Always use the focused pane so */# follow the caret the user sees.
 	host := a.resolveSearchHost()
@@ -284,6 +288,17 @@ func (a *DebuggerApp) searchWordMatch(dir int) {
 		return
 	}
 	host.SetSearchColor(a.State().SearchColor())
+
+	if host.SearchPattern() != "" && a.cursorInSearchMatch(host) {
+		a.searchTarget = host
+		if dir < 0 {
+			_ = host.SearchPrev()
+		} else {
+			_ = host.SearchNext()
+		}
+		a.RequestFrame()
+		return
+	}
 
 	// Prefer caret word so a leftover mouse/select mark does not lock */# onto
 	// an old token when the user moves to a new word.
@@ -308,6 +323,19 @@ func (a *DebuggerApp) searchWordMatch(dir int) {
 		return
 	}
 	a.searchNextMatch()
+}
+
+func (a *DebuggerApp) cursorInSearchMatch(host termui.SearchHost) bool {
+	if host == nil {
+		return false
+	}
+	if c, ok := host.(interface{ CursorInSearchMatch() bool }); ok {
+		return c.CursorInSearchMatch()
+	}
+	if vp := a.viewportOfSearchHost(host); vp != nil {
+		return vp.CursorInSearchMatch()
+	}
+	return false
 }
 
 // trySearchOrGdbNext is normal-mode n: on Code always GDB next (like s/c);

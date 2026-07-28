@@ -312,7 +312,7 @@ func (w *OutputWidget) Clear() {
 	if w.console.InputEnabled() {
 		w.console.SetLivePrompt(true)
 	}
-	w.console.FollowTailAndScroll()
+	w.console.ForceFollowTailAndScroll()
 }
 
 func (w *OutputWidget) handleSubmit(raw string) {
@@ -331,7 +331,7 @@ func (w *OutputWidget) handleSubmit(raw string) {
 	if w.console.InputEnabled() {
 		w.console.SetLivePrompt(true)
 	}
-	w.console.FollowTailAndScroll()
+	w.console.ForceFollowTailAndScroll()
 }
 
 func (w *OutputWidget) handleInterrupt() {

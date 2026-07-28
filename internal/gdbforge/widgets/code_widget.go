@@ -221,6 +221,17 @@ func (w *CodeWidget) WordAtCursor() string {
 	return w.viewport.WordAtCursor()
 }
 
+// CursorInSearchMatch reports whether the browse caret sits on a /search hit.
+func (w *CodeWidget) CursorInSearchMatch() bool {
+	if w == nil || w.viewport == nil {
+		return false
+	}
+	if w.selLine >= 1 {
+		w.viewport.CursorLine = w.selLine - 1
+	}
+	return w.viewport.CursorInSearchMatch()
+}
+
 func (w *CodeWidget) SetSearchColor(c tcell.Color) {
 	if w == nil || w.viewport == nil {
 		return

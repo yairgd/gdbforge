@@ -192,6 +192,25 @@ func TestPushRawRunningThenStoppedClearsRunningState(t *testing.T) {
 	}
 }
 
+func TestPushRawStoppedThenRunningKeepsRunningState(t *testing.T) {
+	// Ctrl-C + break + continue: *stopped then ^running in one chunk.
+	st := NewGdbInputState()
+	u := st.PushRaw(
+		`*stopped,reason="signal-received",signal-name="SIGINT",thread-id="1"` + "\n" +
+			"=breakpoint-created,bkpt={number=\"2\"}\n" +
+			"^running\n",
+	)
+	if u.Stopped == nil {
+		t.Fatal("expected Stopped from Ctrl-C")
+	}
+	if !u.BreakpointsChanged {
+		t.Fatal("expected breakpoint-created")
+	}
+	if u.State != Running {
+		t.Fatalf("state=%v want Running after trailing ^running", u.State)
+	}
+}
+
 func TestPushRawHidesDownloadStatusShowsLoadText(t *testing.T) {
 	st := NewGdbInputState()
 	// load / remote write: MI +download status is protocol noise; console ~

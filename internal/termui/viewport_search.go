@@ -113,6 +113,32 @@ func (v *Viewport) WordAtCursor() string {
 	return identAtOrNear(content, v.contentByteAtCursor())
 }
 
+// CursorInSearchMatch reports whether the caret sits inside a highlighted
+// match of the live search pattern (e.g. after /46 on "1052946").
+func (v *Viewport) CursorInSearchMatch() bool {
+	if v == nil || v.searchPattern == "" || v.Buffer == nil {
+		return false
+	}
+	content := v.searchContent(v.CursorLine)
+	if content == "" {
+		return false
+	}
+	byteAt := v.contentByteAtCursor()
+	if byteAt < 0 {
+		byteAt = 0
+	}
+	if byteAt > len(content) {
+		byteAt = len(content)
+	}
+	contentCol := utf8.RuneCountInString(content[:byteAt])
+	// At EOL, treat as still on the last rune so */# after /pattern do not
+	// expand to the enclosing identifier.
+	if contentCol > 0 && byteAt >= len(content) {
+		contentCol--
+	}
+	return v.runeInSearchMatch(v.CursorLine, contentCol)
+}
+
 // identAtOrNear returns the isWordChar token at/near byte offset at.
 // Prefer the token under at; if that is punctuation/empty, the next identifier
 // forward, then the previous, then the first on the line.
@@ -253,6 +279,9 @@ func (v *Viewport) searchJump(dir int) bool {
 }
 
 func (v *Viewport) jumpToSearchLine(lineIdx int) {
+	// Consoles start in follow-tail; leaving it keeps Draw from ScrollToBottom
+	// and undoing the match (IO / GDB / Exec panes).
+	v.leaveFollowTail()
 	v.CursorLine = lineIdx
 	v.placeCursorOnSearchMatch(lineIdx)
 	v.EnsureCursorVisible()

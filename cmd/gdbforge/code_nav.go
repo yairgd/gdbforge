@@ -281,6 +281,11 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 		}
 	} else {
 		sendCmd = gdb.CLIExecToMI(sendCmd)
+		// Arm before ^running arrives so Space-break while the inferior is
+		// mid-continue still interrupts and installs the BP.
+		if isDlvRunCmd(strings.TrimSpace(cmd)) && a.State() != nil {
+			a.Debug().SetInferiorRunning(true)
+		}
 	}
 	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

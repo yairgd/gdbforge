@@ -138,7 +138,7 @@ func (m *ExecWidget) handleSubmit(raw string) {
 		m.onSubmit(cmd)
 	}
 	m.console.Input().Clear()
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 func (m *ExecWidget) handleInterrupt() {
@@ -176,7 +176,7 @@ func (m *ExecWidget) markEnded() {
 	m.pending = false
 	m.console.SetLivePrompt(false)
 	m.console.AppendText("[exec] process exited — press any key to return")
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 func (m *ExecWidget) dismiss() {

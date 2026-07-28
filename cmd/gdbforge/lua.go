@@ -441,7 +441,7 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 				}
 				if a.gdbWidget != nil {
 					a.gdbWidget.EchoSubmit(cmd)
-					a.gdbWidget.FollowTailAndScroll()
+					a.gdbWidget.ForceFollowTailAndScroll()
 				}
 				if a.isDLV() {
 					if a.dlvClient == nil {

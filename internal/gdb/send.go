@@ -36,7 +36,19 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 		defer cancel()
 		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
 			running := ctl != nil && ctl.InferiorRunning()
+			willResume := false
 			if running {
+				switch {
+				case IsBreakInsertCmd(cmd):
+					willResume = true
+				case IsBreakRemoveCmd(cmd) && ctl.ContinueAfterClear():
+					willResume = true
+				}
+				// Arm before Ctrl-C so a fast *stopped cannot race past an
+				// unarmed suppress and later eat the real breakpoint-hit UI.
+				if willResume {
+					ctl.NoteTransientStopSuppress()
+				}
 				if err := pw.SendRaw("\x03"); err != nil {
 					return err
 				}
@@ -44,21 +56,10 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 			if err := pw.Send(cmd); err != nil {
 				return err
 			}
-			if !running {
+			if !running || !willResume {
 				return nil
 			}
-			if IsBreakRemoveCmd(cmd) {
-				if ctl != nil && ctl.ContinueAfterClear() {
-					ctl.NoteTransientStopSuppress()
-					return pw.Send("continue")
-				}
-				return nil
-			}
-			if IsBreakInsertCmd(cmd) {
-				ctl.NoteTransientStopSuppress()
-				return pw.Send("continue")
-			}
-			return nil
+			return pw.Send("continue")
 		})
 	}
 	if app != nil {

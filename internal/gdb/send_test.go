@@ -88,6 +88,9 @@ func TestSendCmdBreakWhileRunningStillContinues(t *testing.T) {
 
 	SendCmd(sess, app, ctl, "break hello.c:10")
 
+	if ctl.suppressNotes != 1 {
+		t.Fatalf("suppress notes=%d want 1 (armed before Ctrl-C)", ctl.suppressNotes)
+	}
 	if got := <-sent; got != "\x03" {
 		t.Fatalf("interrupt=%q", got)
 	}
@@ -97,8 +100,51 @@ func TestSendCmdBreakWhileRunningStillContinues(t *testing.T) {
 	if got := <-sent; got != "continue" {
 		t.Fatalf("continue=%q", got)
 	}
+}
+
+func TestSendCmdClearWhileRunningNoContinueNoSuppress(t *testing.T) {
+	sent := make(chan string, 8)
+	sess := &fakeSess{sent: sent}
+	app := platform.NewAppState()
+	ctl := &stubCtl{running: true, contAfterClear: false}
+
+	SendCmd(sess, app, ctl, "clear hello.c:10")
+
+	if ctl.suppressNotes != 0 {
+		t.Fatalf("suppress notes=%d want 0", ctl.suppressNotes)
+	}
+	if got := <-sent; got != "\x03" {
+		t.Fatalf("interrupt=%q", got)
+	}
+	if got := <-sent; got != "clear hello.c:10" {
+		t.Fatalf("cmd=%q", got)
+	}
+	select {
+	case got := <-sent:
+		t.Fatalf("unexpected send: %q", got)
+	default:
+	}
+}
+
+func TestSendCmdClearWhileRunningContinuesWhenEnabled(t *testing.T) {
+	sent := make(chan string, 8)
+	sess := &fakeSess{sent: sent}
+	app := platform.NewAppState()
+	ctl := &stubCtl{running: true, contAfterClear: true}
+
+	SendCmd(sess, app, ctl, "clear hello.c:10")
+
 	if ctl.suppressNotes != 1 {
 		t.Fatalf("suppress notes=%d want 1", ctl.suppressNotes)
+	}
+	if got := <-sent; got != "\x03" {
+		t.Fatalf("interrupt=%q", got)
+	}
+	if got := <-sent; got != "clear hello.c:10" {
+		t.Fatalf("cmd=%q", got)
+	}
+	if got := <-sent; got != "continue" {
+		t.Fatalf("continue=%q", got)
 	}
 }
 

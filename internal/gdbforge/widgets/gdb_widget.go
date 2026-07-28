@@ -175,7 +175,7 @@ func (m *GDBWidget) ApplyCompletion(name string) {
 		return
 	}
 	m.console.Input().SetText(name)
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 // InsertInputRune types into the input line (e.g. while wildmenu is open).
@@ -184,7 +184,7 @@ func (m *GDBWidget) InsertInputRune(r rune) {
 		return
 	}
 	m.console.Input().InsertRune(r)
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 // BackspaceInput deletes one character from the input line.
@@ -193,7 +193,7 @@ func (m *GDBWidget) BackspaceInput() {
 		return
 	}
 	m.console.Input().Backspace()
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 func (m *GDBWidget) SetFocused(focused bool) {
@@ -231,6 +231,14 @@ func (m *GDBWidget) FollowTailAndScroll() {
 	m.console.FollowTailAndScroll()
 }
 
+// ForceFollowTailAndScroll re-pins the console after submit / Clear.
+func (m *GDBWidget) ForceFollowTailAndScroll() {
+	if m == nil || m.console == nil {
+		return
+	}
+	m.console.ForceFollowTailAndScroll()
+}
+
 func (m *GDBWidget) LivePrompt() bool {
 	if m == nil || m.console == nil {
 		return false
@@ -262,7 +270,7 @@ func (m *GDBWidget) BeginLiveHost(scrollback []string, host string) {
 		m.console.SetLivePrompt(true)
 	}
 	m.ClearInput()
-	m.console.FollowTailAndScroll()
+	m.console.ForceFollowTailAndScroll()
 }
 
 // AttachGdbPrompt paints GDB's MI prompt record as the live input host.

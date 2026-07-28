@@ -251,7 +251,20 @@ func (p *ConsolePane) StripTrailingBarePrompt() {
 	}
 }
 
+// FollowTailAndScroll scrolls to the end only while follow-tail is on.
+// After PgUp / search the user has left the tail; new output must not yank them.
 func (p *ConsolePane) FollowTailAndScroll() {
+	if p.out == nil || !p.out.FollowTail() {
+		return
+	}
+	p.out.ScrollToBottom()
+}
+
+// ForceFollowTailAndScroll re-pins to the end (Clear, submit, typing on the prompt).
+func (p *ConsolePane) ForceFollowTailAndScroll() {
+	if p.out == nil {
+		return
+	}
 	p.out.SetFollowTail(true)
 	p.out.ScrollToBottom()
 }

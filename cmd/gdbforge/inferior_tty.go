@@ -154,7 +154,7 @@ func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
 	// Ensure the Delve console accepts typing even if prompt paint was partial.
 	if a.gdbWidget != nil {
 		a.gdbWidget.AttachGdbPrompt(dlv.PromptLiveHost)
-		a.gdbWidget.FollowTailAndScroll()
+		a.gdbWidget.ForceFollowTailAndScroll()
 	}
 }
 
