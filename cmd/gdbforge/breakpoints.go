@@ -9,10 +9,11 @@ import (
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 )
 
-// syncBreakpointViews pushes the shared BreakpointList to BP + Code views and
+// syncBreakpointViews pushes the shared BreakpointList to BP + Code + Asm views and
 // snapshots the list for .gdbforge/breakpoints.yaml on quit.
 func (a *DebuggerApp) syncBreakpointViews() {
 	if a.breakpoints == nil {
@@ -23,6 +24,7 @@ func (a *DebuggerApp) syncBreakpointViews() {
 		a.bpWidget.SetItems(items)
 	}
 	a.paintCodeBreakmarks(items)
+	a.paintAsmBreakmarks(items)
 	a.bpSnapshot = items
 	a.bpSnapshotSet = true
 }
@@ -143,6 +145,22 @@ func (a *DebuggerApp) onCodeBreakToggle(path string, line int) {
 	a.sendBreakpointCmd(cmd)
 }
 
+func (a *DebuggerApp) onAsmBreakToggle(addr string) {
+	if a.breakpoints == nil {
+		return
+	}
+	addr = parse.NormalizeAddr(addr)
+	if addr == "" {
+		return
+	}
+	cmd, ok := a.breakpoints.ToggleInsertClearAddr(addr)
+	if !ok {
+		return
+	}
+	a.syncBreakpointViews()
+	a.sendBreakpointCmd(cmd)
+}
+
 func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 	if cw == nil || a.breakpoints == nil {
 		return
@@ -153,6 +171,25 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 		return
 	}
 	cmd, idx, ok := a.breakpoints.ToggleEnableAtFileLine(path, line, cw.HasEnabledBreak(line))
+	if !ok {
+		return
+	}
+	a.syncBreakpointViews()
+	if a.bpWidget != nil && idx >= 0 {
+		a.bpWidget.SelectIndex(idx)
+	}
+	a.sendBreakpointCmd(cmd)
+}
+
+func (a *DebuggerApp) toggleAsmBreakEnable() {
+	if a.assemblyWidget == nil || a.breakpoints == nil {
+		return
+	}
+	addr := parse.NormalizeAddr(a.assemblyWidget.SelAddr())
+	if addr == "" {
+		return
+	}
+	cmd, idx, ok := a.breakpoints.ToggleEnableAtAddr(addr, a.assemblyWidget.HasEnabledBreak(addr))
 	if !ok {
 		return
 	}
@@ -178,4 +215,15 @@ func (a *DebuggerApp) paintCodeWidgetBreaks(w *widgets.CodeWidget, path string) 
 		return
 	}
 	w.SetBreakInfos(breaksForFile(a.breakpoints.Items(), path))
+}
+
+// paintAsmBreakmarks applies address breakpoints to the AssemblyWidget.
+func (a *DebuggerApp) paintAsmBreakmarks(items []models.BreakInfo) {
+	if a.assemblyWidget == nil {
+		return
+	}
+	if items == nil {
+		items = []models.BreakInfo{}
+	}
+	a.assemblyWidget.SetBreakInfos(items)
 }

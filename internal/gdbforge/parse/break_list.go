@@ -57,7 +57,14 @@ func ParseBreakList(raw string) []models.BreakInfo {
 				}
 			}
 		}
-		if file == "" || line < 1 {
+		addr := extractQuotedField(chunk, "addr")
+		if addr == "<PENDING>" || addr == "0x0" || addr == "0" {
+			addr = ""
+		}
+		if addr != "" {
+			addr = NormalizeAddr(addr)
+		}
+		if (file == "" || line < 1) && addr == "" {
 			continue
 		}
 		out = append(out, models.BreakInfo{
@@ -65,6 +72,7 @@ func ParseBreakList(raw string) []models.BreakInfo {
 			Enabled: !strings.Contains(chunk, `enabled="n"`),
 			File:    unescapeMI(file),
 			Line:    line,
+			Addr:    addr,
 		})
 	}
 	return out

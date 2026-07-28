@@ -121,6 +121,10 @@ func (app *DebuggerApp) ShowThreads(args ...any) {
 }
 
 func (app *DebuggerApp) SplitHorizontal(args ...any) {
+	if isAsmSplitArg(args...) {
+		app.SplitAsmBelow()
+		return
+	}
 	w := app.Widgets()[0].Widget()
 	tab, ok := w.(*termui.TabWidget)
 	if !ok {
@@ -135,12 +139,32 @@ func (app *DebuggerApp) SplitHorizontal(args ...any) {
 }
 
 func (app *DebuggerApp) SplitVertical(args ...any) {
+	if isAsmSplitArg(args...) {
+		app.SplitAsmRight()
+		return
+	}
 	w := widgets.NewCodeWidget()
 	w.PaneName = "[No Name]"
 	w.SetClipboard(app.ClipboardIO())
 	app.wireCodeWidget(w)
 	app.tab.VerticalSplit(w)
 	app.RequestRedraw()
+}
+
+// splitAsmCompletions is Tab after :vs / :sp (:vs asm).
+func (a *DebuggerApp) splitAsmCompletions(prefix string) []string {
+	var out []string
+	for _, name := range []string{"asm", "assembly"} {
+		if prefix == "" || strings.HasPrefix(name, prefix) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func isAsmSplitArg(args ...any) bool {
+	name := strings.ToLower(strings.TrimSpace(joinCmdArgs(args)))
+	return name == "asm" || name == "assembly"
 }
 
 func (app *DebuggerApp) EnterInsertMode(args ...any) {

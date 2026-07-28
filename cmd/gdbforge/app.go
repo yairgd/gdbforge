@@ -97,16 +97,20 @@ type DebuggerApp struct {
 	breakpoints *models.BreakpointList
 	// bpSnapshot is the last user-visible BP list for quit save. Kept across
 	// clearBreakpointViews (kill/exit UI reset) so q / Ctrl-D can still persist.
-	bpSnapshot       []models.BreakInfo
-	bpSnapshotSet    bool
-	threads          *models.ThreadList
-	callstack        *models.CallStack
-	bpWidget         *widgets.BreakpointWidget
-	threadWidget     *widgets.ThreadWidget
-	callstackWidget  *widgets.CallStackWidget
-	outputWidget     *widgets.OutputWidget
-	fileListWidget   *widgets.FileListWidget
-	primaryCode      *widgets.CodeWidget
+	bpSnapshot      []models.BreakInfo
+	bpSnapshotSet   bool
+	threads         *models.ThreadList
+	callstack       *models.CallStack
+	bpWidget        *widgets.BreakpointWidget
+	threadWidget    *widgets.ThreadWidget
+	callstackWidget *widgets.CallStackWidget
+	outputWidget    *widgets.OutputWidget
+	fileListWidget  *widgets.FileListWidget
+	primaryCode     *widgets.CodeWidget
+	assemblyWidget  *widgets.AssemblyWidget
+	assembly        *models.AssemblyList
+	// preferAsm means :b asm owns the code leaf until :b code (no auto-swap).
+	preferAsm        bool
 	bpRefreshMu      sync.Mutex
 	bpRefreshRunning bool
 	bpRefreshPending bool

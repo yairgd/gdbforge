@@ -2,7 +2,6 @@ package models
 
 import (
 	"testing"
-
 )
 
 func TestBreakpointListMergeKeepsDisabled(t *testing.T) {
@@ -53,17 +52,38 @@ func TestBreakpointListDelete(t *testing.T) {
 	}
 }
 
-func TestBreakpointListToggleEnableAtFileLine(t *testing.T) {
+func TestBreakpointListToggleInsertClearAddr(t *testing.T) {
+	var b BreakpointList
+	cmd, ok := b.ToggleInsertClearAddr("0x401126")
+	if !ok || cmd != "break *0x401126" {
+		t.Fatalf("insert=%q ok=%v", cmd, ok)
+	}
+	if !b.HasEnabledAtAddr("0x401126") {
+		t.Fatal("expected enabled")
+	}
+	cmd, ok = b.ToggleInsertClearAddr("0x401126")
+	if !ok || cmd != "clear *0x401126" {
+		t.Fatalf("clear=%q", cmd)
+	}
+	if b.HasEnabledAtAddr("0x401126") {
+		t.Fatal("expected cleared")
+	}
+}
+
+func TestBreakpointListAsmAndCodeAt(t *testing.T) {
 	var b BreakpointList
 	b.MergeFromGDB([]BreakInfo{
-		{Number: 2, Enabled: true, File: "/tmp/a.c", Line: 10},
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10, Addr: "0x401126"},
+		{Number: 2, Enabled: true, File: "/tmp/a.c", Line: 20},
 	})
-	cmd, idx, ok := b.ToggleEnableAtFileLine("/tmp/a.c", 10, false)
-	if !ok || idx != 0 || cmd != "-break-delete 2" {
-		t.Fatalf("cmd=%q idx=%d", cmd, idx)
+	if !b.HasAsmAndCodeAt("/tmp/a.c", 10) {
+		t.Fatal("expected linked asm+code at line 10")
 	}
-	_, _, ok = b.ToggleEnableAtFileLine("/tmp/a.c", 99, false)
-	if ok {
-		t.Fatal("expected no-op")
+	if b.HasAsmAndCodeAt("/tmp/a.c", 20) {
+		t.Fatal("line 20 has no addr")
+	}
+	bp, ok := b.SourceAtAddr("0x401126")
+	if !ok || bp.File != "/tmp/a.c" || bp.Line != 10 {
+		t.Fatalf("SourceAtAddr=%+v ok=%v", bp, ok)
 	}
 }

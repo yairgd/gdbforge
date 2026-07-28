@@ -7,10 +7,10 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -424,6 +424,8 @@ func (a *DebuggerApp) searchHostOf(w termui.Widget) termui.SearchHost {
 	}
 	switch t := w.(type) {
 	case *widgets.CodeWidget:
+		return t
+	case *widgets.AssemblyWidget:
 		return t
 	case *widgets.BreakpointWidget:
 		return t.Viewport()
@@ -940,6 +942,9 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			}
 		}
 		a.applyCodeStop(data.widget)
+		a.RequestFrame()
+	case asmRefreshMsg:
+		a.applyAsmRefresh(data)
 		a.RequestFrame()
 	case breakpointsUIMsg:
 		// refreshBreakpoints may have applied off-thread; push gutters again

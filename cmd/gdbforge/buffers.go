@@ -214,6 +214,7 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 	}
 	// :b code → restore CodeWidget into the code leaf (not swap onto focused pane).
 	if name == "code" {
+		a.preferAsm = false
 		if cw := a.codeBufferForB(); cw != nil {
 			a.placeCodeInSlot(cw)
 			a.activateCodePane()
@@ -223,6 +224,10 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("buffer").Error("no code buffer open yet")
 		}
+		return
+	}
+	if name == "asm" || name == "assembly" {
+		a.openAssemblyBuffer()
 		return
 	}
 	if name == "gdb" {

@@ -5,7 +5,8 @@ type BreakInfo struct {
 	Number  int
 	Enabled bool
 	File    string // fullname preferred, else file / pending path
-	Line    int    // 1-based
+	Line    int    // 1-based; 0 for address-only breakpoints
+	Addr    string // normalized hex address when known (e.g. "0x401126")
 }
 
 // BreakMark is an enabled breakpoint location for CodeWidget red marks.

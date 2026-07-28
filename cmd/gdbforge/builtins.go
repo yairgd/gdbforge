@@ -112,6 +112,18 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.breakpoints = &models.BreakpointList{}
 	a.threads = &models.ThreadList{}
 	a.callstack = &models.CallStack{}
+	a.assembly = &models.AssemblyList{}
+	a.assemblyWidget = widgets.NewAssemblyWidget()
+	a.assemblyWidget.SetClipboard(a.ClipboardIO())
+	a.assemblyWidget.SetAppState(a.Debug())
+	a.assemblyWidget.OnBrowse = func(addr string, rows int) {
+		go a.runAssemblyRefresh(addr, rows, false)
+	}
+	a.assemblyWidget.OnBreakToggle = a.onAsmBreakToggle
+	a.assemblyWidget.OnToggleEnable = a.toggleAsmBreakEnable
+	a.registerBuiltin("asm", a.assemblyWidget)
+	a.registerBuiltin("assembly", a.assemblyWidget)
+
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.bpWidget.SetAppState(a.Debug())

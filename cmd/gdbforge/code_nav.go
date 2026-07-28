@@ -16,6 +16,7 @@ import (
 const (
 	leafMarkCode = "code"
 	leafMarkGDB  = "gdb"
+	leafMarkAsm  = "asm"
 	// leafMarkLast is the Esc restore target when the user last focused a pane
 	// that is neither Code nor GDB (breakpoints, callstack, …). Focusing Code
 	// clears it; focusing GDB leaves it unchanged.
@@ -48,8 +49,20 @@ func isCodeWidget(w termui.Widget) bool {
 	return ok
 }
 
-// isCodeSlot is the startup code leaf: LogoWidget until source loads, then CodeWidget.
+// isCodeSlot is the startup code leaf: Logo / Code, or single-pane Assembly
+// when there is no dedicated :vs asm / :sp asm leaf.
 func isCodeSlot(w termui.Widget) bool {
+	if isCodeWidget(w) {
+		return true
+	}
+	if _, ok := w.(*widgets.LogoWidget); ok {
+		return true
+	}
+	return isAssemblyWidget(w)
+}
+
+// isSourceCodeSlot is a leaf that shows source (or the logo placeholder).
+func isSourceCodeSlot(w termui.Widget) bool {
 	if isCodeWidget(w) {
 		return true
 	}
@@ -58,17 +71,44 @@ func isCodeSlot(w termui.Widget) bool {
 }
 
 // findCodeLeaf returns the remembered code leaf if still valid, else any leaf
-// currently showing a CodeWidget or LogoWidget.
+// currently showing a CodeWidget or LogoWidget (not a dedicated asm split pane).
 func (a *DebuggerApp) findCodeLeaf() *termui.Node {
 	if a.tab == nil {
 		return nil
 	}
-	if leaf := a.tab.LeafMark(leafMarkCode); leaf != nil && isCodeSlot(leaf.GetWidget()) {
-		return leaf
+	if leaf := a.tab.LeafMark(leafMarkCode); leaf != nil {
+		w := leaf.GetWidget()
+		if isSourceCodeSlot(w) {
+			return leaf
+		}
+		// Single-pane :b asm still owns the code mark.
+		if isAssemblyWidget(w) && !a.hasAsmSplit() {
+			return leaf
+		}
 	}
-	leaf := a.tab.FindLeaf(isCodeSlot)
+	leaf := a.tab.FindLeaf(isSourceCodeSlot)
 	a.tab.SetLeafMark(leafMarkCode, leaf)
 	return leaf
+}
+
+// hasAsmSplit reports a dedicated Assembly leaf from :vs asm / :sp asm.
+func (a *DebuggerApp) hasAsmSplit() bool {
+	if a == nil || a.tab == nil || a.assemblyWidget == nil {
+		return false
+	}
+	leaf := a.tab.LeafMark(leafMarkAsm)
+	return leaf != nil && leaf.GetWidget() == a.assemblyWidget
+}
+
+// findAsmLeaf returns the dedicated asm split leaf, if any.
+func (a *DebuggerApp) findAsmLeaf() *termui.Node {
+	if a.tab == nil {
+		return nil
+	}
+	if leaf := a.tab.LeafMark(leafMarkAsm); leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
+		return leaf
+	}
+	return a.tab.FindLeaf(isAssemblyWidget)
 }
 
 // rememberCodeLeafFromFocus updates code/gdb marks and the Esc "last" mark.
@@ -88,7 +128,13 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	}
 	w := leaf.GetWidget()
 	switch {
+	case isAssemblyWidget(w):
+		a.tab.SetLeafMark(leafMarkAsm, leaf)
+	case isSourceCodeSlot(w):
+		a.tab.SetLeafMark(leafMarkCode, leaf)
+		a.tab.SetLeafMark(leafMarkLast, nil)
 	case isCodeSlot(w):
+		// Single-pane asm occupying the code leaf.
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 		a.tab.SetLeafMark(leafMarkLast, nil)
 	case w == a.gdbWidget:
@@ -232,7 +278,7 @@ func (a *DebuggerApp) onEscape() {
 	a.RequestRedraw()
 }
 
-// activateCodePane leaves insert mode and focuses the code slot (Logo or Code).
+// activateCodePane leaves insert mode and focuses the code slot (Logo/Code/Asm).
 func (a *DebuggerApp) activateCodePane() {
 	if a.tab == nil {
 		return
@@ -249,7 +295,11 @@ func (a *DebuggerApp) activateCodePane() {
 		return
 	}
 
-	if cw := a.activeCodeWidget(); cw != nil && leaf.GetWidget() != cw {
+	if a.preferAsm && a.assemblyWidget != nil && !a.hasAsmSplit() {
+		if leaf.GetWidget() != a.assemblyWidget {
+			leaf.SetWidget(a.assemblyWidget)
+		}
+	} else if cw := a.activeCodeWidget(); cw != nil && leaf.GetWidget() != cw {
 		leaf.SetWidget(cw)
 	}
 	_ = a.tab.FocusLeaf(leaf)

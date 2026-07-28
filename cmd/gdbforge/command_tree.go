@@ -80,8 +80,10 @@ func (a *DebuggerApp) ExapData() {
 		LeafRestComplete("edit", a.OnEdit, a.editCompletions).
 		LeafRestComplete("lua", a.OnLua, a.luaCompletions).
 		Leaf("help", a.OnHelp).
-		Leaf("vs", a.SplitVertical).
-		Leaf("split", a.SplitHorizontal).
+		LeafRestComplete("vs", a.SplitVertical, a.splitAsmCompletions).
+		LeafRestComplete("vsplit", a.SplitVertical, a.splitAsmCompletions).
+		LeafRestComplete("sp", a.SplitHorizontal, a.splitAsmCompletions).
+		LeafRestComplete("split", a.SplitHorizontal, a.splitAsmCompletions).
 		Leaf("only", a.OnlyFocus).
 		Leaf("clear", a.ClearFocus).
 		Leaf("close", a.ClosePane).

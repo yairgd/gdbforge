@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+	"path/filepath"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
@@ -128,22 +128,25 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 // if that has no source file (common for SIGINT in libc), uses the first
 // call-stack frame that has a file after a stack query.
 func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
+	var w *widgets.CodeWidget
 	if stop != nil && stop.File != "" {
-		w := a.showCodeAt(stop.File, stop.Line)
+		w = a.showCodeAt(stop.File, stop.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(stop.File, formatUnavailableExtra(stop.Func, stop.Line))
 		}
-		return w
+	} else {
+		// No fullname on *stopped — query stack (same path as frame sync).
+		a.syncCurrentFrameFromGDB()
+		if w = a.activeCodeWidget(); w != nil {
+			// fall through to asm check
+		} else if stop != nil && stop.Func != "" {
+			w = a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
+		}
 	}
-	// No fullname on *stopped — query stack (same path as frame sync).
-	a.syncCurrentFrameFromGDB()
-	if w := a.activeCodeWidget(); w != nil {
-		return w
+	if a.shouldShowAssembly(w) {
+		a.armAssemblyRefresh(true)
 	}
-	if stop != nil && stop.Func != "" {
-		return a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
-	}
-	return nil
+	return w
 }
 
 // showCodeAt loads file at line in a CodeWidget (━━▶) and paints BP gutters.
@@ -329,20 +332,21 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 	case fr.File != "":
 		file := normalizeCodePath(fr.File)
 		a.Debug().SetCurrentLocation(file, fr.Line)
-		// Level 0 follows the real PC (━━▶); other frames browse with the blue
-		// cursor so the stop mark stays put — same idea as the Breakpoints list.
-		if fr.Level == 0 {
-			w = a.showCodeAt(file, fr.Line)
-		} else {
-			w = a.showCodeBrowse(file, fr.Line)
-		}
+		// Call-stack selection places ━━▶ on the frame's line (same idea as
+		// Assembly recentering on fr.Addr). Breakpoint-list jumps still use
+		// showCodeBrowse so the real stop mark can stay put.
+		w = a.showCodeAt(file, fr.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(file, formatUnavailableExtra(fr.Func, fr.Line))
 		}
 	case fr.Func != "":
 		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
-	default:
-		return
+	}
+	// Assembly follows the selected frame address (call site) like Code
+	// places ━━▶ on fr.File:fr.Line — real $pc keeps ━━▶ when in view; blue
+	// line moves to fr.Addr.
+	if a.shouldShowAssembly(w) {
+		a.syncAssemblyToFrame(fr)
 	}
 	if w != nil {
 		a.applyCodeStop(w)
@@ -369,13 +373,31 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 	}
 	if fr, ok := a.callstack.At(0); ok && fr.Func != "" {
 		w := a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
+		if a.shouldShowAssembly(w) {
+			a.armAssemblyRefresh(true)
+		}
 		a.applyCodeStop(w)
 	}
 }
 
 // onBreakpointActivate shows the source at the selected breakpoint location
 // with the blue browse cursor — ━━▶ stays on the real program counter.
+// Address-only breakpoints refresh Assembly in its existing leaf (:b asm / :vs asm / :sp asm).
 func (a *DebuggerApp) onBreakpointActivate(bp models.BreakInfo) {
+	if bp.File == "" && bp.Addr != "" {
+		if a.assemblyWidget == nil || a.isDLV() {
+			return
+		}
+		if a.hasAsmSplit() || a.preferAsm {
+			a.placeAsmInSlot(a.assemblyWidget)
+			if leaf := a.findAsmLeaf(); leaf != nil && a.hasAsmSplit() {
+				_ = a.tab.FocusLeaf(leaf)
+			}
+			go a.runAssemblyRefresh(bp.Addr, a.assemblyWidget.VisibleRows(), false)
+			a.RequestFrame()
+		}
+		return
+	}
 	if bp.File == "" {
 		return
 	}
@@ -426,9 +448,15 @@ func (a *DebuggerApp) onThreadActivate(th models.ThreadInfo) {
 			}
 			w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
 		}
+		if a.shouldShowAssembly(w) {
+			a.armAssemblyRefresh(true)
+		}
 		a.applyCodeStop(w)
 	} else if th.Func != "" {
 		w := a.showCodeUnavailable(th.Func, formatUnavailableExtra("", th.Line))
+		if a.shouldShowAssembly(w) {
+			a.armAssemblyRefresh(true)
+		}
 		a.applyCodeStop(w)
 	}
 	a.RequestFrame()
@@ -642,13 +670,37 @@ func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
 }
 
 // placeCodeInSlot puts w into the code leaf, replacing LogoWidget or an older CodeWidget.
-// Never places code onto the fixed GDB layout leaf.
+// Never places code onto the fixed GDB layout leaf, a dedicated asm split leaf,
+// or the code leaf while :b asm owns it (preferAsm).
 func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
 	a.primaryCode = w
+	// :b asm owns the code leaf until :b code — do not swap Assembly out.
+	if a.preferAsm && !a.hasAsmSplit() {
+		return
+	}
+	if asm := a.tab.LeafMark(leafMarkAsm); asm != nil && a.focusedLeaf() == asm {
+		// Focus is on asm — still update the code leaf in place.
+		if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) && leaf != asm {
+			if isAssemblyWidget(leaf.GetWidget()) {
+				return
+			}
+			leaf.SetWidget(w)
+			a.tab.SetLeafMark(leafMarkCode, leaf)
+		}
+		return
+	}
 	if !a.isGdbLeaf(a.focusedLeaf()) {
+		if isAssemblyWidget(a.focusedWidget()) {
+			// Focused asm (split or :b asm) — update code leaf without stealing focus.
+			if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) && !isAssemblyWidget(leaf.GetWidget()) {
+				leaf.SetWidget(w)
+				a.tab.SetLeafMark(leafMarkCode, leaf)
+			}
+			return
+		}
 		if cw := a.focusedCode(); cw != nil {
 			if cw != w {
 				_ = a.tab.ReplaceFocusedWidget(w)
@@ -662,16 +714,16 @@ func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 			return
 		}
 	}
-	// Prefer the remembered code leaf so call-stack / BP focus still updates
-	// the source pane (ReplaceMatchingLeafWidget only scans non-focused leaves
-	// and can miss when the mark points at a specific split).
 	if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) {
+		if a.tab.LeafMark(leafMarkAsm) == leaf || isAssemblyWidget(leaf.GetWidget()) {
+			return
+		}
 		leaf.SetWidget(w)
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 		return
 	}
-	if a.tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
-		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
+	if a.tab.ReplaceMatchingLeafWidget(w, isSourceCodeSlot) {
+		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isSourceCodeSlot))
 	}
 }
 

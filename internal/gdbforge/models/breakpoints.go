@@ -3,7 +3,6 @@ package models
 import (
 	"fmt"
 	"path/filepath"
-
 )
 
 // BreakpointList is the shared breakpoint model for GUI and MCP/AI.
@@ -81,19 +80,16 @@ func (b *BreakpointList) MergeFromGDB(gdbItems []BreakInfo) {
 	if b == nil {
 		return
 	}
-	keyOf := func(it BreakInfo) string {
-		return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
-	}
 	gdbByKey := make(map[string]BreakInfo, len(gdbItems))
 	for _, g := range gdbItems {
 		g.Enabled = true
-		gdbByKey[keyOf(g)] = g
+		gdbByKey[breakKey(g)] = g
 	}
 
 	placed := make(map[string]bool)
 	out := make([]BreakInfo, 0, len(b.items)+len(gdbItems))
 	for _, local := range b.items {
-		k := keyOf(local)
+		k := breakKey(local)
 		if g, ok := gdbByKey[k]; ok {
 			out = append(out, g)
 			placed[k] = true
@@ -105,7 +101,7 @@ func (b *BreakpointList) MergeFromGDB(gdbItems []BreakInfo) {
 		}
 	}
 	for _, g := range gdbItems {
-		k := keyOf(g)
+		k := breakKey(g)
 		if placed[k] {
 			continue
 		}
@@ -116,13 +112,26 @@ func (b *BreakpointList) MergeFromGDB(gdbItems []BreakInfo) {
 	b.items = out
 }
 
-// BreakLoc formats file:line for GDB break/clear.
-func BreakLoc(it BreakInfo) string {
-	file := it.File
-	if file == "" {
-		file = "?"
+func breakKey(it BreakInfo) string {
+	if it.File != "" && it.Line > 0 {
+		return fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
 	}
-	return fmt.Sprintf("%s:%d", file, it.Line)
+	if it.Addr != "" {
+		return "addr:" + it.Addr
+	}
+	return fmt.Sprintf("num:%d", it.Number)
+}
+
+// BreakLoc formats a location for GDB break/clear.
+func BreakLoc(it BreakInfo) string {
+	if it.File != "" && it.Line > 0 {
+		file := it.File
+		return fmt.Sprintf("%s:%d", file, it.Line)
+	}
+	if it.Addr != "" {
+		return "*" + it.Addr
+	}
+	return "?"
 }
 
 // ToggleEnableAt disables (delete from GDB, keep row) or re-enables (break).
@@ -215,6 +224,121 @@ func (b *BreakpointList) ToggleInsertClear(file string, line int) (cmd string, o
 		Enabled: true,
 	})
 	return "break " + loc, true
+}
+
+// ToggleInsertClearAddr is Assembly Space: clear if enabled at addr, else break *addr.
+func (b *BreakpointList) ToggleInsertClearAddr(addr string) (cmd string, ok bool) {
+	if b == nil || addr == "" {
+		return "", false
+	}
+	loc := "*" + addr
+	if idx := b.IndexOfAddr(addr); idx >= 0 {
+		it := b.items[idx]
+		if it.Enabled {
+			if it.Number > 0 {
+				cmd = fmt.Sprintf("-break-delete %d", it.Number)
+			} else {
+				cmd = "clear " + loc
+			}
+			b.items = append(b.items[:idx], b.items[idx+1:]...)
+			return cmd, true
+		}
+		it.Enabled = true
+		b.items[idx] = it
+		return "break " + loc, true
+	}
+	b.items = append(b.items, BreakInfo{
+		Addr:    addr,
+		Enabled: true,
+	})
+	return "break " + loc, true
+}
+
+// HasEnabledAtAddr reports an enabled breakpoint at the given address.
+func (b *BreakpointList) HasEnabledAtAddr(addr string) bool {
+	if b == nil || addr == "" {
+		return false
+	}
+	for _, it := range b.items {
+		if it.Enabled && it.Addr == addr {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAsmAndCodeAt reports an enabled breakpoint at file:line that also has an
+// address (visible in both Code and Assembly at the same $pc).
+func (b *BreakpointList) HasAsmAndCodeAt(file string, line int) bool {
+	_, ok := b.AsmAndCodeAt(file, line)
+	return ok
+}
+
+// AsmAndCodeAt returns an enabled breakpoint at file:line with a non-empty Addr.
+func (b *BreakpointList) AsmAndCodeAt(file string, line int) (BreakInfo, bool) {
+	if b == nil || file == "" || line < 1 {
+		return BreakInfo{}, false
+	}
+	base := filepath.Base(file)
+	for _, it := range b.items {
+		if !it.Enabled || it.Line != line || it.Addr == "" {
+			continue
+		}
+		if it.File == file || filepath.Base(it.File) == base {
+			return it, true
+		}
+	}
+	return BreakInfo{}, false
+}
+
+// SourceAtAddr returns an enabled breakpoint at addr that also has file:line
+// (same $pc known in Assembly and Code).
+func (b *BreakpointList) SourceAtAddr(addr string) (BreakInfo, bool) {
+	if b == nil || addr == "" {
+		return BreakInfo{}, false
+	}
+	for _, it := range b.items {
+		if !it.Enabled || it.Addr != addr {
+			continue
+		}
+		if it.File != "" && it.Line > 0 {
+			return it, true
+		}
+	}
+	return BreakInfo{}, false
+}
+
+// IndexOfAddr returns the first row with matching Addr, or -1.
+func (b *BreakpointList) IndexOfAddr(addr string) int {
+	if b == nil || addr == "" {
+		return -1
+	}
+	for i, it := range b.items {
+		if it.Addr == addr {
+			return i
+		}
+	}
+	return -1
+}
+
+// ToggleEnableAtAddr is Assembly "e" at the browse address.
+func (b *BreakpointList) ToggleEnableAtAddr(addr string, hasEnabled bool) (cmd string, index int, ok bool) {
+	if b == nil || addr == "" {
+		return "", -1, false
+	}
+	idx := b.IndexOfAddr(addr)
+	if idx < 0 {
+		if !hasEnabled {
+			return "", -1, false
+		}
+		b.items = append(b.items, BreakInfo{
+			Addr:    addr,
+			Enabled: true,
+		})
+		idx = len(b.items) - 1
+	}
+	cmd, ok = b.ToggleEnableAt(idx)
+	return cmd, idx, ok
 }
 
 func (b *BreakpointList) removeAtFileLine(file string, line int) {

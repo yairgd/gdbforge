@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 
-	"path/filepath"
 	tcell "github.com/gdamore/tcell/v2"
+	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
@@ -91,6 +92,14 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 	a.keyBindings.Bind(
 		commands.NewHandledCommand("code-down", a.tryCodeMoveDown),
 		"<Down>",
+	)
+	a.keyBindings.Bind(
+		commands.NewHandledCommand("code-page-up", a.tryCodePageUp),
+		"<PgUp>", "<C-b>",
+	)
+	a.keyBindings.Bind(
+		commands.NewHandledCommand("code-page-down", a.tryCodePageDown),
+		"<PgDn>", "<C-f>",
 	)
 	a.keyBindings.Bind(
 		commands.NewHandledCommand("code-left", a.tryCodeMoveLeft),
@@ -232,6 +241,11 @@ func (a *DebuggerApp) tryCodeMoveUp() bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
 	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		aw.MoveSel(-1)
+		a.RequestFrame()
+		return true
+	}
 	if cw := a.activeCodeWidget(); cw != nil {
 		cw.MoveSel(-1)
 		a.RequestFrame()
@@ -244,8 +258,55 @@ func (a *DebuggerApp) tryCodeMoveDown() bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
 	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		aw.MoveSel(1)
+		a.RequestFrame()
+		return true
+	}
 	if cw := a.activeCodeWidget(); cw != nil {
 		cw.MoveSel(1)
+		a.RequestFrame()
+		return true
+	}
+	return false
+}
+
+func (a *DebuggerApp) tryCodePageUp() bool {
+	if !a.focusIsCodeOrGdb() {
+		return false
+	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		n := aw.VisibleRows()
+		if n < 1 {
+			n = 10
+		}
+		aw.MoveSel(-n)
+		a.RequestFrame()
+		return true
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		cw.MoveSel(-10)
+		a.RequestFrame()
+		return true
+	}
+	return false
+}
+
+func (a *DebuggerApp) tryCodePageDown() bool {
+	if !a.focusIsCodeOrGdb() {
+		return false
+	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		n := aw.VisibleRows()
+		if n < 1 {
+			n = 10
+		}
+		aw.MoveSel(n)
+		a.RequestFrame()
+		return true
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		cw.MoveSel(10)
 		a.RequestFrame()
 		return true
 	}
@@ -280,6 +341,11 @@ func (a *DebuggerApp) tryCodeBreakAtSel() bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
 	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		aw.BreakAtSel()
+		a.RequestFrame()
+		return true
+	}
 	if cw := a.activeCodeWidget(); cw != nil {
 		cw.BreakAtSel()
 		a.RequestFrame()
@@ -288,7 +354,7 @@ func (a *DebuggerApp) tryCodeBreakAtSel() bool {
 	return false
 }
 
-// trySpaceBreak toggles a breakpoint: Call Stack selection, or Code cursor
+// trySpaceBreak toggles a breakpoint: Call Stack selection, or Code/Asm cursor
 // (same Space behavior as CodeWidget). Falls through for other panes / GDB typing.
 func (a *DebuggerApp) trySpaceBreak() bool {
 	if a.focusedIsCallstack() {
@@ -305,6 +371,11 @@ func (a *DebuggerApp) trySpaceBreak() bool {
 func (a *DebuggerApp) tryCodeToggleEnable() bool {
 	if a.focusedIsBreakpoint() {
 		return false
+	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		a.toggleAsmBreakEnable()
+		a.RequestFrame()
+		return true
 	}
 	if cw := a.activeCodeWidget(); cw != nil {
 		if focused := a.focusedCode(); focused != nil {

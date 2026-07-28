@@ -244,11 +244,14 @@ func (w *BreakpointWidget) rebuild() {
 		if it.Number > 0 {
 			num = fmt.Sprintf("%3d", it.Number)
 		}
-		file := it.File
-		if file == "" {
-			file = "?"
+		loc := "?"
+		switch {
+		case it.File != "" && it.Line > 0:
+			loc = fmt.Sprintf("%s:%d", it.File, it.Line)
+		case it.Addr != "":
+			loc = "*" + it.Addr
 		}
-		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s:%d", num, en, file, it.Line))
+		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s", num, en, loc))
 	}
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0
