@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
@@ -267,13 +268,19 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if sess == nil {
 		return
 	}
-	sendCmd := cmd
+	sendCmd := strings.TrimSpace(cmd)
 	if a.isDLV() {
-		if isDlvRunCmd(cmd) && a.State() != nil {
+		switch sendCmd {
+		case "finish":
+			sendCmd = "stepout"
+		case "run", "start":
+			sendCmd = "restart"
+		}
+		if isDlvRunCmd(sendCmd) && a.State() != nil {
 			a.Debug().SetInferiorRunning(true)
 		}
 	} else {
-		sendCmd = gdb.CLIExecToMI(cmd)
+		sendCmd = gdb.CLIExecToMI(sendCmd)
 	}
 	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

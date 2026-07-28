@@ -86,6 +86,7 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 │   ├── up        → Action: OnFocusUp
 │   └── down      → Action: OnFocusDown
 ├── gdb
+│   ├── run / start / continue / next / step / finish / nexti / stepi / interrupt
 │   ├── break
 │   │   ├── file  → Action: BreakFile
 │   │   └── delete → Action: DeleteBreakpoint
@@ -99,7 +100,8 @@ Each node is either a **container** (has children, no action) or a **leaf** (has
 ├── vs            → Action: SplitVertical
 ├── split         → Action: SplitHorizontal
 ├── clear         → Action: ClearFocus
-└── quit          → Action: Quit
+├── close         → Action: ClosePane
+└── quit          → Action: Quit  (:q exits app; same as Ctrl-D)
 ```
 
 ```go
@@ -214,6 +216,11 @@ func (a *DebuggerApp) ExapData() {
             commands.Cmd("down", a.OnFocusDown),
         ).
         Group("gdb",
+            commands.Cmd("run", a.GdbRun),
+            commands.Cmd("continue", a.GdbContinue),
+            commands.Cmd("next", a.GdbNext),
+            commands.Cmd("step", a.GdbStep),
+            // … start, finish, nexti, stepi, interrupt …
             commands.Group("break",
                 commands.Cmd("file", a.BreakFile),
                 commands.Cmd("delete", a.DeleteBreakpoint),

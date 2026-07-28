@@ -99,15 +99,25 @@ func (p *CommandParser) CurrentIsRestArgs() bool {
 
 func (p *CommandParser) Accept() error {
 	list, ok := p.current.Complete(p.token)
-	if !ok || len(list) != 1 {
+	if !ok || len(list) == 0 {
 		return ErrUnknownCommand
 	}
-
-	p.current = list[0]
-	p.path = append(p.path, p.current)
-	p.token = ""
-
-	return nil
+	if len(list) == 1 {
+		p.current = list[0]
+		p.path = append(p.path, p.current)
+		p.token = ""
+		return nil
+	}
+	// Prefix matched several leaves (e.g. next + nexti). Prefer an exact name.
+	for _, n := range list {
+		if n.Name == p.token {
+			p.current = n
+			p.path = append(p.path, p.current)
+			p.token = ""
+			return nil
+		}
+	}
+	return ErrUnknownCommand
 }
 
 func (p *CommandParser) HasChildren() bool {
@@ -161,13 +171,22 @@ func (p *CommandParser) Parse(line string) error {
 
 	tokens := strings.Fields(line)
 	for i, token := range tokens {
+		bang := false
+		if len(token) > 1 && strings.HasSuffix(token, "!") {
+			// Vim-style command bang (:q! / :quit!) — not :!shell.
+			bang = true
+			token = token[:len(token)-1]
+		}
 		p.token = token
 
 		if err := p.Accept(); err != nil {
 			return err
 		}
+		if bang {
+			p.args = append(p.args, "!")
+		}
 		if p.current.RestArgs {
-			p.args = append([]string(nil), tokens[i+1:]...)
+			p.args = append(p.args, tokens[i+1:]...)
 			return nil
 		}
 	}
@@ -207,7 +226,7 @@ func (p *CommandParser) Sync(line string, cursor int) {
 				p.token = string(runes[tokenStart:cursor])
 				return
 			}
-			p.token = string(runes[tokenStart:i])
+			p.token = stripCmdBang(string(runes[tokenStart:i]))
 			_ = p.Accept()
 			if p.current != nil && p.current.RestArgs {
 				p.token = string(runes[i+1 : cursor])
@@ -217,5 +236,13 @@ func (p *CommandParser) Sync(line string, cursor int) {
 		}
 	}
 
-	p.token = string(runes[tokenStart:cursor])
+	p.token = stripCmdBang(string(runes[tokenStart:cursor]))
+}
+
+// stripCmdBang removes a trailing vim-style bang from a command token (:q!).
+func stripCmdBang(token string) string {
+	if len(token) > 1 && strings.HasSuffix(token, "!") {
+		return token[:len(token)-1]
+	}
+	return token
 }

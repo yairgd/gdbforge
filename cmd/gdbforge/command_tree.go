@@ -7,22 +7,17 @@ import (
 // ExapData builds the command hierarchy on commandReg.Root:
 //
 //	/ → window → left, right, up, down
+//	/ → gdb → run, start, continue, next, step, finish, nexti, stepi, interrupt
 //	/ → gdb → break → file, delete
 //	/ → gdb → info → registers, threads
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
-//	/ → set → equalalways, noequalalways, clearoutput, noclearoutput,
-//	          continueafterclear, nocontinueafterclear, esctocode, noesctocode,
-//	          breakmain, nobreakmain, gdblistenprint, nogdblistenprint,
-//	          gdbtargetprint, nogdbtargetprint, inferior-tty,
-//	          markcolor, markdimcolor, breakcolor, breakdisabledcolor,
-//	          pccolor, stackbreakcolor, codeselcolor, mutedcolor, searchcolor
-//	/ → layout <name>  (default | panels | classic)
-//	/ → b <name>   (switch buffer: about, logger, gdb, io, …; games after :lua)
-//	/ → lua <func> [args…]  (gdbforge.register'd Lua commands)
-//	/ → edit [name]  (project source picker, or open a source file; :e is unique prefix)
-//	/ → help         (Viewport user manual)
-//	/ → vs, split, only, clear, quit
+//	/ → set → … (colors, equalalways, inferior-tty, …)
+//	/ → layout <name>  (default | panels | classic | wide)
+//	/ → b <name>   (switch buffer)
+//	/ → lua <func> [args…]
+//	/ → edit [name]
+//	/ → help, vs, split, only, clear, close, quit
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",
@@ -32,6 +27,15 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("down", a.OnFocusDown),
 		).
 		Group("gdb",
+			commands.Cmd("run", a.GdbRun),
+			commands.Cmd("start", a.GdbStart),
+			commands.Cmd("continue", a.GdbContinue),
+			commands.Cmd("next", a.GdbNext),
+			commands.Cmd("step", a.GdbStep),
+			commands.Cmd("finish", a.GdbFinish),
+			commands.Cmd("nexti", a.GdbNexti),
+			commands.Cmd("stepi", a.GdbStepi),
+			commands.Cmd("interrupt", a.GdbInterrupt),
 			commands.Group("break",
 				commands.Cmd("file", a.BreakFile),
 				commands.Cmd("delete", a.DeleteBreakpoint),
@@ -79,5 +83,6 @@ func (a *DebuggerApp) ExapData() {
 		Leaf("split", a.SplitHorizontal).
 		Leaf("only", a.OnlyFocus).
 		Leaf("clear", a.ClearFocus).
+		Leaf("close", a.ClosePane).
 		Leaf("quit", a.Quit)
 }

@@ -55,14 +55,69 @@ func (app *DebuggerApp) DeleteBreakpoint(args ...any) {
 	log.Info("delete breakpoint")
 }
 
+// :gdb run — start/restart inferior (GDB: run; Delve: restart).
+func (app *DebuggerApp) GdbRun(args ...any) {
+	app.sendGdbExec("run")
+	app.RequestFrame()
+}
+
+// :gdb start — GDB start (break at main + run); Delve maps to restart.
+func (app *DebuggerApp) GdbStart(args ...any) {
+	app.sendGdbExec("start")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbContinue(args ...any) {
+	app.sendGdbExec("continue")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbNext(args ...any) {
+	app.sendGdbExec("next")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbStep(args ...any) {
+	app.sendGdbExec("step")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbFinish(args ...any) {
+	app.sendGdbExec("finish")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbNexti(args ...any) {
+	app.sendGdbExec("nexti")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbStepi(args ...any) {
+	app.sendGdbExec("stepi")
+	app.RequestFrame()
+}
+
+func (app *DebuggerApp) GdbInterrupt(args ...any) {
+	app.onGdbConsoleInterrupt()
+	app.RequestFrame()
+}
+
 func (app *DebuggerApp) ShowRegisters(args ...any) {
-	log := app.ctx.Log.Named("MainApp")
-	log.Info("show registers")
+	cmd := "info registers"
+	if app.isDLV() {
+		cmd = "regs"
+	}
+	app.sendGdbExec(cmd)
+	app.RequestFrame()
 }
 
 func (app *DebuggerApp) ShowThreads(args ...any) {
-	log := app.ctx.Log.Named("MainApp")
-	log.Info("show threads")
+	cmd := "info threads"
+	if app.isDLV() {
+		cmd = "threads"
+	}
+	app.sendGdbExec(cmd)
+	app.RequestFrame()
 }
 
 func (app *DebuggerApp) SplitHorizontal(args ...any) {
@@ -126,9 +181,35 @@ func (app *DebuggerApp) OnHelp(args ...any) {
 }
 
 func (app *DebuggerApp) Quit(args ...any) {
-	if app.tab.DeleteFocus() {
+	// :q / :quit — confirm when inferior alive (same as Ctrl-D).
+	// :q! / :quit! — force exit, no Quit-anyway question.
+	if cmdArgsHasBang(args) {
 		app.Close()
 		app.Exit()
+		return
+	}
+	app.onGdbConsoleEOF()
+	app.RequestFrame()
+}
+
+func cmdArgsHasBang(args []any) bool {
+	for _, a := range args {
+		if s, ok := a.(string); ok && s == "!" {
+			return true
+		}
+	}
+	return false
+}
+
+// ClosePane removes the focused split (:close). Does not exit the app when
+// only one pane remains (unlike the old vim-style :quit).
+func (app *DebuggerApp) ClosePane(args ...any) {
+	if app.tab == nil {
+		return
+	}
+	if app.tab.DeleteFocus() {
+		// Last pane — nothing to close; stay in the session.
+		return
 	}
 	app.RequestRedraw()
 }

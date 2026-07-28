@@ -109,6 +109,8 @@ func CLIExecToMI(cmd string) string {
 		return "-exec-next-instruction"
 	case "si", "stepi":
 		return "-exec-step-instruction"
+	case "run":
+		return "-exec-run"
 	default:
 		return cmd
 	}

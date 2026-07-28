@@ -333,7 +333,7 @@ Older docs described a flat `termui.AutoCompleter` + `CommandID` + `SubmitMsg` p
 | Model / window | `:buffer code`, `:buffer breakpoints`, `:vs`, `:split`, `:close` | Window manager binds widget to existing model — **partial** (`:vs` / `:split` wired) |
 | Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
 | Debugger | `:gdb break`, `:gdb info registers` | Colon tree under `gdb`; GDB CLI still typed in the GDB pane |
-| UI | `:quit` | `HandleCoreEvents` → `app.Exit()` (implemented) |
+| UI | `:quit` / `:q` | confirm if inferior alive (Ctrl-D); `:q!` / `:quit!` force exit |
 
 The `:buffer <name>` command displays an application model, not a file. Each `<name>` must be declared at startup (e.g. `code`, `breakpoints`, `console`). There is no `:attach` command — all models exist from initialization. See [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
 

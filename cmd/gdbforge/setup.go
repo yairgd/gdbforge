@@ -61,6 +61,7 @@ func (a *DebuggerApp) InitB() error {
 	a.cmdWidget.SetOnSearchSubmit(func(pattern string) {
 		a.onSearchCmdSubmit(pattern)
 	})
+	a.restoreCmdlineHistory()
 	a.AddWidget(a.cmdWidget)
 
 	a.InitKeyBindings()

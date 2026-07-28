@@ -117,8 +117,11 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `:! <cmd>` — run shell in an Exec pane
 - `:AI <question>` — in-app LLM against live GDB (`:ai` alias)
 - `:clear` — clear focused clearable pane
-- `:quit` — close focused pane / quit app
+- `:close` — close focused pane/split (no-op if last pane)
+- `:quit` / `:q` — quit app (confirm if inferior alive; same as Ctrl-D)
+- `:quit!` / `:q!` — force quit with no Quit-anyway question
 - `:window left|right|up|down` — focus direction
+- `:gdb run|start|continue|next|step|finish|nexti|stepi|interrupt`
 - `:gdb break file` / `:gdb break delete`
 - `:gdb info registers|threads`
 

@@ -118,7 +118,7 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 - Each `:!…` **restarts** the exec session (closes previous `ExecClient`).
 - When the PTY process exits (or Ctrl-D closes it), the Exec pane shows  
   `[exec] process exited — press any key to return`, then **any key** runs `JumpBack` to the previous widget and clears the `exec` builtin.
-- App exit / last-pane `:quit` still closes `execClient` if present (`DebuggerApp.Close`, `Quit`).
+- App exit (`:quit` / Ctrl-D → debugger quit → `gdb-exit`) still closes `execClient` if present (`DebuggerApp.Close`).
 
 ---
 

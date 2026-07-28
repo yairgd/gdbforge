@@ -464,7 +464,7 @@ func isDlvRunCmd(cmd string) bool {
 		return false
 	}
 	switch strings.Fields(cmd)[0] {
-	case "c", "continue", "n", "next", "s", "step", "stepout", "finish", "nexti", "ni", "stepi", "si":
+	case "c", "continue", "n", "next", "s", "step", "stepout", "finish", "nexti", "ni", "stepi", "si", "restart", "run":
 		return true
 	default:
 		return false

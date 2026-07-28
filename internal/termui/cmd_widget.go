@@ -20,8 +20,8 @@ const (
 type CmdWidget struct {
 	BaseWidget
 
-	history       History
-	searchHistory History
+	history       *MemoryHistory
+	searchHistory *MemoryHistory
 	parser        *commands.CommandParser
 	clipboard     ClipboardIO
 	active        bool
@@ -47,6 +47,38 @@ func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
 		active:        false,
 		kind:          CmdKindCommand,
 	}
+}
+
+// CommandHistoryItems returns ':' cmdline history (oldest first).
+func (c *CmdWidget) CommandHistoryItems() []string {
+	if c == nil || c.history == nil {
+		return nil
+	}
+	return c.history.Items()
+}
+
+// LoadCommandHistory replaces ':' cmdline history.
+func (c *CmdWidget) LoadCommandHistory(items []string) {
+	if c == nil || c.history == nil {
+		return
+	}
+	c.history.Load(items)
+}
+
+// SearchHistoryItems returns '/' search cmdline history (oldest first).
+func (c *CmdWidget) SearchHistoryItems() []string {
+	if c == nil || c.searchHistory == nil {
+		return nil
+	}
+	return c.searchHistory.Items()
+}
+
+// LoadSearchHistory replaces '/' search cmdline history.
+func (c *CmdWidget) LoadSearchHistory(items []string) {
+	if c == nil || c.searchHistory == nil {
+		return
+	}
+	c.searchHistory.Load(items)
 }
 
 // SetOnExecute registers the Enter handler for a fully parsed command.
@@ -103,7 +135,7 @@ func (c *CmdWidget) prefix() rune {
 	return ':'
 }
 
-func (c *CmdWidget) hist() History {
+func (c *CmdWidget) hist() *MemoryHistory {
 	if c.kind == CmdKindSearch {
 		return c.searchHistory
 	}

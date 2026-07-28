@@ -165,6 +165,7 @@ func (a *DebuggerApp) isDLV() bool {
 func (a *DebuggerApp) Close() {
 	a.cancelLuaJob()
 	a.saveBreakpointsOnQuit()
+	a.saveCmdlineHistoryOnQuit()
 	if a.gdbMcp != nil {
 		a.gdbMcp.Close()
 		a.gdbMcp = nil
@@ -219,6 +220,30 @@ func (a *DebuggerApp) saveBreakpointsOnQuit() {
 		}
 	}
 	_ = persist.SaveBreakpoints(".", items)
+}
+
+// restoreCmdlineHistory loads ./.gdbforge/cmdline_history.yaml into the CmdWidget.
+func (a *DebuggerApp) restoreCmdlineHistory() {
+	if a == nil || a.cmdWidget == nil {
+		return
+	}
+	cmds, search, err := persist.LoadCmdlineHistory(".")
+	if err != nil {
+		if a.ctx.Log != nil {
+			a.ctx.Log.Named("cmdline").Error("load cmdline history: " + err.Error())
+		}
+		return
+	}
+	a.cmdWidget.LoadCommandHistory(cmds)
+	a.cmdWidget.LoadSearchHistory(search)
+}
+
+// saveCmdlineHistoryOnQuit writes CmdWidget history to ./.gdbforge/cmdline_history.yaml.
+func (a *DebuggerApp) saveCmdlineHistoryOnQuit() {
+	if a == nil || a.cmdWidget == nil {
+		return
+	}
+	_ = persist.SaveCmdlineHistory(".", a.cmdWidget.CommandHistoryItems(), a.cmdWidget.SearchHistoryItems())
 }
 
 // Debug returns gdbforge-private debugger session state.

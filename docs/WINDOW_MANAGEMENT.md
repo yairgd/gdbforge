@@ -283,11 +283,11 @@ The **CmdLine** is a top-level band for **Vim-style `:` commands**, distinct fro
 
 Command mode is entered by **`DebuggerApp`** (`:` → `ModeCommand`, `CmdWidget.Activate()`), not by `CmdWidget` alone. `Esc` returns to normal mode at the app layer.
 
-**Current state:** `:quit` closes focused pane or exits via `HandleCoreEvents`. Split commands (`:vs`, `:split`) partially wired. Unknown commands emit `termui.CmdUnknown`.
+**Current state:** `:quit` / `:q` exits the debug session (same as Ctrl-D). `:close` removes the focused pane/split. Split commands (`:vs`, `:split`) partially wired. Unknown commands emit `termui.CmdUnknown`.
 
 **Design decision:** separate CmdLine from GDB console because:
 
-- GDB console speaks MI/cli dialect; CmdLine speaks **UI commands** (`:split`, `:focus`, `:tabnew`, `:quit`).
+- GDB console speaks MI/cli dialect; CmdLine speaks **UI commands** (`:split`, `:focus`, `:close`, `:quit`).
 - Users can run UI operations without sending spurious input to GDB.
 - Completion vocabularies differ (UI vs debugger).
 

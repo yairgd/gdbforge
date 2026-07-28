@@ -140,6 +140,77 @@ func TestSuggestionNamesRestArgsComplete(t *testing.T) {
 	}
 }
 
+func TestCommandParserExactPreferOverPrefix(t *testing.T) {
+	reg := NewCommandRegistry()
+	var got string
+	reg.Root.Group("gdb",
+		Cmd("next", func(args ...any) { got = "next" }),
+		Cmd("nexti", func(args ...any) { got = "nexti" }),
+		Cmd("step", func(args ...any) { got = "step" }),
+		Cmd("stepi", func(args ...any) { got = "stepi" }),
+	)
+	p := NewCommandParser(reg)
+	for _, tc := range []struct{ line, want string }{
+		{"gdb next", "next"},
+		{"gdb nexti", "nexti"},
+		{"gdb step", "step"},
+		{"gdb stepi", "stepi"},
+	} {
+		got = ""
+		if err := p.Parse(tc.line); err != nil {
+			t.Fatalf("Parse %q: %v", tc.line, err)
+		}
+		if err := p.Execute(); err != nil {
+			t.Fatalf("Execute %q: %v", tc.line, err)
+		}
+		if got != tc.want {
+			t.Fatalf("%q: got %q want %q", tc.line, got, tc.want)
+		}
+	}
+	// Ambiguous short prefix still fails.
+	if err := p.Parse("gdb nex"); err == nil {
+		t.Fatal("gdb nex should be ambiguous")
+	}
+}
+
+func TestCommandParserQuitBang(t *testing.T) {
+	reg := NewCommandRegistry()
+	var gotForce bool
+	reg.Root.Leaf("quit", func(args ...any) {
+		for _, a := range args {
+			if s, ok := a.(string); ok && s == "!" {
+				gotForce = true
+			}
+		}
+	})
+	p := NewCommandParser(reg)
+	for _, line := range []string{"q!", "quit!"} {
+		gotForce = false
+		if err := p.Parse(line); err != nil {
+			t.Fatalf("Parse %q: %v", line, err)
+		}
+		if p.Current() == nil || p.Current().Name != "quit" {
+			t.Fatalf("%q current=%v", line, p.Current())
+		}
+		if err := p.Execute(); err != nil {
+			t.Fatalf("Execute %q: %v", line, err)
+		}
+		if !gotForce {
+			t.Fatalf("%q: want bang arg", line)
+		}
+	}
+	gotForce = false
+	if err := p.Parse("q"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotForce {
+		t.Fatal(":q must not force")
+	}
+}
+
 func TestCommandParserUniquePrefixEdit(t *testing.T) {
 	reg := NewCommandRegistry()
 	var gotArgs []string
