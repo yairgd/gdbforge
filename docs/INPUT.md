@@ -283,7 +283,7 @@ const (
 - Normal mode avoids accidentally typing into GDB when navigating; trie handles multi-key chords.
 - Insert mode is pane-local typing (GDB CLI, IO stdin, exec shell).
 - Command mode is for UI operations, not debugger commands.
-- Search mode muxes the same `CmdWidget` with a leading `/` (separate history; no Tab). Target is the focused pane's `SearchHost` (`viewport_search.go`). `*` / `#` search the word under the cursor; `n` / `N` jump matches (`n` is GDB next when no pattern is active).
+- Search mode muxes the same `CmdWidget` with a leading `/` (separate history; no Tab). Target is the focused pane's `SearchHost` (`viewport_search.go`). `*` / `#` search the word under the cursor; on Code `n` is always GDB next (like `s`/`c`) and `N` is prev match; on other panes `n` / `N` jump matches.
 - Ctrl-Z / Ctrl-D are mode-independent (GDB-like job control / quit).
 
 **Gaps:**
@@ -381,7 +381,7 @@ See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB 
 | `:` | Enter command mode | Implemented |
 | `/` | Enter search mode (focused pane) | Implemented |
 | `*` / `#` | Search word under cursor forward / back | Implemented |
-| `n` / `N` | Next / previous search match (`n` = GDB next if no pattern) | Implemented |
+| `n` / `N` | Code: `n` = GDB next (like `s`/`c`), `N` = prev search; else search next/prev | Implemented |
 | `Ctrl+W h/j/k/l` or arrows | Focus direction (via trie) | Implemented |
 | `Ctrl+W o` | Only focused pane | Implemented |
 | `Ctrl+O` | Jump back after `:b` / `:edit` / `:!` | Implemented |

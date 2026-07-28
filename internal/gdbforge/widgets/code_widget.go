@@ -45,6 +45,7 @@ type CodeWidget struct {
 	path       string
 	pcLine     int // 1-based program counter
 	selLine    int // 1-based cursor / bold line
+	preferCol  int // preferred source column (0-based, past gutter)
 	rawLines   []string
 	hiLines    []string         // chroma ANSI lines (same length as rawLines)
 	bpLines    map[int]struct{} // enabled breakpoints → breakColor bg
@@ -62,6 +63,7 @@ func NewCodeWidget() *CodeWidget {
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
+	vp.SetCursor(termui.NewInverseCursor())
 	vp.SetCursorVisible(false)
 	vp.ANSI = true
 
@@ -73,7 +75,8 @@ func NewCodeWidget() *CodeWidget {
 	vp.RowStyle = w.rowStyle
 	vp.SetSearchContentOffset(codeGutterCols)
 	vp.SetOnSearchJump(func(lineIdx int) {
-		w.moveSelTo(lineIdx + 1)
+		w.selLine = lineIdx + 1
+		w.preferCol = w.contentCol()
 	})
 	w.initKeyBindings()
 	return w
@@ -97,6 +100,8 @@ func (w *CodeWidget) SetOnToggleEnable(fn func()) {
 func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("sel-up", func(args ...any) { w.moveSel(-1) }, "<Up>", "k")
 	w.BindKeyFunc("sel-down", func(args ...any) { w.moveSel(1) }, "<Down>", "j")
+	w.BindKeyFunc("sel-left", func(args ...any) { w.moveCol(-1) }, "<Left>", "h")
+	w.BindKeyFunc("sel-right", func(args ...any) { w.moveCol(1) }, "<Right>", "l")
 	w.BindKeyFunc("page-up", func(args ...any) { w.moveSel(-10) }, "<PgUp>", "<C-b>")
 	w.BindKeyFunc("page-down", func(args ...any) { w.moveSel(10) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("home", func(args ...any) { w.moveSelTo(1) }, "<Home>", "g")
@@ -111,6 +116,9 @@ func (w *CodeWidget) initKeyBindings() {
 
 // MoveSel moves the bold cursor line by delta (exported for app-level normal-mode keys).
 func (w *CodeWidget) MoveSel(delta int) { w.moveSel(delta) }
+
+// GotoLine moves the browse caret (blue line) to 1-based line, clamped to the file.
+func (w *CodeWidget) GotoLine(line int) { w.moveSelTo(line) }
 
 // BreakAtSel fires OnBreakToggle for the selected line (exported for global Space).
 func (w *CodeWidget) BreakAtSel() { w.breakAtSel() }
@@ -244,9 +252,57 @@ func (w *CodeWidget) moveSelTo(line int) {
 	}
 	w.selLine = line
 	w.viewport.CursorLine = line - 1
-	w.viewport.CursorCol = 0
-	w.viewport.Left = 0
+	w.setCursorContentCol(w.preferCol)
 	w.viewport.EnsureCursorVisible()
+}
+
+// MoveCol moves the caret horizontally by delta visible content cells.
+func (w *CodeWidget) MoveCol(delta int) { w.moveCol(delta) }
+
+func (w *CodeWidget) moveCol(delta int) {
+	if w == nil || w.viewport == nil || len(w.rawLines) == 0 {
+		return
+	}
+	if w.selLine < 1 {
+		w.selLine = 1
+		w.viewport.CursorLine = 0
+	}
+	w.setCursorContentCol(w.contentCol() + delta)
+	w.viewport.EnsureCursorVisible()
+}
+
+// contentCol is the 0-based column in source text (after the gutter).
+func (w *CodeWidget) contentCol() int {
+	if w == nil || w.viewport == nil || w.viewport.Buffer == nil {
+		return 0
+	}
+	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
+	vis := termui.VisibleANSIColAtByte(line, w.viewport.CursorCol)
+	col := vis - codeGutterCols
+	if col < 0 {
+		return 0
+	}
+	return col
+}
+
+// setCursorContentCol places the caret on a source column (0-based, past gutter).
+func (w *CodeWidget) setCursorContentCol(contentCol int) {
+	if w == nil || w.viewport == nil || w.viewport.Buffer == nil {
+		return
+	}
+	if contentCol < 0 {
+		contentCol = 0
+	}
+	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
+	maxContent := termui.VisibleANSIWidth(line) - codeGutterCols
+	if maxContent < 0 {
+		maxContent = 0
+	}
+	if contentCol > maxContent {
+		contentCol = maxContent
+	}
+	w.preferCol = contentCol
+	w.viewport.CursorCol = termui.ANSIByteIndexAtVisible(line, codeGutterCols+contentCol)
 }
 
 func (w *CodeWidget) breakAtSel() {
@@ -353,8 +409,9 @@ func (w *CodeWidget) loadAndScroll(path string, line int) error {
 		idx = n - 1
 	}
 	w.viewport.Left = 0
-	w.viewport.CursorCol = 0
 	w.viewport.CursorLine = idx
+	w.preferCol = 0
+	w.setCursorContentCol(0)
 	pageH := w.viewport.Height()
 	if pageH <= 0 {
 		pageH = 20
@@ -376,6 +433,7 @@ func (w *CodeWidget) Clear() {
 	w.hiLines = nil
 	w.pcLine = 0
 	w.selLine = 0
+	w.preferCol = 0
 	w.bpLines = nil
 	w.bpDisabled = nil
 	w.bpNums = nil
@@ -655,6 +713,7 @@ func (w *CodeWidget) syncSelFromViewport() {
 		line = n
 	}
 	w.selLine = line
+	w.preferCol = w.contentCol()
 }
 
 func (w *CodeWidget) HandleEvent(ev tcell.Event) {
@@ -673,7 +732,9 @@ func (w *CodeWidget) HandleEvent(ev tcell.Event) {
 
 func (w *CodeWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
+	if w.viewport != nil {
+		w.viewport.SetCursorVisible(focused && !w.unavailable)
+	}
 }
 
 func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {

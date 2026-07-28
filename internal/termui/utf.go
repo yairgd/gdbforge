@@ -106,6 +106,45 @@ func ANSIByteIndexAtVisible(text string, visCol int) int {
 	return len(text)
 }
 
+// VisibleANSIColAtByte returns the visible cell column for a byte offset in text.
+func VisibleANSIColAtByte(text string, byteIdx int) int {
+	if byteIdx <= 0 {
+		return 0
+	}
+	if byteIdx > len(text) {
+		byteIdx = len(text)
+	}
+	return VisibleANSIWidth(text[:byteIdx])
+}
+
+// ANSIRuneAtVisible returns the printable rune at visible cell visCol, or ' '.
+func ANSIRuneAtVisible(text string, visCol int) rune {
+	if visCol < 0 {
+		return ' '
+	}
+	style := tcell.StyleDefault
+	visible := 0
+	for i := 0; i < len(text); {
+		if text[i] == 0x1b {
+			next, _, ok := consumeEscape(text, i, style, style)
+			if ok {
+				i = next
+				continue
+			}
+		}
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if visible == visCol {
+			if r == utf8.RuneError && size == 1 {
+				return ' '
+			}
+			return r
+		}
+		i += size
+		visible++
+	}
+	return ' '
+}
+
 // VisibleANSIWidth returns how many terminal cells text occupies after stripping
 // ANSI/OSC control sequences.
 func VisibleANSIWidth(text string) int {

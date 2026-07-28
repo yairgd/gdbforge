@@ -31,7 +31,7 @@ Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for comple
 
 **Search**
 
-Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. After a search, `n` / `N` jump next / previous match. `*` / `#` search the word under the cursor (forward / backward). With no active pattern, `n` is still GDB next.
+Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. On Code, a real caret (`h`/`l` or arrows) marks the column; `*` / `#` search that word; `N` previous match; **`n` is always GDB next** (same as `s`/`c` run-control). On other panes, `n` / `N` jump search matches when a pattern is active.
 
 **Completion**
 
@@ -51,13 +51,15 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 |-----|--------|
 | `:` | enter command mode |
 | `/` | search in focused pane (live highlight; Enter commits) |
-| `*` / `#` | search word under cursor forward / backward |
-| `n` / `N` | next / previous search match (`n` = GDB next if no pattern) |
+| `*` / `#` | search word under Code caret (or selection) forward / backward |
+| `n` / `N` | Code: `n` = GDB next (like `s`/`c`); `N` = prev search. Other panes: search next/prev |
+| `h` / `l` | move Code caret left / right (also ←/→) |
 | `i` | focus GDB leaf and enter insert |
 | `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
 | `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |
 | `s` | GDB step via MI `-exec-step` (also in insert when Code is focused) |
 | `c` | GDB continue via MI `-exec-continue` (also in insert when Code is focused) |
+| `f` | GDB finish via MI `-exec-finish` (Delve: `stepout`; also in insert when Code is focused) |
 | Up / Down | move Code browse cursor (does not move ━━▶) |
 | Space | toggle breakpoint: Call Stack selection, or Code cursor line (never steals Space from GDB) |
 | `e` | enable/disable breakpoint at Code cursor |
@@ -76,6 +78,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `:edit` — project source file picker
 - `:edit <file>` — open that source in a CodeWidget
 - `:e` — unique prefix of `:edit`
+- `:N` / `:0` — jump Code browse cursor (blue line) to line N (`:0` → 1)
 
 **Layout**
 

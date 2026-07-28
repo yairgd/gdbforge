@@ -18,6 +18,7 @@ import (
 //	/ → lua <func> [args…]
 //	/ → edit [name]
 //	/ → help, vs, split, only, clear, close, quit
+//	/ → :N / :0 (numeric goto — handled in handleUnknownCommand, not the trie)
 func (a *DebuggerApp) ExapData() {
 	a.commandReg.Root.
 		Group("window",

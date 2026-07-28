@@ -106,6 +106,35 @@ func (v *Viewport) SetCursorVisible(visible bool) {
 	v.cursorVisible = visible
 }
 
+// cursorDrawPos maps CursorCol/CursorLine to pane-local paint coordinates.
+// In ANSI mode CursorCol is a byte index; localX uses the visible cell column.
+func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
+	if v == nil || v.Buffer == nil {
+		return 0, 0, ' ', false
+	}
+	localY = v.CursorLine - v.Top + v.padTop
+	if localY < 0 || localY >= v.height {
+		return 0, 0, ' ', false
+	}
+	line := v.Buffer.Line(v.CursorLine)
+	visCol := v.CursorCol
+	under = ' '
+	if v.ANSI {
+		visCol = VisibleANSIColAtByte(line, v.CursorCol)
+		under = ANSIRuneAtVisible(line, visCol)
+	} else if v.CursorCol >= 0 && v.CursorCol < len(line) {
+		r, _ := utf8.DecodeRuneInString(line[v.CursorCol:])
+		if r != utf8.RuneError {
+			under = r
+		}
+	}
+	localX = visCol - v.Left
+	if localX < 0 || localX >= v.width {
+		return 0, 0, ' ', false
+	}
+	return localX, localY, under, true
+}
+
 // Draw renders the visible portion of the buffer.
 func (v *Viewport) Draw(c Canvas) {
 	if v.Buffer == nil {
@@ -729,6 +758,13 @@ func (v *Viewport) clearSelection() {
 	v.hasSel = false
 }
 
+// ClearSelection drops any active text mark (e.g. after */# takes the caret word).
+func (v *Viewport) ClearSelection() {
+	if v != nil {
+		v.clearSelection()
+	}
+}
+
 func (v *Viewport) SetFollowTail(follow bool) {
 	v.followTail = follow
 }
@@ -821,6 +857,18 @@ func (v *Viewport) Down() {
 }
 
 func (v *Viewport) LeftChar() {
+	if v.ANSI && v.Buffer != nil {
+		line := v.Buffer.Line(v.CursorLine)
+		vis := VisibleANSIColAtByte(line, v.CursorCol)
+		if vis > 0 {
+			vis--
+			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
+		}
+		if vis < v.Left {
+			v.Left = vis
+		}
+		return
+	}
 
 	if v.CursorCol > 0 {
 		v.CursorCol--
@@ -832,6 +880,17 @@ func (v *Viewport) LeftChar() {
 }
 
 func (v *Viewport) RightChar() {
+	if v.ANSI && v.Buffer != nil {
+		line := v.Buffer.Line(v.CursorLine)
+		vis := VisibleANSIColAtByte(line, v.CursorCol)
+		maxVis := VisibleANSIWidth(line)
+		if vis < maxVis {
+			vis++
+			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
+		}
+		return
+	}
+
 	if v.Buffer != nil {
 		lineLen := len(v.Buffer.Line(v.CursorLine))
 		if v.CursorCol < lineLen {
@@ -1030,11 +1089,18 @@ func (v *Viewport) EnsureVisible(width, height int) {
 	}
 
 	// Horizontal scroll. In ANSI mode CursorCol is a byte offset into the
-	// escape-laden string, while Left is a visible-cell skip count — mixing
-	// them scrolls the view past all text (blank pane). Keep Left in visible
-	// cells only, and clamp so we never skip the whole line.
+	// escape-laden string, while Left is a visible-cell skip count — mix them
+	// carefully so the caret stays in view.
 	if v.ANSI {
-		vis := VisibleANSIWidth(v.Buffer.Line(v.CursorLine))
+		line := v.Buffer.Line(v.CursorLine)
+		vis := VisibleANSIWidth(line)
+		curVis := VisibleANSIColAtByte(line, v.CursorCol)
+		if curVis < v.Left {
+			v.Left = curVis
+		}
+		if curVis >= v.Left+width {
+			v.Left = curVis - width + 1
+		}
 		if v.Left < 0 {
 			v.Left = 0
 		}

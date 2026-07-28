@@ -52,8 +52,17 @@ func TestCodeWidgetWordAtCursor(t *testing.T) {
 	w.rebuildBuffer()
 	w.selLine = 1
 	w.viewport.CursorLine = 0
-	w.viewport.CursorCol = 0
+	w.setCursorContentCol(0)
 	if got := w.WordAtCursor(); got != "int" {
 		t.Fatalf("WordAtCursor=%q want int", got)
+	}
+	// Move onto hello_world (after "int ").
+	w.setCursorContentCol(4)
+	if got := w.WordAtCursor(); got != "hello_world" {
+		t.Fatalf("col4 WordAtCursor=%q want hello_world", got)
+	}
+	w.MoveCol(1)
+	if got := w.WordAtCursor(); got != "hello_world" {
+		t.Fatalf("after MoveCol WordAtCursor=%q", got)
 	}
 }

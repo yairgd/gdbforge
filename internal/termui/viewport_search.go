@@ -254,11 +254,36 @@ func (v *Viewport) searchJump(dir int) bool {
 
 func (v *Viewport) jumpToSearchLine(lineIdx int) {
 	v.CursorLine = lineIdx
-	v.CursorCol = 0
+	v.placeCursorOnSearchMatch(lineIdx)
 	v.EnsureCursorVisible()
 	if v.onSearchJump != nil {
 		v.onSearchJump(lineIdx)
 	}
+}
+
+// placeCursorOnSearchMatch puts CursorCol on the first pattern match in the line.
+func (v *Viewport) placeCursorOnSearchMatch(lineIdx int) {
+	if v.Buffer == nil || v.searchPattern == "" {
+		v.CursorCol = 0
+		return
+	}
+	content := v.searchContent(lineIdx)
+	rel := strings.Index(content, v.searchPattern)
+	contentCol := 0
+	if rel >= 0 {
+		contentCol = utf8.RuneCountInString(content[:rel])
+	}
+	vis := v.searchContentOffset + contentCol
+	raw := v.Buffer.Line(lineIdx)
+	if v.ANSI {
+		v.CursorCol = ANSIByteIndexAtVisible(raw, vis)
+		return
+	}
+	runes := []rune(platform.StripANSI(raw))
+	if vis > len(runes) {
+		vis = len(runes)
+	}
+	v.CursorCol = len(string(runes[:vis]))
 }
 
 func (v *Viewport) lineMatches(lineIdx int) bool {

@@ -93,6 +93,14 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"<Down>",
 	)
 	a.keyBindings.Bind(
+		commands.NewHandledCommand("code-left", a.tryCodeMoveLeft),
+		"<Left>",
+	)
+	a.keyBindings.Bind(
+		commands.NewHandledCommand("code-right", a.tryCodeMoveRight),
+		"<Right>",
+	)
+	a.keyBindings.Bind(
 		commands.NewHandledCommand("space-break", a.trySpaceBreak),
 		" ",
 	)
@@ -117,6 +125,10 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		commands.NewCommand("gdb-continue", func(args ...any) { a.sendGdbExec("continue") }),
 		"c",
 	)
+	a.keyBindings.Bind(
+		commands.NewCommand("gdb-finish", func(args ...any) { a.sendGdbExec("finish") }),
+		"f",
+	)
 }
 
 func (a *DebuggerApp) initInsertKeyBindings() {
@@ -135,6 +147,10 @@ func (a *DebuggerApp) initInsertKeyBindings() {
 	a.insertKeys.Bind(
 		commands.NewHandledCommand("code-continue", a.tryInsertCodeContinue),
 		"c",
+	)
+	a.insertKeys.Bind(
+		commands.NewHandledCommand("code-finish", a.tryInsertCodeFinish),
+		"f",
 	)
 	a.insertKeys.Bind(
 		commands.NewHandledCommand("space-break", a.trySpaceBreak),
@@ -236,6 +252,30 @@ func (a *DebuggerApp) tryCodeMoveDown() bool {
 	return false
 }
 
+func (a *DebuggerApp) tryCodeMoveLeft() bool {
+	if !a.focusIsCodeOrGdb() {
+		return false
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		cw.MoveCol(-1)
+		a.RequestFrame()
+		return true
+	}
+	return false
+}
+
+func (a *DebuggerApp) tryCodeMoveRight() bool {
+	if !a.focusIsCodeOrGdb() {
+		return false
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		cw.MoveCol(1)
+		a.RequestFrame()
+		return true
+	}
+	return false
+}
+
 func (a *DebuggerApp) tryCodeBreakAtSel() bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
@@ -296,6 +336,14 @@ func (a *DebuggerApp) tryInsertCodeContinue() bool {
 		return false
 	}
 	a.sendGdbExec("continue")
+	return true
+}
+
+func (a *DebuggerApp) tryInsertCodeFinish() bool {
+	if !a.focusedIsCode() {
+		return false
+	}
+	a.sendGdbExec("finish")
 	return true
 }
 

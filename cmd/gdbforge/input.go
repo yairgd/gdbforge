@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -270,54 +271,49 @@ func (a *DebuggerApp) searchPrevMatch() {
 	}
 }
 
-// searchWordMatch implements vim-ish * (dir>0) / # (dir<0):
-//   1. If a search pattern is already active → next/prev only (do not change it).
-//   2. Else if text is selected → commit selection as the pattern, then jump.
-//   3. Else → commit word under cursor, then jump.
+// searchWordMatch implements vim * (dir>0) / # (dir<0): set pattern from the
+// word under the caret (prefer caret over a stale selection), then jump
+// next/prev. With no word, fall back to selection, then existing pattern.
 func (a *DebuggerApp) searchWordMatch(dir int) {
-	host := a.searchTarget
-	if host == nil {
-		host = a.resolveSearchHost()
-	}
+	// Always use the focused pane so */# follow the caret the user sees.
+	host := a.resolveSearchHost()
 	if host == nil {
 		return
 	}
 	host.SetSearchColor(a.State().SearchColor())
 
-	// Keep an existing / or prior */# pattern; * / # only navigate.
-	if host.SearchPattern() != "" {
+	// Prefer caret word so a leftover mouse/select mark does not lock */# onto
+	// an old token when the user moves to a new word.
+	pattern := a.wordAtSearchHost(host)
+	if pattern == "" {
+		pattern = a.selectionAtSearchHost(host)
+	}
+	if pattern != "" {
+		host.CommitSearch(pattern)
 		a.searchTarget = host
+		a.clearSearchHostSelection(host)
 		if dir < 0 {
-			a.searchPrevMatch()
-			return
+			_ = host.SearchPrev()
+		} else {
+			_ = host.SearchNext()
 		}
-		a.searchNextMatch()
-		return
-	}
-
-	pattern := a.selectionAtSearchHost(host)
-	if pattern == "" {
-		pattern = a.wordAtSearchHost(host)
-	}
-	if pattern == "" {
-		return
-	}
-	host.CommitSearch(pattern)
-	a.searchTarget = host
-	moved := false
-	if dir < 0 {
-		moved = host.SearchPrev()
-	} else {
-		moved = host.SearchNext()
-	}
-	if moved {
 		a.RequestFrame()
+		return
 	}
+	if dir < 0 {
+		a.searchPrevMatch()
+		return
+	}
+	a.searchNextMatch()
 }
 
-// trySearchOrGdbNext is normal-mode n: prefer search-next when a pattern is
-// active (after / or */#), otherwise GDB next.
+// trySearchOrGdbNext is normal-mode n: on Code always GDB next (like s/c);
+// elsewhere search-next when a pattern is active, else GDB next.
 func (a *DebuggerApp) trySearchOrGdbNext() bool {
+	if a.focusedIsCode() {
+		a.sendGdbExec("next")
+		return true
+	}
 	if a.hasActiveSearchPattern() {
 		a.searchNextMatch()
 		return true
@@ -356,6 +352,12 @@ func (a *DebuggerApp) selectionAtSearchHost(host termui.SearchHost) string {
 		return ""
 	}
 	return strings.TrimSpace(vp.SelectedText())
+}
+
+func (a *DebuggerApp) clearSearchHostSelection(host termui.SearchHost) {
+	if vp := a.viewportOfSearchHost(host); vp != nil {
+		vp.ClearSelection()
+	}
 }
 
 func (a *DebuggerApp) viewportOfSearchHost(host termui.SearchHost) *termui.Viewport {
@@ -786,9 +788,55 @@ func (a *DebuggerApp) HandleResize() {
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
-func (app *DebuggerApp) handleUnknownCommand(_ termui.CommandEvent) bool {
+func (app *DebuggerApp) handleUnknownCommand(ev termui.CommandEvent) bool {
+	if msg, ok := ev.(termui.SubmitMsg); ok && app.tryGotoLineCmd(msg.Text) {
+		return true
+	}
 	// TODO: show unknown command feedback in the UI
 	return true
+}
+
+// tryGotoLineCmd handles Vim-style :N / :0 — jump browse cursor to line N
+// in the active Code buffer (blue line). :0 goes to line 1.
+func (a *DebuggerApp) tryGotoLineCmd(text string) bool {
+	line, ok := parseGotoLineCmd(text)
+	if !ok {
+		return false
+	}
+	cw := a.activeCodeWidget()
+	if focused := a.focusedCode(); focused != nil {
+		cw = focused
+	}
+	if cw == nil {
+		return true // consumed as goto, but no buffer
+	}
+	cw.GotoLine(line)
+	a.RequestFrame()
+	return true
+}
+
+// parseGotoLineCmd accepts ":42", "42", ":0" (→ line 1). Rejects non-numeric.
+func parseGotoLineCmd(text string) (line int, ok bool) {
+	s := strings.TrimSpace(text)
+	if strings.HasPrefix(s, ":") {
+		s = strings.TrimSpace(s[1:])
+	}
+	if s == "" {
+		return 0, false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n, true
 }
 
 func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {

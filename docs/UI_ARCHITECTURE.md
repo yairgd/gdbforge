@@ -459,7 +459,7 @@ Application keys handled by `DebuggerApp` (`HandleKey`):
 | `:` (normal mode) | Enter command mode, activate `CmdWidget` |
 | `/` (normal mode) | Enter search mode (`ActivateSearch`); target = focused pane |
 | `*` / `#` (normal mode) | Search word under cursor forward / back |
-| `n` / `N` (normal mode) | Next / previous `/` search match (`n` = GDB next if no pattern) |
+| `n` / `N` (normal mode) | Code: `n` = GDB next; `N` = prev search. Other panes: search next/prev |
 | `<C-w>…` (normal mode) | Focus movement / `:only` via trie |
 | Other keys (normal mode) | Trie partial match, then `TabWidget.HandleEvent` |
 | All keys (command / search mode) | `CmdWidget.HandleEvent` |

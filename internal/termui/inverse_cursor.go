@@ -25,19 +25,9 @@ func (n *InverseCursor) Draw(c Canvas, v *Viewport) {
 		return
 	}
 
-	localX := v.CursorCol - v.Left
-	localY := v.CursorLine - v.Top + v.padTop
-
-	if localY < 0 || localY >= v.height || localX < 0 || localX >= v.width {
+	localX, localY, under, ok := v.cursorDrawPos()
+	if !ok {
 		return
-	}
-
-	under := ' '
-	if v.Buffer != nil {
-		line := v.Buffer.Line(v.CursorLine)
-		if v.CursorCol >= 0 && v.CursorCol < len(line) {
-			under = rune(line[v.CursorCol])
-		}
 	}
 	n.Paint(c, localX, localY, under)
 }
