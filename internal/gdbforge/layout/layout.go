@@ -14,6 +14,17 @@ const (
 	Wide    = "wide"
 )
 
+// AsmSplitRight reports whether :layout <name> asm should place Assembly to
+// the right of Code (vs below Code).
+func AsmSplitRight(name string) bool {
+	switch name {
+	case Classic, Wide, Panels:
+		return true
+	default:
+		return false
+	}
+}
+
 // Panes are the singleton widgets a layout may place. Unused fields may be nil
 // (e.g. Classic ignores Output / list panes).
 type Panes struct {

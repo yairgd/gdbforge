@@ -172,3 +172,12 @@ func TestBuildWideStructure(t *testing.T) {
 		t.Fatalf("leaves=%d want 6", len(leaves))
 	}
 }
+
+func TestAsmSplitRight(t *testing.T) {
+	if !AsmSplitRight(Classic) || !AsmSplitRight(Wide) || !AsmSplitRight(Panels) {
+		t.Fatal("classic/wide/panels should split asm to the right")
+	}
+	if AsmSplitRight(Default) || AsmSplitRight("") {
+		t.Fatal("default/empty should not split asm to the right")
+	}
+}

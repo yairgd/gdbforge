@@ -13,7 +13,7 @@ import (
 //	/ → ! <cmdline>  (Vim-style :!bash / :!ls — ExecClient + ExecWidget)
 //	/ → AI <question> / ai <question>  (in-app LLM on live GDB)
 //	/ → set → … (colors, equalalways, inferior-tty, …)
-//	/ → layout <name>  (default | panels | classic | wide)
+//	/ → layout <name> [asm]  (default | panels | classic | wide; optional asm)
 //	/ → b <name>   (switch buffer)
 //	/ → lua <func> [args…]
 //	/ → edit [name]
