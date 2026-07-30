@@ -1,10 +1,11 @@
 package persist
 
 import (
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 
 	"gopkg.in/yaml.v3"
 )
@@ -52,22 +53,8 @@ func SaveBreakpoints(dir string, items []models.BreakInfo) error {
 			Condition: it.Condition,
 		})
 	}
-	data, err := yaml.Marshal(&doc)
-	if err != nil {
-		return fmt.Errorf("marshal breakpoints: %w", err)
-	}
-	outDir := filepath.Join(dir, DirName)
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", outDir, err)
-	}
-	path := BreakpointsPath(dir)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename %s: %w", path, err)
+	if err := writeYAMLAtomic(BreakpointsPath(dir), &doc); err != nil {
+		return fmt.Errorf("breakpoints: %w", err)
 	}
 	return nil
 }

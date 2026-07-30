@@ -6,7 +6,6 @@ import (
 
 	"path/filepath"
 
-	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
@@ -15,7 +14,8 @@ import (
 
 // syncBreakpointViews pushes the shared BreakpointList to BP + Code + Asm views and
 // snapshots the list for .gdbforge/breakpoints.yaml on quit.
-func (a *DebuggerApp) syncBreakpointViews() {
+func (c *breakCtl) syncBreakpointViews() {
+	a := c.app
 	if a.breakpoints == nil {
 		return
 	}
@@ -29,21 +29,20 @@ func (a *DebuggerApp) syncBreakpointViews() {
 	a.bpSnapshotSet = true
 }
 
-func (a *DebuggerApp) sendBreakpointCmd(cmd string) {
-	if cmd == "" {
+func (c *breakCtl) sendBreakpointCmd(cmd string) {
+	a := c.app
+	if cmd == "" || a.backend == nil {
 		return
 	}
-	if a.isDLV() {
-		cmd = dlv.MapBreakCmd(cmd)
-	}
+	cmd = a.backend.MapBreak(cmd)
 	gdb.SendCmd(a.GDB(), a.State(), a.Debug(), cmd)
-	if a.isDLV() {
-		// Do not Query("breakpoints") immediately — after exit Delve may ask
-		// [Y/n]? and the query line would be consumed as the answer.
-		a.dlvBPDeferred = true
+	if a.backend.BreakRefreshImmediate() {
+		a.onBreakpointsChanged()
 		return
 	}
-	a.onBreakpointsChanged()
+	// Do not Query("breakpoints") immediately — after exit Delve may ask
+	// [Y/n]? and the query line would be consumed as the answer.
+	a.dlvBPDeferred = true
 }
 
 // restoreSavedBreakpoints reloads ./.gdbforge/breakpoints.yaml into GDB + UI.
@@ -58,7 +57,7 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []models.BreakInfo) {
 
 	// Merge current GDB BPs first (e.g. from -x) so we do not duplicate.
 	if items, ok := a.fetchBreakInfos(); ok {
-		a.applyBreakInfos(items)
+		a.breaks.applyBreakInfos(items)
 	}
 
 	for _, it := range saved {
@@ -74,10 +73,10 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []models.BreakInfo) {
 	items, ok := a.fetchBreakInfos()
 	if !ok {
 		// Still seed the model so the BP pane shows saved rows until refresh.
-		a.applyBreakInfos(saved)
+		a.breaks.applyBreakInfos(saved)
 		return
 	}
-	a.applyBreakInfos(items)
+	a.breaks.applyBreakInfos(items)
 
 	// Apply disabled flags from the saved file.
 	for _, want := range saved {
@@ -98,7 +97,7 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []models.BreakInfo) {
 	// Re-apply conditions from the saved file (after numbers are known).
 	items, ok = a.fetchBreakInfos()
 	if ok {
-		a.applyBreakInfos(items)
+		a.breaks.applyBreakInfos(items)
 	}
 	for _, want := range saved {
 		if want.Condition == "" {
@@ -129,7 +128,8 @@ func breakInsertCmd(file string, line int) string {
 	return "break " + loc
 }
 
-func (a *DebuggerApp) onBreakpointToggle(index int) {
+func (c *breakCtl) onBreakpointToggle(index int) {
+	a := c.app
 	if a.breakpoints == nil {
 		return
 	}
@@ -139,21 +139,22 @@ func (a *DebuggerApp) onBreakpointToggle(index int) {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
+	c.syncBreakpointViews()
 	if a.bpWidget != nil {
 		a.bpWidget.SelectIndex(index)
 	}
-	a.sendBreakpointCmd(cmd)
+	c.sendBreakpointCmd(cmd)
 	// Re-enable only inserts the break; restore condition after GDB assigns a number.
 	if strings.HasPrefix(cmd, "break ") && cond != "" {
 		it, ok := a.breakpoints.At(index)
 		if ok {
-			a.reapplyConditionAfterEnable(cmd, it.File, it.Line, it.Addr, cond)
+			a.breaks.reapplyConditionAfterEnable(cmd, it.File, it.Line, it.Addr, cond)
 		}
 	}
 }
 
-func (a *DebuggerApp) onBreakpointDelete(index int) {
+func (c *breakCtl) onBreakpointDelete(index int) {
+	a := c.app
 	if a.breakpoints == nil {
 		return
 	}
@@ -161,11 +162,12 @@ func (a *DebuggerApp) onBreakpointDelete(index int) {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
-	a.sendBreakpointCmd(cmd)
+	c.syncBreakpointViews()
+	c.sendBreakpointCmd(cmd)
 }
 
-func (a *DebuggerApp) onCodeBreakToggle(path string, line int) {
+func (c *breakCtl) onCodeBreakToggle(path string, line int) {
+	a := c.app
 	if a.breakpoints == nil || path == "" || line < 1 {
 		return
 	}
@@ -173,11 +175,12 @@ func (a *DebuggerApp) onCodeBreakToggle(path string, line int) {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
-	a.sendBreakpointCmd(cmd)
+	c.syncBreakpointViews()
+	c.sendBreakpointCmd(cmd)
 }
 
-func (a *DebuggerApp) onAsmBreakToggle(addr string) {
+func (c *breakCtl) onAsmBreakToggle(addr string) {
+	a := c.app
 	if a.breakpoints == nil {
 		return
 	}
@@ -189,11 +192,12 @@ func (a *DebuggerApp) onAsmBreakToggle(addr string) {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
-	a.sendBreakpointCmd(cmd)
+	c.syncBreakpointViews()
+	c.sendBreakpointCmd(cmd)
 }
 
-func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
+func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
+	a := c.app
 	if cw == nil || a.breakpoints == nil {
 		return
 	}
@@ -212,15 +216,16 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
+	c.syncBreakpointViews()
 	if a.bpWidget != nil && idx >= 0 {
 		a.bpWidget.SelectIndex(idx)
 	}
-	a.sendBreakpointCmd(cmd)
-	a.reapplyConditionAfterEnable(cmd, path, line, "", prevCond)
+	c.sendBreakpointCmd(cmd)
+	a.breaks.reapplyConditionAfterEnable(cmd, path, line, "", prevCond)
 }
 
-func (a *DebuggerApp) toggleAsmBreakEnable() {
+func (c *breakCtl) toggleAsmBreakEnable() {
+	a := c.app
 	if a.assemblyWidget == nil || a.breakpoints == nil {
 		return
 	}
@@ -238,16 +243,17 @@ func (a *DebuggerApp) toggleAsmBreakEnable() {
 	if !ok {
 		return
 	}
-	a.syncBreakpointViews()
+	c.syncBreakpointViews()
 	if a.bpWidget != nil && idx >= 0 {
 		a.bpWidget.SelectIndex(idx)
 	}
-	a.sendBreakpointCmd(cmd)
-	a.reapplyConditionAfterEnable(cmd, "", 0, addr, prevCond)
+	c.sendBreakpointCmd(cmd)
+	a.breaks.reapplyConditionAfterEnable(cmd, "", 0, addr, prevCond)
 }
 
 // reapplyConditionAfterEnable sends condition N expr after a re-enable break insert.
-func (a *DebuggerApp) reapplyConditionAfterEnable(cmd, file string, line int, addr, cond string) {
+func (c *breakCtl) reapplyConditionAfterEnable(cmd, file string, line int, addr, cond string) {
+	a := c.app
 	if !strings.HasPrefix(cmd, "break ") || cond == "" || a.breakpoints == nil {
 		return
 	}
@@ -272,16 +278,17 @@ func (a *DebuggerApp) reapplyConditionAfterEnable(cmd, file string, line int, ad
 	if !ok || cur.Number < 1 {
 		return
 	}
-	a.sendBreakpointCmd(fmt.Sprintf("condition %d %s", cur.Number, cond))
+	c.sendBreakpointCmd(fmt.Sprintf("condition %d %s", cur.Number, cond))
 }
 
 // applyBreakInfos merges GDB -break-list into the shared model and syncs views.
-func (a *DebuggerApp) applyBreakInfos(gdbItems []models.BreakInfo) {
+func (c *breakCtl) applyBreakInfos(gdbItems []models.BreakInfo) {
+	a := c.app
 	if a.breakpoints == nil {
 		a.breakpoints = &models.BreakpointList{}
 	}
 	a.breakpoints.MergeFromGDB(gdbItems)
-	a.syncBreakpointViews()
+	c.syncBreakpointViews()
 }
 
 // paintCodeWidgetBreaks applies the shared BP list to one CodeWidget.
@@ -301,4 +308,35 @@ func (a *DebuggerApp) paintAsmBreakmarks(items []models.BreakInfo) {
 		items = []models.BreakInfo{}
 	}
 	a.assemblyWidget.SetBreakInfos(items)
+}
+
+
+func (c *breakCtl) Activate(bp models.BreakInfo) {
+	a := c.app
+	if a == nil {
+		return
+	}
+	if bp.File == "" && bp.Addr != "" {
+		if a.assemblyWidget == nil || a.backend == nil || !a.backend.SupportsAssembly() {
+			return
+		}
+		if a.hasAsmSplit() || a.preferAsm {
+			a.placeAsmInSlot(a.assemblyWidget)
+			if leaf := a.findAsmLeaf(); leaf != nil && a.hasAsmSplit() {
+				_ = a.tab.FocusLeaf(leaf)
+			}
+			go a.runAssemblyRefresh(bp.Addr, a.assemblyWidget.VisibleRows(), false)
+			a.RequestFrame()
+		}
+		return
+	}
+	if bp.File == "" {
+		return
+	}
+	w := a.showCodeBrowse(bp.File, bp.Line)
+	if w != nil && w.Unavailable() {
+		w.ShowUnavailable(bp.File, formatUnavailableExtra("", bp.Line))
+	}
+	a.placeCodeInSlot(w)
+	a.RequestFrame()
 }

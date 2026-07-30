@@ -8,7 +8,6 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/luadebug"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
@@ -443,18 +442,11 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 					a.gdbWidget.EchoSubmit(cmd)
 					a.gdbWidget.ForceFollowTailAndScroll()
 				}
-				if a.isDLV() {
-					if a.dlvClient == nil {
-						return
-					}
-					a.withGdbUIOwner(func() { _ = a.dlvClient.Send(cmd) })
-				} else {
-					if a.gdbClient == nil {
-						return
-					}
-					sendCmd := gdb.CLIExecToMI(cmd)
-					a.withGdbUIOwner(func() { _ = a.gdbClient.Send(sendCmd) })
+				if a.backend == nil {
+					return
 				}
+				sendCmd, _ := a.backend.MapExec(cmd)
+				a.withGdbUIOwner(func() { _ = a.backend.SendLine(sendCmd) })
 				a.RequestFrame()
 			})
 		},

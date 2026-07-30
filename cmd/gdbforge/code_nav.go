@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -311,31 +309,16 @@ func (a *DebuggerApp) activateCodePane() {
 // GDB: prefer MI -exec-* so stops update Code via *stopped without dumping a
 // CLI source listing into the console. Delve: keep CLI (no MI mapping).
 func (a *DebuggerApp) sendGdbExec(cmd string) {
-	if a.gdbWidget == nil || cmd == "" {
+	if a.gdbWidget == nil || cmd == "" || a.backend == nil {
 		return
 	}
 	sess := a.GDB()
 	if sess == nil {
 		return
 	}
-	sendCmd := strings.TrimSpace(cmd)
-	if a.isDLV() {
-		switch sendCmd {
-		case "finish":
-			sendCmd = "stepout"
-		case "run", "start":
-			sendCmd = "restart"
-		}
-		if isDlvRunCmd(sendCmd) && a.State() != nil {
-			a.Debug().SetInferiorRunning(true)
-		}
-	} else {
-		sendCmd = gdb.CLIExecToMI(sendCmd)
-		// Arm before ^running arrives so Space-break while the inferior is
-		// mid-continue still interrupts and installs the BP.
-		if isDlvRunCmd(strings.TrimSpace(cmd)) && a.State() != nil {
-			a.Debug().SetInferiorRunning(true)
-		}
+	sendCmd, marksRunning := a.backend.MapExec(cmd)
+	if marksRunning && a.State() != nil {
+		a.Debug().SetInferiorRunning(true)
 	}
 	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

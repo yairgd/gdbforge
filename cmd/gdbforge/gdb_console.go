@@ -6,6 +6,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/core"
@@ -42,83 +43,33 @@ func (a *DebuggerApp) startGdbConsoleBridge() {
 }
 
 func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(events.GdbOutputMsg), onExit func()) {
-	var pending strings.Builder
-	var flushTimer *time.Timer
-	var flushC <-chan time.Time
-
-	disarm := func() {
-		if flushTimer == nil {
-			return
-		}
-		if !flushTimer.Stop() {
-			select {
-			case <-flushTimer.C:
-			default:
-			}
-		}
-		flushTimer = nil
-		flushC = nil
-	}
-	flush := func() {
-		disarm()
-		if pending.Len() == 0 {
-			return
-		}
-		data := pending.String()
-		pending.Reset()
-		post(events.GdbOutputMsg{Data: data})
-	}
-	arm := func() {
-		if flushTimer != nil {
-			return
-		}
-		flushTimer = time.NewTimer(gdbOutputFlushInterval)
-		flushC = flushTimer.C
-	}
-
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				flush()
-				if onExit != nil {
-					onExit()
-				}
+	coalescePtyOutput(ch, ptyCoalesceOpts{
+		Interval: gdbOutputFlushInterval,
+		MaxBytes: gdbOutputFlushMaxBytes,
+		Post: func(data string, err error) {
+			if post == nil {
 				return
 			}
-			if msg.Err != nil {
-				flush()
-				post(events.GdbOutputMsg{Err: msg.Err})
-				continue
-			}
-			if msg.Data == "" {
-				continue
-			}
-			pending.WriteString(msg.Data)
-			if pending.Len() >= gdbOutputFlushMaxBytes {
-				flush()
-			} else {
-				arm()
-			}
-		case <-flushC:
-			flush()
-		}
-	}
+			post(events.GdbOutputMsg{Data: data, Err: err})
+		},
+		OnExit: onExit,
+	})
 }
 
 func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
-	if a.gdbWidget == nil || a.GDB() == nil {
+	if a.gdbWidget == nil || a.backend == nil {
 		return
 	}
 	if a.isDLV() {
 		a.onDlvConsoleSubmit(raw)
 		return
 	}
-	if a.gdbClient == nil {
+	gb := a.gdbBackend()
+	if gb == nil || gb.Client == nil {
 		return
 	}
 	w := a.gdbWidget
-	c := a.gdbClient
+	c := gb.Client
 
 	cmd := raw
 	if !c.Quit.Confirming() && cmd == "" {
@@ -180,11 +131,12 @@ func (a *DebuggerApp) onGdbConsoleSubmit(raw string) {
 }
 
 func (a *DebuggerApp) onDlvConsoleSubmit(raw string) {
-	if a.dlvClient == nil || a.gdbWidget == nil {
+	db := a.dlvBackend()
+	if db == nil || db.Client == nil || a.gdbWidget == nil {
 		return
 	}
 	w := a.gdbWidget
-	c := a.dlvClient
+	c := db.Client
 
 	cmd := raw
 	if cmd == "" {
@@ -237,29 +189,20 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 	if a.gdbWidget != nil {
 		a.gdbWidget.ClearInput()
 	}
-	if a.GDB() == nil {
+	if a.backend == nil {
 		return
 	}
 	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
 	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
-	if a.isDLV() && a.dlvClient != nil {
-		// At a Delve yes/no prompt, cancel with "n" — do not SIGINT-spam dlv.
-		if a.dlvConfirm.Confirming() {
-			a.withGdbUIOwner(func() { _ = a.dlvClient.Send("n") })
-			return
-		}
-		running := a.State() != nil && a.Debug().InferiorRunning()
-		if !running {
-			return
-		}
-		_ = a.dlvClient.Interrupt()
+	running := a.State() != nil && a.Debug().InferiorRunning()
+	confirming := a.dlvConfirm.Confirming()
+	if confirming && a.isDLV() {
+		a.withGdbUIOwner(func() { _ = a.backend.Interrupt(running, true) })
 		a.RequestFrame()
 		return
 	}
-	if a.gdbClient != nil {
-		_ = a.gdbClient.Interrupt()
-		a.RequestFrame()
-	}
+	_ = a.backend.Interrupt(running, false)
+	a.RequestFrame()
 }
 
 // onGdbConsoleSuspend handles Ctrl-Z like GDB: SIGTSTP the inferior while it
@@ -267,8 +210,9 @@ func (a *DebuggerApp) onGdbConsoleInterrupt() {
 func (a *DebuggerApp) onGdbConsoleSuspend() {
 	running := a.State() != nil && a.Debug().InferiorRunning()
 	if running {
-		if a.gdbClient != nil {
-			a.withGdbUIOwner(func() { _ = a.gdbClient.SuspendInferior() })
+		if a.backend != nil && a.backend.SupportsLiveInferiorTTY() {
+			// GDB: SIGTSTP via MI pid tracking.
+			a.withGdbUIOwner(func() { _ = a.backend.SuspendInferior() })
 			return
 		}
 		// Delve: no MI pid tracking yet — ^Z on the inferior TTY (cooked mode).
@@ -281,18 +225,15 @@ func (a *DebuggerApp) onGdbConsoleSuspend() {
 }
 
 func (a *DebuggerApp) inferiorTTY() *ptyx.TTY {
-	if a.gdbClient != nil {
-		return a.gdbClient.InferiorTTY()
+	if a.backend == nil {
+		return nil
 	}
-	if a.dlvClient != nil {
-		return a.dlvClient.InferiorTTY()
-	}
-	return nil
+	return a.backend.InferiorTTY()
 }
 
 func (a *DebuggerApp) onGdbConsoleEOF() {
 	if a.isDLV() {
-		if a.dlvClient == nil {
+		if a.backend == nil {
 			return
 		}
 		// Delve: send quit; it may ask for confirmation interactively.
@@ -302,17 +243,19 @@ func (a *DebuggerApp) onGdbConsoleEOF() {
 			w.EchoSubmit("quit")
 			w.ClearInput()
 		}
-		a.withGdbUIOwner(func() { _ = a.dlvClient.Send("quit") })
+		a.withGdbUIOwner(func() { _ = a.backend.SendLine("quit") })
 		return
 	}
-	if a.gdbClient == nil {
+	gb := a.gdbBackend()
+	if gb == nil || gb.Client == nil {
 		return
 	}
-	a.handleGdbQuitAction(a.gdbClient.RequestQuit(), "q")
+	a.handleGdbQuitAction(gb.Client.RequestQuit(), "q")
 }
 
 func (a *DebuggerApp) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
-	if a.gdbClient == nil || a.gdbWidget == nil {
+	gb := a.gdbBackend()
+	if gb == nil || gb.Client == nil || a.gdbWidget == nil {
 		return
 	}
 	w := a.gdbWidget
@@ -322,7 +265,7 @@ func (a *DebuggerApp) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
 			w.PushHistory(echoCmd)
 			w.EchoSubmit(echoCmd)
 		}
-		w.BeginLiveHost(gdb.QuitConfirmLines(a.gdbClient.Quit.InferiorPID()), gdb.QuitConfirmHost)
+		w.BeginLiveHost(gdb.QuitConfirmLines(gb.Client.Quit.InferiorPID()), gdb.QuitConfirmHost)
 	case gdb.QuitReprompt:
 		w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
 	default:
@@ -332,10 +275,11 @@ func (a *DebuggerApp) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
 }
 
 func (a *DebuggerApp) sendGdbQuitAction(act gdb.QuitAction) {
-	if a.gdbClient == nil || !act.Sends() {
+	gb := a.gdbBackend()
+	if gb == nil || gb.Client == nil || !act.Sends() {
 		return
 	}
-	a.withGdbUIOwner(func() { _ = gdb.ApplyQuitAction(a.gdbClient, act) })
+	a.withGdbUIOwner(func() { _ = gdb.ApplyQuitAction(gb.Client, act) })
 }
 
 func (a *DebuggerApp) withGdbUIOwner(fn func()) {
@@ -347,11 +291,12 @@ func (a *DebuggerApp) withGdbUIOwner(fn func()) {
 }
 
 func (a *DebuggerApp) applyGdbMiUpdate(upd gdb.MiUpdate) {
-	if a.gdbClient != nil {
-		a.gdbClient.Quit.Observe(upd)
+	if gb := a.gdbBackend(); gb != nil && gb.Client != nil {
+		gb.Client.Quit.Observe(upd)
 	}
 	silent := a.State() != nil && a.Debug().SuppressGdbConsole()
-	confirming := a.gdbClient != nil && a.gdbClient.Quit.Confirming()
+	gb := a.gdbBackend()
+	confirming := gb != nil && gb.Client != nil && gb.Client.Quit.Confirming()
 	if !silent && a.gdbWidget != nil {
 		includeTarget := a.State() != nil && a.Debug().GdbTargetPrint()
 		a.gdbWidget.PaintMiDisplay(widgets.MiPaintUpdate{
@@ -439,20 +384,17 @@ func (a *DebuggerApp) applyStopAndPromptSideEffects(
 
 // handleDebuggerOutputMsg routes coalesced PTY output to the active backend parser.
 func (a *DebuggerApp) handleDebuggerOutputMsg(msg events.GdbOutputMsg) {
-	if msg.Data == "" {
+	if msg.Data == "" || a.backend == nil {
 		return
 	}
-	if a.isDLV() {
-		if a.dlvInputState == nil {
-			return
-		}
-		a.applyDlvUpdate(a.dlvInputState.PushRaw(msg.Data))
+	ev := a.backend.PushConsoleOutput(msg.Data)
+	if ev.GDB != nil {
+		a.applyGdbMiUpdate(*ev.GDB)
 		return
 	}
-	if a.gdbInputState == nil {
-		return
+	if u := backend.AsDLVUpdate(ev); u != nil {
+		a.applyDlvUpdate(*u)
 	}
-	a.applyGdbMiUpdate(a.gdbInputState.PushRaw(msg.Data))
 }
 
 // handleGdbOutputMsg is kept as an alias for existing call sites / tests.

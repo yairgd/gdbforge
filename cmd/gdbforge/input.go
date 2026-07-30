@@ -8,7 +8,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -175,7 +174,7 @@ func (a *DebuggerApp) toggleCodeBreakEnable() {
 	if focused := a.focusedCode(); focused != nil {
 		cw = focused
 	}
-	a.toggleCodeBreakEnableOn(cw)
+	a.breaks.toggleCodeBreakEnableOn(cw)
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
@@ -523,15 +522,13 @@ func (a *DebuggerApp) gdbTabComplete() {
 		return
 	}
 	text := a.gdbWidget.InputText()
-	var res gdb.CompleteResult
-	if a.isDLV() {
-		if a.dlvConfirm.Confirming() {
-			return
-		}
-		res = dlv.Complete(a.GDB(), a.State(), text)
-	} else {
-		res = gdb.Complete(a.GDB(), a.State(), text)
+	if a.backend == nil {
+		return
 	}
+	if a.isDLV() && a.dlvConfirm.Confirming() {
+		return
+	}
+	res := a.backend.Complete(a.GDB(), a.State(), text)
 
 	// Expand to longest common prefix when it grows the line.
 	if res.Completion != "" && res.Completion != text {
@@ -576,16 +573,15 @@ func (a *DebuggerApp) refreshGDBCompletionMenu() {
 		a.leaveCompletionMode()
 		return
 	}
-	var res gdb.CompleteResult
-	if a.isDLV() {
-		if a.dlvConfirm.Confirming() {
-			a.leaveCompletionMode()
-			return
-		}
-		res = dlv.Complete(a.GDB(), a.State(), text)
-	} else {
-		res = gdb.Complete(a.GDB(), a.State(), text)
+	if a.backend == nil {
+		a.leaveCompletionMode()
+		return
 	}
+	if a.isDLV() && a.dlvConfirm.Confirming() {
+		a.leaveCompletionMode()
+		return
+	}
+	res := a.backend.Complete(a.GDB(), a.State(), text)
 	names := res.Matches
 	if len(names) == 0 && res.Completion != "" && res.Completion != text {
 		names = []string{res.Completion}
@@ -601,11 +597,8 @@ func (a *DebuggerApp) publishGDBCompletionMenu(text string, names []string) {
 	menu := gdb.MenuNames(text, names)
 	// After file:, attach signatures from -symbol-info-functions
 	// ("foo" → "foo(int, char *)"); apply still inserts bare name.
-	// Skip the heavy MI query when not completing a linespec, and never under Delve.
-	if !a.isDLV() && gdb.CompletingLinespec(text) {
-		if sigs := gdb.FunctionSignatures(a.GDB(), a.State()); len(sigs) > 0 {
-			menu = gdb.EnrichLinespecMenuNames(text, menu, sigs)
-		}
+	if a.backend != nil {
+		menu = a.backend.EnrichLinespecMenu(text, menu, a.GDB(), a.State())
 	}
 	if a.ctx.Bus != nil {
 		platform.Publish(a.ctx.Bus, termui.CompletionMsg{
@@ -950,7 +943,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		// refreshBreakpoints may have applied off-thread; push gutters again
 		// on the UI thread so a late Code buffer still gets marks.
 		if a.breakpoints != nil {
-			a.syncBreakpointViews()
+			a.breaks.syncBreakpointViews()
 		}
 		a.RequestFrame()
 	case debugInfoUIMsg:

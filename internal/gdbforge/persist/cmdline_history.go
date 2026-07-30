@@ -62,22 +62,8 @@ func SaveCmdlineHistory(dir string, commands, search []string) error {
 	if doc.Search == nil {
 		doc.Search = []string{}
 	}
-	data, err := yaml.Marshal(&doc)
-	if err != nil {
-		return fmt.Errorf("marshal cmdline history: %w", err)
-	}
-	outDir := filepath.Join(dir, DirName)
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", outDir, err)
-	}
-	path := CmdlineHistoryPath(dir)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename %s: %w", path, err)
+	if err := writeYAMLAtomic(CmdlineHistoryPath(dir), &doc); err != nil {
+		return fmt.Errorf("cmdline history: %w", err)
 	}
 	return nil
 }

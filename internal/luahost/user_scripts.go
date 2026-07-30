@@ -36,71 +36,40 @@ type SpawnTerminalFunc func(argv []string) error
 
 // SetOpenBuffer installs gdbforge.open_buffer(name) for user scripts.
 func (rt *Runtime) SetOpenBuffer(fn OpenBufferFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.openBuffer = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "open_buffer", rt.L.NewFunction(rt.luaOpenBuffer))
-	}
+	rt.setHostAPI(func() { rt.openBuffer = fn }, "open_buffer", rt.luaOpenBuffer)
 }
 
 // SetRun installs gdbforge.run(...) → same path as :! argv.
 func (rt *Runtime) SetRun(fn RunFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.run = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "run", rt.L.NewFunction(rt.luaRun))
-	}
+	rt.setHostAPI(func() { rt.run = fn }, "run", rt.luaRun)
 }
 
 // SetSpawn installs gdbforge.spawn(...) — background exec, no focus steal.
 func (rt *Runtime) SetSpawn(fn SpawnFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.spawn = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "spawn", rt.L.NewFunction(rt.luaSpawn))
-	}
+	rt.setHostAPI(func() { rt.spawn = fn }, "spawn", rt.luaSpawn)
 }
 
 // SetOpenExternalTTY installs gdbforge.open_external_tty() → pts path.
 func (rt *Runtime) SetOpenExternalTTY(fn OpenExternalTTYFunc) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.openExternalTTY = fn
-	if rt.L == nil {
-		return
-	}
-	gf := rt.L.GetGlobal("gdbforge")
-	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "open_external_tty", rt.L.NewFunction(rt.luaOpenExternalTTY))
-	}
+	rt.setHostAPI(func() { rt.openExternalTTY = fn }, "open_external_tty", rt.luaOpenExternalTTY)
 }
 
 // SetSpawnTerminal installs gdbforge.spawn_terminal(...) — real terminal + argv.
 func (rt *Runtime) SetSpawnTerminal(fn SpawnTerminalFunc) {
+	rt.setHostAPI(func() { rt.spawnTerminal = fn }, "spawn_terminal", rt.luaSpawnTerminal)
+}
+
+// setHostAPI stores a host callback and publishes it on gdbforge.<name> when L is live.
+func (rt *Runtime) setHostAPI(store func(), name string, fn lua.LGFunction) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
-	rt.spawnTerminal = fn
+	store()
 	if rt.L == nil {
 		return
 	}
 	gf := rt.L.GetGlobal("gdbforge")
 	if tbl, ok := gf.(*lua.LTable); ok {
-		rt.L.SetField(tbl, "spawn_terminal", rt.L.NewFunction(rt.luaSpawnTerminal))
+		rt.L.SetField(tbl, name, rt.L.NewFunction(fn))
 	}
 }
 
@@ -113,35 +82,23 @@ type ScriptFile struct {
 // WalkLuaScripts recursively finds *.lua under root. Command name is the file
 // basename (e.g. games/snake/snake.lua → "snake"). Missing root is empty.
 func WalkLuaScripts(root string) ([]ScriptFile, error) {
-	var out []ScriptFile
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) && path == root {
-				return nil
-			}
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasSuffix(strings.ToLower(name), ".lua") {
-			return nil
-		}
-		cmd := strings.TrimSuffix(name, filepath.Ext(name))
-		if cmd == "" {
-			return nil
-		}
-		out = append(out, ScriptFile{Path: path, Cmd: cmd})
-		return nil
-	})
-	if err != nil {
+	if root == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(root); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return out, nil
+	files, err := WalkLuaScriptsFS(os.DirFS(root), ".")
+	if err != nil {
+		return nil, err
+	}
+	for i := range files {
+		files[i].Path = filepath.Join(root, files[i].Path)
+	}
+	return files, nil
 }
 
 // LoadDir loads every *.lua file under dir (non-recursive). Prefer WalkLuaScripts

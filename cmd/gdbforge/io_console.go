@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -31,18 +30,17 @@ func (a *DebuggerApp) wireInferiorIO(tty *ptyx.TTY) {
 	}
 	a.outputWidget.EnableInput(true)
 	a.outputWidget.SetSizeFunc(tty.SetSize)
-	a.outputWidget.SetOnSubmit(func(line string) {
-		a.sendInferior(tty, func() { _ = tty.Send(line) })
-	})
-	a.outputWidget.SetOnInterrupt(func() {
-		a.sendInferior(tty, func() { _ = tty.SendRaw("\x03") })
-	})
-	a.outputWidget.SetOnSuspend(func() {
-		// Same policy as GDB console / global Ctrl-Z (not raw ^Z while stopped).
-		a.onGdbConsoleSuspend()
-	})
-	a.outputWidget.SetOnEOF(func() {
-		a.sendInferior(tty, func() { _ = tty.SendRaw("\x04") })
+	wireConsole(a.outputWidget, consoleHandlers{
+		Submit: func(line string) {
+			a.sendInferior(tty, func() { _ = tty.Send(line) })
+		},
+		Interrupt: func() {
+			a.sendInferior(tty, func() { _ = tty.SendRaw("\x03") })
+		},
+		Suspend: a.onGdbConsoleSuspend,
+		EOF: func() {
+			a.sendInferior(tty, func() { _ = tty.SendRaw("\x04") })
+		},
 	})
 	a.startInferiorIOBridge(tty)
 }
@@ -90,92 +88,18 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 // coalesceInferiorOutput batches PTY chunks so a busy UI event queue is less
 // likely to drop program stdout (PostEvent returns ErrEventQFull under flood).
 func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.InferiorOutputMsg), onExit func()) {
-	var pending strings.Builder
-	var flushTimer *time.Timer
-	var flushC <-chan time.Time
-	dropped := 0
-
-	disarm := func() {
-		if flushTimer == nil {
-			return
-		}
-		if !flushTimer.Stop() {
-			select {
-			case <-flushTimer.C:
-			default:
-			}
-		}
-		flushTimer = nil
-		flushC = nil
-	}
-	trimPending := func() {
-		if pending.Len() <= inferiorPendingHardMax {
-			return
-		}
-		s := pending.String()
-		keepHead := inferiorPendingHardMax / 4
-		keepTail := inferiorPendingHardMax - keepHead - 80
-		if keepTail < 1024 {
-			keepTail = inferiorPendingHardMax / 2
-			keepHead = inferiorPendingHardMax - keepTail
-		}
-		marker := "\n... [output truncated under flood] ...\n"
-		dropped += len(s) - keepHead - keepTail
-		pending.Reset()
-		pending.WriteString(s[:keepHead])
-		pending.WriteString(marker)
-		pending.WriteString(s[len(s)-keepTail:])
-	}
-	flush := func() {
-		disarm()
-		if pending.Len() == 0 {
-			return
-		}
-		data := pending.String()
-		pending.Reset()
-		if dropped > 0 {
-			data = "... [earlier output truncated under flood] ...\n" + data
-			dropped = 0
-		}
-		post(events.InferiorOutputMsg{Data: data})
-	}
-	arm := func() {
-		if flushTimer != nil {
-			return
-		}
-		flushTimer = time.NewTimer(inferiorOutputFlushInterval)
-		flushC = flushTimer.C
-	}
-
-	for {
-		select {
-		case msg, ok := <-ch:
-			if !ok {
-				flush()
-				if onExit != nil {
-					onExit()
-				}
+	coalescePtyOutput(ch, ptyCoalesceOpts{
+		Interval: inferiorOutputFlushInterval,
+		MaxBytes: inferiorOutputFlushMaxBytes,
+		HardMax:  inferiorPendingHardMax,
+		Post: func(data string, err error) {
+			if post == nil {
 				return
 			}
-			if msg.Err != nil {
-				flush()
-				post(events.InferiorOutputMsg{Err: msg.Err})
-				continue
-			}
-			if msg.Data == "" {
-				continue
-			}
-			pending.WriteString(msg.Data)
-			trimPending()
-			if pending.Len() >= inferiorOutputFlushMaxBytes {
-				flush()
-			} else {
-				arm()
-			}
-		case <-flushC:
-			flush()
-		}
-	}
+			post(events.InferiorOutputMsg{Data: data, Err: err})
+		},
+		OnExit: onExit,
+	})
 }
 
 func (a *DebuggerApp) stopInferiorIO() {

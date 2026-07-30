@@ -72,8 +72,10 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 
 	a.keyBindings.Bind(
 		commands.NewCommand("gdb-quit", func(args ...any) {
-			if a.gdbClient != nil {
-				a.handleGdbQuitAction(a.gdbClient.RequestQuit(), "q")
+			if gb := a.gdbBackend(); gb != nil && gb.Client != nil {
+				a.handleGdbQuitAction(gb.Client.RequestQuit(), "q")
+			} else if a.isDLV() {
+				a.onGdbConsoleEOF()
 			}
 			a.RequestFrame()
 		}),
@@ -235,61 +237,47 @@ func (a *DebuggerApp) tryKeyBindings(reg *commands.KeyBindingRegistry, ev *tcell
 }
 
 func (a *DebuggerApp) tryCodeMoveUp() bool {
-	if !a.focusIsCodeOrGdb() {
-		return false
-	}
-	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		aw.MoveSel(-1)
-		a.RequestFrame()
-		return true
-	}
-	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveSel(-1)
-		a.RequestFrame()
-		return true
-	}
-	return false
+	return a.tryCodeDelta(-1, 0)
 }
 
 func (a *DebuggerApp) tryCodeMoveDown() bool {
-	if !a.focusIsCodeOrGdb() {
-		return false
-	}
-	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		aw.MoveSel(1)
-		a.RequestFrame()
-		return true
-	}
-	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveSel(1)
-		a.RequestFrame()
-		return true
-	}
-	return false
+	return a.tryCodeDelta(1, 0)
 }
 
 func (a *DebuggerApp) tryCodePageUp() bool {
-	if !a.focusIsCodeOrGdb() {
-		return false
-	}
-	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		n := aw.VisibleRows()
-		if n < 1 {
-			n = 10
-		}
-		aw.MoveSel(-n)
-		a.RequestFrame()
-		return true
-	}
-	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveSel(-10)
-		a.RequestFrame()
-		return true
-	}
-	return false
+	return a.tryCodePage(-1)
 }
 
 func (a *DebuggerApp) tryCodePageDown() bool {
+	return a.tryCodePage(1)
+}
+
+func (a *DebuggerApp) tryCodeMoveLeft() bool {
+	return a.tryCodeCol(-1)
+}
+
+func (a *DebuggerApp) tryCodeMoveRight() bool {
+	return a.tryCodeCol(1)
+}
+
+func (a *DebuggerApp) tryCodeDelta(lineDelta, _ int) bool {
+	if !a.focusIsCodeOrGdb() {
+		return false
+	}
+	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
+		aw.MoveSel(lineDelta)
+		a.RequestFrame()
+		return true
+	}
+	if cw := a.activeCodeWidget(); cw != nil {
+		cw.MoveSel(lineDelta)
+		a.RequestFrame()
+		return true
+	}
+	return false
+}
+
+func (a *DebuggerApp) tryCodePage(dir int) bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
 	}
@@ -298,36 +286,24 @@ func (a *DebuggerApp) tryCodePageDown() bool {
 		if n < 1 {
 			n = 10
 		}
-		aw.MoveSel(n)
+		aw.MoveSel(dir * n)
 		a.RequestFrame()
 		return true
 	}
 	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveSel(10)
-		a.RequestFrame()
-		return true
-	}
-	return false
-}
-
-func (a *DebuggerApp) tryCodeMoveLeft() bool {
-	if !a.focusIsCodeOrGdb() {
-		return false
-	}
-	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveCol(-1)
+		cw.MoveSel(dir * 10)
 		a.RequestFrame()
 		return true
 	}
 	return false
 }
 
-func (a *DebuggerApp) tryCodeMoveRight() bool {
+func (a *DebuggerApp) tryCodeCol(delta int) bool {
 	if !a.focusIsCodeOrGdb() {
 		return false
 	}
 	if cw := a.activeCodeWidget(); cw != nil {
-		cw.MoveCol(1)
+		cw.MoveCol(delta)
 		a.RequestFrame()
 		return true
 	}
@@ -370,7 +346,7 @@ func (a *DebuggerApp) tryCodeToggleEnable() bool {
 		return false
 	}
 	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		a.toggleAsmBreakEnable()
+		a.breaks.toggleAsmBreakEnable()
 		a.RequestFrame()
 		return true
 	}
@@ -378,7 +354,7 @@ func (a *DebuggerApp) tryCodeToggleEnable() bool {
 		if focused := a.focusedCode(); focused != nil {
 			cw = focused
 		}
-		a.toggleCodeBreakEnableOn(cw)
+		a.breaks.toggleCodeBreakEnableOn(cw)
 	}
 	return true
 }
@@ -426,7 +402,7 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	if !ok || fr.File == "" || fr.Line < 1 {
 		return
 	}
-	a.onCodeBreakToggle(fr.File, fr.Line)
+	a.breaks.onCodeBreakToggle(fr.File, fr.Line)
 	a.RequestFrame()
 }
 

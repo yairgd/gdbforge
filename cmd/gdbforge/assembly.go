@@ -25,7 +25,7 @@ type asmRefreshMsg struct {
 // When resetToPC is true, X is set to $pc; otherwise X stays on center (or
 // the widget's current browse address when center is empty).
 func (a *DebuggerApp) armAssemblyRefresh(resetToPC bool) {
-	if a == nil || a.isDLV() || a.gdbMcp == nil {
+	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() || a.gdbMcp == nil {
 		return
 	}
 	if a.assemblyWidget == nil {
@@ -44,7 +44,7 @@ func (a *DebuggerApp) armAssemblyRefresh(resetToPC bool) {
 
 // armAssemblyAround recenters Assembly browse on addr; ━━▶ stays on real $pc.
 func (a *DebuggerApp) armAssemblyAround(addr string) {
-	if a == nil || a.isDLV() || a.gdbMcp == nil || a.assemblyWidget == nil {
+	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() || a.gdbMcp == nil || a.assemblyWidget == nil {
 		return
 	}
 	addr = strings.TrimSpace(addr)
@@ -198,7 +198,7 @@ func (a *DebuggerApp) placeAsmInSlot(w *widgets.AssemblyWidget) {
 // shouldShowAssembly reports whether disassembly should refresh.
 // Never auto-opens asm for missing source — only :b asm or :vs asm / :sp asm.
 func (a *DebuggerApp) shouldShowAssembly(codeW *widgets.CodeWidget) bool {
-	if a == nil || a.isDLV() {
+	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() {
 		return false
 	}
 	_ = codeW
@@ -208,7 +208,7 @@ func (a *DebuggerApp) shouldShowAssembly(codeW *widgets.CodeWidget) bool {
 // openAssemblyBuffer is :b asm / :b assembly — the only request that puts
 // Assembly into the code leaf (unless :vs asm / :sp asm already has a dedicated leaf).
 func (a *DebuggerApp) openAssemblyBuffer() {
-	if a.isDLV() {
+	if a.backend == nil || !a.backend.SupportsAssembly() {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("buffer").Error("assembly view is GDB-only for now")
 		}
@@ -235,7 +235,7 @@ func (a *DebuggerApp) prepareCodeForAsmSplit() bool {
 	if a == nil || a.tab == nil || a.assemblyWidget == nil {
 		return false
 	}
-	if a.isDLV() {
+	if a.backend == nil || !a.backend.SupportsAssembly() {
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("buffer").Error("assembly split is GDB-only for now")
 		}
@@ -274,38 +274,28 @@ func (a *DebuggerApp) focusExistingAsmSplit() bool {
 }
 
 // SplitAsmBelow is :sp asm / :split asm — Code on top, Assembly below.
-// Only one asm split is allowed; a second :sp asm / :vs asm just focuses it.
 func (a *DebuggerApp) SplitAsmBelow(args ...any) {
-	if a.focusExistingAsmSplit() {
-		return
-	}
-	if !a.prepareCodeForAsmSplit() {
-		return
-	}
-	a.tab.HorizontalSplit(a.assemblyWidget)
-	codeLeaf := a.focusedLeaf()
-	asmLeaf := a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.assemblyWidget })
-	if codeLeaf != nil {
-		a.tab.SetLeafMark(leafMarkCode, codeLeaf)
-	}
-	if asmLeaf != nil {
-		a.tab.SetLeafMark(leafMarkAsm, asmLeaf)
-	}
-	a.armAssemblyRefresh(true)
-	a.RequestRedraw()
+	a.splitAsm(true)
 }
 
 // SplitAsmRight is :vs asm / :vsplit asm — Code on the left, Assembly on the right.
-// Only one asm split is allowed; a second :vs asm / :sp asm just focuses it.
 func (a *DebuggerApp) SplitAsmRight(args ...any) {
+	a.splitAsm(false)
+}
+
+// splitAsm opens a dedicated asm split (horizontal=true → below, else right).
+func (a *DebuggerApp) splitAsm(horizontal bool) {
 	if a.focusExistingAsmSplit() {
 		return
 	}
 	if !a.prepareCodeForAsmSplit() {
 		return
 	}
-	a.tab.VerticalSplit(a.assemblyWidget)
-	// After VerticalSplit: First=code (focus), Second=asm (right).
+	if horizontal {
+		a.tab.HorizontalSplit(a.assemblyWidget)
+	} else {
+		a.tab.VerticalSplit(a.assemblyWidget)
+	}
 	codeLeaf := a.focusedLeaf()
 	asmLeaf := a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.assemblyWidget })
 	if codeLeaf != nil {

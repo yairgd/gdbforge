@@ -11,6 +11,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/dlv"
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
@@ -22,10 +23,7 @@ func (a *DebuggerApp) unwireInferiorIO() {
 	}
 	if a.outputWidget != nil {
 		a.outputWidget.EnableInput(false)
-		a.outputWidget.SetOnSubmit(nil)
-		a.outputWidget.SetOnInterrupt(nil)
-		a.outputWidget.SetOnSuspend(nil)
-		a.outputWidget.SetOnEOF(nil)
+		unwireConsole(a.outputWidget)
 		a.outputWidget.SetSizeFunc(nil)
 	}
 }
@@ -64,24 +62,26 @@ func (a *DebuggerApp) SetInferiorTTY(path string) error {
 	if a.isDLV() {
 		return a.setDlvInferiorTTY(path)
 	}
-	if a.gdbClient == nil {
+	gb := a.gdbBackend()
+	if gb == nil || gb.Client == nil {
 		return fmt.Errorf("no gdb session")
 	}
-	if err := a.gdbClient.SetInferiorTTYPath(path); err != nil {
+	if err := gb.Client.SetInferiorTTYPath(path); err != nil {
 		return err
 	}
-	if a.gdbClient.UsesExternalInferiorTTY() {
-		a.markIOExternal(a.gdbClient.InferiorTTYPath())
+	if gb.Client.UsesExternalInferiorTTY() {
+		a.markIOExternal(gb.Client.InferiorTTYPath())
 		return nil
 	}
-	a.rewireInternalInferiorIO(a.gdbClient.InferiorTTY())
+	a.rewireInternalInferiorIO(gb.Client.InferiorTTY())
 	return nil
 }
 
 // setDlvInferiorTTY restarts Delve with --tty path (or an internal PTY).
 // path "" / "internal" → in-app IO pane; otherwise an external /dev/pts/N.
 func (a *DebuggerApp) setDlvInferiorTTY(path string) error {
-	if a.dlvClient == nil {
+	db := a.dlvBackend()
+	if db == nil || db.Client == nil {
 		return fmt.Errorf("no dlv session")
 	}
 	ext := ""
@@ -89,14 +89,14 @@ func (a *DebuggerApp) setDlvInferiorTTY(path string) error {
 		ext = path
 	}
 	cur := ""
-	if a.dlvClient.UsesExternalInferiorTTY() {
-		cur = a.dlvClient.InferiorTTYPath()
+	if db.Client.UsesExternalInferiorTTY() {
+		cur = db.Client.InferiorTTYPath()
 	}
 	if ext == cur {
 		// Already on the desired mode/path — still refresh IO chrome.
 		if ext != "" {
 			a.markIOExternal(ext)
-		} else if inf := a.dlvClient.InferiorTTY(); inf != nil {
+		} else if inf := db.Client.InferiorTTY(); inf != nil {
 			a.rewireInternalInferiorIO(inf)
 		}
 		return nil
@@ -140,8 +140,11 @@ func (a *DebuggerApp) restartDlvWithInferiorTTY(extTTY string) error {
 
 // attachRestartedDlv wires a freshly spawned Delve client into the UI.
 func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
-	a.dlvClient = client
-	a.dlvInputState = dlv.NewInputState()
+	if db := a.dlvBackend(); db != nil {
+		db.ReplaceClient(client)
+	} else {
+		a.backend = backend.NewDLV(client)
+	}
 
 	if boot := client.TakeStartupOutput(); boot != "" && a.gdbWidget != nil {
 		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
@@ -168,9 +171,9 @@ func (a *DebuggerApp) tearDownDlvSession() {
 	a.unwireInferiorIO()
 	a.pendingDebugInfo = false
 	a.pendingFrameSync = false
-	if a.dlvClient != nil {
-		a.dlvClient.Close()
-		a.dlvClient = nil
+	if db := a.dlvBackend(); db != nil && db.Client != nil {
+		db.Client.Close()
+		db.Client = nil
 	}
 }
 
@@ -221,7 +224,7 @@ func (a *DebuggerApp) reapplyBreakpointsAfterDlvConnect() {
 		if it.File == "" || it.Line < 1 {
 			continue
 		}
-		a.sendBreakpointCmd(breakInsertCmd(it.File, it.Line))
+		a.breaks.sendBreakpointCmd(breakInsertCmd(it.File, it.Line))
 	}
 	a.onBreakpointsChanged()
 }

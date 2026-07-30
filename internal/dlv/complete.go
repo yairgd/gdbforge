@@ -271,14 +271,7 @@ func querySilent(sess core.Session, state *platform.AppState, command string) (s
 }
 
 func drainComplete(ch <-chan core.PtyOutputMsg, wait time.Duration) {
-	deadline := time.After(wait)
-	for {
-		select {
-		case <-ch:
-		case <-deadline:
-			return
-		}
-	}
+	core.Drain(ch, wait)
 }
 
 func captureComplete(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration) {

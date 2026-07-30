@@ -85,8 +85,8 @@ func (d appDebugDomain) SetBreakpoint(file string, line int) error {
 	if !ok {
 		return fmt.Errorf("could not set breakpoint")
 	}
-	d.app.syncBreakpointViews()
-	d.app.sendBreakpointCmd(cmd)
+	d.app.breaks.SyncViews()
+	d.app.breaks.SendCmd(cmd)
 	return nil
 }
 
@@ -107,8 +107,8 @@ func (d appDebugDomain) ClearBreakpoint(file string, line int) error {
 	if !ok {
 		return fmt.Errorf("could not clear breakpoint")
 	}
-	d.app.syncBreakpointViews()
-	d.app.sendBreakpointCmd(cmd)
+	d.app.breaks.SyncViews()
+	d.app.breaks.SendCmd(cmd)
 	return nil
 }
 

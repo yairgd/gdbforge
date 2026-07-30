@@ -131,14 +131,7 @@ func (s *GdbMcpService) query(ctx context.Context, command string, owner platfor
 }
 
 func drain(ch <-chan core.PtyOutputMsg, wait time.Duration) {
-	deadline := time.After(wait)
-	for {
-		select {
-		case <-ch:
-		case <-deadline:
-			return
-		}
-	}
+	core.Drain(ch, wait)
 }
 
 func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration, promptToken string) {

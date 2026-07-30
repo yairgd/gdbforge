@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
@@ -48,39 +49,35 @@ func (a *DebuggerApp) initBuiltins() error {
 		if err != nil {
 			return err
 		}
-		a.dlvClient = client
-		a.dlvInputState = dlv.NewInputState()
-		boot = client.TakeStartupOutput()
-		inferior = client.InferiorTTY()
-		promptTok = dlv.PromptToken
-		_ = client.ConfigureInferiorTTY()
+		a.backend = backend.NewDLV(client)
 	} else {
 		client, err := gdb.NewGDBClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, gdb.ClientOptions{InferiorTTY: extTTY})
 		if err != nil {
 			return err
 		}
-		a.gdbClient = client
-		a.gdbInputState = gdb.NewGdbInputState()
-		boot = client.TakeStartupOutput()
-		inferior = client.InferiorTTY()
-		promptTok = gdb.MIPromptToken
-		_ = client.ConfigureInferiorTTY()
+		a.backend = backend.NewGDB(client)
 		skipBreakMain = gdb.HasInitScript(a.cfg.GDBArgs)
 	}
+	boot = a.backend.TakeStartupOutput()
+	inferior = a.backend.InferiorTTY()
+	promptTok = a.backend.PromptToken()
+	_ = a.backend.ConfigureInferiorTTY()
 
 	a.gdbWidget = widgets.NewGDBWidget()
 	a.gdbWidget.SetClipboard(a.ClipboardIO())
 	a.gdbWidget.SetPromptStyleToken(promptTok)
 	// make/gcc (and Delve listings) emit ANSI SGR on the debugger PTY.
 	a.gdbWidget.SetANSI(true)
-	if a.cfg.IsDLV() {
+	if a.backend.PaintTargetInConsole() {
 		// Also paint program stdout in the Delve console (IO pane is primary).
 		a.Debug().SetGdbTargetPrint(true)
 	}
-	a.gdbWidget.SetOnSubmit(a.onGdbConsoleSubmit)
-	a.gdbWidget.SetOnInterrupt(a.onGdbConsoleInterrupt)
-	a.gdbWidget.SetOnSuspend(a.onGdbConsoleSuspend)
-	a.gdbWidget.SetOnEOF(a.onGdbConsoleEOF)
+	wireConsole(a.gdbWidget, consoleHandlers{
+		Submit:    a.onGdbConsoleSubmit,
+		Interrupt: a.onGdbConsoleInterrupt,
+		Suspend:   a.onGdbConsoleSuspend,
+		EOF:       a.onGdbConsoleEOF,
+	})
 	// Replay banner / -x output captured before the UI subscribed, then attach live PTY.
 	if boot != "" {
 		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
@@ -119,30 +116,30 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.assemblyWidget.OnBrowse = func(addr string, rows int) {
 		go a.runAssemblyRefresh(addr, rows, false)
 	}
-	a.assemblyWidget.OnBreakToggle = a.onAsmBreakToggle
-	a.assemblyWidget.OnToggleEnable = a.toggleAsmBreakEnable
+	a.assemblyWidget.OnBreakToggle = a.breaks.onAsmBreakToggle
+	a.assemblyWidget.OnToggleEnable = a.breaks.toggleAsmBreakEnable
 	a.registerBuiltin("asm", a.assemblyWidget)
 	a.registerBuiltin("assembly", a.assemblyWidget)
 
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.bpWidget.SetAppState(a.Debug())
-	a.bpWidget.OnToggle = a.onBreakpointToggle
-	a.bpWidget.OnDelete = a.onBreakpointDelete
-	a.bpWidget.OnActivate = a.onBreakpointActivate
+	a.bpWidget.OnToggle = a.breaks.Toggle
+	a.bpWidget.OnDelete = a.breaks.Delete
+	a.bpWidget.OnActivate = a.breaks.Activate
 	a.bpWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
 	a.threadWidget.SetAppState(a.Debug())
-	a.threadWidget.OnActivate = a.onThreadActivate
+	a.threadWidget.OnActivate = a.nav.ActivateThread
 	a.registerBuiltin("threads", a.threadWidget)
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.callstackWidget.SetAppState(a.Debug())
-	a.callstackWidget.OnActivate = a.onCallStackActivate
+	a.callstackWidget.OnActivate = a.nav.ActivateCallStack
 	a.callstackWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("callstack", a.callstackWidget)
 

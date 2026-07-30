@@ -104,8 +104,8 @@ func (app *DebuggerApp) GdbInterrupt(args ...any) {
 
 func (app *DebuggerApp) ShowRegisters(args ...any) {
 	cmd := "info registers"
-	if app.isDLV() {
-		cmd = "regs"
+	if app.backend != nil {
+		cmd = app.backend.InfoRegistersCmd()
 	}
 	app.sendGdbExec(cmd)
 	app.RequestFrame()
@@ -113,8 +113,8 @@ func (app *DebuggerApp) ShowRegisters(args ...any) {
 
 func (app *DebuggerApp) ShowThreads(args ...any) {
 	cmd := "info threads"
-	if app.isDLV() {
-		cmd = "threads"
+	if app.backend != nil {
+		cmd = app.backend.InfoThreadsCmd()
 	}
 	app.sendGdbExec(cmd)
 	app.RequestFrame()
@@ -512,17 +512,11 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 	w := widgets.NewExecWidget()
 	w.SetClipboard(app.ClipboardIO())
 	w.SetSizeFunc(client.SetSize)
-	w.SetOnSubmit(func(cmd string) {
-		_ = client.Send(cmd)
-	})
-	w.SetOnInterrupt(func() {
-		_ = client.SendRaw("\x03")
-	})
-	w.SetOnSuspend(func() {
-		_ = client.SendRaw("\x1a")
-	})
-	w.SetOnEOF(func() {
-		_ = client.SendRaw("\x04")
+	wireConsole(w, consoleHandlers{
+		Submit:    func(cmd string) { _ = client.Send(cmd) },
+		Interrupt: func() { _ = client.SendRaw("\x03") },
+		Suspend:   func() { _ = client.SendRaw("\x1a") },
+		EOF:       func() { _ = client.SendRaw("\x04") },
 	})
 	w.SetOnClose(func() {
 		client.Close()

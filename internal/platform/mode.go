@@ -284,77 +284,57 @@ func (a *AppState) SetCurrentLayout(name string) {
 }
 
 func (a *AppState) MarkColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.markColor == tcell.ColorDefault {
-		return DefaultMarkColor
-	}
-	return a.markColor
+	return a.getColor(&a.markColor, DefaultMarkColor)
 }
 
 func (a *AppState) SetMarkColor(c tcell.Color) {
-	a.mu.Lock()
-	a.markColor = c
-	a.mu.Unlock()
+	a.setColor(&a.markColor, c)
 }
 
 func (a *AppState) MarkDimColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.markDimColor == tcell.ColorDefault {
-		return DefaultMarkDimColor
-	}
-	return a.markDimColor
+	return a.getColor(&a.markDimColor, DefaultMarkDimColor)
 }
 
 func (a *AppState) SetMarkDimColor(c tcell.Color) {
-	a.mu.Lock()
-	a.markDimColor = c
-	a.mu.Unlock()
+	a.setColor(&a.markDimColor, c)
 }
 
 func (a *AppState) CodeSelColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.codeSelColor == tcell.ColorDefault {
-		return DefaultCodeSelColor
-	}
-	return a.codeSelColor
+	return a.getColor(&a.codeSelColor, DefaultCodeSelColor)
 }
 
 func (a *AppState) SetCodeSelColor(c tcell.Color) {
-	a.mu.Lock()
-	a.codeSelColor = c
-	a.mu.Unlock()
+	a.setColor(&a.codeSelColor, c)
 }
 
 func (a *AppState) MutedColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.mutedColor == tcell.ColorDefault {
-		return DefaultMutedColor
-	}
-	return a.mutedColor
+	return a.getColor(&a.mutedColor, DefaultMutedColor)
 }
 
 func (a *AppState) SetMutedColor(c tcell.Color) {
-	a.mu.Lock()
-	a.mutedColor = c
-	a.mu.Unlock()
+	a.setColor(&a.mutedColor, c)
 }
 
 func (a *AppState) SearchColor() tcell.Color {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.searchColor == tcell.ColorDefault {
-		return DefaultSearchColor
-	}
-	return a.searchColor
+	return a.getColor(&a.searchColor, DefaultSearchColor)
 }
 
 func (a *AppState) SetSearchColor(c tcell.Color) {
+	a.setColor(&a.searchColor, c)
+}
+
+func (a *AppState) getColor(field *tcell.Color, def tcell.Color) tcell.Color {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if *field == tcell.ColorDefault {
+		return def
+	}
+	return *field
+}
+
+func (a *AppState) setColor(field *tcell.Color, c tcell.Color) {
 	a.mu.Lock()
-	a.searchColor = c
+	*field = c
 	a.mu.Unlock()
 }
 

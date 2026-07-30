@@ -58,7 +58,7 @@ func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
 		return
 	}
 	w.SetAppState(a.Debug())
-	w.SetOnBreakToggle(a.onCodeBreakToggle)
+	w.SetOnBreakToggle(a.breaks.onCodeBreakToggle)
 	w.SetOnToggleEnable(a.toggleCodeBreakEnable)
 }
 

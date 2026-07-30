@@ -44,35 +44,29 @@ func (s *GdbMcpService) runTool(ctx context.Context, name string, input json.Raw
 			return s.domain.ListFrames()
 		})
 	case "set_breakpoint":
-		var in struct {
-			File string `json:"file"`
-			Line int    `json:"line"`
-		}
-		if err := json.Unmarshal(input, &in); err != nil {
-			return "error: " + err.Error()
+		file, line, errMsg := parseFileLine(input)
+		if errMsg != "" {
+			return errMsg
 		}
 		if s.domain == nil {
 			return "error: domain not wired"
 		}
-		if err := s.domain.SetBreakpoint(in.File, in.Line); err != nil {
+		if err := s.domain.SetBreakpoint(file, line); err != nil {
 			return "error: " + err.Error()
 		}
-		return fmt.Sprintf("ok: breakpoint set at %s:%d", in.File, in.Line)
+		return fmt.Sprintf("ok: breakpoint set at %s:%d", file, line)
 	case "clear_breakpoint":
-		var in struct {
-			File string `json:"file"`
-			Line int    `json:"line"`
-		}
-		if err := json.Unmarshal(input, &in); err != nil {
-			return "error: " + err.Error()
+		file, line, errMsg := parseFileLine(input)
+		if errMsg != "" {
+			return errMsg
 		}
 		if s.domain == nil {
 			return "error: domain not wired"
 		}
-		if err := s.domain.ClearBreakpoint(in.File, in.Line); err != nil {
+		if err := s.domain.ClearBreakpoint(file, line); err != nil {
 			return "error: " + err.Error()
 		}
-		return fmt.Sprintf("ok: breakpoint cleared at %s:%d", in.File, in.Line)
+		return fmt.Sprintf("ok: breakpoint cleared at %s:%d", file, line)
 	case "gdb_command":
 		var in struct {
 			Command string `json:"command"`
@@ -99,4 +93,15 @@ func (s *GdbMcpService) toolListJSON(fn func() any) string {
 		return "error: " + err.Error()
 	}
 	return string(b)
+}
+
+func parseFileLine(input json.RawMessage) (file string, line int, errMsg string) {
+	var in struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return "", 0, "error: " + err.Error()
+	}
+	return in.File, in.Line, ""
 }

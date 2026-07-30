@@ -9,7 +9,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/execcli"
-	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
@@ -48,16 +48,15 @@ type DebuggerApp struct {
 	debug          *debugstate.State
 	miLog          *platform.NamedLogger
 
-	cfg               SessionConfig
-	gdbClient         *gdb.GDBClient
-	dlvClient         *dlv.Client
+	cfg     SessionConfig
+	backend backend.Backend
+	breaks  breakCtl
+	nav     navCtl
 	gdbCancelSub      func()
 	inferiorCancelSub func()
 	// gdbBridgeGen identifies the active debugger console bridge. Bump before
 	// canceling a subscription so a deliberate restart does not post gdb-exit.
-	gdbBridgeGen  atomic.Uint64
-	gdbInputState *gdb.GdbInputState
-	dlvInputState *dlv.InputState
+	gdbBridgeGen atomic.Uint64
 	// dlvConfirm tracks Delve [Y/n]? prompts (suspended BP after exit, etc.).
 	dlvConfirm dlv.ConfirmGate
 	// dlvBPDeferred is set when a BP refresh was skipped while dlvConfirm is active.
@@ -110,13 +109,10 @@ type DebuggerApp struct {
 	assemblyWidget  *widgets.AssemblyWidget
 	assembly        *models.AssemblyList
 	// preferAsm means :b asm owns the code leaf until :b code (no auto-swap).
-	preferAsm        bool
-	bpRefreshMu      sync.Mutex
-	bpRefreshRunning bool
-	bpRefreshPending bool
-	debugInfoMu      sync.Mutex
-	debugInfoRunning bool
-	debugInfoPending bool
+	preferAsm bool
+	// Coalesced background refreshes (Phase B: one runner shape).
+	bpRefresh coalesceRunner
+	debugInfo coalesceRunner
 
 	// completionForGDB is true while ModeCompletion is driven by GDB Tab
 	// (apply/cancel return to insert mode instead of command mode).
@@ -138,6 +134,7 @@ type DebuggerApp struct {
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 	dbg := &DebuggerApp{cfg: cfg}
+	dbg.initControllers()
 	dbg.TermApp = termui.NewTermApp()
 	dbg.TermApp.Api = dbg
 	dbg.commandReg = commands.NewCommandRegistry()
@@ -152,17 +149,30 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 // GDB returns the owned debugger session for external APIs (e.g. MCP).
 // Despite the name, this is whichever backend was selected with -g (gdb or dlv).
 func (a *DebuggerApp) GDB() core.Session {
-	if a == nil {
+	if a == nil || a.backend == nil {
 		return nil
 	}
-	if a.dlvClient != nil {
-		return a.dlvClient
-	}
-	return a.gdbClient
+	return a.backend.Session()
 }
 
 func (a *DebuggerApp) isDLV() bool {
-	return a != nil && a.cfg.IsDLV()
+	return a != nil && a.backend != nil && a.backend.Kind() == backend.DLV
+}
+
+func (a *DebuggerApp) gdbBackend() *backend.GDBBackend {
+	if a == nil || a.backend == nil {
+		return nil
+	}
+	b, _ := a.backend.(*backend.GDBBackend)
+	return b
+}
+
+func (a *DebuggerApp) dlvBackend() *backend.DLVBackend {
+	if a == nil || a.backend == nil {
+		return nil
+	}
+	b, _ := a.backend.(*backend.DLVBackend)
+	return b
 }
 
 // Close tears down owned debugger/exec sessions.
@@ -182,13 +192,9 @@ func (a *DebuggerApp) Close() {
 		a.gdbCancelSub()
 		a.gdbCancelSub = nil
 	}
-	if a.dlvClient != nil {
-		a.dlvClient.Close()
-		a.dlvClient = nil
-	}
-	if a.gdbClient != nil {
-		a.gdbClient.Close()
-		a.gdbClient = nil
+	if a.backend != nil {
+		a.backend.Close()
+		a.backend = nil
 	}
 	if a.execClient != nil {
 		a.execClient.Close()
