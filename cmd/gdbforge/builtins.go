@@ -135,18 +135,12 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.threadWidget = widgets.NewThreadWidget()
 	a.threadWidget.SetClipboard(a.ClipboardIO())
 	a.threadWidget.SetAppState(a.Debug())
-	a.threadWidget.HasBreakAt = func(file string, line int) bool {
-		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
-	}
 	a.threadWidget.OnActivate = a.onThreadActivate
 	a.registerBuiltin("threads", a.threadWidget)
 
 	a.callstackWidget = widgets.NewCallStackWidget()
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.callstackWidget.SetAppState(a.Debug())
-	a.callstackWidget.HasBreakAt = func(file string, line int) bool {
-		return a.breakpoints != nil && a.breakpoints.IndexOfFileLine(file, line) >= 0
-	}
 	a.callstackWidget.OnActivate = a.onCallStackActivate
 	a.registerBuiltin("callstack", a.callstackWidget)
 

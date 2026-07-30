@@ -44,6 +44,9 @@ func TestDebugStateDefaultsAndSuppress(t *testing.T) {
 	if s.BreakColor() != tcell.ColorRed {
 		t.Fatal("breakcolor default")
 	}
+	if s.BreakCondColor() != platform.DefaultBreakCondColor {
+		t.Fatal("breakcondcolor default")
+	}
 	if s.PCColor() != platform.DefaultPCColor {
 		t.Fatal("pccolor default")
 	}

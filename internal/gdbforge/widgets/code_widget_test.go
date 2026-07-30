@@ -188,11 +188,11 @@ func TestCodeWidgetSetBreakInfosNilKeepsMarks(t *testing.T) {
 	w.rawLines = []string{"a", "b"}
 	w.SetBreakInfos([]models.BreakInfo{{File: "/tmp/a.c", Line: 2, Enabled: true}})
 	w.SetBreakInfos(nil) // failed refresh
-	if !w.hasBreakpoint(2) {
+	if !w.HasEnabledBreak(2) {
 		t.Fatal("nil SetBreakInfos must keep red mark")
 	}
 	w.SetBreakInfos([]models.BreakInfo{}) // real empty
-	if w.hasBreakpoint(2) {
+	if w.HasEnabledBreak(2) {
 		t.Fatal("empty SetBreakInfos must clear red mark")
 	}
 }

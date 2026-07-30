@@ -94,6 +94,29 @@ func (a *DebuggerApp) restoreSavedBreakpoints(saved []models.BreakInfo) {
 		}
 		gdb.SendCmd(sess, a.State(), a.Debug(), fmt.Sprintf("disable %d", cur.Number))
 	}
+
+	// Re-apply conditions from the saved file (after numbers are known).
+	items, ok = a.fetchBreakInfos()
+	if ok {
+		a.applyBreakInfos(items)
+	}
+	for _, want := range saved {
+		if want.Condition == "" {
+			continue
+		}
+		idx := a.breakpoints.IndexOfFileLine(want.File, want.Line)
+		if idx < 0 {
+			continue
+		}
+		cur, ok := a.breakpoints.At(idx)
+		if !ok || cur.Number < 1 {
+			continue
+		}
+		if cur.Condition == want.Condition {
+			continue
+		}
+		gdb.SendCmd(sess, a.State(), a.Debug(), fmt.Sprintf("condition %d %s", cur.Number, want.Condition))
+	}
 	a.onBreakpointsChanged()
 }
 
@@ -110,6 +133,8 @@ func (a *DebuggerApp) onBreakpointToggle(index int) {
 	if a.breakpoints == nil {
 		return
 	}
+	prev, _ := a.breakpoints.At(index)
+	cond := prev.Condition
 	cmd, ok := a.breakpoints.ToggleEnableAt(index)
 	if !ok {
 		return
@@ -119,6 +144,13 @@ func (a *DebuggerApp) onBreakpointToggle(index int) {
 		a.bpWidget.SelectIndex(index)
 	}
 	a.sendBreakpointCmd(cmd)
+	// Re-enable only inserts the break; restore condition after GDB assigns a number.
+	if strings.HasPrefix(cmd, "break ") && cond != "" {
+		it, ok := a.breakpoints.At(index)
+		if ok {
+			a.reapplyConditionAfterEnable(cmd, it.File, it.Line, it.Addr, cond)
+		}
+	}
 }
 
 func (a *DebuggerApp) onBreakpointDelete(index int) {
@@ -170,6 +202,12 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 	if path == "" || line < 1 {
 		return
 	}
+	prevCond := ""
+	if idx := a.breakpoints.IndexOfFileLine(path, line); idx >= 0 {
+		if it, ok := a.breakpoints.At(idx); ok {
+			prevCond = it.Condition
+		}
+	}
 	cmd, idx, ok := a.breakpoints.ToggleEnableAtFileLine(path, line, cw.HasEnabledBreak(line))
 	if !ok {
 		return
@@ -179,6 +217,7 @@ func (a *DebuggerApp) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 		a.bpWidget.SelectIndex(idx)
 	}
 	a.sendBreakpointCmd(cmd)
+	a.reapplyConditionAfterEnable(cmd, path, line, "", prevCond)
 }
 
 func (a *DebuggerApp) toggleAsmBreakEnable() {
@@ -189,6 +228,12 @@ func (a *DebuggerApp) toggleAsmBreakEnable() {
 	if addr == "" {
 		return
 	}
+	prevCond := ""
+	if idx := a.breakpoints.IndexOfAddr(addr); idx >= 0 {
+		if it, ok := a.breakpoints.At(idx); ok {
+			prevCond = it.Condition
+		}
+	}
 	cmd, idx, ok := a.breakpoints.ToggleEnableAtAddr(addr, a.assemblyWidget.HasEnabledBreak(addr))
 	if !ok {
 		return
@@ -198,6 +243,36 @@ func (a *DebuggerApp) toggleAsmBreakEnable() {
 		a.bpWidget.SelectIndex(idx)
 	}
 	a.sendBreakpointCmd(cmd)
+	a.reapplyConditionAfterEnable(cmd, "", 0, addr, prevCond)
+}
+
+// reapplyConditionAfterEnable sends condition N expr after a re-enable break insert.
+func (a *DebuggerApp) reapplyConditionAfterEnable(cmd, file string, line int, addr, cond string) {
+	if !strings.HasPrefix(cmd, "break ") || cond == "" || a.breakpoints == nil {
+		return
+	}
+	var cur models.BreakInfo
+	var ok bool
+	switch {
+	case file != "" && line > 0:
+		idx := a.breakpoints.IndexOfFileLine(file, line)
+		if idx < 0 {
+			return
+		}
+		cur, ok = a.breakpoints.At(idx)
+	case addr != "":
+		idx := a.breakpoints.IndexOfAddr(addr)
+		if idx < 0 {
+			return
+		}
+		cur, ok = a.breakpoints.At(idx)
+	default:
+		return
+	}
+	if !ok || cur.Number < 1 {
+		return
+	}
+	a.sendBreakpointCmd(fmt.Sprintf("condition %d %s", cur.Number, cond))
 }
 
 // applyBreakInfos merges GDB -break-list into the shared model and syncs views.

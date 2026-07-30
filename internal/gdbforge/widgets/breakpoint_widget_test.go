@@ -55,6 +55,7 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	st := debugstate.New(platform.NewAppState())
 	st.SetBreakColor(tcell.ColorPurple)
 	st.SetBreakDisabledColor(tcell.ColorAqua)
+	st.SetBreakCondColor(tcell.ColorOrange)
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
 	w := NewBreakpointWidget()
@@ -62,6 +63,7 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
 		{Number: 2, Enabled: false, File: "/tmp/a.c", Line: 2},
+		{Number: 3, Enabled: true, Condition: "x > 0", File: "/tmp/a.c", Line: 3},
 	})
 	w.SelectIndex(0)
 
@@ -81,6 +83,16 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	_, disBg, _ := dis.Decompose()
 	if disBg != tcell.ColorAqua {
 		t.Fatalf("disabled bg=%v want aqua", disBg)
+	}
+
+	cond := w.rowStyle(2, "")
+	_, condBg, _ := cond.Decompose()
+	if condBg != tcell.ColorOrange {
+		t.Fatalf("conditional bg=%v want orange", condBg)
+	}
+	lines := w.LinesForTest()
+	if len(lines) != 3 || lines[2] != "  3  y  /tmp/a.c:3  if x > 0" {
+		t.Fatalf("display=%q", lines)
 	}
 }
 

@@ -63,12 +63,11 @@ func (b *BreakpointList) HasEnabledAt(file string, line int) bool {
 	if b == nil || file == "" || line < 1 {
 		return false
 	}
-	base := filepath.Base(file)
 	for _, it := range b.items {
 		if !it.Enabled || it.Line != line {
 			continue
 		}
-		if it.File == file || filepath.Base(it.File) == base {
+		if SameSourcePath(it.File, file) {
 			return true
 		}
 	}

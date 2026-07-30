@@ -68,11 +68,12 @@ func ParseBreakList(raw string) []models.BreakInfo {
 			continue
 		}
 		out = append(out, models.BreakInfo{
-			Number:  num,
-			Enabled: !strings.Contains(chunk, `enabled="n"`),
-			File:    unescapeMI(file),
-			Line:    line,
-			Addr:    addr,
+			Number:    num,
+			Enabled:   !strings.Contains(chunk, `enabled="n"`),
+			Condition: unescapeMI(extractQuotedField(chunk, "cond")),
+			File:      unescapeMI(file),
+			Line:      line,
+			Addr:      addr,
 		})
 	}
 	return out
@@ -92,11 +93,6 @@ func parseFileLineLoc(s string) (file string, line int, ok bool) {
 		return "", 0, false
 	}
 	return m[1], ln, true
-}
-
-// EnabledBreakMarks returns file:line for enabled breakpoints only.
-func EnabledBreakMarks(items []models.BreakInfo) []models.BreakMark {
-	return models.EnabledBreakMarks(items)
 }
 
 func extractQuotedField(s, key string) string {

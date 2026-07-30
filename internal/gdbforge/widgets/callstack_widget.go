@@ -30,11 +30,8 @@ type CallStackWidget struct {
 	// every drag sample (which flooded GDB with `frame N` console noise).
 	mouseDown     bool
 	pressSelected int
-	lastActLevel  int
-	lastActTime   time.Time
-
-	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
-	HasBreakAt func(file string, line int) bool
+	lastActLevel int
+	lastActTime  time.Time
 
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(models.StackFrame)
@@ -148,17 +145,6 @@ func (w *CallStackWidget) isFrameZero(lineIdx int) bool {
 		return false
 	}
 	return w.items[lineIdx].Level == 0
-}
-
-func (w *CallStackWidget) atBreakOnProgramPoint(lineIdx int) bool {
-	if !w.atProgramPoint(lineIdx) {
-		return false
-	}
-	if w.HasBreakAt == nil {
-		return false
-	}
-	it := w.items[lineIdx]
-	return w.HasBreakAt(it.File, it.Line)
 }
 
 func (w *CallStackWidget) move(delta int) {

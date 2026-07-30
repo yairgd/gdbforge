@@ -69,6 +69,7 @@ func (a *DebuggerApp) ExapData() {
 			commands.CmdRest("markdimcolor", a.SetMarkDimColor),
 			commands.CmdRest("breakcolor", a.SetBreakColor),
 			commands.CmdRest("breakdisabledcolor", a.SetBreakDisabledColor),
+			commands.CmdRest("breakcondcolor", a.SetBreakCondColor),
 			commands.CmdRest("pccolor", a.SetPCColor),
 			commands.CmdRest("stackbreakcolor", a.SetStackBreakColor),
 			commands.CmdRest("codeselcolor", a.SetCodeSelColor),

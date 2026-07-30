@@ -126,10 +126,10 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, line string) tcell.Style {
 		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	bg := w.breakColor()
-	if !it.Enabled {
-		bg = w.breakDisabledColor()
-	}
+	bg := breakGutterColor(models.BreakGutter{
+		Enabled:   it.Enabled,
+		Condition: it.Condition,
+	}, w.state)
 	_ = line
 	return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
 }
@@ -167,6 +167,13 @@ func (w *BreakpointWidget) breakDisabledColor() tcell.Color {
 		return w.state.BreakDisabledColor()
 	}
 	return platform.DefaultBreakDisabledColor
+}
+
+func (w *BreakpointWidget) breakCondColor() tcell.Color {
+	if w.state != nil {
+		return w.state.BreakCondColor()
+	}
+	return platform.DefaultBreakCondColor
 }
 
 func (w *BreakpointWidget) pcColor() tcell.Color {
@@ -251,7 +258,11 @@ func (w *BreakpointWidget) rebuild() {
 		case it.Addr != "":
 			loc = "*" + it.Addr
 		}
-		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s", num, en, loc))
+		line := fmt.Sprintf("%s  %s  %s", num, en, loc)
+		if it.Conditional() {
+			line = fmt.Sprintf("%s  if %s", line, it.Condition)
+		}
+		w.buf.AppendLine(line)
 	}
 	w.viewport.CursorLine = w.selected
 	w.viewport.CursorCol = 0

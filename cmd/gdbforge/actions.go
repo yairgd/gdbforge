@@ -341,7 +341,7 @@ func (app *DebuggerApp) inferiorTTYCompletions(prefix string) []string {
 	return out
 }
 
-func (app *DebuggerApp) SetMarkColor(args ...any) {
+func (app *DebuggerApp) setNamedColor(args []any, what string, apply func(tcell.Color), rebuildGutters bool) {
 	name := joinCmdArgs(args)
 	if name == "" {
 		return
@@ -349,142 +349,55 @@ func (app *DebuggerApp) SetMarkColor(args ...any) {
 	c, ok := platform.ParseColorName(name)
 	if !ok {
 		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown markcolor: " + name)
+			app.ctx.Log.Named("set").Error("unknown " + what + ": " + name)
 		}
 		return
 	}
-	app.State().SetMarkColor(c)
+	apply(c)
+	if rebuildGutters {
+		app.rebuildCodeBreakGutters()
+	}
 	app.RequestFrame()
+}
+
+func (app *DebuggerApp) SetMarkColor(args ...any) {
+	app.setNamedColor(args, "markcolor", app.State().SetMarkColor, false)
 }
 
 func (app *DebuggerApp) SetMarkDimColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown markdimcolor: " + name)
-		}
-		return
-	}
-	app.State().SetMarkDimColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "markdimcolor", app.State().SetMarkDimColor, false)
 }
 
 func (app *DebuggerApp) SetBreakColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown breakcolor: " + name)
-		}
-		return
-	}
-	app.Debug().SetBreakColor(c)
-	app.rebuildCodeBreakGutters()
-	app.RequestFrame()
+	app.setNamedColor(args, "breakcolor", app.Debug().SetBreakColor, true)
 }
 
 func (app *DebuggerApp) SetBreakDisabledColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown breakdisabledcolor: " + name)
-		}
-		return
-	}
-	app.Debug().SetBreakDisabledColor(c)
-	app.rebuildCodeBreakGutters()
-	app.RequestFrame()
+	app.setNamedColor(args, "breakdisabledcolor", app.Debug().SetBreakDisabledColor, true)
+}
+
+func (app *DebuggerApp) SetBreakCondColor(args ...any) {
+	app.setNamedColor(args, "breakcondcolor", app.Debug().SetBreakCondColor, true)
 }
 
 func (app *DebuggerApp) SetPCColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown pccolor: " + name)
-		}
-		return
-	}
-	app.Debug().SetPCColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "pccolor", app.Debug().SetPCColor, false)
 }
 
 func (app *DebuggerApp) SetStackBreakColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown stackbreakcolor: " + name)
-		}
-		return
-	}
-	app.Debug().SetStackBreakColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "stackbreakcolor", app.Debug().SetStackBreakColor, false)
 }
 
 func (app *DebuggerApp) SetCodeSelColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown codeselcolor: " + name)
-		}
-		return
-	}
-	app.State().SetCodeSelColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "codeselcolor", app.State().SetCodeSelColor, false)
 }
 
 func (app *DebuggerApp) SetMutedColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown mutedcolor: " + name)
-		}
-		return
-	}
-	app.State().SetMutedColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "mutedcolor", app.State().SetMutedColor, false)
 }
 
 func (app *DebuggerApp) SetSearchColor(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" {
-		return
-	}
-	c, ok := platform.ParseColorName(name)
-	if !ok {
-		if app.ctx.Log != nil {
-			app.ctx.Log.Named("set").Error("unknown searchcolor: " + name)
-		}
-		return
-	}
-	app.State().SetSearchColor(c)
-	app.RequestFrame()
+	app.setNamedColor(args, "searchcolor", app.State().SetSearchColor, false)
 }
 
 // OnAI runs an in-app LLM question against the live GDB session (:AI … / :ai …).

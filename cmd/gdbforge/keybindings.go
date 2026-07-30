@@ -1,10 +1,7 @@
 package main
 
 import (
-	"fmt"
-
 	tcell "github.com/gdamore/tcell/v2"
-	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -419,7 +416,7 @@ func (a *DebuggerApp) tryInsertCodeFinish() bool {
 }
 
 // toggleCallstackBreak inserts or clears a breakpoint at the selected frame
-// (same toggle semantics as CodeWidget Space).
+// (same path as CodeWidget Space — includes DLV cmd mapping).
 func (a *DebuggerApp) toggleCallstackBreak() {
 	cs := a.focusedCallstack()
 	if cs == nil {
@@ -429,20 +426,7 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	if !ok || fr.File == "" || fr.Line < 1 {
 		return
 	}
-	if a.gdbWidget == nil {
-		return
-	}
-	sess := a.GDB()
-	if sess == nil {
-		return
-	}
-	loc := fmt.Sprintf("%s:%d", filepath.Base(fr.File), fr.Line)
-	cmd := "break " + loc
-	if a.hasBreakAt(fr.File, fr.Line) {
-		cmd = "clear " + loc
-	}
-	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
-	a.onBreakpointsChanged()
+	a.onCodeBreakToggle(fr.File, fr.Line)
 	a.RequestFrame()
 }
 

@@ -2,7 +2,6 @@ package widgets
 
 import (
 	"fmt"
-	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
@@ -32,8 +31,7 @@ type AssemblyWidget struct {
 	pcAddr string // normalized $pc
 	selIdx int    // browse caret index into items
 
-	bpEnabled  map[string]struct{} // addr → enabled
-	bpDisabled map[string]struct{} // addr → disabled
+	bpByAddr map[string]models.BreakGutter
 
 	// OnBreakToggle is Space — insert/clear breakpoint at browse addr.
 	OnBreakToggle func(addr string)
@@ -216,23 +214,16 @@ func (w *AssemblyWidget) BreakAtSel() {
 
 // HasEnabledBreak reports an enabled breakpoint mark at addr.
 func (w *AssemblyWidget) HasEnabledBreak(addr string) bool {
-	return w.hasEnabledBreak(normalizeAsmAddr(addr))
+	g, ok := w.gutterAt(normalizeAsmAddr(addr))
+	return ok && g.Enabled
 }
 
-func (w *AssemblyWidget) hasEnabledBreak(addr string) bool {
-	if w == nil || w.bpEnabled == nil || addr == "" {
-		return false
+func (w *AssemblyWidget) gutterAt(addr string) (models.BreakGutter, bool) {
+	if w == nil || w.bpByAddr == nil || addr == "" {
+		return models.BreakGutter{}, false
 	}
-	_, ok := w.bpEnabled[addr]
-	return ok
-}
-
-func (w *AssemblyWidget) hasDisabledBreak(addr string) bool {
-	if w == nil || w.bpDisabled == nil || addr == "" {
-		return false
-	}
-	_, ok := w.bpDisabled[addr]
-	return ok
+	g, ok := w.bpByAddr[addr]
+	return g, ok
 }
 
 // SetBreakInfos updates address gutter marks from the shared breakpoint model.
@@ -241,19 +232,7 @@ func (w *AssemblyWidget) SetBreakInfos(items []models.BreakInfo) {
 	if w == nil || items == nil {
 		return
 	}
-	w.bpEnabled = make(map[string]struct{})
-	w.bpDisabled = make(map[string]struct{})
-	for _, it := range items {
-		addr := normalizeAsmAddr(it.Addr)
-		if addr == "" {
-			continue
-		}
-		if it.Enabled {
-			w.bpEnabled[addr] = struct{}{}
-		} else {
-			w.bpDisabled[addr] = struct{}{}
-		}
-	}
+	w.bpByAddr = models.GuttersByAddr(items)
 	w.rebuild()
 }
 
@@ -295,38 +274,27 @@ func (w *AssemblyWidget) rowStyle(lineIdx int, line string) tcell.Style {
 }
 
 func (w *AssemblyWidget) breakColor() tcell.Color {
-	if w.state != nil {
-		return w.state.BreakColor()
-	}
-	return platform.DefaultBreakColor
+	return themeFrom{w.state}.Break()
 }
 
 func (w *AssemblyWidget) breakDisabledColor() tcell.Color {
-	if w.state != nil {
-		return w.state.BreakDisabledColor()
-	}
-	return platform.DefaultBreakDisabledColor
+	return themeFrom{w.state}.BreakDisabled()
+}
+
+func (w *AssemblyWidget) breakCondColor() tcell.Color {
+	return themeFrom{w.state}.BreakCond()
 }
 
 func (w *AssemblyWidget) pcColor() tcell.Color {
-	if w.state != nil {
-		return w.state.PCColor()
-	}
-	return platform.DefaultPCColor
+	return themeFrom{w.state}.PC()
 }
 
 func (w *AssemblyWidget) codeSelColor() tcell.Color {
-	if w.state != nil {
-		return w.state.CodeSelColor()
-	}
-	return platform.DefaultCodeSelColor
+	return themeFrom{w.state}.CodeSel()
 }
 
 func (w *AssemblyWidget) searchColor() tcell.Color {
-	if w.state != nil {
-		return w.state.SearchColor()
-	}
-	return platform.DefaultSearchColor
+	return themeFrom{w.state}.Search()
 }
 
 func (w *AssemblyWidget) rebuild() {
@@ -350,12 +318,9 @@ func (w *AssemblyWidget) rebuild() {
 		}
 		addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
 		var addrANSI string
-		switch {
-		case w.hasEnabledBreak(norm):
-			addrANSI = platform.BreakNumberANSI(addrPad, w.breakColor())
-		case w.hasDisabledBreak(norm):
-			addrANSI = platform.BreakNumberANSI(addrPad, w.breakDisabledColor())
-		default:
+		if g, ok := w.gutterAt(norm); ok {
+			addrANSI = platform.BreakNumberANSI(addrPad, breakGutterColor(g, w.state))
+		} else {
 			addrANSI = "\x1b[38;5;245m" + addrPad + "\x1b[0m"
 		}
 		inst := it.Inst
@@ -558,29 +523,7 @@ func (w *AssemblyWidget) CursorInSearchMatch() bool {
 }
 
 func normalizeAsmAddr(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	// Match parse.NormalizeAddr without importing parse (widgets stay free of MI).
-	s = strings.TrimPrefix(strings.ToLower(s), "0x")
-	n := uint64(0)
-	ok := true
-	for _, c := range s {
-		n <<= 4
-		switch {
-		case c >= '0' && c <= '9':
-			n |= uint64(c - '0')
-		case c >= 'a' && c <= 'f':
-			n |= uint64(c - 'a' + 10)
-		default:
-			ok = false
-		}
-	}
-	if !ok || s == "" {
-		return "0x" + s
-	}
-	return fmt.Sprintf("0x%x", n)
+	return models.NormalizeAddr(s)
 }
 
 func indexOfAsmAddr(items []models.AsmLine, addr string) int {

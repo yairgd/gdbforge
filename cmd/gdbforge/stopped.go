@@ -332,19 +332,15 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 	case fr.File != "":
 		file := normalizeCodePath(fr.File)
 		a.Debug().SetCurrentLocation(file, fr.Line)
-		// Call-stack selection places ━━▶ on the frame's line (same idea as
-		// Assembly recentering on fr.Addr). Breakpoint-list jumps still use
-		// showCodeBrowse so the real stop mark can stay put.
-		w = a.showCodeAt(file, fr.Line)
+		// Browse only: keep ━━▶ on the real stop PC (same as Assembly).
+		w = a.showCodeBrowse(file, fr.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(file, formatUnavailableExtra(fr.Func, fr.Line))
 		}
 	case fr.Func != "":
 		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
 	}
-	// Assembly follows the selected frame address (call site) like Code
-	// places ━━▶ on fr.File:fr.Line — real $pc keeps ━━▶ when in view; blue
-	// line moves to fr.Addr.
+	// Assembly follows the selected frame address; real $pc keeps ━━▶.
 	if a.shouldShowAssembly(w) {
 		a.syncAssemblyToFrame(fr)
 	}
@@ -906,10 +902,9 @@ func (a *DebuggerApp) rebuildCodeBreakGutters() {
 }
 
 func breaksForFile(items []models.BreakInfo, path string) []models.BreakInfo {
-	base := filepath.Base(path)
 	out := make([]models.BreakInfo, 0)
 	for _, it := range items {
-		if it.File == path || filepath.Base(it.File) == base {
+		if models.SameSourcePath(it.File, path) {
 			out = append(out, it)
 		}
 	}

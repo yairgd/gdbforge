@@ -1,24 +1,14 @@
 package widgets
 
-import "path/filepath"
+import "github.com/yairgd/gdbforge/internal/gdbforge/models"
 
 // SameSourceLoc reports whether two file:line pairs refer to the same source
 // location (full path or basename match), matching breakpoint list lookup.
 func SameSourceLoc(aFile string, aLine int, bFile string, bLine int) bool {
-	return sameSourceLoc(aFile, aLine, bFile, bLine)
+	return models.SameSourceLoc(aFile, aLine, bFile, bLine)
 }
 
-// sameSourceLoc reports whether two file:line pairs refer to the same source
-// location (full path or basename match), matching breakpoint list lookup.
+// sameSourceLoc is the package-local alias used by list widgets.
 func sameSourceLoc(aFile string, aLine int, bFile string, bLine int) bool {
-	if aLine == 0 || bLine == 0 || aLine != bLine {
-		return false
-	}
-	if aFile == "" || bFile == "" {
-		return false
-	}
-	if aFile == bFile {
-		return true
-	}
-	return filepath.Base(aFile) == filepath.Base(bFile)
+	return models.SameSourceLoc(aFile, aLine, bFile, bLine)
 }

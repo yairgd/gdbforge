@@ -18,9 +18,10 @@ const (
 
 // BreakpointEntry is one persisted breakpoint row.
 type BreakpointEntry struct {
-	File    string `yaml:"file"`
-	Line    int    `yaml:"line"`
-	Enabled bool   `yaml:"enabled"`
+	File      string `yaml:"file"`
+	Line      int    `yaml:"line"`
+	Enabled   bool   `yaml:"enabled"`
+	Condition string `yaml:"condition,omitempty"`
 }
 
 // BreakpointsDoc is the on-disk YAML document.
@@ -45,9 +46,10 @@ func SaveBreakpoints(dir string, items []models.BreakInfo) error {
 			continue
 		}
 		doc.Breakpoints = append(doc.Breakpoints, BreakpointEntry{
-			File:    it.File,
-			Line:    it.Line,
-			Enabled: it.Enabled,
+			File:      it.File,
+			Line:      it.Line,
+			Enabled:   it.Enabled,
+			Condition: it.Condition,
 		})
 	}
 	data, err := yaml.Marshal(&doc)
@@ -91,9 +93,10 @@ func LoadBreakpoints(dir string) ([]models.BreakInfo, error) {
 			continue
 		}
 		out = append(out, models.BreakInfo{
-			File:    e.File,
-			Line:    e.Line,
-			Enabled: e.Enabled,
+			File:      e.File,
+			Line:      e.Line,
+			Enabled:   e.Enabled,
+			Condition: e.Condition,
 		})
 	}
 	return out, nil

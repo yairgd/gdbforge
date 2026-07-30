@@ -20,10 +20,11 @@ func (d appDebugDomain) ListBreakpoints() []domain.Breakpoint {
 	out := make([]domain.Breakpoint, len(items))
 	for i, it := range items {
 		out[i] = domain.Breakpoint{
-			Number:  it.Number,
-			Enabled: it.Enabled,
-			File:    it.File,
-			Line:    it.Line,
+			Number:    it.Number,
+			Enabled:   it.Enabled,
+			Condition: it.Condition,
+			File:      it.File,
+			Line:      it.Line,
 		}
 	}
 	return out

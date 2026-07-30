@@ -31,6 +31,7 @@ type State struct {
 
 	breakColor         tcell.Color
 	breakDisabledColor tcell.Color
+	breakCondColor     tcell.Color
 	pcColor            tcell.Color
 	stackBreakColor    tcell.Color
 
@@ -48,6 +49,7 @@ func New(app *platform.AppState) *State {
 		clearOutput:        true,
 		breakColor:         platform.DefaultBreakColor,
 		breakDisabledColor: platform.DefaultBreakDisabledColor,
+		breakCondColor:     platform.DefaultBreakCondColor,
 		pcColor:            platform.DefaultPCColor,
 		stackBreakColor:    platform.DefaultStackBreakColor,
 		breakMain:          true,
@@ -271,6 +273,21 @@ func (s *State) BreakDisabledColor() tcell.Color {
 func (s *State) SetBreakDisabledColor(c tcell.Color) {
 	s.mu.Lock()
 	s.breakDisabledColor = c
+	s.mu.Unlock()
+}
+
+func (s *State) BreakCondColor() tcell.Color {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.breakCondColor == tcell.ColorDefault {
+		return platform.DefaultBreakCondColor
+	}
+	return s.breakCondColor
+}
+
+func (s *State) SetBreakCondColor(c tcell.Color) {
+	s.mu.Lock()
+	s.breakCondColor = c
 	s.mu.Unlock()
 }
 

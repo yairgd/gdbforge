@@ -1,15 +1,16 @@
 -- Cortex-R5 OpenAMP bring-up (Linux remoteproc + J-Link attach).
 -- Install: cp -r lua/cortex_r5 .gdbforge/lua/   (keeps r5_target.xml beside the script)
 -- Usage:
---   :lua r5_openamp_debug
---   :lua r5_openamp_debug ./z10
+--   :lua r5_openamp_jlink
+--   :lua r5_openamp_jlink ./z10
 --
 -- On the target (A53 / Linux):
 --   1) scp R5 firmware → /lib/firmware/
 --   2) stop/start remoteproc0 with that firmware
--- Then on the host: JLinkGDBServer → GDB target remote (same as baremetal).
+-- Then on the host: JLinkGDBServer in attach mode (-noreset -noir) →
+-- GDB target remote (no load — remoteproc already loaded the image).
 --
--- Env (J-Link — same defaults as r5_baremetal_debug):
+-- Env (J-Link — same defaults as r5_baremetal_jlink):
 --   GDBFORGE_JLINK         path to JLinkGDBServer
 --   GDBFORGE_JLINK_DEVICE  e.g. XCZU3CG_R5_0
 --   GDBFORGE_JLINK_PORT    GDB listen port (default 2334)
@@ -34,9 +35,10 @@ local DEFAULT_USER = "root"
 local REMOTE_FW_DIR = "/lib/firmware"
 
 function help()
-  gdbforge.print("r5_openamp_jlink — scp firmware to /lib/firmware, remoteproc start, J-Link attach")
+  gdbforge.print("r5_openamp_jlink — remoteproc bring-up + J-Link attach (no reset/load)")
   gdbforge.print("Usage: :lua r5_openamp_jlink [firmware]")
   gdbforge.print("  :lua r5_openamp_jlink ./z10")
+  gdbforge.print("Attach: JLinkGDBServer -noreset -noir → target remote → halt → break main")
   gdbforge.print("Setup (copy-paste into shell / script):")
   gdbforge.print("  export GDBFORGE_JLINK=" .. JLINK)
   gdbforge.print("  export GDBFORGE_JLINK_DEVICE=" .. DEVICE)
@@ -114,7 +116,7 @@ function main(fw_arg)
     fw = trim(gdbforge.program() or "")
   end
   if fw == "" then
-    gdbforge.print("ERROR: set R5 firmware — :lua r5_openamp_debug ./z10")
+    gdbforge.print("ERROR: set R5 firmware — :lua r5_openamp_jlink ./z10")
     gdbforge.print("       or GDBFORGE_R5_FW / start gdbforge with the ELF")
     return
   end
@@ -122,7 +124,7 @@ function main(fw_arg)
   local fw_name = env("GDBFORGE_R5_FW_NAME", basename(fw))
   local remote_fw = REMOTE_FW_DIR .. "/" .. fw_name
 
-  gdbforge.print("r5_openamp_debug: " .. fw .. " → " .. user .. "@" .. host)
+  gdbforge.print("r5_openamp_jlink: " .. fw .. " → " .. user .. "@" .. host)
   gdbforge.print("remoteproc firmware name: " .. fw_name)
 
   -- 1) copy R5 image into /lib/firmware on the target
@@ -151,14 +153,16 @@ function main(fw_arg)
   -- brief settle before J-Link attach
   gdbforge.sleep(1)
 
-  -- 3) J-Link + target remote (same defaults as r5_baremetal_debug)
-  gdbforge.print("starting JLinkGDBServer …")
+  -- 3) J-Link attach mode (no reset) + target remote — unlike baremetal (load).
+  gdbforge.print("starting JLinkGDBServer (attach: -noreset -noir) …")
   gdbforge.spawn(
     JLINK,
     "-device", DEVICE,
     "-if", "JTAG",
     "-speed", "4000",
-    "-port", PORT
+    "-port", PORT,
+    "-noreset",
+    "-noir"
   )
 
   gdbforge.print("waiting for port " .. PORT .. " …")
@@ -176,5 +180,5 @@ function main(fw_arg)
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
   gdbforge.gdb("break main")
-  gdbforge.print("r5_openamp_debug done — Code leaf intact; :b exec for JLink logs")
+  gdbforge.print("r5_openamp_jlink done — attached (no load); :b exec for JLink logs")
 end

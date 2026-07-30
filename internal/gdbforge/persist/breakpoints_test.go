@@ -12,7 +12,7 @@ import (
 func TestSaveLoadBreakpoints(t *testing.T) {
 	dir := t.TempDir()
 	items := []models.BreakInfo{
-		{File: "/src/main.c", Line: 42, Enabled: true},
+		{File: "/src/main.c", Line: 42, Enabled: true, Condition: "i == 3"},
 		{File: "hello.c", Line: 10, Enabled: false},
 	}
 	if err := SaveBreakpoints(dir, items); err != nil {
@@ -22,6 +22,13 @@ func TestSaveLoadBreakpoints(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "condition: i == 3") && !strings.Contains(string(raw), `condition: "i == 3"`) {
+		t.Fatalf("yaml missing condition: %s", raw)
+	}
 	got, err := LoadBreakpoints(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -29,10 +36,10 @@ func TestSaveLoadBreakpoints(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len=%d", len(got))
 	}
-	if got[0].File != "/src/main.c" || got[0].Line != 42 || !got[0].Enabled {
+	if got[0].File != "/src/main.c" || got[0].Line != 42 || !got[0].Enabled || got[0].Condition != "i == 3" {
 		t.Fatalf("first=%+v", got[0])
 	}
-	if got[1].File != "hello.c" || got[1].Enabled {
+	if got[1].File != "hello.c" || got[1].Enabled || got[1].Condition != "" {
 		t.Fatalf("second=%+v", got[1])
 	}
 }

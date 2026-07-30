@@ -47,10 +47,8 @@ type CodeWidget struct {
 	selLine    int // 1-based cursor / bold line
 	preferCol  int // preferred source column (0-based, past gutter)
 	rawLines   []string
-	hiLines    []string         // chroma ANSI lines (same length as rawLines)
-	bpLines    map[int]struct{} // enabled breakpoints → breakColor bg
-	bpDisabled map[int]struct{} // disabled breakpoints → breakDisabledColor bg
-	bpNums     map[int][]int    // line → GDB breakpoint numbers (any state)
+	hiLines    []string // chroma ANSI lines (same length as rawLines)
+	bpByLine   map[int]models.BreakGutter
 
 	// unavailable: source path cannot be shown (missing file, .so without sources).
 	unavailable      bool
@@ -329,13 +327,6 @@ func (w *CodeWidget) breakAtSel() {
 	w.onBreakToggle(w.path, w.selLine)
 }
 
-func (w *CodeWidget) lineHasBreak(line int) bool {
-	if w.hasBreakpoint(line) {
-		return true
-	}
-	return len(w.bpNums[line]) > 0
-}
-
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.
 // line is 1-based. If the source is missing or is a shared library without sources,
 // shows a centered "not available" placeholder instead of returning an error.
@@ -363,7 +354,7 @@ func (w *CodeWidget) ShowSelection(path string, line int) error {
 		return nil
 	}
 	// Preserve ━━▶ when staying on the same source file as the stop.
-	if prevPC > 0 && sameSourcePath(prevPath, w.path) {
+	if prevPC > 0 && models.SameSourcePath(prevPath, w.path) {
 		w.pcLine = prevPC
 	} else {
 		w.pcLine = 0
@@ -371,16 +362,6 @@ func (w *CodeWidget) ShowSelection(path string, line int) error {
 	w.selLine = line
 	w.rebuildBuffer()
 	return nil
-}
-
-func sameSourcePath(a, b string) bool {
-	if a == "" || b == "" {
-		return a == b
-	}
-	if a == b {
-		return true
-	}
-	return filepath.Base(a) == filepath.Base(b)
 }
 
 // loadAndScroll loads path and centers the viewport on line (1-based).
@@ -445,9 +426,7 @@ func (w *CodeWidget) Clear() {
 	w.pcLine = 0
 	w.selLine = 0
 	w.preferCol = 0
-	w.bpLines = nil
-	w.bpDisabled = nil
-	w.bpNums = nil
+	w.bpByLine = nil
 	w.PaneName = "Code"
 	if w.viewport != nil {
 		w.viewport.CommitSearch("")
@@ -482,9 +461,7 @@ func (w *CodeWidget) ShowUnavailable(path, extra string) {
 	w.hiLines = nil
 	w.pcLine = 0
 	w.selLine = 0
-	w.bpLines = nil
-	w.bpDisabled = nil
-	w.bpNums = nil
+	w.bpByLine = nil
 	if path != "" {
 		w.PaneName = filepath.Base(path)
 	}
@@ -499,31 +476,13 @@ func isSharedLibPath(path string) bool {
 }
 
 // SetBreakInfos updates gutter state from breakpoint rows for this file.
-// Enabled / disabled backgrounds come from AppState BreakColor / BreakDisabledColor.
-// Numbers are used by Space to clear.
-//
 // A nil slice means "no update" (failed refresh) so existing marks stay.
 // A non-nil empty slice clears marks (no breakpoints for this file).
 func (w *CodeWidget) SetBreakInfos(items []models.BreakInfo) {
 	if items == nil {
 		return
 	}
-	w.bpLines = make(map[int]struct{})
-	w.bpDisabled = make(map[int]struct{})
-	w.bpNums = make(map[int][]int)
-	for _, it := range items {
-		if it.Line < 1 {
-			continue
-		}
-		if it.Number > 0 {
-			w.bpNums[it.Line] = append(w.bpNums[it.Line], it.Number)
-		}
-		if it.Enabled {
-			w.bpLines[it.Line] = struct{}{}
-		} else {
-			w.bpDisabled[it.Line] = struct{}{}
-		}
-	}
+	w.bpByLine = models.GuttersByLine(items)
 	if w.path != "" || len(w.rawLines) > 0 {
 		w.rebuildBuffer()
 	}
@@ -545,59 +504,45 @@ func (w *CodeWidget) SetBreakpointLines(lines []int) {
 	w.SetBreakInfos(items)
 }
 
-func (w *CodeWidget) hasBreakpoint(line int) bool {
-	_, ok := w.bpLines[line]
-	return ok
+func (w *CodeWidget) gutterAt(line int) (models.BreakGutter, bool) {
+	g, ok := w.bpByLine[line]
+	return g, ok
 }
 
-func (w *CodeWidget) hasDisabledBreakpoint(line int) bool {
-	_, ok := w.bpDisabled[line]
-	return ok
-}
-
-// HasEnabledBreak reports whether line has an enabled (red) breakpoint mark.
+// HasEnabledBreak reports whether line has an enabled breakpoint mark.
 func (w *CodeWidget) HasEnabledBreak(line int) bool {
-	return w.hasBreakpoint(line)
+	g, ok := w.gutterAt(line)
+	return ok && g.Enabled
 }
 
-// HasDisabledBreak reports whether line has a disabled (yellow) breakpoint mark.
+// HasDisabledBreak reports whether line has a disabled breakpoint mark.
 func (w *CodeWidget) HasDisabledBreak(line int) bool {
-	return w.hasDisabledBreakpoint(line)
+	g, ok := w.gutterAt(line)
+	return ok && !g.Enabled
 }
 
 func (w *CodeWidget) breakColor() tcell.Color {
-	if w.state != nil {
-		return w.state.BreakColor()
-	}
-	return platform.DefaultBreakColor
+	return themeFrom{w.state}.Break()
 }
 
 func (w *CodeWidget) breakDisabledColor() tcell.Color {
-	if w.state != nil {
-		return w.state.BreakDisabledColor()
-	}
-	return platform.DefaultBreakDisabledColor
+	return themeFrom{w.state}.BreakDisabled()
+}
+
+func (w *CodeWidget) breakCondColor() tcell.Color {
+	return themeFrom{w.state}.BreakCond()
 }
 
 func (w *CodeWidget) pcColor() tcell.Color {
-	if w.state != nil {
-		return w.state.PCColor()
-	}
-	return platform.DefaultPCColor
+	return themeFrom{w.state}.PC()
 }
 
 func (w *CodeWidget) codeSelColor() tcell.Color {
-	if w.state != nil {
-		return w.state.CodeSelColor()
-	}
-	return platform.DefaultCodeSelColor
+	return themeFrom{w.state}.CodeSel()
 }
 
 func (w *CodeWidget) searchColor() tcell.Color {
-	if w.state != nil {
-		return w.state.SearchColor()
-	}
-	return platform.DefaultSearchColor
+	return themeFrom{w.state}.Search()
 }
 
 // RebuildBuffer refreshes gutter ANSI from current AppState break colors.
@@ -622,12 +567,9 @@ func (w *CodeWidget) rebuildBuffer() {
 		}
 		num := fmt.Sprintf("%4d", ln)
 		var numANSI string
-		switch {
-		case w.hasBreakpoint(ln):
-			numANSI = platform.BreakNumberANSI(num, w.breakColor())
-		case w.hasDisabledBreakpoint(ln):
-			numANSI = platform.BreakNumberANSI(num, w.breakDisabledColor())
-		default:
+		if g, ok := w.gutterAt(ln); ok {
+			numANSI = platform.BreakNumberANSI(num, breakGutterColor(g, w.state))
+		} else {
 			numANSI = "\x1b[38;5;244m" + num + "\x1b[0m"
 		}
 		gutter := fmt.Sprintf("%s %s\x1b[38;5;240m│\x1b[0m ", markANSI, numANSI)

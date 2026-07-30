@@ -8,10 +8,11 @@ package domain
 
 // Breakpoint is a domain snapshot row (same facts as the Breakpoints pane).
 type Breakpoint struct {
-	Number  int    `json:"number"`
-	Enabled bool   `json:"enabled"`
-	File    string `json:"file"`
-	Line    int    `json:"line"`
+	Number    int    `json:"number"`
+	Enabled   bool   `json:"enabled"`
+	Condition string `json:"condition,omitempty"`
+	File      string `json:"file"`
+	Line      int    `json:"line"`
 }
 
 // Thread is a domain snapshot row (same facts as the Threads pane).

@@ -14,9 +14,25 @@ func TestParseBreakList(t *testing.T) {
 	if got[1].Number != 2 || got[1].Enabled {
 		t.Fatalf("second should be disabled: %+v", got[1])
 	}
-	locs := EnabledBreakMarks(got)
-	if len(locs) != 2 {
-		t.Fatalf("enabled locs=%v", locs)
+	enabled := 0
+	for _, it := range got {
+		if it.Enabled {
+			enabled++
+		}
+	}
+	if enabled != 2 {
+		t.Fatalf("enabled=%d", enabled)
+	}
+}
+
+func TestParseBreakListCondition(t *testing.T) {
+	raw := `^done,BreakpointTable={body=[bkpt={number="7",type="breakpoint",disp="keep",enabled="y",addr="0x0000000000401126",func="main",file="hello.c",fullname="/tmp/hello.c",line="22",cond="i == 3",times="0"}]}`
+	got := ParseBreakList(raw)
+	if len(got) != 1 {
+		t.Fatalf("got %d, want 1", len(got))
+	}
+	if got[0].Condition != "i == 3" || !got[0].Conditional() {
+		t.Fatalf("cond=%+v", got[0])
 	}
 }
 

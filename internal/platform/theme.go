@@ -10,6 +10,8 @@ var (
 	DefaultMarkDimColor       = tcell.ColorGray
 	DefaultBreakColor         = tcell.ColorRed
 	DefaultBreakDisabledColor = tcell.ColorYellow
+	// DefaultBreakCondColor is the background for enabled conditional breakpoints.
+	DefaultBreakCondColor = tcell.ColorOrange
 	// DefaultPCColor is the program-counter / ━━▶ row (Code + Breakpoint list).
 	DefaultPCColor = tcell.ColorDarkSlateGray
 	// DefaultStackBreakColor highlights a Call Stack frame when ━━▶ is on the

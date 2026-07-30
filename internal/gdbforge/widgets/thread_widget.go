@@ -30,11 +30,8 @@ type ThreadWidget struct {
 	// every drag sample (which flooded GDB with thread/frame console noise).
 	mouseDown     bool
 	pressSelected int
-	lastActID     string
-	lastActTime   time.Time
-
-	// HasBreakAt reports a breakpoint at file:line (wired from BreakpointList).
-	HasBreakAt func(file string, line int) bool
+	lastActID   string
+	lastActTime time.Time
 
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(models.ThreadInfo)
@@ -146,17 +143,6 @@ func (w *ThreadWidget) isCurrentThread(lineIdx int) bool {
 		return false
 	}
 	return w.items[lineIdx].Current
-}
-
-func (w *ThreadWidget) atBreakOnProgramPoint(lineIdx int) bool {
-	if !w.atProgramPoint(lineIdx) {
-		return false
-	}
-	if w.HasBreakAt == nil {
-		return false
-	}
-	it := w.items[lineIdx]
-	return w.HasBreakAt(it.File, it.Line)
 }
 
 func (w *ThreadWidget) move(delta int) {
