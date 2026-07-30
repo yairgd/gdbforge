@@ -130,6 +130,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.bpWidget.OnToggle = a.onBreakpointToggle
 	a.bpWidget.OnDelete = a.onBreakpointDelete
 	a.bpWidget.OnActivate = a.onBreakpointActivate
+	a.bpWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
 	a.threadWidget = widgets.NewThreadWidget()
@@ -142,6 +143,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.callstackWidget.SetAppState(a.Debug())
 	a.callstackWidget.OnActivate = a.onCallStackActivate
+	a.callstackWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("callstack", a.callstackWidget)
 
 	a.fileListWidget = widgets.NewFileListWidget()

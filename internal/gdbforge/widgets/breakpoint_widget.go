@@ -14,9 +14,9 @@ import (
 // The app owns Merge/Toggle/Delete and GDB sends; this widget only paints
 // SetItems and fires OnActivate / OnToggle / OnDelete intents.
 //
-//	j/k or Up/Down — move selection and OnActivate (like Enter)
-//	wheel — same (Code jumps to the breakpoint)
-//	Enter / click — OnActivate
+//	j/k or Up/Down — move selection and OnActivate (browse Code, keep BP focus)
+//	wheel / click — same (browse only; do not steal focus)
+//	Enter — OnActivate then OnFocusCode (status line → Code)
 //	e — OnToggle(selected)
 //	d — OnDelete(selected)
 type BreakpointWidget struct {
@@ -34,8 +34,10 @@ type BreakpointWidget struct {
 	mouseDown     bool
 	pressSelected int
 
-	// OnActivate is called when the user selects a row.
+	// OnActivate is called when the user selects a row (browse).
 	OnActivate func(models.BreakInfo)
+	// OnFocusCode is called after Enter (commit focus to Code pane).
+	OnFocusCode func()
 	// OnToggle is e — enable/disable at selected index.
 	OnToggle func(index int)
 	// OnDelete is d — remove selected index.
@@ -82,11 +84,11 @@ func (w *BreakpointWidget) SetItems(items []models.BreakInfo) {
 }
 
 func (w *BreakpointWidget) initKeyBindings() {
-	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
-	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected(false) }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected(false) }, "<Down>", "j")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
-	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
+	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected(true) }, "<Enter>", "<C-m>")
 	w.BindKeyFunc("toggle", func(args ...any) {
 		if w.OnToggle != nil && len(w.items) > 0 {
 			w.OnToggle(w.selected)
@@ -224,14 +226,19 @@ func (w *BreakpointWidget) syncSelectedFromViewport() {
 	w.viewport.CursorLine = line
 }
 
-func (w *BreakpointWidget) activateSelected() {
-	if w.OnActivate == nil || len(w.items) == 0 {
+func (w *BreakpointWidget) activateSelected(commitFocus bool) {
+	if len(w.items) == 0 {
 		return
 	}
 	if w.selected < 0 || w.selected >= len(w.items) {
 		return
 	}
-	w.OnActivate(w.items[w.selected])
+	if w.OnActivate != nil {
+		w.OnActivate(w.items[w.selected])
+	}
+	if commitFocus && w.OnFocusCode != nil {
+		w.OnFocusCode()
+	}
 }
 
 func (w *BreakpointWidget) rebuild() {
@@ -280,12 +287,12 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 		// Wheel moves selection and activates so Code jumps to the breakpoint.
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
-			w.activateSelected()
+			w.activateSelected(false)
 			return
 		}
 		if btns&tcell.WheelDown != 0 {
 			w.move(1)
-			w.activateSelected()
+			w.activateSelected(false)
 			return
 		}
 		w.viewport.HandleEvent(e)
@@ -301,7 +308,7 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 			w.mouseDown = false
 			w.syncSelectedFromViewport()
 			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
-				w.activateSelected()
+				w.activateSelected(false)
 			}
 		}
 	case *tcell.EventKey:

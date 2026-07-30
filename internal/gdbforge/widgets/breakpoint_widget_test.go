@@ -159,6 +159,30 @@ func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 	}
 }
 
+func TestBreakpointWidgetEnterFocusesCode(t *testing.T) {
+	w := NewBreakpointWidget()
+	w.SetFocused(true)
+	w.SetItems([]models.BreakInfo{
+		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
+		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
+	})
+	var focus int
+	w.OnActivate = func(models.BreakInfo) {}
+	w.OnFocusCode = func() { focus++ }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("enter")
+	}
+	if focus != 1 {
+		t.Fatalf("focus calls=%d want 1", focus)
+	}
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("down")
+	}
+	if focus != 1 {
+		t.Fatalf("j/k must not focus Code: focus=%d", focus)
+	}
+}
+
 func TestBreakpointWidgetWheelActivates(t *testing.T) {
 	w := NewBreakpointWidget()
 	w.SetFocused(true)

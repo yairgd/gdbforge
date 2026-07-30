@@ -14,9 +14,9 @@ import (
 
 // CallStackWidget shows GDB stack frames.
 //
-//	j/k or Up/Down — move selection and OnActivate (like Enter)
-//	wheel — same (Code follows the selected frame)
-//	Enter / click — OnActivate
+//	j/k or Up/Down — move selection and OnActivate (browse Code, keep stack focus)
+//	wheel / click — same (browse only; do not steal focus)
+//	Enter — OnActivate then OnFocusCode (status line → Code)
 type CallStackWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -30,11 +30,13 @@ type CallStackWidget struct {
 	// every drag sample (which flooded GDB with `frame N` console noise).
 	mouseDown     bool
 	pressSelected int
-	lastActLevel int
-	lastActTime  time.Time
+	lastActLevel  int
+	lastActTime   time.Time
 
 	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
 	OnActivate func(models.StackFrame)
+	// OnFocusCode is called after Enter (commit focus to Code pane).
+	OnFocusCode func()
 }
 
 func NewCallStackWidget() *CallStackWidget {
@@ -65,11 +67,11 @@ func (w *CallStackWidget) SetAppState(st *debugstate.State) {
 }
 
 func (w *CallStackWidget) initKeyBindings() {
-	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
-	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
+	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected(false) }, "<Up>", "k")
+	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected(false) }, "<Down>", "j")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
-	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
+	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected(true) }, "<Enter>", "<C-m>")
 }
 
 func (w *CallStackWidget) markColor() tcell.Color {
@@ -175,22 +177,26 @@ func (w *CallStackWidget) syncSelectedFromViewport() {
 	w.viewport.CursorLine = line
 }
 
-func (w *CallStackWidget) activateSelected() {
-	if w.OnActivate == nil || len(w.items) == 0 {
+func (w *CallStackWidget) activateSelected(commitFocus bool) {
+	if len(w.items) == 0 {
 		return
 	}
 	if w.selected < 0 || w.selected >= len(w.items) {
 		return
 	}
 	fr := w.items[w.selected]
-	// Collapse duplicate activates from noisy mouse press/release sequences.
-	now := time.Now()
-	if fr.Level == w.lastActLevel && now.Sub(w.lastActTime) < 300*time.Millisecond {
-		return
+	if w.OnActivate != nil {
+		// Collapse duplicate activates from noisy mouse press/release sequences.
+		now := time.Now()
+		if fr.Level != w.lastActLevel || now.Sub(w.lastActTime) >= 300*time.Millisecond {
+			w.lastActLevel = fr.Level
+			w.lastActTime = now
+			w.OnActivate(fr)
+		}
 	}
-	w.lastActLevel = fr.Level
-	w.lastActTime = now
-	w.OnActivate(fr)
+	if commitFocus && w.OnFocusCode != nil {
+		w.OnFocusCode()
+	}
 }
 
 // SetItems replaces the frame list and rebuilds the viewport.
@@ -267,12 +273,12 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 		// Wheel moves selection and activates so Code follows the frame.
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
-			w.activateSelected()
+			w.activateSelected(false)
 			return
 		}
 		if btns&tcell.WheelDown != 0 {
 			w.move(1)
-			w.activateSelected()
+			w.activateSelected(false)
 			return
 		}
 		w.viewport.HandleEvent(e)
@@ -290,7 +296,7 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 			w.mouseDown = false
 			w.syncSelectedFromViewport()
 			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
-				w.activateSelected()
+				w.activateSelected(false)
 			}
 		}
 	case *tcell.EventKey:

@@ -76,6 +76,30 @@ func TestCallStackWidgetActivateEnter(t *testing.T) {
 	}
 }
 
+func TestCallStackWidgetEnterFocusesCode(t *testing.T) {
+	w := NewCallStackWidget()
+	w.SetFocused(true)
+	w.SetItems([]models.StackFrame{
+		{Level: 0, Func: "main", File: "a.c", Line: 1},
+		{Level: 1, Func: "foo", File: "b.c", Line: 2},
+	})
+	var focus int
+	w.OnActivate = func(models.StackFrame) {}
+	w.OnFocusCode = func() { focus++ }
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("enter")
+	}
+	if focus != 1 {
+		t.Fatalf("focus calls=%d want 1", focus)
+	}
+	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("down")
+	}
+	if focus != 1 {
+		t.Fatalf("j/k must not focus Code: focus=%d", focus)
+	}
+}
+
 func TestCallStackWidgetActivateOnMove(t *testing.T) {
 	w := NewCallStackWidget()
 	w.SetFocused(true)
