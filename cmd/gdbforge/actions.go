@@ -98,7 +98,7 @@ func (app *DebuggerApp) GdbStepi(args ...any) {
 }
 
 func (app *DebuggerApp) GdbInterrupt(args ...any) {
-	app.onGdbConsoleInterrupt()
+	app.console.onGdbConsoleInterrupt()
 	app.RequestFrame()
 }
 
@@ -212,7 +212,7 @@ func (app *DebuggerApp) Quit(args ...any) {
 		app.Exit()
 		return
 	}
-	app.onGdbConsoleEOF()
+	app.console.onGdbConsoleEOF()
 	app.RequestFrame()
 }
 

@@ -52,6 +52,7 @@ type DebuggerApp struct {
 	backend backend.Backend
 	breaks  breakCtl
 	nav     navCtl
+	console consoleCtl
 	gdbCancelSub      func()
 	inferiorCancelSub func()
 	// gdbBridgeGen identifies the active debugger console bridge. Bump before

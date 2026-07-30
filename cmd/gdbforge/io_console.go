@@ -37,7 +37,7 @@ func (a *DebuggerApp) wireInferiorIO(tty *ptyx.TTY) {
 		Interrupt: func() {
 			a.sendInferior(tty, func() { _ = tty.SendRaw("\x03") })
 		},
-		Suspend: a.onGdbConsoleSuspend,
+		Suspend: a.console.onGdbConsoleSuspend,
 		EOF: func() {
 			a.sendInferior(tty, func() { _ = tty.SendRaw("\x04") })
 		},

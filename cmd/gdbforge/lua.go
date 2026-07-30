@@ -446,7 +446,7 @@ func (a *DebuggerApp) wireUserLuaAPI(rt *luahost.Runtime) {
 					return
 				}
 				sendCmd, _ := a.backend.MapExec(cmd)
-				a.withGdbUIOwner(func() { _ = a.backend.SendLine(sendCmd) })
+				a.console.withGdbUIOwner(func() { _ = a.backend.SendLine(sendCmd) })
 				a.RequestFrame()
 			})
 		},

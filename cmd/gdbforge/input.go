@@ -38,7 +38,7 @@ func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	if !isCtrlZ(ev) {
 		return false
 	}
-	a.onGdbConsoleSuspend()
+	a.console.onGdbConsoleSuspend()
 	return true
 }
 
@@ -56,7 +56,7 @@ func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 		a.RequestFrame()
 		return true
 	}
-	a.onGdbConsoleInterrupt()
+	a.console.onGdbConsoleInterrupt()
 	a.RequestFrame()
 	return true
 }
@@ -67,7 +67,7 @@ func (a *DebuggerApp) tryGlobalEOF(ev *tcell.EventKey) bool {
 	if !isCtrlD(ev) {
 		return false
 	}
-	a.onGdbConsoleEOF()
+	a.console.onGdbConsoleEOF()
 	a.RequestFrame()
 	return true
 }
@@ -885,7 +885,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			a.miLog.Error(data.Err.Error())
 		}
 		if a.gdbWidget != nil {
-			a.handleGdbOutputMsg(data)
+			a.console.handleDebuggerOutputMsg(data)
 		}
 		if a.outputWidget != nil && data.Data != "" {
 			a.outputWidget.AppendPty(data.Data)

@@ -147,9 +147,9 @@ func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
 	}
 
 	if boot := client.TakeStartupOutput(); boot != "" && a.gdbWidget != nil {
-		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
+		a.console.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
 	}
-	a.startGdbConsoleBridge()
+	a.console.startGdbConsoleBridge()
 
 	if a.gdbMcp != nil {
 		a.gdbMcp.SetSession(a.GDB())

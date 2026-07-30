@@ -73,16 +73,16 @@ func (a *DebuggerApp) initBuiltins() error {
 		a.Debug().SetGdbTargetPrint(true)
 	}
 	wireConsole(a.gdbWidget, consoleHandlers{
-		Submit:    a.onGdbConsoleSubmit,
-		Interrupt: a.onGdbConsoleInterrupt,
-		Suspend:   a.onGdbConsoleSuspend,
-		EOF:       a.onGdbConsoleEOF,
+		Submit:    a.console.onGdbConsoleSubmit,
+		Interrupt: a.console.onGdbConsoleInterrupt,
+		Suspend:   a.console.onGdbConsoleSuspend,
+		EOF:       a.console.onGdbConsoleEOF,
 	})
 	// Replay banner / -x output captured before the UI subscribed, then attach live PTY.
 	if boot != "" {
-		a.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
+		a.console.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
 	}
-	a.startGdbConsoleBridge()
+	a.console.startGdbConsoleBridge()
 	a.registerBuiltin("gdb", a.gdbWidget)
 
 	a.outputWidget = widgets.NewOutputWidget()
@@ -124,8 +124,8 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.bpWidget = widgets.NewBreakpointWidget()
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.bpWidget.SetAppState(a.Debug())
-	a.bpWidget.OnToggle = a.breaks.Toggle
-	a.bpWidget.OnDelete = a.breaks.Delete
+	a.bpWidget.OnToggle = a.breaks.onBreakpointToggle
+	a.bpWidget.OnDelete = a.breaks.onBreakpointDelete
 	a.bpWidget.OnActivate = a.breaks.Activate
 	a.bpWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("breakpoint", a.bpWidget)
