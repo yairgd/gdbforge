@@ -338,6 +338,26 @@ func (a *AppState) setColor(field *tcell.Color, c tcell.Color) {
 	a.mu.Unlock()
 }
 
+// colorNames are accepted by ParseColorName (including aliases). Sorted for Tab.
+var colorNames = []string{
+	"aqua", "black", "blue", "cyan", "darkblue", "darkorange",
+	"darkslategray", "darkslategrey", "fuchsia", "gray", "green", "grey",
+	"magenta", "navy", "orange", "purple", "red", "silver", "slategray",
+	"slategrey", "teal", "white", "yellow",
+}
+
+// CompleteColorName returns ParseColorName names matching prefix (case-insensitive).
+func CompleteColorName(prefix string) []string {
+	prefix = strings.ToLower(strings.TrimSpace(prefix))
+	var out []string
+	for _, name := range colorNames {
+		if prefix == "" || strings.HasPrefix(name, prefix) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // ParseColorName maps a user color name to a tcell.Color (case-insensitive).
 func ParseColorName(name string) (tcell.Color, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {

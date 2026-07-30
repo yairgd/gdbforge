@@ -341,6 +341,11 @@ func (app *DebuggerApp) inferiorTTYCompletions(prefix string) []string {
 	return out
 }
 
+// colorCompletions is Tab after :set breakcolor / markcolor / ….
+func (app *DebuggerApp) colorCompletions(prefix string) []string {
+	return platform.CompleteColorName(prefix)
+}
+
 func (app *DebuggerApp) setNamedColor(args []any, what string, apply func(tcell.Color), rebuildGutters bool) {
 	name := joinCmdArgs(args)
 	if name == "" {

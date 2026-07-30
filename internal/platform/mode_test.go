@@ -100,6 +100,14 @@ func TestAppStatePTYOwnerAndEqualAlways(t *testing.T) {
 	if _, ok := ParseColorName("notaColor"); ok {
 		t.Fatal("ParseColorName unknown")
 	}
+	if got := CompleteColorName("dark"); len(got) == 0 {
+		t.Fatal("CompleteColorName dark")
+	}
+	for _, name := range CompleteColorName("") {
+		if _, ok := ParseColorName(name); !ok {
+			t.Fatalf("CompleteColorName %q not parseable", name)
+		}
+	}
 	_ = PTYOwnerApp.String()
 }
 
