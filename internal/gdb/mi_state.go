@@ -23,6 +23,18 @@ type MiUpdate struct {
 	InferiorPID string
 	// InferiorExited is set on =thread-group-exited.
 	InferiorExited bool
+	// FrameSelected is set from =thread-selected when it includes frame={…}
+	// (CLI frame / f / up / down). Lets the UI sync Code without a Query race.
+	FrameSelected *MiFrameMsg
+}
+
+// MiFrameMsg is a stack frame carried by =thread-selected (or similar).
+type MiFrameMsg struct {
+	Level int
+	Func  string
+	File  string
+	Line  int
+	Addr  string
 }
 
 // GdbInputState splits PTY chunks into MI lines and streams display updates.
@@ -146,6 +158,12 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 	case strings.HasPrefix(line, "=thread-group-exited"):
 		out.InferiorExited = true
 
+	case strings.HasPrefix(line, "=thread-selected"):
+		// CLI frame/f/up/down emit this with frame={level=…,fullname=…,line=…}.
+		if fr, ok := parseMiFrame(line); ok {
+			out.FrameSelected = &fr
+		}
+
 	default:
 		// make / shell write child stdout as raw PTY text — not wrapped in
 		// ~/"@" streams. Paint it so the console matches classic GDB.
@@ -218,6 +236,35 @@ func displayHasSignalMsg(lines []string) bool {
 		}
 	}
 	return false
+}
+
+// parseMiFrame extracts frame={…} fields from an MI record (=thread-selected, *stopped, …).
+func parseMiFrame(line string) (MiFrameMsg, bool) {
+	if !strings.Contains(line, "frame={") {
+		return MiFrameMsg{}, false
+	}
+	fr := MiFrameMsg{
+		Func: ExtractMIField(line, "func"),
+		File: ExtractMIField(line, "fullname"),
+		Addr: ExtractMIField(line, "addr"),
+	}
+	if fr.File == "" {
+		fr.File = ExtractMIField(line, "file")
+	}
+	if lv := ExtractMIField(line, "level"); lv != "" {
+		if n, err := strconv.Atoi(lv); err == nil {
+			fr.Level = n
+		}
+	}
+	if ln := ExtractMIField(line, "line"); ln != "" {
+		if n, err := strconv.Atoi(ln); err == nil {
+			fr.Line = n
+		}
+	}
+	if fr.File == "" && fr.Func == "" && fr.Addr == "" {
+		return MiFrameMsg{}, false
+	}
+	return fr, true
 }
 
 // IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").

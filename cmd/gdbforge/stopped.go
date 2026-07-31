@@ -132,8 +132,37 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 	return w
 }
 
+// onGdbFrameSelected presents Code/Asm from =thread-selected (CLI frame/f/up/down).
+// Called on the UI thread with the frame GDB already reported — no MI Query.
+func (a *DebuggerApp) onGdbFrameSelected(fr gdb.MiFrameMsg) {
+	a.debugInfo.selectLevel(fr.Level)
+	a.showFrameSource(models.StackFrame{
+		Level: fr.Level,
+		Func:  fr.Func,
+		File:  fr.File,
+		Line:  fr.Line,
+		Addr:  fr.Addr,
+	})
+	a.RequestFrame()
+	// Refresh call-stack list off-thread; re-present with the queried frame so
+	// Asm browse address stays aligned if the async record omitted addr.
+	go func() {
+		got, ok := a.fetchCurrentFrameFromGDB()
+		if !ok {
+			return
+		}
+		if scr := a.Screen(); scr != nil {
+			frCopy := got
+			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
+				frame: &frCopy,
+			}))
+		}
+	}()
+}
+
 // onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
 // (those do not emit *stopped). Query off-thread; present on the UI thread.
+// Used when =thread-selected did not carry a frame (e.g. -stack-select-frame).
 func (a *DebuggerApp) onGdbFrameSync() {
 	go func() {
 		fr, ok := a.fetchCurrentFrameFromGDB()

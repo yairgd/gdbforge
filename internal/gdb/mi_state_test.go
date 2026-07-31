@@ -69,15 +69,20 @@ func TestPushRawBreakpointNotify(t *testing.T) {
 	}
 }
 
-func TestPushRawThreadGroupLifecycle(t *testing.T) {
+func TestPushRawThreadSelectedFrame(t *testing.T) {
 	st := NewGdbInputState()
-	u := st.PushRaw(`=thread-group-started,id="i1",pid="24193"` + "\n")
-	if u.InferiorPID != "24193" {
-		t.Fatalf("pid=%q", u.InferiorPID)
+	u := st.PushRaw(`=thread-selected,id="1",frame={level="2",addr="0x400",func="main",args=[],file="hello.c",fullname="/tmp/hello.c",line="10",arch="i386:x86-64"}` + "\n^done\n(gdb)\n")
+	if u.FrameSelected == nil {
+		t.Fatal("expected FrameSelected from =thread-selected")
 	}
-	u = st.PushRaw(`=thread-group-exited,id="i1"` + "\n")
-	if !u.InferiorExited {
-		t.Fatal("expected InferiorExited")
+	if u.FrameSelected.Level != 2 || u.FrameSelected.File != "/tmp/hello.c" || u.FrameSelected.Line != 10 {
+		t.Fatalf("got %+v", u.FrameSelected)
+	}
+	if u.FrameSelected.Func != "main" || u.FrameSelected.Addr != "0x400" {
+		t.Fatalf("got %+v", u.FrameSelected)
+	}
+	if !u.PromptReady {
+		t.Fatal("expected PromptReady")
 	}
 }
 

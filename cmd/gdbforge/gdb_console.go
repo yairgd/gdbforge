@@ -41,6 +41,9 @@ type consoleHost interface {
 	// Stop pipeline / peer-controller hooks.
 	onGdbStopped(stop *gdb.MiStopMsg)
 	onGdbFrameSync()
+	// onGdbFrameSelected presents Code/Asm for a frame from =thread-selected
+	// (CLI frame/f/up/down) — already on the UI thread.
+	onGdbFrameSelected(fr gdb.MiFrameMsg)
 	clearDebugInfoPanes()
 	BreakpointsChanged()
 	SelectedFrameLevel() int
@@ -391,7 +394,7 @@ func (c *consoleCtl) applyGdbMiUpdate(upd gdb.MiUpdate) {
 			PromptLine:   upd.PromptLine,
 		}, confirming, includeTarget)
 	}
-	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged)
+	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged, upd.FrameSelected)
 }
 
 func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
@@ -418,7 +421,7 @@ func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
 		h.DeferDLVBPRefresh()
 		bpChanged = false
 	}
-	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, bpChanged)
+	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, bpChanged, nil)
 	if upd.PromptReady && h.TakeDeferredBP() {
 		h.BreakpointsChanged()
 	}
@@ -430,6 +433,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	promptReady bool,
 	state gdb.GdbState,
 	breakpointsChanged bool,
+	frameSelected *gdb.MiFrameMsg,
 ) {
 	h := c.host
 	if h == nil {
@@ -443,7 +447,14 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	}
 	h.TriggerPendingDebugInfoIfReady(promptReady)
 	if h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
-		h.onGdbFrameSync()
+		// CLI frame/f/up/down include =thread-selected with the new frame in
+		// the same batch as (gdb). Present that immediately — a follow-up
+		// -stack-info-frame Query often left Code/Asm stale.
+		if frameSelected != nil {
+			h.onGdbFrameSelected(*frameSelected)
+		} else {
+			h.onGdbFrameSync()
+		}
 	}
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
 	if promptReady && h.isDLV() && h.SuppressStopUICount() > 0 && stopped == nil {
