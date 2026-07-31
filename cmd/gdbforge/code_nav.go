@@ -79,14 +79,28 @@ func (a *DebuggerApp) findCodeLeaf() *termui.Node {
 		if isSourceCodeSlot(w) {
 			return leaf
 		}
-		// Single-pane :b asm still owns the code mark.
-		if isAssemblyWidget(w) && !a.asm.hasSplit() {
+		// Shared location leaf showing Assembly (:b asm / autoAsm).
+		// Never clear the code mark just because the leaf currently holds Asm —
+		// that used to make hasSplit() look true and block reclaiming Code.
+		if isAssemblyWidget(w) {
+			if a.tab.LeafMark(leafMarkAsm) == leaf {
+				a.tab.SetLeafMark(leafMarkAsm, nil)
+			}
 			return leaf
 		}
 	}
-	leaf := a.tab.FindLeaf(isSourceCodeSlot)
-	a.tab.SetLeafMark(leafMarkCode, leaf)
-	return leaf
+	if leaf := a.tab.FindLeaf(isSourceCodeSlot); leaf != nil {
+		a.tab.SetLeafMark(leafMarkCode, leaf)
+		return leaf
+	}
+	// Heal contamination: asm mark on the only location leaf (no Code/Logo).
+	if asm := a.tab.LeafMark(leafMarkAsm); asm != nil && isAssemblyWidget(asm.GetWidget()) {
+		a.tab.SetLeafMark(leafMarkCode, asm)
+		a.tab.SetLeafMark(leafMarkAsm, nil)
+		return asm
+	}
+	a.tab.SetLeafMark(leafMarkCode, nil)
+	return nil
 }
 
 // rememberCodeLeafFromFocus updates code/gdb marks and the Esc "last" mark.
@@ -107,13 +121,23 @@ func (a *DebuggerApp) rememberCodeLeafFromFocus() {
 	w := leaf.GetWidget()
 	switch {
 	case isAssemblyWidget(w):
-		a.tab.SetLeafMark(leafMarkAsm, leaf)
+		codeLeaf := a.tab.LeafMark(leafMarkCode)
+		// Dedicated :vs/:sp asm only when distinct from the location leaf.
+		if codeLeaf != nil && codeLeaf != leaf {
+			a.tab.SetLeafMark(leafMarkAsm, leaf)
+			break
+		}
+		// Shared location leaf (:b asm / autoAsm) — keep the code mark.
+		a.tab.SetLeafMark(leafMarkCode, leaf)
+		a.tab.SetLeafMark(leafMarkAsm, nil)
+		a.tab.SetLeafMark(leafMarkLast, nil)
 	case isSourceCodeSlot(w):
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 		a.tab.SetLeafMark(leafMarkLast, nil)
 	case isCodeSlot(w):
 		// Single-pane asm occupying the code leaf.
 		a.tab.SetLeafMark(leafMarkCode, leaf)
+		a.tab.SetLeafMark(leafMarkAsm, nil)
 		a.tab.SetLeafMark(leafMarkLast, nil)
 	case w == a.gdbWidget:
 		a.tab.SetLeafMark(leafMarkGDB, leaf)

@@ -565,8 +565,7 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			}
 			a.debugInfo.selectLevel(0)
 			if data.stop != nil {
-				w := a.updateCodeAfterStop(data.stop)
-				a.applyCodeStop(w)
+				_ = a.updateCodeAfterStop(data.stop)
 				// Repaint all Code gutters from the model (fresh from the
 				// pre-stop -break-list query, or whatever Merge already holds).
 				if a.breaks.List() != nil {
@@ -576,7 +575,17 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 				break
 			}
 		}
-		a.applyCodeStop(data.widget)
+		// Console frame/f/up/down: present with the fetched frame (not nil).
+		if data.frame != nil {
+			a.debugInfo.syncCallStackViews()
+			a.debugInfo.selectLevel(data.frame.Level)
+			a.showFrameSource(*data.frame)
+			a.RequestFrame()
+			break
+		}
+		if data.widget != nil {
+			a.presentLocation(data.widget, nil)
+		}
 		a.RequestFrame()
 	case asmRefreshMsg:
 		a.asm.applyRefresh(data)

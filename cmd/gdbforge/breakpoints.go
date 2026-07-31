@@ -526,14 +526,16 @@ func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 		if aw == nil || a.backend == nil || !a.backend.SupportsAssembly() {
 			return
 		}
-		if a.asm.hasSplit() || a.asm.PreferAsm() {
-			a.asm.placeInSlot(aw)
-			if leaf := a.asm.findLeaf(); leaf != nil && a.asm.hasSplit() {
-				_ = a.tab.FocusLeaf(leaf)
-			}
-			go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
-			a.RequestFrame()
+		// Addr-only BP: show Asm in the location leaf (auto if not sticky).
+		if !a.asm.hasSplit() && !a.asm.PreferAsm() {
+			a.asm.setAutoAsm(true)
 		}
+		a.asm.placeInSlot(aw)
+		if leaf := a.asm.findLeaf(); leaf != nil && a.asm.hasSplit() {
+			_ = a.tab.FocusLeaf(leaf)
+		}
+		go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
+		a.RequestFrame()
 		return
 	}
 	if bp.File == "" {
@@ -543,6 +545,11 @@ func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 	if w != nil && w.Unavailable() {
 		w.ShowUnavailable(bp.File, formatUnavailableExtra("", bp.Line))
 	}
-	a.placeCodeInSlot(w)
+	a.presentLocation(w, nil)
+	if sourceUnavailable(w) && bp.Addr != "" && a.asm.AutoAsm() {
+		if aw := a.asm.Widget(); aw != nil {
+			go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
+		}
+	}
 	a.RequestFrame()
 }

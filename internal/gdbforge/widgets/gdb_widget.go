@@ -386,3 +386,4 @@ func (m *GDBWidget) HandleEvent(ev tcell.Event) {
 	}
 	m.console.HandleEvent(ev)
 }
+

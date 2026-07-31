@@ -464,7 +464,8 @@ func (c *bufferCtl) showCode(file string, line int, browse bool) *widgets.CodeWi
 	if !w.Unavailable() {
 		h.PaintCodeBreaks(w, file)
 	}
-	h.placeCodeInSlot(w)
+	c.setPrimary(w)
+	// Buffer update only — location leaf content is chosen by presentLocation.
 	return w
 }
 
@@ -488,7 +489,8 @@ func (c *bufferCtl) showCodeUnavailable(label, extra string) *widgets.CodeWidget
 	if w.PaneName == "" || w.PaneName == "." {
 		w.PaneName = "unavailable"
 	}
-	h.placeCodeInSlot(w)
+	c.setPrimary(w)
+	// Buffer update only — presentLocation may show Asm instead of this banner.
 	return w
 }
 

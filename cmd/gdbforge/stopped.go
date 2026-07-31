@@ -25,6 +25,10 @@ type codeRefreshMsg struct {
 	// stop is applied on the UI thread (not in a background goroutine) so a
 	// call-stack browse cannot be overwritten by a racing showCodeAt.
 	stop *gdb.MiStopMsg
+	// frame is set for console frame/f/up/down. showFrameSource runs on the
+	// UI thread with this frame (never present off-thread then re-present
+	// with a nil frame — that snapped Asm back to $pc and skipped Code).
+	frame *models.StackFrame
 }
 
 type breakpointsUIMsg struct{}
@@ -114,38 +118,42 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(stop.File, formatUnavailableExtra(stop.Func, stop.Line))
 		}
+		a.presentLocation(w, nil)
 	} else {
 		// No fullname on *stopped — query stack (same path as frame sync).
 		a.syncCurrentFrameFromGDB()
 		if w = a.activeCodeWidget(); w != nil {
-			// fall through to asm check
+			// showFrameSource already presented.
 		} else if stop != nil && stop.Func != "" {
 			w = a.bufs.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
+			a.presentLocation(w, nil)
 		}
-	}
-	if a.asm.shouldShow(w) {
-		a.asm.armRefresh(true)
 	}
 	return w
 }
 
 // onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
-// (those do not emit *stopped).
+// (those do not emit *stopped). Query off-thread; present on the UI thread.
 func (a *DebuggerApp) onGdbFrameSync() {
 	go func() {
-		a.syncCurrentFrameFromGDB()
+		fr, ok := a.fetchCurrentFrameFromGDB()
+		if !ok {
+			return
+		}
 		if scr := a.Screen(); scr != nil {
-			// Not fromStop: must not SelectLevel(0) / force the stop file.
+			frCopy := fr
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
-				widget: a.activeCodeWidget(),
+				frame: &frCopy,
 			}))
 		}
 	}()
 }
 
-func (a *DebuggerApp) syncCurrentFrameFromGDB() {
+// fetchCurrentFrameFromGDB queries the selected frame and updates the call-stack
+// model. Does not touch Code/Asm or Call Stack views — UI thread must present.
+func (a *DebuggerApp) fetchCurrentFrameFromGDB() (models.StackFrame, bool) {
 	if a.gdbMcp == nil {
-		return
+		return models.StackFrame{}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -154,13 +162,13 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 		raw, err := a.gdbMcp.Query(ctx, "stack")
 		if err != nil {
 			a.LogError("frame", err.Error())
-			return
+			return models.StackFrame{}, false
 		}
 		frames := dlv.ParseStack(raw)
 		if len(frames) == 0 {
-			return
+			return models.StackFrame{}, false
 		}
-		a.debugInfo.applyStackFrames(frames)
+		a.debugInfo.setStackFrames(frames)
 		// Delve's `stack` always lists level 0 first; it does not mark the
 		// selected frame. Use the level from the last frame/up/down command
 		// (or the call-stack highlight) instead of always taking frames[0].
@@ -169,30 +177,36 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 		if found, ok := frameAtLevel(frames, level); ok {
 			fr = found
 		}
-		a.debugInfo.selectLevel(fr.Level)
-		a.showFrameSource(fr)
-		return
+		return fr, true
 	}
 
 	raw, err := a.gdbMcp.Query(ctx, "-stack-info-frame")
 	if err != nil {
 		a.LogError("frame", err.Error())
-		return
+		return models.StackFrame{}, false
 	}
 	fr, ok := parse.ParseStackInfoFrame(raw)
 	if !ok {
-		return
+		return models.StackFrame{}, false
 	}
 
-	// Keep the callstack list in sync and highlight the selected level.
 	if a.debugInfo.CallStackWidget() != nil || a.debugInfo.Stack() != nil {
 		rawStack, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
 		if err == nil {
-			a.debugInfo.applyStackFrames(parse.ParseStackListFrames(rawStack))
+			a.debugInfo.setStackFrames(parse.ParseStackListFrames(rawStack))
 		}
-		a.debugInfo.selectLevel(fr.Level)
 	}
+	return fr, true
+}
 
+// syncCurrentFrameFromGDB fetches the selected frame and presents it (UI thread).
+func (a *DebuggerApp) syncCurrentFrameFromGDB() {
+	fr, ok := a.fetchCurrentFrameFromGDB()
+	if !ok {
+		return
+	}
+	a.debugInfo.syncCallStackViews()
+	a.debugInfo.selectLevel(fr.Level)
 	a.showFrameSource(fr)
 }
 
@@ -210,13 +224,7 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 	case fr.Func != "":
 		w = a.bufs.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
 	}
-	// Assembly follows the selected frame address; real $pc keeps ━━▶.
-	if a.asm.shouldShow(w) {
-		a.asm.syncToFrame(fr)
-	}
-	if w != nil {
-		a.applyCodeStop(w)
-	}
+	a.presentLocation(w, &fr)
 }
 
 // syncCodeFromCallstack moves Code to the first stack frame that has a source
@@ -240,10 +248,7 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 	}
 	if fr, ok := stack.At(0); ok && fr.Func != "" {
 		w := a.bufs.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
-		if a.asm.shouldShow(w) {
-			a.asm.armRefresh(true)
-		}
-		a.applyCodeStop(w)
+		a.presentLocation(w, &fr)
 	}
 }
 
@@ -262,43 +267,104 @@ func formatUnavailableExtra(fn string, line int) string {
 	}
 }
 
-// applyCodeStop refreshes the source view for a stop without stealing focus from
-// another pane. If the focused pane is already a CodeWidget, switch that pane
-// to the stop file; otherwise update the code-slot leaf (Logo or Code) in place.
-func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
-	a.placeCodeInSlot(w)
+// presentLocation chooses Code vs Assembly for the location leaf only.
+// Like Call Stack / Breakpoints, other panes are never stolen.
+//
+//	readable source → Code (unless sticky :b asm)
+//	no source + asm supported → Assembly (autoAsm)
+//	no source + no asm → unavailable Code banner
+func (a *DebuggerApp) presentLocation(codeW *widgets.CodeWidget, fr *models.StackFrame) {
+	if a == nil {
+		return
+	}
+	unavailable := sourceUnavailable(codeW)
+
+	refreshAsm := func() {
+		if fr != nil {
+			a.asm.syncToFrame(*fr)
+			return
+		}
+		a.asm.armRefresh(true)
+	}
+
+	if a.asm.hasSplit() {
+		if codeW != nil && !unavailable {
+			a.placeCodeInSlot(codeW)
+		}
+		if a.asm.shouldShow(codeW) {
+			refreshAsm()
+		}
+		return
+	}
+
+	if a.asm.PreferAsm() {
+		a.asm.setAutoAsm(false)
+		if aw := a.asm.Widget(); aw != nil {
+			a.asm.placeInSlot(aw)
+		}
+		refreshAsm()
+		return
+	}
+
+	if unavailable && a.asm.supported() && a.asm.Widget() != nil {
+		a.asm.setAutoAsm(true)
+		a.asm.placeInSlot(a.asm.Widget())
+		refreshAsm()
+		return
+	}
+
+	a.asm.setAutoAsm(false)
+	if codeW != nil {
+		a.placeCodeInSlot(codeW)
+	}
 }
 
-// placeCodeInSlot puts w into the code leaf, replacing LogoWidget or an older CodeWidget.
-// Never places code onto the fixed GDB layout leaf, a dedicated asm split leaf,
-// or the code leaf while :b asm owns it (preferAsm).
+// applyCodeStop is the UI-thread re-assert of location leaf content after a
+// buffer update (same policy as presentLocation).
+func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
+	a.presentLocation(w, nil)
+}
+
+// placeCodeInSlot puts w into the location leaf, replacing Logo or Code.
+// Never places onto the fixed GDB leaf or a dedicated asm split leaf.
+// Sticky :b asm blocks reclaim; autoAsm does not (source can reclaim the leaf).
 func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
 	a.bufs.setPrimary(w)
-	// :b asm owns the code leaf until :b code — do not swap Assembly out.
+	// :b asm owns the location leaf until :b code — do not swap Assembly out.
 	if a.asm.PreferAsm() && !a.asm.hasSplit() {
 		return
 	}
-	if asm := a.tab.LeafMark(leafMarkAsm); asm != nil && a.focusedLeaf() == asm {
-		// Focus is on asm — still update the code leaf in place.
-		if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) && leaf != asm {
-			if isAssemblyWidget(leaf.GetWidget()) {
-				return
+	if a.asm.hasSplit() {
+		asm := a.tab.LeafMark(leafMarkAsm)
+		if asm != nil && a.focusedLeaf() == asm {
+			// Focus is on dedicated asm — update the code leaf in place.
+			if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) && leaf != asm {
+				if isAssemblyWidget(leaf.GetWidget()) && a.asm.PreferAsm() {
+					return
+				}
+				leaf.SetWidget(w)
+				a.tab.SetLeafMark(leafMarkCode, leaf)
 			}
-			leaf.SetWidget(w)
-			a.tab.SetLeafMark(leafMarkCode, leaf)
+			return
 		}
-		return
-	}
-	if !a.isGdbLeaf(a.focusedLeaf()) {
 		if isAssemblyWidget(a.focusedWidget()) {
-			// Focused asm (split or :b asm) — update code leaf without stealing focus.
 			if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) && !isAssemblyWidget(leaf.GetWidget()) {
 				leaf.SetWidget(w)
 				a.tab.SetLeafMark(leafMarkCode, leaf)
 			}
+			return
+		}
+	}
+	if !a.isGdbLeaf(a.focusedLeaf()) {
+		if isAssemblyWidget(a.focusedWidget()) {
+			// Shared leaf showing Asm (autoAsm) — reclaim with Code.
+			if a.focusedWidget() != w {
+				_ = a.tab.ReplaceFocusedWidget(w)
+			}
+			a.rememberCodeLeafFromFocus()
 			return
 		}
 		if cw := a.focusedCode(); cw != nil {
@@ -315,11 +381,17 @@ func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 		}
 	}
 	if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) {
-		if a.tab.LeafMark(leafMarkAsm) == leaf || isAssemblyWidget(leaf.GetWidget()) {
+		if a.asm.hasSplit() && a.tab.LeafMark(leafMarkAsm) == leaf {
+			return
+		}
+		if isAssemblyWidget(leaf.GetWidget()) && a.asm.PreferAsm() {
 			return
 		}
 		leaf.SetWidget(w)
 		a.tab.SetLeafMark(leafMarkCode, leaf)
+		if a.tab.LeafMark(leafMarkAsm) == leaf {
+			a.tab.SetLeafMark(leafMarkAsm, nil)
+		}
 		return
 	}
 	if a.tab.ReplaceMatchingLeafWidget(w, isSourceCodeSlot) {

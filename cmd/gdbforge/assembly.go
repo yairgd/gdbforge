@@ -52,8 +52,11 @@ type asmCtl struct {
 	host   asmHost
 	widget *widgets.AssemblyWidget
 	list   *models.AssemblyList
-	// preferAsm means :b asm owns the code leaf until :b code (no auto-swap).
+	// preferAsm means :b asm owns the code leaf until :b code (sticky user choice).
 	preferAsm bool
+	// autoAsm means the location leaf shows Assembly because the presented
+	// frame has no readable source. Cleared when source returns or :b code.
+	autoAsm bool
 }
 
 // Widget returns the shared AssemblyWidget (may be nil before InitB).
@@ -62,8 +65,31 @@ func (c *asmCtl) Widget() *widgets.AssemblyWidget { return c.widget }
 // PreferAsm reports whether :b asm owns the code leaf.
 func (c *asmCtl) PreferAsm() bool { return c != nil && c.preferAsm }
 
+// AutoAsm reports whether Assembly was auto-opened for missing source.
+func (c *asmCtl) AutoAsm() bool { return c != nil && c.autoAsm }
+
 // setPreferAsm records whether Assembly keeps the code leaf (:b asm / :b code).
-func (c *asmCtl) setPreferAsm(v bool) { c.preferAsm = v }
+// Clearing preferAsm also clears autoAsm (:b code / prepare split).
+func (c *asmCtl) setPreferAsm(v bool) {
+	c.preferAsm = v
+	if v {
+		c.autoAsm = false
+	} else {
+		c.autoAsm = false
+	}
+}
+
+func (c *asmCtl) setAutoAsm(v bool) {
+	if c == nil {
+		return
+	}
+	c.autoAsm = v
+}
+
+// ownsLocationLeaf reports whether Assembly should occupy the shared code leaf.
+func (c *asmCtl) ownsLocationLeaf() bool {
+	return c != nil && (c.preferAsm || c.autoAsm)
+}
 
 // supported reports whether the active backend can disassemble.
 func (c *asmCtl) supported() bool {
@@ -108,7 +134,7 @@ func (c *asmCtl) armAround(addr string) {
 // syncToFrame updates Assembly for a call-stack frame: level 0 → $pc,
 // deeper frames → frame address (return / call site) as browse X.
 func (c *asmCtl) syncToFrame(fr models.StackFrame) {
-	if c == nil || !(c.hasSplit() || c.preferAsm) {
+	if c == nil || !(c.hasSplit() || c.ownsLocationLeaf()) {
 		return
 	}
 	if fr.Level == 0 {
@@ -117,6 +143,8 @@ func (c *asmCtl) syncToFrame(fr models.StackFrame) {
 	}
 	if fr.Addr != "" {
 		c.armAround(fr.Addr)
+	} else {
+		c.armRefresh(false)
 	}
 }
 
@@ -205,12 +233,12 @@ func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
 	if h != nil {
 		h.PaintAsmBreaks()
 	}
-	// Layout changes only via :b asm / :vs asm / :sp asm — never auto-swap with Code.
+	// Re-assert Assembly in its leaf after fetch (preferAsm, autoAsm, or split).
 	c.placeInSlot(c.widget)
 }
 
-// placeInSlot updates the Assembly leaf without stealing a Code pane.
-// Code ↔ Assembly in the shared code leaf only when preferAsm (:b asm).
+// placeInSlot updates the Assembly leaf without stealing Call Stack / Breakpoints.
+// Shared code leaf: preferAsm (:b asm) or autoAsm (missing source).
 func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 	h := c.host
 	if w == nil || h == nil || h.Tab() == nil {
@@ -219,12 +247,17 @@ func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 	tab := h.Tab()
 	// Dedicated :vs asm / :sp asm leaf — never touch the code leaf.
 	if leaf := tab.LeafMark(leafMarkAsm); leaf != nil && !h.isGdbLeaf(leaf) {
-		leaf.SetWidget(w)
-		tab.SetLeafMark(leafMarkAsm, leaf)
-		return
+		code := tab.LeafMark(leafMarkCode)
+		if code == nil || code != leaf {
+			leaf.SetWidget(w)
+			tab.SetLeafMark(leafMarkAsm, leaf)
+			return
+		}
+		// Mistaken asm mark on the shared location leaf — heal and fall through.
+		tab.SetLeafMark(leafMarkAsm, nil)
 	}
-	// Single-pane: only replace Code when the user asked :b asm.
-	if !c.preferAsm {
+	// Shared location leaf: user sticky or auto for missing source.
+	if !c.ownsLocationLeaf() {
 		return
 	}
 	if !h.isGdbLeaf(h.focusedLeaf()) {
@@ -252,13 +285,19 @@ func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 }
 
 // hasSplit reports a dedicated Assembly leaf from :vs asm / :sp asm.
+// The shared location leaf showing Assembly (:b asm / autoAsm) is not a split.
 func (c *asmCtl) hasSplit() bool {
 	h := c.host
 	if c == nil || h == nil || h.Tab() == nil || c.widget == nil {
 		return false
 	}
 	leaf := h.Tab().LeafMark(leafMarkAsm)
-	return leaf != nil && leaf.GetWidget() == c.widget
+	if leaf == nil || leaf.GetWidget() != c.widget {
+		return false
+	}
+	code := h.Tab().LeafMark(leafMarkCode)
+	// Dedicated only when asm and code marks point at different leaves.
+	return code != nil && code != leaf
 }
 
 // findLeaf returns the dedicated asm split leaf, if any.
@@ -273,18 +312,21 @@ func (c *asmCtl) findLeaf() *termui.Node {
 	return h.Tab().FindLeaf(isAssemblyWidget)
 }
 
-// shouldShow reports whether disassembly should refresh.
-// Never auto-opens asm for missing source — only :b asm or :vs asm / :sp asm.
+// sourceUnavailable reports whether the Code buffer has no readable source.
+func sourceUnavailable(codeW *widgets.CodeWidget) bool {
+	return codeW == nil || codeW.Unavailable()
+}
+
+// shouldShow reports whether disassembly should refresh for this Code buffer.
 func (c *asmCtl) shouldShow(codeW *widgets.CodeWidget) bool {
 	if !c.supported() {
 		return false
 	}
-	_ = codeW
-	return c.hasSplit() || c.preferAsm
+	return c.hasSplit() || c.preferAsm || c.autoAsm || sourceUnavailable(codeW)
 }
 
-// openBuffer is :b asm / :b assembly — the only request that puts Assembly
-// into the code leaf (unless :vs asm / :sp asm already has a dedicated leaf).
+// openBuffer is :b asm / :b assembly — sticky user request for Assembly in the
+// location leaf (unless :vs asm / :sp asm already has a dedicated leaf).
 func (c *asmCtl) openBuffer() {
 	h := c.host
 	if h == nil {
@@ -303,7 +345,7 @@ func (c *asmCtl) openBuffer() {
 		h.RequestFrame()
 		return
 	}
-	c.preferAsm = true
+	c.setPreferAsm(true)
 	c.placeInSlot(c.widget)
 	h.FocusCode()
 	c.armRefresh(true)
@@ -320,7 +362,7 @@ func (c *asmCtl) prepareCodeForSplit() bool {
 		h.LogError("buffer", "assembly split is GDB-only for now")
 		return false
 	}
-	c.preferAsm = false
+	c.setPreferAsm(false)
 	cw := h.CodeBufferForB()
 	if cw == nil {
 		cw = h.PrimaryCode()
