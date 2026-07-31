@@ -7,30 +7,93 @@ import (
 
 	"path/filepath"
 
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// ensureCodeBuffer returns the CodeWidget for path, creating it if needed.
+// bufferHost is the narrow surface bufferCtl needs from the composition root.
+// DebuggerApp implements it; bufferCtl must not depend on *DebuggerApp.
+type bufferHost interface {
+	Debug() *debugstate.State
+	Tab() *termui.TabWidget
+	ClipboardIO() termui.ClipboardIO
+	Builtins() map[string]termui.Widget
+	FileListWidget() *widgets.FileListWidget
+	ToggleCodeBreak(path string, line int)
+	toggleCodeBreakEnable()
+	BreakpointsChanged()
+	PaintCodeBreaks(w *widgets.CodeWidget, path string)
+	placeCodeInSlot(w *widgets.CodeWidget)
+	OpenAssembly()
+	SetPreferAsm(v bool)
+	activateGdbPane()
+	FocusCode()
+	RequestFrame()
+	ensureSourceFiles()
+	syncFileListViews()
+	swapFocusedWidget(w termui.Widget) bool
+	LuaEnterBuffer(w termui.Widget)
+	LuaEnsureBuffer(name string, from *luahost.Runtime) bool
+	LogError(area, msg string)
+}
+
+// bufferCtl owns source-buffer state: the per-path CodeWidget map, the :b Tab
+// list, the primary code pane, and :b / :edit buffer behavior.
+// DebuggerApp wires it; the ctl owns the domain.
+type bufferCtl struct {
+	host bufferHost
+	// files are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
+	files map[string]*widgets.CodeWidget
+	// listed paths appear in :b Tab. Only :edit / FileList open marks them —
+	// stop / callstack / BP preview must not pollute the wildmenu (ldo.c, …).
+	listed map[string]struct{}
+	// primary is the source pane last driven by a stop / :edit.
+	primary *widgets.CodeWidget
+}
+
+// initMaps allocates the buffer registries at startup.
+func (c *bufferCtl) initMaps() {
+	c.files = make(map[string]*widgets.CodeWidget)
+	c.listed = make(map[string]struct{})
+}
+
+// Buffers returns the live per-path CodeWidget map (nil before InitB).
+func (c *bufferCtl) Buffers() map[string]*widgets.CodeWidget { return c.files }
+
+// Primary returns the source pane a stop / :edit last drove.
+func (c *bufferCtl) Primary() *widgets.CodeWidget {
+	if c == nil {
+		return nil
+	}
+	return c.primary
+}
+
+func (c *bufferCtl) setPrimary(w *widgets.CodeWidget) { c.primary = w }
+
+// ensure returns the CodeWidget for path, creating it if needed.
 // PaneName is the file basename (Vim-style buffer name for :b); the status
 // line shows the full path via CodeWidget.DrawStatusLine. created is true when
 // a new widget was allocated (caller may need to paint breakpoint gutters).
-func (a *DebuggerApp) ensureCodeBuffer(path string) (w *widgets.CodeWidget, created bool) {
+func (c *bufferCtl) ensure(path string) (w *widgets.CodeWidget, created bool) {
 	path = normalizeCodePath(path)
 	if path == "" {
 		return nil, false
 	}
-	if a.fileBuffers == nil {
-		a.fileBuffers = make(map[string]*widgets.CodeWidget)
+	if c.files == nil {
+		c.files = make(map[string]*widgets.CodeWidget)
 	}
-	if existing, ok := a.fileBuffers[path]; ok {
+	if existing, ok := c.files[path]; ok {
 		return existing, false
 	}
 	w = widgets.NewCodeWidget()
 	w.PaneName = filepath.Base(path)
-	w.SetClipboard(a.ClipboardIO())
-	a.wireCodeWidget(w)
-	a.fileBuffers[path] = w
+	if h := c.host; h != nil {
+		w.SetClipboard(h.ClipboardIO())
+	}
+	c.wire(w)
+	c.files[path] = w
 	return w, true
 }
 
@@ -52,26 +115,27 @@ func normalizeCodePath(path string) string {
 	return filepath.Clean(path)
 }
 
-// wireCodeWidget attaches app-owned breakpoint intents and mark colors.
-func (a *DebuggerApp) wireCodeWidget(w *widgets.CodeWidget) {
-	if w == nil {
+// wire attaches host-owned breakpoint intents and mark colors.
+func (c *bufferCtl) wire(w *widgets.CodeWidget) {
+	h := c.host
+	if w == nil || h == nil {
 		return
 	}
-	w.SetAppState(a.Debug())
-	w.SetOnBreakToggle(a.breaks.onCodeBreakToggle)
-	w.SetOnToggleEnable(a.toggleCodeBreakEnable)
+	w.SetAppState(h.Debug())
+	w.SetOnBreakToggle(h.ToggleCodeBreak)
+	w.SetOnToggleEnable(h.toggleCodeBreakEnable)
 }
 
-// findFileBuffer looks up an open file buffer by full path or basename.
-func (a *DebuggerApp) findFileBuffer(name string) *widgets.CodeWidget {
-	if name == "" || a.fileBuffers == nil {
+// find looks up an open file buffer by full path or basename.
+func (c *bufferCtl) find(name string) *widgets.CodeWidget {
+	if name == "" || c.files == nil {
 		return nil
 	}
-	if w, ok := a.fileBuffers[name]; ok {
+	if w, ok := c.files[name]; ok {
 		return w
 	}
 	base := filepath.Base(name)
-	for path, w := range a.fileBuffers {
+	for path, w := range c.files {
 		if path == name || filepath.Base(path) == name || filepath.Base(path) == base {
 			return w
 		}
@@ -79,10 +143,10 @@ func (a *DebuggerApp) findFileBuffer(name string) *widgets.CodeWidget {
 	return nil
 }
 
-// bufferCompletions returns :b Tab candidates: builtins + buffers the user
+// completions returns :b Tab candidates: builtins + buffers the user
 // opened with :edit / file-list. Auto-opened code from stop/stack/BP is kept
 // out of the wildmenu (GDB SourceFiles includes deps like ldo.c / lapi.c).
-func (a *DebuggerApp) bufferCompletions(prefix string) []string {
+func (c *bufferCtl) completions(prefix string) []string {
 	seen := make(map[string]struct{})
 	var names []string
 	add := func(name string) {
@@ -98,11 +162,13 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 		seen[name] = struct{}{}
 		names = append(names, name)
 	}
-	for name := range a.builtins {
-		add(name)
+	if h := c.host; h != nil {
+		for name := range h.Builtins() {
+			add(name)
+		}
 	}
 	// Alias for the primary/active source pane (leaf mark "code").
-	if cw := a.codeBufferForB(); cw != nil {
+	if cw := c.codeBufferForB(); cw != nil {
 		add("code")
 		if cw.PaneName != "" {
 			add(cw.PaneName)
@@ -112,8 +178,8 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 		}
 	}
 	add("gdb")
-	for path := range a.bufferListed {
-		w := a.fileBuffers[path]
+	for path := range c.listed {
+		w := c.files[path]
 		if w == nil || w.Unavailable() {
 			continue
 		}
@@ -126,25 +192,26 @@ func (a *DebuggerApp) bufferCompletions(prefix string) []string {
 	return names
 }
 
-// markBufferListed adds path to :b Tab completions (explicit :edit / picker).
-func (a *DebuggerApp) markBufferListed(path string) {
+// markListed adds path to :b Tab completions (explicit :edit / picker).
+func (c *bufferCtl) markListed(path string) {
 	if path == "" {
 		return
 	}
-	if a.bufferListed == nil {
-		a.bufferListed = make(map[string]struct{})
+	if c.listed == nil {
+		c.listed = make(map[string]struct{})
 	}
-	a.bufferListed[path] = struct{}{}
+	c.listed[path] = struct{}{}
 }
 
 // resolveSourceFile maps a user argument to a readable path using SourceFiles, then disk.
-func (a *DebuggerApp) resolveSourceFile(name string) (string, bool) {
+func (c *bufferCtl) resolveSourceFile(name string) (string, bool) {
+	h := c.host
 	name = strings.TrimSpace(name)
-	if name == "" {
+	if name == "" || h == nil {
 		return "", false
 	}
 
-	files := a.Debug().SourceFiles()
+	files := h.Debug().SourceFiles()
 	for _, f := range files {
 		if f == name {
 			return f, true
@@ -192,12 +259,12 @@ func joinCmdArgs(args []any) string {
 }
 
 // codeBufferForB returns the CodeWidget for :b code / completions.
-// Prefers primaryCode (stop / edit), then any open file buffer.
-func (a *DebuggerApp) codeBufferForB() *widgets.CodeWidget {
-	if a.primaryCode != nil && !a.primaryCode.Unavailable() {
-		return a.primaryCode
+// Prefers the primary pane (stop / edit), then any open file buffer.
+func (c *bufferCtl) codeBufferForB() *widgets.CodeWidget {
+	if c.primary != nil && !c.primary.Unavailable() {
+		return c.primary
 	}
-	for _, w := range a.fileBuffers {
+	for _, w := range c.files {
 		if w != nil && !w.Unavailable() {
 			return w
 		}
@@ -205,104 +272,104 @@ func (a *DebuggerApp) codeBufferForB() *widgets.CodeWidget {
 	return nil
 }
 
-// OnBuffer switches to an existing builtin or open file buffer (:b name).
+// onBuffer switches to an existing builtin or open file buffer (:b name).
 // Pane scripts (snake, tetris, …) are created lazily on first :b.
-func (a *DebuggerApp) OnBuffer(args ...any) {
-	name := joinCmdArgs(args)
-	if name == "" || a.tab == nil {
+func (c *bufferCtl) onBuffer(name string) {
+	h := c.host
+	if name == "" || h == nil || h.Tab() == nil {
 		return
 	}
 	// :b code → restore CodeWidget into the code leaf (not swap onto focused pane).
 	if name == "code" {
-		a.preferAsm = false
-		if cw := a.codeBufferForB(); cw != nil {
-			a.placeCodeInSlot(cw)
-			a.FocusCode()
-			a.RequestFrame()
+		h.SetPreferAsm(false)
+		if cw := c.codeBufferForB(); cw != nil {
+			h.placeCodeInSlot(cw)
+			h.FocusCode()
+			h.RequestFrame()
 			return
 		}
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("buffer").Error("no code buffer open yet")
-		}
+		h.LogError("buffer", "no code buffer open yet")
 		return
 	}
 	if name == "asm" || name == "assembly" {
-		a.openAssemblyBuffer()
+		h.OpenAssembly()
 		return
 	}
 	if name == "gdb" {
-		a.activateGdbPane()
-		a.RequestFrame()
+		h.activateGdbPane()
+		h.RequestFrame()
 		return
 	}
-	a.openOrCreateBuffer(name, nil)
+	c.openOrCreate(name, nil)
 }
 
-// OnEdit opens the project file list (:edit) or a source file (:edit name).
+// onEdit opens the project file list (:edit) or a source file (:edit name).
 // Unique prefix :e also resolves here (no separate :e leaf).
-func (a *DebuggerApp) OnEdit(args ...any) {
-	name := joinCmdArgs(args)
-	if a.tab == nil {
+func (c *bufferCtl) onEdit(name string) {
+	h := c.host
+	if h == nil || h.Tab() == nil {
 		return
 	}
 	if name == "" {
-		if a.fileListWidget == nil {
+		fl := h.FileListWidget()
+		if fl == nil {
 			return
 		}
-		a.ensureSourceFiles()
-		a.syncFileListViews()
-		if a.swapFocusedWidget(a.fileListWidget) {
-			a.RequestFrame()
+		h.ensureSourceFiles()
+		h.syncFileListViews()
+		if h.swapFocusedWidget(fl) {
+			h.RequestFrame()
 		}
 		return
 	}
-	a.ensureSourceFiles()
-	path, ok := a.resolveSourceFile(name)
+	h.ensureSourceFiles()
+	path, ok := c.resolveSourceFile(name)
 	if !ok {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("edit").Error("file not found: " + name)
-		}
+		h.LogError("edit", "file not found: "+name)
 		return
 	}
-	a.OpenSourcePath(path)
+	c.openSourcePath(path)
 }
 
-// OpenSourcePath shows path in a CodeWidget, replacing the focused pane
+// openSourcePath shows path in a CodeWidget, replacing the focused pane
 // (used by :edit <name> and FileListWidget selection).
-func (a *DebuggerApp) OpenSourcePath(path string) {
-	if path == "" || a.tab == nil {
+func (c *bufferCtl) openSourcePath(path string) {
+	h := c.host
+	if path == "" || h == nil || h.Tab() == nil {
 		return
 	}
-	w, _ := a.ensureCodeBuffer(path)
+	w, _ := c.ensure(path)
 	if w == nil {
 		return
 	}
-	a.markBufferListed(path)
+	c.markListed(path)
 	line := 1
 	if w.Path() == path && w.PCLine() > 0 {
 		line = w.PCLine()
 	}
 	if err := w.ShowLocation(path, line); err != nil {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("edit").Error(err.Error())
-		}
+		h.LogError("edit", err.Error())
 		return
 	}
-	a.onBreakpointsChanged()
-	a.primaryCode = w
-	if a.swapFocusedWidget(w) {
-		if leaf := a.tab.FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
-			a.tab.SetLeafMark(leafMarkCode, leaf)
+	h.BreakpointsChanged()
+	c.primary = w
+	if h.swapFocusedWidget(w) {
+		if leaf := h.Tab().FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
+			h.Tab().SetLeafMark(leafMarkCode, leaf)
 		}
-		a.RequestFrame()
+		h.RequestFrame()
 	}
 }
 
 // editCompletions returns dynamic :edit Tab candidates (SourceFiles full paths).
-func (a *DebuggerApp) editCompletions(prefix string) []string {
+func (c *bufferCtl) editCompletions(prefix string) []string {
+	h := c.host
+	if h == nil {
+		return nil
+	}
 	seen := make(map[string]struct{})
 	var names []string
-	for _, f := range a.Debug().SourceFiles() {
+	for _, f := range h.Debug().SourceFiles() {
 		if f == "" {
 			continue
 		}
@@ -318,3 +385,137 @@ func (a *DebuggerApp) editCompletions(prefix string) []string {
 	sort.Strings(names)
 	return names
 }
+
+func (c *bufferCtl) focusBufferWidget(w termui.Widget) {
+	h := c.host
+	if w == nil || h == nil || h.Tab() == nil {
+		return
+	}
+	if h.swapFocusedWidget(w) {
+		h.LuaEnterBuffer(w)
+		h.RequestFrame()
+		return
+	}
+	if _, ok := w.(*widgets.LuaWidget); ok {
+		h.LuaEnterBuffer(w)
+		h.RequestFrame()
+	}
+}
+
+// openOrCreate focuses an existing buffer, or creates a Lua pane when
+// allowed: from a pane script's open_buffer, or lazy :b for known pane scripts.
+func (c *bufferCtl) openOrCreate(name string, from *luahost.Runtime) {
+	h := c.host
+	if name == "" || h == nil || h.Tab() == nil {
+		return
+	}
+	if w := h.Builtins()[name]; w != nil {
+		c.focusBufferWidget(w)
+		return
+	}
+	if w := c.find(name); w != nil {
+		if h.swapFocusedWidget(w) {
+			h.RequestFrame()
+		}
+		return
+	}
+	if from != nil {
+		// Lua open_buffer: create only when the caller is a pane script.
+		if from.HasPaneHooks() && h.LuaEnsureBuffer(name, from) {
+			return
+		}
+		h.LogError("buffer", "no matching buffer: "+name)
+		return
+	}
+	// :b name — only existing builtins/files (pane scripts appear after :lua creates them).
+	h.LogError("buffer", "no matching buffer: "+name)
+}
+
+// showCodeAt loads file at line with ━━▶ (program counter).
+func (c *bufferCtl) showCodeAt(file string, line int) *widgets.CodeWidget {
+	return c.showCode(file, line, false)
+}
+
+// showCodeBrowse loads file and moves the blue code cursor without moving ━━▶.
+func (c *bufferCtl) showCodeBrowse(file string, line int) *widgets.CodeWidget {
+	return c.showCode(file, line, true)
+}
+
+// showCode loads file at line in a CodeWidget and paints BP gutters.
+// browse=false moves ━━▶ (ShowLocation); browse=true only moves selection.
+func (c *bufferCtl) showCode(file string, line int, browse bool) *widgets.CodeWidget {
+	h := c.host
+	if file == "" || h == nil {
+		return nil
+	}
+	w, _ := c.ensure(file)
+	if w == nil {
+		return nil
+	}
+	if line < 1 {
+		line = 1
+	}
+	if browse {
+		_ = w.ShowSelection(file, line)
+	} else {
+		_ = w.ShowLocation(file, line)
+	}
+	h.Debug().SetCurrentLocation(file, line)
+	if !w.Unavailable() {
+		h.PaintCodeBreaks(w, file)
+	}
+	h.placeCodeInSlot(w)
+	return w
+}
+
+// showCodeUnavailable shows a CodeWidget placeholder when there is no source path
+// (e.g. ??? in libc) using func/detail as the displayed path line.
+func (c *bufferCtl) showCodeUnavailable(label, extra string) *widgets.CodeWidget {
+	h := c.host
+	if h == nil {
+		return nil
+	}
+	if label == "" {
+		label = "(unknown)"
+	}
+	key := "unavailable:" + label
+	w, _ := c.ensure(key)
+	if w == nil {
+		return nil
+	}
+	w.ShowUnavailable(label, extra)
+	w.PaneName = filepath.Base(label)
+	if w.PaneName == "" || w.PaneName == "." {
+		w.PaneName = "unavailable"
+	}
+	h.placeCodeInSlot(w)
+	return w
+}
+
+// clearAll empties every source buffer and drops the primary pane
+// (inferior exit / kill). Layout restore stays with DebuggerApp.
+func (c *bufferCtl) clearAll() {
+	seen := make(map[*widgets.CodeWidget]bool)
+	for _, w := range c.files {
+		if w == nil {
+			continue
+		}
+		w.Clear()
+		seen[w] = true
+	}
+	if c.primary != nil && !seen[c.primary] {
+		c.primary.Clear()
+	}
+	c.primary = nil
+}
+
+// --- Host adapters (FileListHost / command trie need *DebuggerApp methods) ---
+
+// OnBuffer switches to an existing builtin or open file buffer (:b name).
+func (a *DebuggerApp) OnBuffer(args ...any) { a.bufs.onBuffer(joinCmdArgs(args)) }
+
+// OnEdit opens the project file list (:edit) or a source file (:edit name).
+func (a *DebuggerApp) OnEdit(args ...any) { a.bufs.onEdit(joinCmdArgs(args)) }
+
+// OpenSourcePath shows path in a CodeWidget (FileListWidget selection).
+func (a *DebuggerApp) OpenSourcePath(path string) { a.bufs.openSourcePath(path) }

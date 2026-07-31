@@ -1,20 +1,13 @@
 package main
 
 import (
-	"context"
-	"sync"
-	"sync/atomic"
-
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -38,42 +31,29 @@ type DebuggerApp struct {
 	insertKeys     *commands.KeyBindingRegistry
 	completionKeys *commands.KeyBindingRegistry
 
-	tab            *termui.TabWidget
-	cmdWidget      *termui.CmdWidget
-	searchTarget   termui.SearchHost // last focused pane's /search host
-	completionMenu *termui.CompletionMenu
-	completionView termui.CompletionView
-	completionBar  *termui.CompletionBarWidget // concrete chrome; also CompletionView
-	ctx            platform.AppContext
-	debug          *debugstate.State
-	miLog          *platform.NamedLogger
+	tab       *termui.TabWidget
+	cmdWidget *termui.CmdWidget
+	ctx       platform.AppContext
+	debug     *debugstate.State
+	miLog     *platform.NamedLogger
 
-	cfg     SessionConfig
-	backend backend.Backend
-	breaks  breakCtl
-	nav     navCtl
-	console consoleCtl
-	gdbCancelSub      func()
-	inferiorCancelSub func()
-	// gdbBridgeGen identifies the active debugger console bridge. Bump before
-	// canceling a subscription so a deliberate restart does not post gdb-exit.
-	gdbBridgeGen atomic.Uint64
-	// dlvConfirm tracks Delve [Y/n]? prompts (suspended BP after exit, etc.).
-	dlvConfirm dlv.ConfirmGate
-	// dlvBPDeferred is set when a BP refresh was skipped while dlvConfirm is active.
-	dlvBPDeferred        bool
-	pendingFrameSync     bool
-	pendingFrameLevel    int // Delve: level to show after frame/up/down (see pendingFrameLevelSet)
-	pendingFrameLevelSet bool
-	pendingDebugInfo     bool // refresh threads/stack after *stopped once prompt is ready
-	// codeNavGen increments when the user browses away from the stop frame
-	// (call stack / frame cmd). Late stop refreshes with an older gen are ignored.
-	codeNavGen uint64
-	// dlvSuppressStopUI counts Delve frame/up/down ops whose re-emitted "> …"
-	// lines must not run stop UI (would snap Code back to frame 0).
-	dlvSuppressStopUI int
-	gdbWidget         *widgets.GDBWidget
-	gdbMcp            *mcp.GdbMcpService
+	// Controllers own their domain state and behavior; DebuggerApp wires them
+	// (initControllers) and keeps orchestration.
+	cfg        SessionConfig
+	backend    backend.Backend
+	breaks     breakCtl
+	asm        asmCtl
+	bufs       bufferCtl
+	debugInfo  debugInfoCtl
+	console    consoleCtl
+	inferiorIO inferiorIOCtl
+	comp       completionCtl
+	search     searchCtl
+	lua        luaCtl
+	dlv        dlvCtl
+
+	gdbWidget *widgets.GDBWidget
+	gdbMcp    *mcp.GdbMcpService
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
@@ -88,49 +68,9 @@ type DebuggerApp struct {
 	helpWidget  *widgets.HelpWidget
 	logoWidget  *widgets.LogoWidget
 
-	// fileBuffers are per-path CodeWidgets opened via :e / GDB stop (PaneName = basename).
-	fileBuffers map[string]*widgets.CodeWidget
-	// bufferListed paths appear in :b Tab. Only :edit / FileList open marks them —
-	// stop / callstack / BP preview must not pollute the wildmenu (ldo.c, …).
-	bufferListed map[string]struct{}
-
-	breakpoints *models.BreakpointList
-	// bpSnapshot is the last user-visible BP list for quit save. Kept across
-	// clearBreakpointViews (kill/exit UI reset) so q / Ctrl-D can still persist.
-	bpSnapshot      []models.BreakInfo
-	bpSnapshotSet   bool
-	threads         *models.ThreadList
-	callstack       *models.CallStack
-	bpWidget        *widgets.BreakpointWidget
-	threadWidget    *widgets.ThreadWidget
-	callstackWidget *widgets.CallStackWidget
-	outputWidget    *widgets.OutputWidget
-	fileListWidget  *widgets.FileListWidget
-	primaryCode     *widgets.CodeWidget
-	assemblyWidget  *widgets.AssemblyWidget
-	assembly        *models.AssemblyList
-	// preferAsm means :b asm owns the code leaf until :b code (no auto-swap).
-	preferAsm bool
-	// Coalesced background refreshes (Phase B: one runner shape).
-	bpRefresh coalesceRunner
-	debugInfo coalesceRunner
-
-	// completionForGDB is true while ModeCompletion is driven by GDB Tab
-	// (apply/cancel return to insert mode instead of command mode).
-	completionForGDB bool
-
-	// Lua / gdbforge scripting
-	luaDynamic      []*widgets.LuaWidget // create-or-focus panes (:lua games, …)
-	activeLua       *widgets.LuaWidget
-	luaCmds         map[string]*luahost.Runtime
-	luaPending      map[string]luahost.ResolvedScript // indexed at boot; loaded on first :lua
-	luaUser         *luahost.Runtime
-	luaUserRuntimes []*luahost.Runtime
-	luaJobMu        sync.Mutex
-	luaJobCancel    context.CancelFunc
-	luaJobRT        *luahost.Runtime // runtime running the current job (for KillSystem)
-	luaJobBusy      atomic.Bool
-	luaOnWorker     atomic.Bool // true while CallNamed runs on the worker goroutine
+	bpWidget       *widgets.BreakpointWidget
+	outputWidget   *widgets.OutputWidget
+	fileListWidget *widgets.FileListWidget
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -178,21 +118,15 @@ func (a *DebuggerApp) dlvBackend() *backend.DLVBackend {
 
 // Close tears down owned debugger/exec sessions.
 func (a *DebuggerApp) Close() {
-	a.cancelLuaJob()
-	a.saveBreakpointsOnQuit()
+	a.lua.closeAll()
+	a.breaks.saveOnQuit()
 	a.saveCmdlineHistoryOnQuit()
 	if a.gdbMcp != nil {
 		a.gdbMcp.Close()
 		a.gdbMcp = nil
 	}
-	if a.inferiorCancelSub != nil {
-		a.inferiorCancelSub()
-		a.inferiorCancelSub = nil
-	}
-	if a.gdbCancelSub != nil {
-		a.gdbCancelSub()
-		a.gdbCancelSub = nil
-	}
+	a.inferiorIO.stop()
+	a.console.stopBridge()
 	if a.backend != nil {
 		a.backend.Close()
 		a.backend = nil
@@ -201,36 +135,6 @@ func (a *DebuggerApp) Close() {
 		a.execClient.Close()
 		a.execClient = nil
 	}
-	a.leaveLuaMode()
-	for _, w := range a.luaDynamic {
-		if w != nil {
-			w.Close()
-		}
-	}
-	a.luaDynamic = nil
-	for _, rt := range a.luaUserRuntimes {
-		if rt != nil {
-			rt.Close()
-		}
-	}
-	a.luaUserRuntimes = nil
-	a.luaUser = nil
-	a.luaPending = nil
-}
-
-// saveBreakpointsOnQuit writes bpSnapshot to ./.gdbforge/breakpoints.yaml.
-func (a *DebuggerApp) saveBreakpointsOnQuit() {
-	if a == nil || !a.bpSnapshotSet {
-		return
-	}
-	// Prefer live model when still populated; else last snapshot before UI clear.
-	items := a.bpSnapshot
-	if a.breakpoints != nil {
-		if cur := a.breakpoints.Items(); len(cur) > 0 {
-			items = cur
-		}
-	}
-	_ = persist.SaveBreakpoints(".", items)
 }
 
 // restoreCmdlineHistory loads ./.gdbforge/cmdline_history.yaml into the CmdWidget.

@@ -20,8 +20,7 @@ import (
 // Show with :b name (OnBuffer). Source files use :edit filename (per-file CodeWidget).
 func (a *DebuggerApp) initBuiltins() error {
 	a.builtins = make(map[string]termui.Widget)
-	a.fileBuffers = make(map[string]*widgets.CodeWidget)
-	a.bufferListed = make(map[string]struct{})
+	a.bufs.initMaps()
 
 	a.aboutWidget = widgets.NewAboutWidget(version)
 	a.registerBuiltin("about", a.aboutWidget)
@@ -91,9 +90,9 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.registerBuiltin("output", a.outputWidget) // alias for :b io
 	a.maybeClearOutput()
 	if extTTY != "" {
-		a.markIOExternal(extTTY)
+		a.inferiorIO.markExternal(extTTY)
 	} else if inferior != nil {
-		a.wireInferiorIO(inferior)
+		a.inferiorIO.wire(inferior)
 	}
 
 	savedBPs, err := persist.LoadBreakpoints(".")
@@ -103,52 +102,52 @@ func (a *DebuggerApp) initBuiltins() error {
 	// Scripts via -x already set breakpoints; skip default break main when
 	// restoring a saved session or using -x.
 	if !skipBreakMain && len(savedBPs) == 0 {
-		a.maybeBreakMain()
+		a.breaks.maybeBreakMain()
 	}
 
-	a.breakpoints = &models.BreakpointList{}
-	a.threads = &models.ThreadList{}
-	a.callstack = &models.CallStack{}
-	a.assembly = &models.AssemblyList{}
-	a.assemblyWidget = widgets.NewAssemblyWidget(a)
-	a.assemblyWidget.SetClipboard(a.ClipboardIO())
-	a.assemblyWidget.SetAppState(a.Debug())
-	a.registerBuiltin("asm", a.assemblyWidget)
-	a.registerBuiltin("assembly", a.assemblyWidget)
+	a.breaks.list = &models.BreakpointList{}
+	a.debugInfo.threads = &models.ThreadList{}
+	a.debugInfo.stack = &models.CallStack{}
+	a.asm.list = &models.AssemblyList{}
+	a.asm.widget = widgets.NewAssemblyWidget(a)
+	a.asm.widget.SetClipboard(a.ClipboardIO())
+	a.asm.widget.SetAppState(a.Debug())
+	a.registerBuiltin("asm", a.asm.widget)
+	a.registerBuiltin("assembly", a.asm.widget)
 
 	a.bpWidget = widgets.NewBreakpointWidget(a)
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.bpWidget.SetAppState(a.Debug())
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
-	a.threadWidget = widgets.NewThreadWidget(a)
-	a.threadWidget.SetClipboard(a.ClipboardIO())
-	a.threadWidget.SetAppState(a.Debug())
-	a.registerBuiltin("threads", a.threadWidget)
+	a.debugInfo.threadW = widgets.NewThreadWidget(a)
+	a.debugInfo.threadW.SetClipboard(a.ClipboardIO())
+	a.debugInfo.threadW.SetAppState(a.Debug())
+	a.registerBuiltin("threads", a.debugInfo.threadW)
 
-	a.callstackWidget = widgets.NewCallStackWidget(a)
-	a.callstackWidget.SetClipboard(a.ClipboardIO())
-	a.callstackWidget.SetAppState(a.Debug())
-	a.registerBuiltin("callstack", a.callstackWidget)
+	a.debugInfo.stackW = widgets.NewCallStackWidget(a)
+	a.debugInfo.stackW.SetClipboard(a.ClipboardIO())
+	a.debugInfo.stackW.SetAppState(a.Debug())
+	a.registerBuiltin("callstack", a.debugInfo.stackW)
 
 	a.fileListWidget = widgets.NewFileListWidget(a)
 	a.fileListWidget.SetClipboard(a.ClipboardIO())
 	a.fileListWidget.SetAppState(a.Debug())
-	a.luaCmds = make(map[string]*luahost.Runtime)
-	a.loadUserLuaScripts()
+	a.lua.cmds = make(map[string]*luahost.Runtime)
+	a.lua.loadScripts()
 
 	a.registerLayouts()
 
 	a.gdbMcp = mcp.NewGdbMcpService(a.GDB(), a.State())
-	a.gdbMcp.OnBreakpointsChanged = a.onBreakpointsChanged
+	a.gdbMcp.OnBreakpointsChanged = a.breaks.onChanged
 	a.gdbMcp.SetDomain(appDebugDomain{app: a})
 	if a.cfg.IsDLV() {
 		a.gdbMcp.SetPromptToken(dlv.PromptToken)
 	}
 	if a.ctx.Bus != nil {
-		platform.Subscribe(a.ctx.Bus, a.onBreakpointsChangedMsg)
+		platform.Subscribe(a.ctx.Bus, a.breaks.onChangedMsg)
 	}
-	a.restoreSavedBreakpoints(savedBPs)
+	a.breaks.restoreSaved(savedBPs)
 	return nil
 }
 

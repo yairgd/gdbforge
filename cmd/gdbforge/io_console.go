@@ -7,6 +7,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
@@ -22,52 +23,71 @@ const (
 	inferiorPostRetries = 400 // ~2s before dropping a coalesced chunk
 )
 
-// wireInferiorIO attaches the dedicated program PTY to the IO view and
-// bridges stdout onto the UI event loop. App owns Send / Subscribe.
-func (a *DebuggerApp) wireInferiorIO(tty *ptyx.TTY) {
-	if a.outputWidget == nil || tty == nil {
-		return
-	}
-	a.outputWidget.EnableInput(true)
-	a.outputWidget.SetSizeFunc(tty.SetSize)
-	wireConsole(a.outputWidget, consoleHandlers{
-		Submit: func(line string) {
-			a.sendInferior(tty, func() { _ = tty.Send(line) })
-		},
-		Interrupt: func() {
-			a.sendInferior(tty, func() { _ = tty.SendRaw("\x03") })
-		},
-		Suspend: a.console.onGdbConsoleSuspend,
-		EOF: func() {
-			a.sendInferior(tty, func() { _ = tty.SendRaw("\x04") })
-		},
-	})
-	a.startInferiorIOBridge(tty)
+// inferiorHost is the narrow surface inferiorIOCtl needs from the composition
+// root. DebuggerApp implements it; inferiorIOCtl must not depend on *DebuggerApp.
+type inferiorHost interface {
+	OutputWidget() *widgets.OutputWidget
+	Screen() tcell.Screen
+	State() *platform.AppState
+	ConsoleSuspend()
+	LogError(area, msg string)
 }
 
-func (a *DebuggerApp) sendInferior(tty *ptyx.TTY, send func()) {
+// inferiorIOCtl owns the program stdio domain: the inferior PTY subscription,
+// the IO pane wiring, and internal/external tty switches.
+// DebuggerApp wires it; the ctl owns the domain.
+type inferiorIOCtl struct {
+	host      inferiorHost
+	cancelSub func()
+}
+
+// wire attaches the dedicated program PTY to the IO view and bridges stdout
+// onto the UI event loop. The ctl owns Send / Subscribe.
+func (c *inferiorIOCtl) wire(tty *ptyx.TTY) {
+	h := c.host
+	if h == nil || h.OutputWidget() == nil || tty == nil {
+		return
+	}
+	out := h.OutputWidget()
+	out.EnableInput(true)
+	out.SetSizeFunc(tty.SetSize)
+	wireConsole(out, consoleHandlers{
+		Submit: func(line string) {
+			c.send(tty, func() { _ = tty.Send(line) })
+		},
+		Interrupt: func() {
+			c.send(tty, func() { _ = tty.SendRaw("\x03") })
+		},
+		Suspend: h.ConsoleSuspend,
+		EOF: func() {
+			c.send(tty, func() { _ = tty.SendRaw("\x04") })
+		},
+	})
+	c.startBridge(tty)
+}
+
+func (c *inferiorIOCtl) send(tty *ptyx.TTY, send func()) {
 	if tty == nil || send == nil {
 		return
 	}
-	if st := a.State(); st != nil {
-		st.WithPTYOwner(platform.PTYOwnerUI, send)
-		return
+	if h := c.host; h != nil {
+		if st := h.State(); st != nil {
+			st.WithPTYOwner(platform.PTYOwnerUI, send)
+			return
+		}
 	}
 	send()
 }
 
-func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
-	if tty == nil || a.Screen() == nil {
+func (c *inferiorIOCtl) startBridge(tty *ptyx.TTY) {
+	h := c.host
+	if h == nil || tty == nil || h.Screen() == nil {
 		return
 	}
-	if a.inferiorCancelSub != nil {
-		a.inferiorCancelSub()
-		a.inferiorCancelSub = nil
-	}
+	c.stop()
 	ch, cancel := tty.Subscribe()
-	a.inferiorCancelSub = cancel
-	screen := a.Screen()
-	log := a.ctx.Log.Named("inferior-io")
+	c.cancelSub = cancel
+	screen := h.Screen()
 	go coalesceInferiorOutput(ch, func(msg events.InferiorOutputMsg) {
 		ev := tcell.NewEventInterrupt(msg)
 		for i := 0; i < inferiorPostRetries; i++ {
@@ -77,9 +97,7 @@ func (a *DebuggerApp) startInferiorIOBridge(tty *ptyx.TTY) {
 			// Backpressure: stop draining the PTY subscriber until the UI accepts.
 			time.Sleep(inferiorPostRetry)
 		}
-		if log != nil {
-			log.Error("dropped inferior output (UI event queue full)")
-		}
+		h.LogError("inferior-io", "dropped inferior output (UI event queue full)")
 	}, func() {
 		_ = screen.PostEvent(tcell.NewEventInterrupt("inferior-exit"))
 	})
@@ -102,9 +120,52 @@ func coalesceInferiorOutput(ch <-chan core.PtyOutputMsg, post func(events.Inferi
 	})
 }
 
-func (a *DebuggerApp) stopInferiorIO() {
-	if a.inferiorCancelSub != nil {
-		a.inferiorCancelSub()
-		a.inferiorCancelSub = nil
+// stop drops the inferior PTY subscription (bridge teardown only).
+func (c *inferiorIOCtl) stop() {
+	if c.cancelSub != nil {
+		c.cancelSub()
+		c.cancelSub = nil
 	}
+}
+
+// unwire stops reading the internal inferior PTY into the IO pane.
+func (c *inferiorIOCtl) unwire() {
+	c.stop()
+	h := c.host
+	if h == nil || h.OutputWidget() == nil {
+		return
+	}
+	out := h.OutputWidget()
+	out.EnableInput(false)
+	unwireConsole(out)
+	out.SetSizeFunc(nil)
+}
+
+// markExternal clears the IO pane and notes that stdio is on an external tty.
+func (c *inferiorIOCtl) markExternal(path string) {
+	c.unwire()
+	h := c.host
+	if h == nil || h.OutputWidget() == nil {
+		return
+	}
+	out := h.OutputWidget()
+	out.Clear()
+	msg := "stdio: external tty"
+	if path != "" {
+		msg += " " + path
+	}
+	msg += " (TUI / real terminal — not this pane)\n"
+	out.AppendInferior(msg)
+}
+
+// rewireInternal attaches the in-process inferior PTY to the IO pane.
+func (c *inferiorIOCtl) rewireInternal(tty *ptyx.TTY) {
+	h := c.host
+	if tty == nil || h == nil || h.OutputWidget() == nil {
+		return
+	}
+	c.unwire()
+	c.wire(tty)
+	h.OutputWidget().Clear()
+	h.OutputWidget().AppendInferior("stdio: internal IO pane\n")
 }

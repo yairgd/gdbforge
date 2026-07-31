@@ -146,7 +146,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 	w := widgets.NewCodeWidget()
 	w.PaneName = "[No Name]"
 	w.SetClipboard(app.ClipboardIO())
-	app.wireCodeWidget(w)
+	app.bufs.wire(w)
 	app.tab.VerticalSplit(w)
 	app.RequestRedraw()
 }
@@ -168,7 +168,7 @@ func isAsmSplitArg(args ...any) bool {
 }
 
 func (app *DebuggerApp) EnterInsertMode(args ...any) {
-	app.leaveLuaMode()
+	app.lua.leaveMode()
 	app.tab.SetInsertActive(true)
 	app.SetMode(platform.ModeInsert)
 	app.RequestRedraw()
@@ -283,7 +283,7 @@ func (app *DebuggerApp) SetEscToCodeOff(args ...any) {
 
 func (app *DebuggerApp) SetBreakMainOn(args ...any) {
 	app.Debug().SetBreakMain(true)
-	app.maybeBreakMain()
+	app.breaks.maybeBreakMain()
 }
 
 func (app *DebuggerApp) SetBreakMainOff(args ...any) {
@@ -360,7 +360,7 @@ func (app *DebuggerApp) setNamedColor(args []any, what string, apply func(tcell.
 	}
 	apply(c)
 	if rebuildGutters {
-		app.rebuildCodeBreakGutters()
+		app.breaks.rebuildGutters()
 	}
 	app.RequestFrame()
 }

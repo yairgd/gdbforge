@@ -13,10 +13,10 @@ type appDebugDomain struct {
 }
 
 func (d appDebugDomain) ListBreakpoints() []domain.Breakpoint {
-	if d.app == nil || d.app.breakpoints == nil {
+	if d.app == nil || d.app.breaks.List() == nil {
 		return nil
 	}
-	items := d.app.breakpoints.Items()
+	items := d.app.breaks.Items()
 	out := make([]domain.Breakpoint, len(items))
 	for i, it := range items {
 		out[i] = domain.Breakpoint{
@@ -31,10 +31,10 @@ func (d appDebugDomain) ListBreakpoints() []domain.Breakpoint {
 }
 
 func (d appDebugDomain) ListThreads() []domain.Thread {
-	if d.app == nil || d.app.threads == nil {
+	if d.app == nil || d.app.debugInfo.Threads() == nil {
 		return nil
 	}
-	items := d.app.threads.Items()
+	items := d.app.debugInfo.Threads().Items()
 	out := make([]domain.Thread, len(items))
 	for i, it := range items {
 		out[i] = domain.Thread{
@@ -51,10 +51,10 @@ func (d appDebugDomain) ListThreads() []domain.Thread {
 }
 
 func (d appDebugDomain) ListFrames() []domain.Frame {
-	if d.app == nil || d.app.callstack == nil {
+	if d.app == nil || d.app.debugInfo.Stack() == nil {
 		return nil
 	}
-	items := d.app.callstack.Items()
+	items := d.app.debugInfo.Stack().Items()
 	out := make([]domain.Frame, len(items))
 	for i, it := range items {
 		out[i] = domain.Frame{
@@ -75,13 +75,14 @@ func (d appDebugDomain) SetBreakpoint(file string, line int) error {
 	if file == "" || line < 1 {
 		return fmt.Errorf("file and line required")
 	}
-	if d.app.breakpoints == nil {
+	list := d.app.breaks.List()
+	if list == nil {
 		return fmt.Errorf("no breakpoint model")
 	}
-	if d.app.breakpoints.HasEnabledAt(file, line) {
+	if list.HasEnabledAt(file, line) {
 		return nil
 	}
-	cmd, ok := d.app.breakpoints.ToggleInsertClear(file, line)
+	cmd, ok := list.ToggleInsertClear(file, line)
 	if !ok {
 		return fmt.Errorf("could not set breakpoint")
 	}
@@ -97,13 +98,14 @@ func (d appDebugDomain) ClearBreakpoint(file string, line int) error {
 	if file == "" || line < 1 {
 		return fmt.Errorf("file and line required")
 	}
-	if d.app.breakpoints == nil {
+	list := d.app.breaks.List()
+	if list == nil {
 		return fmt.Errorf("no breakpoint model")
 	}
-	if !d.app.breakpoints.HasEnabledAt(file, line) {
+	if !list.HasEnabledAt(file, line) {
 		return nil
 	}
-	cmd, ok := d.app.breakpoints.ToggleInsertClear(file, line)
+	cmd, ok := list.ToggleInsertClear(file, line)
 	if !ok {
 		return fmt.Errorf("could not clear breakpoint")
 	}

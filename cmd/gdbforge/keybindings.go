@@ -4,7 +4,6 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/commands"
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
@@ -58,11 +57,11 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"/",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("search-word-next", func(args ...any) { a.searchWordMatch(1) }),
+		commands.NewCommand("search-word-next", func(args ...any) { a.search.wordMatch(1) }),
 		"*",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("search-word-prev", func(args ...any) { a.searchWordMatch(-1) }),
+		commands.NewCommand("search-word-prev", func(args ...any) { a.search.wordMatch(-1) }),
 		"#",
 	)
 	a.keyBindings.Bind(
@@ -122,7 +121,7 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"n",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("search-prev-match", func(args ...any) { a.searchPrevMatch() }),
+		commands.NewCommand("search-prev-match", func(args ...any) { a.search.prevMatch() }),
 		"N",
 	)
 	a.keyBindings.Bind(
@@ -169,46 +168,29 @@ func (a *DebuggerApp) initInsertKeyBindings() {
 func (a *DebuggerApp) initCompletionKeyBindings() {
 	a.completionKeys.Bind(
 		commands.NewCommand("cancel", func(args ...any) {
-			a.leaveCompletionMode()
+			a.comp.leaveMode()
 			a.RequestFrame()
 		}),
 		"<Esc>",
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("accept", func(args ...any) {
-			if a.completionMenu != nil {
-				if name := a.completionMenu.Selected(); name != "" {
-					useGDB := a.completionForGDB && a.gdbWidget != nil &&
-						(a.cmdWidget == nil || !a.cmdWidget.Active())
-					if useGDB {
-						cur := a.gdbWidget.InputText()
-						a.gdbWidget.ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
-					} else if a.cmdWidget != nil {
-						a.cmdWidget.ApplyCompletion(name)
-					}
-				}
-			}
-			a.leaveCompletionMode()
+			a.comp.applySelected()
+			a.comp.leaveMode()
 			a.RequestFrame()
 		}),
 		"<Enter>",
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("prev", func(args ...any) {
-			if a.completionMenu != nil {
-				a.completionMenu.Move(-1)
-				a.syncCompletionView()
-			}
+			a.comp.move(-1)
 			a.RequestFrame()
 		}),
 		"<Left>", "<Up>",
 	)
 	a.completionKeys.Bind(
 		commands.NewCommand("next", func(args ...any) {
-			if a.completionMenu != nil {
-				a.completionMenu.Move(1)
-				a.syncCompletionView()
-			}
+			a.comp.move(1)
 			a.RequestFrame()
 		}),
 		"<Right>", "<Down>", "<Tab>",
@@ -346,7 +328,7 @@ func (a *DebuggerApp) tryCodeToggleEnable() bool {
 		return false
 	}
 	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		a.ToggleAsmBreakEnable()
+		a.breaks.ToggleAsmEnable()
 		a.RequestFrame()
 		return true
 	}
@@ -407,8 +389,5 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 }
 
 func (a *DebuggerApp) hasBreakAt(file string, line int) bool {
-	if a.breakpoints == nil || file == "" || line < 1 {
-		return false
-	}
-	return a.breakpoints.IndexOfFileLine(file, line) >= 0
+	return a.breaks.hasAt(file, line)
 }

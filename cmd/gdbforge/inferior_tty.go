@@ -9,50 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 )
-
-// unwireInferiorIO stops reading the internal inferior PTY into the IO pane.
-func (a *DebuggerApp) unwireInferiorIO() {
-	if a.inferiorCancelSub != nil {
-		a.inferiorCancelSub()
-		a.inferiorCancelSub = nil
-	}
-	if a.outputWidget != nil {
-		a.outputWidget.EnableInput(false)
-		unwireConsole(a.outputWidget)
-		a.outputWidget.SetSizeFunc(nil)
-	}
-}
-
-// markIOExternal clears the IO pane and notes that stdio is on an external tty.
-func (a *DebuggerApp) markIOExternal(path string) {
-	a.unwireInferiorIO()
-	if a.outputWidget == nil {
-		return
-	}
-	a.outputWidget.Clear()
-	msg := "stdio: external tty"
-	if path != "" {
-		msg += " " + path
-	}
-	msg += " (TUI / real terminal — not this pane)\n"
-	a.outputWidget.AppendInferior(msg)
-}
-
-// rewireInternalInferiorIO attaches the in-process inferior PTY to the IO pane.
-func (a *DebuggerApp) rewireInternalInferiorIO(tty *ptyx.TTY) {
-	if tty == nil || a.outputWidget == nil {
-		return
-	}
-	a.unwireInferiorIO()
-	a.wireInferiorIO(tty)
-	a.outputWidget.Clear()
-	a.outputWidget.AppendInferior("stdio: internal IO pane\n")
-}
 
 // SetInferiorTTY switches program stdio to path ("internal" / empty restores
 // the in-app IO pane). GDB can switch live via -inferior-tty-set. Delve's
@@ -70,10 +30,10 @@ func (a *DebuggerApp) SetInferiorTTY(path string) error {
 		return err
 	}
 	if gb.Client.UsesExternalInferiorTTY() {
-		a.markIOExternal(gb.Client.InferiorTTYPath())
+		a.inferiorIO.markExternal(gb.Client.InferiorTTYPath())
 		return nil
 	}
-	a.rewireInternalInferiorIO(gb.Client.InferiorTTY())
+	a.inferiorIO.rewireInternal(gb.Client.InferiorTTY())
 	return nil
 }
 
@@ -95,9 +55,9 @@ func (a *DebuggerApp) setDlvInferiorTTY(path string) error {
 	if ext == cur {
 		// Already on the desired mode/path — still refresh IO chrome.
 		if ext != "" {
-			a.markIOExternal(ext)
+			a.inferiorIO.markExternal(ext)
 		} else if inf := db.Client.InferiorTTY(); inf != nil {
-			a.rewireInternalInferiorIO(inf)
+			a.inferiorIO.rewireInternal(inf)
 		}
 		return nil
 	}
@@ -117,20 +77,20 @@ func (a *DebuggerApp) restartDlvWithInferiorTTY(extTTY string) error {
 			return fmt.Errorf("restart dlv with tty %q: %w (also failed to restore internal: %v)", extTTY, err, ferr)
 		}
 		a.attachRestartedDlv(fallback)
-		a.rewireInternalInferiorIO(fallback.InferiorTTY())
+		a.inferiorIO.rewireInternal(fallback.InferiorTTY())
 		return fmt.Errorf("external tty failed (%v); restored internal IO", err)
 	}
 	a.attachRestartedDlv(client)
 
 	if client.UsesExternalInferiorTTY() {
-		a.markIOExternal(client.InferiorTTYPath())
+		a.inferiorIO.markExternal(client.InferiorTTYPath())
 		if a.ctx.Log != nil {
 			a.ctx.Log.Named("dlv").Info("inferior stdio → external tty " + client.InferiorTTYPath() + " (dlv restarted)")
 		}
 		return nil
 	}
 	if inf := client.InferiorTTY(); inf != nil {
-		a.rewireInternalInferiorIO(inf)
+		a.inferiorIO.rewireInternal(inf)
 	}
 	if a.ctx.Log != nil {
 		a.ctx.Log.Named("dlv").Info("inferior stdio → internal IO pane (dlv restarted)")
@@ -163,14 +123,9 @@ func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
 
 // tearDownDlvSession cancels the console bridge and closes the current Delve client.
 func (a *DebuggerApp) tearDownDlvSession() {
-	a.gdbBridgeGen.Add(1)
-	if a.gdbCancelSub != nil {
-		a.gdbCancelSub()
-		a.gdbCancelSub = nil
-	}
-	a.unwireInferiorIO()
-	a.pendingDebugInfo = false
-	a.pendingFrameSync = false
+	a.console.stopBridge()
+	a.inferiorIO.unwire()
+	a.dlv.clearPendingOnTeardown()
 	if db := a.dlvBackend(); db != nil && db.Client != nil {
 		db.Client.Close()
 		db.Client = nil
@@ -198,35 +153,19 @@ func (a *DebuggerApp) ConnectDlv(addr string) error {
 		}
 		a.attachRestartedDlv(fallback)
 		if inf := fallback.InferiorTTY(); inf != nil {
-			a.rewireInternalInferiorIO(inf)
+			a.inferiorIO.rewireInternal(inf)
 		}
 		return fmt.Errorf("dlv connect failed (%v); restored local dlv exec", err)
 	}
 	a.attachRestartedDlv(client)
-	a.markIOExternal(client.InferiorTTYPath())
+	a.inferiorIO.markExternal(client.InferiorTTYPath())
 	// New headless session does not inherit the old local dlv breakpoints —
 	// re-apply entry + UI list or `c` will run straight to exit.
-	a.reapplyBreakpointsAfterDlvConnect()
+	a.breaks.reapplyAfterDlvConnect()
 	if a.ctx.Log != nil {
 		a.ctx.Log.Named("dlv").Info("connected to headless dlv at " + addr)
 	}
 	return nil
-}
-
-// reapplyBreakpointsAfterDlvConnect sets break main.main (if enabled) and
-// re-inserts breakpoints from the in-app BreakpointList into the new session.
-func (a *DebuggerApp) reapplyBreakpointsAfterDlvConnect() {
-	a.maybeBreakMain()
-	if a.breakpoints == nil {
-		return
-	}
-	for _, it := range a.breakpoints.Items() {
-		if it.File == "" || it.Line < 1 {
-			continue
-		}
-		a.breaks.sendBreakpointCmd(breakInsertCmd(it.File, it.Line))
-	}
-	a.onBreakpointsChanged()
 }
 
 // SessionProgram returns the debuggee path from startup args (first dlv/gdb arg).

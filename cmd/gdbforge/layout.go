@@ -92,8 +92,8 @@ func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
 		GDB:         a.gdbWidget,
 		Output:      a.outputWidget,
 		Breakpoints: a.bpWidget,
-		Threads:     a.threadWidget,
-		Callstack:   a.callstackWidget,
+		Threads:     a.debugInfo.ThreadWidget(),
+		Callstack:   a.debugInfo.CallStackWidget(),
 	}
 }
 
@@ -160,14 +160,11 @@ func (a *DebuggerApp) layoutCodePane() termui.Widget {
 
 func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 	if path := a.Debug().CurrentFile(); path != "" {
-		if w, _ := a.ensureCodeBuffer(path); w != nil {
+		if w, _ := a.bufs.ensure(path); w != nil {
 			return w
 		}
 	}
-	if a.primaryCode != nil {
-		return a.primaryCode
-	}
-	return nil
+	return a.bufs.Primary()
 }
 
 // registerLayouts registers named workspace layouts on AppState.

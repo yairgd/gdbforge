@@ -77,9 +77,9 @@ func (a *DebuggerApp) ExapData() {
 			commands.CmdRestComplete("searchcolor", a.SetSearchColor, a.colorCompletions),
 		).
 		LeafRestComplete("layout", a.OnLayout, a.layoutCompletions).
-		LeafRestComplete("b", a.OnBuffer, a.bufferCompletions).
-		LeafRestComplete("edit", a.OnEdit, a.editCompletions).
-		LeafRestComplete("lua", a.OnLua, a.luaCompletions).
+		LeafRestComplete("b", a.OnBuffer, a.bufs.completions).
+		LeafRestComplete("edit", a.OnEdit, a.bufs.editCompletions).
+		LeafRestComplete("lua", a.lua.OnCmd, a.lua.completions).
 		Leaf("help", a.OnHelp).
 		LeafRestComplete("vs", a.SplitVertical, a.splitAsmCompletions).
 		LeafRestComplete("vsplit", a.SplitVertical, a.splitAsmCompletions).

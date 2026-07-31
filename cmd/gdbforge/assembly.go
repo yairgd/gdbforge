@@ -8,9 +8,11 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -21,80 +23,126 @@ type asmRefreshMsg struct {
 	err     string
 }
 
-// BrowseAssembly refetches disassembly centered on addr (widget edge/resize).
-func (a *DebuggerApp) BrowseAssembly(addr string, rows int) {
-	go a.runAssemblyRefresh(addr, rows, false)
+// asmHost is the narrow surface asmCtl needs from the composition root.
+// DebuggerApp implements it; asmCtl must not depend on *DebuggerApp.
+type asmHost interface {
+	Backend() backend.Backend
+	GdbMcp() *mcp.GdbMcpService
+	Screen() tcell.Screen
+	Tab() *termui.TabWidget
+	RequestFrame()
+	RequestRedraw()
+	FocusCode()
+	findCodeLeaf() *termui.Node
+	focusedLeaf() *termui.Node
+	focusedWidget() termui.Widget
+	isGdbLeaf(leaf *termui.Node) bool
+	rememberCodeLeafFromFocus()
+	CodeBufferForB() *widgets.CodeWidget
+	PrimaryCode() *widgets.CodeWidget
+	LogoWidget() *widgets.LogoWidget
+	PaintAsmBreaks()
+	LogError(area, msg string)
 }
 
-// armAssemblyRefresh fetches disassembly around X on a background goroutine.
+// asmCtl owns the disassembly domain: the Assembly model + view, the browse
+// address refresh pipeline, and :b asm / :vs asm leaf policy.
+// DebuggerApp wires it; the ctl owns the domain.
+type asmCtl struct {
+	host   asmHost
+	widget *widgets.AssemblyWidget
+	list   *models.AssemblyList
+	// preferAsm means :b asm owns the code leaf until :b code (no auto-swap).
+	preferAsm bool
+}
+
+// Widget returns the shared AssemblyWidget (may be nil before InitB).
+func (c *asmCtl) Widget() *widgets.AssemblyWidget { return c.widget }
+
+// PreferAsm reports whether :b asm owns the code leaf.
+func (c *asmCtl) PreferAsm() bool { return c != nil && c.preferAsm }
+
+// setPreferAsm records whether Assembly keeps the code leaf (:b asm / :b code).
+func (c *asmCtl) setPreferAsm(v bool) { c.preferAsm = v }
+
+// supported reports whether the active backend can disassemble.
+func (c *asmCtl) supported() bool {
+	h := c.host
+	return h != nil && h.Backend() != nil && h.Backend().SupportsAssembly()
+}
+
+// browse refetches disassembly centered on addr (widget edge/resize).
+func (c *asmCtl) browse(addr string, rows int) {
+	go c.runRefresh(addr, rows, false)
+}
+
+// armRefresh fetches disassembly around X on a background goroutine.
 // When resetToPC is true, X is set to $pc; otherwise X stays on center (or
 // the widget's current browse address when center is empty).
-func (a *DebuggerApp) armAssemblyRefresh(resetToPC bool) {
-	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() || a.gdbMcp == nil {
-		return
-	}
-	if a.assemblyWidget == nil {
+func (c *asmCtl) armRefresh(resetToPC bool) {
+	h := c.host
+	if !c.supported() || h.GdbMcp() == nil || c.widget == nil {
 		return
 	}
 	center := ""
-	if !resetToPC && a.assemblyWidget != nil {
-		center = a.assemblyWidget.SelAddr()
+	if !resetToPC {
+		center = c.widget.SelAddr()
 	}
-	rows := 0
-	if a.assemblyWidget != nil {
-		rows = a.assemblyWidget.VisibleRows()
-	}
-	go a.runAssemblyRefresh(center, rows, resetToPC)
+	go c.runRefresh(center, c.widget.VisibleRows(), resetToPC)
 }
 
-// armAssemblyAround recenters Assembly browse on addr; ━━▶ stays on real $pc.
-func (a *DebuggerApp) armAssemblyAround(addr string) {
-	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() || a.gdbMcp == nil || a.assemblyWidget == nil {
+// armAround recenters Assembly browse on addr; ━━▶ stays on real $pc.
+func (c *asmCtl) armAround(addr string) {
+	h := c.host
+	if !c.supported() || h.GdbMcp() == nil || c.widget == nil {
 		return
 	}
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
-		a.armAssemblyRefresh(false)
+		c.armRefresh(false)
 		return
 	}
-	rows := a.assemblyWidget.VisibleRows()
-	go a.runAssemblyRefresh(addr, rows, false)
+	go c.runRefresh(addr, c.widget.VisibleRows(), false)
 }
 
-// syncAssemblyToFrame updates Assembly for a call-stack frame: level 0 → $pc,
+// syncToFrame updates Assembly for a call-stack frame: level 0 → $pc,
 // deeper frames → frame address (return / call site) as browse X.
-func (a *DebuggerApp) syncAssemblyToFrame(fr models.StackFrame) {
-	if a == nil || !(a.hasAsmSplit() || a.preferAsm) {
+func (c *asmCtl) syncToFrame(fr models.StackFrame) {
+	if c == nil || !(c.hasSplit() || c.preferAsm) {
 		return
 	}
 	if fr.Level == 0 {
-		a.armAssemblyRefresh(true)
+		c.armRefresh(true)
 		return
 	}
 	if fr.Addr != "" {
-		a.armAssemblyAround(fr.Addr)
+		c.armAround(fr.Addr)
 	}
 }
 
-func (a *DebuggerApp) runAssemblyRefresh(center string, rows int, resetToPC bool) {
-	items, pc, sel, err := a.queryAssembly(center, rows, resetToPC)
+func (c *asmCtl) runRefresh(center string, rows int, resetToPC bool) {
+	items, pc, sel, err := c.queryAssembly(center, rows, resetToPC)
 	msg := asmRefreshMsg{items: items, pcAddr: pc, selAddr: sel}
 	if err != nil {
 		msg.err = err.Error()
 	}
-	if scr := a.Screen(); scr != nil {
-		_ = scr.PostEvent(tcell.NewEventInterrupt(msg))
+	if h := c.host; h != nil {
+		if scr := h.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(msg))
+		}
 	}
 }
 
-func (a *DebuggerApp) queryAssembly(center string, rows int, resetToPC bool) (items []models.AsmLine, pcAddr, selAddr string, err error) {
-	if a.gdbMcp == nil {
+func (c *asmCtl) queryAssembly(center string, rows int, resetToPC bool) (items []models.AsmLine, pcAddr, selAddr string, err error) {
+	h := c.host
+	if h == nil || h.GdbMcp() == nil {
 		return nil, "", "", fmt.Errorf("no gdb session")
 	}
+	svc := h.GdbMcp()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	pcRaw, qerr := a.gdbMcp.Query(ctx, "-data-evaluate-expression $pc")
+	pcRaw, qerr := svc.Query(ctx, "-data-evaluate-expression $pc")
 	if qerr != nil {
 		return nil, "", "", qerr
 	}
@@ -117,7 +165,7 @@ func (a *DebuggerApp) queryAssembly(center string, rows int, resetToPC bool) (it
 		return nil, pcAddr, selAddr, fmt.Errorf("bad address %s", selAddr)
 	}
 	cmd := fmt.Sprintf("-data-disassemble -s %s -e %s -- 1", start, end)
-	raw, qerr := a.gdbMcp.Query(ctx, cmd)
+	raw, qerr := svc.Query(ctx, cmd)
 	if qerr != nil {
 		return nil, pcAddr, selAddr, qerr
 	}
@@ -125,7 +173,7 @@ func (a *DebuggerApp) queryAssembly(center string, rows int, resetToPC bool) (it
 	if len(all) == 0 {
 		// Retry without opcodes (some stubs reject mode 1).
 		cmd = fmt.Sprintf("-data-disassemble -s %s -e %s -- 0", start, end)
-		raw, qerr = a.gdbMcp.Query(ctx, cmd)
+		raw, qerr = svc.Query(ctx, cmd)
 		if qerr != nil {
 			return nil, pcAddr, selAddr, qerr
 		}
@@ -138,182 +186,215 @@ func (a *DebuggerApp) queryAssembly(center string, rows int, resetToPC bool) (it
 	return items, pcAddr, selAddr, nil
 }
 
-func (a *DebuggerApp) applyAsmRefresh(msg asmRefreshMsg) {
-	if a.assemblyWidget == nil {
+func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
+	h := c.host
+	if c.widget == nil {
 		return
 	}
 	if msg.err != "" {
-		a.assemblyWidget.ClearFetchAck()
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("assembly").Error(msg.err)
+		c.widget.ClearFetchAck()
+		if h != nil {
+			h.LogError("assembly", msg.err)
 		}
 		return
 	}
-	a.assemblyWidget.SetItems(msg.items, msg.pcAddr, msg.selAddr)
-	if a.assembly != nil {
-		a.assembly.Set(msg.items, msg.pcAddr)
+	c.widget.SetItems(msg.items, msg.pcAddr, msg.selAddr)
+	if c.list != nil {
+		c.list.Set(msg.items, msg.pcAddr)
 	}
-	if a.breakpoints != nil {
-		a.assemblyWidget.SetBreakInfos(a.breakpoints.Items())
+	if h != nil {
+		h.PaintAsmBreaks()
 	}
 	// Layout changes only via :b asm / :vs asm / :sp asm — never auto-swap with Code.
-	a.placeAsmInSlot(a.assemblyWidget)
+	c.placeInSlot(c.widget)
 }
 
-// placeAsmInSlot updates the Assembly leaf without stealing a Code pane.
+// placeInSlot updates the Assembly leaf without stealing a Code pane.
 // Code ↔ Assembly in the shared code leaf only when preferAsm (:b asm).
-func (a *DebuggerApp) placeAsmInSlot(w *widgets.AssemblyWidget) {
-	if w == nil || a.tab == nil {
+func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
+	h := c.host
+	if w == nil || h == nil || h.Tab() == nil {
 		return
 	}
+	tab := h.Tab()
 	// Dedicated :vs asm / :sp asm leaf — never touch the code leaf.
-	if leaf := a.tab.LeafMark(leafMarkAsm); leaf != nil && !a.isGdbLeaf(leaf) {
+	if leaf := tab.LeafMark(leafMarkAsm); leaf != nil && !h.isGdbLeaf(leaf) {
 		leaf.SetWidget(w)
-		a.tab.SetLeafMark(leafMarkAsm, leaf)
+		tab.SetLeafMark(leafMarkAsm, leaf)
 		return
 	}
 	// Single-pane: only replace Code when the user asked :b asm.
-	if !a.preferAsm {
+	if !c.preferAsm {
 		return
 	}
-	if !a.isGdbLeaf(a.focusedLeaf()) {
-		if _, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok {
-			if a.focusedWidget() != w {
-				_ = a.tab.ReplaceFocusedWidget(w)
+	if !h.isGdbLeaf(h.focusedLeaf()) {
+		if _, ok := h.focusedWidget().(*widgets.AssemblyWidget); ok {
+			if h.focusedWidget() != w {
+				_ = tab.ReplaceFocusedWidget(w)
 			}
-			a.rememberCodeLeafFromFocus()
+			h.rememberCodeLeafFromFocus()
 			return
 		}
-		if isSourceCodeSlot(a.focusedWidget()) || isCodeSlot(a.focusedWidget()) {
-			_ = a.tab.ReplaceFocusedWidget(w)
-			a.rememberCodeLeafFromFocus()
+		if isSourceCodeSlot(h.focusedWidget()) || isCodeSlot(h.focusedWidget()) {
+			_ = tab.ReplaceFocusedWidget(w)
+			h.rememberCodeLeafFromFocus()
 			return
 		}
 	}
-	if leaf := a.findCodeLeaf(); leaf != nil && !a.isGdbLeaf(leaf) {
+	if leaf := h.findCodeLeaf(); leaf != nil && !h.isGdbLeaf(leaf) {
 		leaf.SetWidget(w)
-		a.tab.SetLeafMark(leafMarkCode, leaf)
+		tab.SetLeafMark(leafMarkCode, leaf)
 		return
 	}
-	if a.tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
-		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
+	if tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
+		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
 	}
 }
 
-// shouldShowAssembly reports whether disassembly should refresh.
+// hasSplit reports a dedicated Assembly leaf from :vs asm / :sp asm.
+func (c *asmCtl) hasSplit() bool {
+	h := c.host
+	if c == nil || h == nil || h.Tab() == nil || c.widget == nil {
+		return false
+	}
+	leaf := h.Tab().LeafMark(leafMarkAsm)
+	return leaf != nil && leaf.GetWidget() == c.widget
+}
+
+// findLeaf returns the dedicated asm split leaf, if any.
+func (c *asmCtl) findLeaf() *termui.Node {
+	h := c.host
+	if h == nil || h.Tab() == nil {
+		return nil
+	}
+	if leaf := h.Tab().LeafMark(leafMarkAsm); leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
+		return leaf
+	}
+	return h.Tab().FindLeaf(isAssemblyWidget)
+}
+
+// shouldShow reports whether disassembly should refresh.
 // Never auto-opens asm for missing source — only :b asm or :vs asm / :sp asm.
-func (a *DebuggerApp) shouldShowAssembly(codeW *widgets.CodeWidget) bool {
-	if a == nil || a.backend == nil || !a.backend.SupportsAssembly() {
+func (c *asmCtl) shouldShow(codeW *widgets.CodeWidget) bool {
+	if !c.supported() {
 		return false
 	}
 	_ = codeW
-	return a.hasAsmSplit() || a.preferAsm
+	return c.hasSplit() || c.preferAsm
 }
 
-// openAssemblyBuffer is :b asm / :b assembly — the only request that puts
-// Assembly into the code leaf (unless :vs asm / :sp asm already has a dedicated leaf).
-func (a *DebuggerApp) openAssemblyBuffer() {
-	if a.backend == nil || !a.backend.SupportsAssembly() {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("buffer").Error("assembly view is GDB-only for now")
-		}
+// openBuffer is :b asm / :b assembly — the only request that puts Assembly
+// into the code leaf (unless :vs asm / :sp asm already has a dedicated leaf).
+func (c *asmCtl) openBuffer() {
+	h := c.host
+	if h == nil {
 		return
 	}
-	if a.assemblyWidget == nil {
+	if !c.supported() {
+		h.LogError("buffer", "assembly view is GDB-only for now")
 		return
 	}
-	if leaf := a.findAsmLeaf(); leaf != nil && a.hasAsmSplit() {
-		_ = a.tab.FocusLeaf(leaf)
-		a.armAssemblyRefresh(true)
-		a.RequestFrame()
+	if c.widget == nil {
 		return
 	}
-	a.preferAsm = true
-	a.placeAsmInSlot(a.assemblyWidget)
-	a.FocusCode()
-	a.armAssemblyRefresh(true)
-	a.RequestFrame()
+	if leaf := c.findLeaf(); leaf != nil && c.hasSplit() {
+		_ = h.Tab().FocusLeaf(leaf)
+		c.armRefresh(true)
+		h.RequestFrame()
+		return
+	}
+	c.preferAsm = true
+	c.placeInSlot(c.widget)
+	h.FocusCode()
+	c.armRefresh(true)
+	h.RequestFrame()
 }
 
-// prepareCodeForAsmSplit restores source into the code leaf and focuses it.
-func (a *DebuggerApp) prepareCodeForAsmSplit() bool {
-	if a == nil || a.tab == nil || a.assemblyWidget == nil {
+// prepareCodeForSplit restores source into the code leaf and focuses it.
+func (c *asmCtl) prepareCodeForSplit() bool {
+	h := c.host
+	if h == nil || h.Tab() == nil || c.widget == nil {
 		return false
 	}
-	if a.backend == nil || !a.backend.SupportsAssembly() {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("buffer").Error("assembly split is GDB-only for now")
-		}
+	if !c.supported() {
+		h.LogError("buffer", "assembly split is GDB-only for now")
 		return false
 	}
-	a.preferAsm = false
-	cw := a.codeBufferForB()
+	c.preferAsm = false
+	cw := h.CodeBufferForB()
 	if cw == nil {
-		cw = a.primaryCode
+		cw = h.PrimaryCode()
 	}
-	leaf := a.findCodeLeaf()
+	leaf := h.findCodeLeaf()
 	if leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
 		if cw != nil {
 			leaf.SetWidget(cw)
-		} else if a.logoWidget != nil {
-			leaf.SetWidget(a.logoWidget)
+		} else if logo := h.LogoWidget(); logo != nil {
+			leaf.SetWidget(logo)
 		}
-		a.tab.SetLeafMark(leafMarkCode, leaf)
+		h.Tab().SetLeafMark(leafMarkCode, leaf)
 	}
-	a.FocusCode()
-	return a.focusedLeaf() != nil && !a.isGdbLeaf(a.focusedLeaf())
+	h.FocusCode()
+	return h.focusedLeaf() != nil && !h.isGdbLeaf(h.focusedLeaf())
 }
 
-// focusExistingAsmSplit focuses the dedicated asm leaf if :vs asm / :sp asm
+// focusExistingSplit focuses the dedicated asm leaf if :vs asm / :sp asm
 // already opened one. Returns true when a split already exists.
-func (a *DebuggerApp) focusExistingAsmSplit() bool {
-	if !a.hasAsmSplit() {
+func (c *asmCtl) focusExistingSplit() bool {
+	h := c.host
+	if h == nil || !c.hasSplit() {
 		return false
 	}
-	if leaf := a.findAsmLeaf(); leaf != nil {
-		_ = a.tab.FocusLeaf(leaf)
+	if leaf := c.findLeaf(); leaf != nil {
+		_ = h.Tab().FocusLeaf(leaf)
 	}
-	a.armAssemblyRefresh(true)
-	a.RequestRedraw()
+	c.armRefresh(true)
+	h.RequestRedraw()
 	return true
 }
 
-// SplitAsmBelow is :sp asm / :split asm — Code on top, Assembly below.
-func (a *DebuggerApp) SplitAsmBelow(args ...any) {
-	a.splitAsm(true)
-}
-
-// SplitAsmRight is :vs asm / :vsplit asm — Code on the left, Assembly on the right.
-func (a *DebuggerApp) SplitAsmRight(args ...any) {
-	a.splitAsm(false)
-}
-
 // splitAsm opens a dedicated asm split (horizontal=true → below, else right).
-func (a *DebuggerApp) splitAsm(horizontal bool) {
-	if a.focusExistingAsmSplit() {
+func (c *asmCtl) splitAsm(horizontal bool) {
+	h := c.host
+	if h == nil {
 		return
 	}
-	if !a.prepareCodeForAsmSplit() {
+	if c.focusExistingSplit() {
 		return
 	}
+	if !c.prepareCodeForSplit() {
+		return
+	}
+	tab := h.Tab()
 	if horizontal {
-		a.tab.HorizontalSplit(a.assemblyWidget)
+		tab.HorizontalSplit(c.widget)
 	} else {
-		a.tab.VerticalSplit(a.assemblyWidget)
+		tab.VerticalSplit(c.widget)
 	}
-	codeLeaf := a.focusedLeaf()
-	asmLeaf := a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.assemblyWidget })
+	codeLeaf := h.focusedLeaf()
+	asmLeaf := tab.FindLeaf(func(w termui.Widget) bool { return w == c.widget })
 	if codeLeaf != nil {
-		a.tab.SetLeafMark(leafMarkCode, codeLeaf)
+		tab.SetLeafMark(leafMarkCode, codeLeaf)
 	}
 	if asmLeaf != nil {
-		a.tab.SetLeafMark(leafMarkAsm, asmLeaf)
+		tab.SetLeafMark(leafMarkAsm, asmLeaf)
 	}
-	a.armAssemblyRefresh(true)
-	a.RequestRedraw()
+	c.armRefresh(true)
+	h.RequestRedraw()
 }
 
 func isAssemblyWidget(w termui.Widget) bool {
 	_, ok := w.(*widgets.AssemblyWidget)
 	return ok
 }
+
+// --- Host adapters (AssemblyHost / command trie need *DebuggerApp methods) ---
+
+// BrowseAssembly refetches disassembly centered on addr (widget edge/resize).
+func (a *DebuggerApp) BrowseAssembly(addr string, rows int) { a.asm.browse(addr, rows) }
+
+// SplitAsmBelow is :sp asm / :split asm — Code on top, Assembly below.
+func (a *DebuggerApp) SplitAsmBelow(args ...any) { a.asm.splitAsm(true) }
+
+// SplitAsmRight is :vs asm / :vsplit asm — Code on the left, Assembly on the right.
+func (a *DebuggerApp) SplitAsmRight(args ...any) { a.asm.splitAsm(false) }

@@ -27,14 +27,14 @@ func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
 		return cw
 	}
 	if path := a.Debug().CurrentFile(); path != "" {
-		if w, _ := a.ensureCodeBuffer(path); w != nil {
+		if w, _ := a.bufs.ensure(path); w != nil {
 			return w
 		}
 	}
-	if a.primaryCode != nil {
-		return a.primaryCode
+	if pc := a.bufs.Primary(); pc != nil {
+		return pc
 	}
-	for _, w := range a.fileBuffers {
+	for _, w := range a.bufs.Buffers() {
 		if w != nil {
 			return w
 		}
@@ -80,33 +80,13 @@ func (a *DebuggerApp) findCodeLeaf() *termui.Node {
 			return leaf
 		}
 		// Single-pane :b asm still owns the code mark.
-		if isAssemblyWidget(w) && !a.hasAsmSplit() {
+		if isAssemblyWidget(w) && !a.asm.hasSplit() {
 			return leaf
 		}
 	}
 	leaf := a.tab.FindLeaf(isSourceCodeSlot)
 	a.tab.SetLeafMark(leafMarkCode, leaf)
 	return leaf
-}
-
-// hasAsmSplit reports a dedicated Assembly leaf from :vs asm / :sp asm.
-func (a *DebuggerApp) hasAsmSplit() bool {
-	if a == nil || a.tab == nil || a.assemblyWidget == nil {
-		return false
-	}
-	leaf := a.tab.LeafMark(leafMarkAsm)
-	return leaf != nil && leaf.GetWidget() == a.assemblyWidget
-}
-
-// findAsmLeaf returns the dedicated asm split leaf, if any.
-func (a *DebuggerApp) findAsmLeaf() *termui.Node {
-	if a.tab == nil {
-		return nil
-	}
-	if leaf := a.tab.LeafMark(leafMarkAsm); leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
-		return leaf
-	}
-	return a.tab.FindLeaf(isAssemblyWidget)
 }
 
 // rememberCodeLeafFromFocus updates code/gdb marks and the Esc "last" mark.
@@ -293,9 +273,9 @@ func (a *DebuggerApp) FocusCode() {
 		return
 	}
 
-	if a.preferAsm && a.assemblyWidget != nil && !a.hasAsmSplit() {
-		if leaf.GetWidget() != a.assemblyWidget {
-			leaf.SetWidget(a.assemblyWidget)
+	if aw := a.asm.Widget(); a.asm.PreferAsm() && aw != nil && !a.asm.hasSplit() {
+		if leaf.GetWidget() != aw {
+			leaf.SetWidget(aw)
 		}
 	} else if cw := a.activeCodeWidget(); cw != nil && leaf.GetWidget() != cw {
 		leaf.SetWidget(cw)

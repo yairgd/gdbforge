@@ -5,17 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"path/filepath"
-
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 type codeRefreshMsg struct {
@@ -23,7 +19,7 @@ type codeRefreshMsg struct {
 	// fromStop is set for *stopped / Delve "> " refreshes. Frame/up/down sync
 	// must not set this — otherwise we keep snapping Code back to frame 0.
 	fromStop bool
-	// stopGen is App.codeNavGen at stop time; if the user browsed the call
+	// stopGen is dlv.codeNavGen at stop time; if the user browsed the call
 	// stack since then, we skip clobbering Code.
 	stopGen uint64
 	// stop is applied on the UI thread (not in a background goroutine) so a
@@ -40,22 +36,6 @@ func (a *DebuggerApp) maybeClearOutput() {
 		return
 	}
 	a.outputWidget.Clear()
-}
-
-// maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
-func (a *DebuggerApp) maybeBreakMain() {
-	if a.gdbWidget == nil || !a.Debug().BreakMain() {
-		return
-	}
-	sess := a.GDB()
-	if sess == nil {
-		return
-	}
-	cmd := "break main"
-	if a.backend != nil {
-		cmd = a.backend.DefaultBreakMain()
-	}
-	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 }
 
 // onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
@@ -86,8 +66,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	// call-stack select. That is not a new halt — never run stop UI unless the
 	// inferior was actually running (continue/next/step/…).
 	if a.isDLV() {
-		if a.dlvSuppressStopUI > 0 {
-			a.dlvSuppressStopUI--
+		if a.dlv.consumeSuppressStopUI() {
 			return
 		}
 		if !wasRunning {
@@ -104,16 +83,16 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 
 	// Defer -thread-info / -stack-list-frames until (gdb), with a short
 	// fallback timer if PromptReady is missed (Threads then only updated on click).
-	a.armDebugInfoRefresh()
+	a.dlv.armDebugInfoRefresh()
 
-	stopGen := a.codeNavGen
+	stopGen := a.dlv.codeNavGen
 	stopCopy := *stop
 	go func() {
 		a.ensureSourceFiles()
 		// Re-query GDB/Delve breakpoints before painting Code. After file /
 		// target remote (e.g. :lua remotegdb) the shared model can be stale or
 		// path-mismatched; gutters must follow live -break-list / breakpoints.
-		a.refreshBreakpointsAfterStop()
+		a.breaks.refreshAfterStop()
 		if scr := a.Screen(); scr != nil {
 			// Apply Code on the UI thread after gen check (see codeRefreshMsg).
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
@@ -131,7 +110,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
 	var w *widgets.CodeWidget
 	if stop != nil && stop.File != "" {
-		w = a.showCodeAt(stop.File, stop.Line)
+		w = a.bufs.showCodeAt(stop.File, stop.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(stop.File, formatUnavailableExtra(stop.Func, stop.Line))
 		}
@@ -141,73 +120,14 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 		if w = a.activeCodeWidget(); w != nil {
 			// fall through to asm check
 		} else if stop != nil && stop.Func != "" {
-			w = a.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
+			w = a.bufs.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
 		}
 	}
-	if a.shouldShowAssembly(w) {
-		a.armAssemblyRefresh(true)
+	if a.asm.shouldShow(w) {
+		a.asm.armRefresh(true)
 	}
 	return w
 }
-
-// showCodeAt loads file at line with ━━▶ (program counter).
-func (a *DebuggerApp) showCodeAt(file string, line int) *widgets.CodeWidget {
-	return a.showCode(file, line, false)
-}
-
-// showCodeBrowse loads file and moves the blue code cursor without moving ━━▶.
-func (a *DebuggerApp) showCodeBrowse(file string, line int) *widgets.CodeWidget {
-	return a.showCode(file, line, true)
-}
-
-// showCode loads file at line in a CodeWidget and paints BP gutters.
-// browse=false moves ━━▶ (ShowLocation); browse=true only moves selection.
-func (a *DebuggerApp) showCode(file string, line int, browse bool) *widgets.CodeWidget {
-	if file == "" {
-		return nil
-	}
-	w, _ := a.ensureCodeBuffer(file)
-	if w == nil {
-		return nil
-	}
-	if line < 1 {
-		line = 1
-	}
-	if browse {
-		_ = w.ShowSelection(file, line)
-	} else {
-		_ = w.ShowLocation(file, line)
-	}
-	a.Debug().SetCurrentLocation(file, line)
-	if !w.Unavailable() {
-		a.paintCodeWidgetBreaks(w, file)
-	}
-	a.placeCodeInSlot(w)
-	return w
-}
-
-// showCodeUnavailable shows a CodeWidget placeholder when there is no source path
-// (e.g. ??? in libc) using func/detail as the displayed path line.
-func (a *DebuggerApp) showCodeUnavailable(label, extra string) *widgets.CodeWidget {
-	if label == "" {
-		label = "(unknown)"
-	}
-	key := "unavailable:" + label
-	w, _ := a.ensureCodeBuffer(key)
-	if w == nil {
-		return nil
-	}
-	w.ShowUnavailable(label, extra)
-	w.PaneName = filepath.Base(label)
-	if w.PaneName == "" || w.PaneName == "." {
-		w.PaneName = "unavailable"
-	}
-	a.placeCodeInSlot(w)
-	return w
-}
-
-// onCallStackActivate selects a stack frame in GDB/Delve and shows its source.
-// Uses MI for GDB so the console does not print CLI frame listings.
 
 // onGdbFrameSync refreshes Code / Call Stack after a GDB console frame/f/up/down
 // (those do not emit *stopped).
@@ -233,36 +153,30 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 	if a.isDLV() {
 		raw, err := a.gdbMcp.Query(ctx, "stack")
 		if err != nil {
-			if a.ctx.Log != nil {
-				a.ctx.Log.Named("frame").Error(err.Error())
-			}
+			a.LogError("frame", err.Error())
 			return
 		}
 		frames := dlv.ParseStack(raw)
 		if len(frames) == 0 {
 			return
 		}
-		a.applyStackFrames(frames)
+		a.debugInfo.applyStackFrames(frames)
 		// Delve's `stack` always lists level 0 first; it does not mark the
 		// selected frame. Use the level from the last frame/up/down command
 		// (or the call-stack highlight) instead of always taking frames[0].
-		level := a.consumeFrameSyncLevel()
+		level := a.dlv.consumeFrameSyncLevel()
 		fr := frames[0]
 		if found, ok := frameAtLevel(frames, level); ok {
 			fr = found
 		}
-		if a.callstackWidget != nil {
-			a.callstackWidget.SelectLevel(fr.Level)
-		}
+		a.debugInfo.selectLevel(fr.Level)
 		a.showFrameSource(fr)
 		return
 	}
 
 	raw, err := a.gdbMcp.Query(ctx, "-stack-info-frame")
 	if err != nil {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("frame").Error(err.Error())
-		}
+		a.LogError("frame", err.Error())
 		return
 	}
 	fr, ok := parse.ParseStackInfoFrame(raw)
@@ -271,14 +185,12 @@ func (a *DebuggerApp) syncCurrentFrameFromGDB() {
 	}
 
 	// Keep the callstack list in sync and highlight the selected level.
-	if a.callstackWidget != nil || a.callstack != nil {
+	if a.debugInfo.CallStackWidget() != nil || a.debugInfo.Stack() != nil {
 		rawStack, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
 		if err == nil {
-			a.applyStackFrames(parse.ParseStackListFrames(rawStack))
+			a.debugInfo.applyStackFrames(parse.ParseStackListFrames(rawStack))
 		}
-		if a.callstackWidget != nil {
-			a.callstackWidget.SelectLevel(fr.Level)
-		}
+		a.debugInfo.selectLevel(fr.Level)
 	}
 
 	a.showFrameSource(fr)
@@ -291,16 +203,16 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 		file := normalizeCodePath(fr.File)
 		a.Debug().SetCurrentLocation(file, fr.Line)
 		// Browse only: keep ━━▶ on the real stop PC (same as Assembly).
-		w = a.showCodeBrowse(file, fr.Line)
+		w = a.bufs.showCodeBrowse(file, fr.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(file, formatUnavailableExtra(fr.Func, fr.Line))
 		}
 	case fr.Func != "":
-		w = a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
+		w = a.bufs.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
 	}
 	// Assembly follows the selected frame address; real $pc keeps ━━▶.
-	if a.shouldShowAssembly(w) {
-		a.syncAssemblyToFrame(fr)
+	if a.asm.shouldShow(w) {
+		a.asm.syncToFrame(fr)
 	}
 	if w != nil {
 		a.applyCodeStop(w)
@@ -314,33 +226,26 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 // When *stopped already carried a file, updateCodeAfterStop owns Code — do not
 // jump back to frame 0 here (that races with call-stack j/k / click browse).
 func (a *DebuggerApp) syncCodeFromCallstack() {
-	if a.callstack == nil {
+	stack := a.debugInfo.Stack()
+	if stack == nil {
 		return
 	}
 	if a.State() != nil && a.Debug().StopFile() != "" {
 		return
 	}
-	if fr, ok := a.callstack.FirstWithFile(); ok {
+	if fr, ok := stack.FirstWithFile(); ok {
 		a.Debug().SetStopLocation(fr.File, fr.Line)
 		a.showFrameSource(fr)
 		return
 	}
-	if fr, ok := a.callstack.At(0); ok && fr.Func != "" {
-		w := a.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
-		if a.shouldShowAssembly(w) {
-			a.armAssemblyRefresh(true)
+	if fr, ok := stack.At(0); ok && fr.Func != "" {
+		w := a.bufs.showCodeUnavailable(fr.Func, formatUnavailableExtra("", fr.Line))
+		if a.asm.shouldShow(w) {
+			a.asm.armRefresh(true)
 		}
 		a.applyCodeStop(w)
 	}
 }
-
-// onBreakpointActivate shows the source at the selected breakpoint location
-// with the blue browse cursor — ━━▶ stays on the real program counter.
-// Address-only breakpoints refresh Assembly in its existing leaf (:b asm / :vs asm / :sp asm).
-
-// onThreadActivate switches GDB to the selected thread, refreshes stack/threads,
-// and shows the current frame source.
-// Uses MI for GDB so the console does not print "[Switching to thread …]".
 
 // formatUnavailableExtra builds the optional detail line under the path in
 // CodeWidget's centered "not available" placeholder.
@@ -354,110 +259,6 @@ func formatUnavailableExtra(fn string, line int) string {
 		return fmt.Sprintf("line %d", line)
 	default:
 		return ""
-	}
-}
-
-// scheduleDebugInfoRefresh coalesces -thread-info / -stack-list-frames on stop.
-func (a *DebuggerApp) scheduleDebugInfoRefresh() {
-	a.debugInfo.Schedule(a.runDebugInfoRefresh)
-}
-
-// armDebugInfoRefresh marks a post-stop threads/stack refresh and starts a
-// fallback timer so we still refresh if PromptReady is missed.
-func (a *DebuggerApp) armDebugInfoRefresh() {
-	a.pendingDebugInfo = true
-	go func() {
-		time.Sleep(120 * time.Millisecond)
-		a.triggerPendingDebugInfo()
-	}()
-}
-
-// triggerPendingDebugInfo runs a scheduled refresh once if still armed.
-func (a *DebuggerApp) triggerPendingDebugInfo() {
-	if !a.pendingDebugInfo {
-		return
-	}
-	a.pendingDebugInfo = false
-	a.scheduleDebugInfoRefresh()
-}
-
-func (a *DebuggerApp) runDebugInfoRefresh() {
-	// Retries: right after *stopped the first -thread-info capture can still
-	// be empty/stale; a click later works because GDB is idle. Retry briefly
-	// so the Threads pane updates without needing a mouse event.
-	var threadsOK, stackOK bool
-	for attempt := 0; attempt < 6; attempt++ {
-		if attempt > 0 {
-			time.Sleep(40 * time.Millisecond)
-		}
-		threadsOK, stackOK = a.refreshThreadsAndStack()
-		if threadsOK && stackOK {
-			break
-		}
-	}
-	if scr := a.Screen(); scr != nil {
-		_ = scr.PostEvent(tcell.NewEventInterrupt(debugInfoUIMsg{}))
-	}
-}
-
-// refreshThreadsAndStack queries the debugger and updates shared models only.
-// Views are synced on the UI thread via debugInfoUIMsg (or sync*Views callers).
-// Returns whether each query produced a usable payload.
-func (a *DebuggerApp) refreshThreadsAndStack() (threadsOK, stackOK bool) {
-	if a.gdbMcp == nil {
-		return false, false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if a.backend == nil {
-		return false, false
-	}
-	var logFn backend.LogFn
-	if a.ctx.Log != nil {
-		logFn = func(area, msg string) {
-			a.ctx.Log.Named(area).Error(msg)
-		}
-	}
-	threads, frames, threadsOK, stackOK := a.backend.RefreshThreadsAndStack(ctx, a.gdbMcp, logFn)
-	if threadsOK {
-		a.setThreadInfos(threads)
-		if len(threads) == 0 {
-			a.setStackFrames(nil)
-		}
-	}
-	if stackOK {
-		a.setStackFrames(frames)
-	} else if threadsOK && len(threads) == 0 {
-		// already cleared above
-	}
-	return threadsOK, stackOK
-}
-
-// onBreakpointsChanged publishes a bus event; the Subscribe handler coalesces
-// -break-list work. Sources: GDB console, BreakpointWidget, MCP (=breakpoint-*).
-func (a *DebuggerApp) onBreakpointsChanged() {
-	if a.ctx.Bus == nil {
-		return
-	}
-	platform.Publish(a.ctx.Bus, BreakpointsChangedMsg{})
-}
-
-// onBreakpointsChangedMsg is the EventBus Subscribe handler for
-// BreakpointsChangedMsg. It coalesces bursts into one in-flight -break-list
-// plus at most one trailing refresh (no timer).
-func (a *DebuggerApp) onBreakpointsChangedMsg(_ BreakpointsChangedMsg) {
-	if a.isDLV() && a.dlvConfirm.Confirming() {
-		a.dlvBPDeferred = true
-		return
-	}
-	a.bpRefresh.Schedule(a.runBreakpointRefresh)
-}
-
-func (a *DebuggerApp) runBreakpointRefresh() {
-	a.refreshBreakpoints()
-	if scr := a.Screen(); scr != nil {
-		_ = scr.PostEvent(tcell.NewEventInterrupt(breakpointsUIMsg{}))
 	}
 }
 
@@ -475,9 +276,9 @@ func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
 	if w == nil || a.tab == nil {
 		return
 	}
-	a.primaryCode = w
+	a.bufs.setPrimary(w)
 	// :b asm owns the code leaf until :b code — do not swap Assembly out.
-	if a.preferAsm && !a.hasAsmSplit() {
+	if a.asm.PreferAsm() && !a.asm.hasSplit() {
 		return
 	}
 	if asm := a.tab.LeafMark(leafMarkAsm); asm != nil && a.focusedLeaf() == asm {
@@ -536,35 +337,6 @@ func frameAtLevel(frames []models.StackFrame, level int) (models.StackFrame, boo
 	return models.StackFrame{}, false
 }
 
-// consumeFrameSyncLevel returns the Delve frame level to show after frame/up/down
-// (or call-stack activate), then clears the pending flag.
-func (a *DebuggerApp) consumeFrameSyncLevel() int {
-	if a.pendingFrameLevelSet {
-		level := a.pendingFrameLevel
-		a.pendingFrameLevelSet = false
-		a.pendingFrameLevel = 0
-		if level < 0 {
-			return 0
-		}
-		return level
-	}
-	if a.callstackWidget != nil {
-		if fr, ok := a.callstackWidget.SelectedFrame(); ok {
-			return fr.Level
-		}
-	}
-	return 0
-}
-
-// noteFrameSyncLevel records which stack level a pending Delve frame sync should show.
-func (a *DebuggerApp) noteFrameSyncLevel(level int) {
-	if level < 0 {
-		level = 0
-	}
-	a.pendingFrameLevel = level
-	a.pendingFrameLevelSet = true
-}
-
 // ensureSourceFiles re-queries GDB -file-list-exec-source-files and replaces
 // AppState.SourceFiles when the parse is non-empty. Always refreshes (does not
 // stick to the first cached hit — an early/partial capture used to leave only
@@ -580,9 +352,7 @@ func (a *DebuggerApp) ensureSourceFiles() {
 	defer cancel()
 	raw, err := a.gdbMcp.Query(ctx, "-file-list-exec-source-files")
 	if err != nil {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("code").Error(err.Error())
-		}
+		a.LogError("code", err.Error())
 		return
 	}
 	files := parse.ParseSourceFileList(raw)
@@ -591,90 +361,4 @@ func (a *DebuggerApp) ensureSourceFiles() {
 	}
 	a.Debug().SetSourceFiles(files)
 	a.syncFileListViews()
-}
-
-// refreshBreakpoints queries GDB -break-list and merges into the Breakpoint
-// widget's internal list (disabled rows are preserved), then paints CodeWidgets.
-func (a *DebuggerApp) refreshBreakpoints() {
-	items, ok := a.fetchBreakInfos()
-	if !ok {
-		// Incomplete/failed capture — keep existing red marks and BP rows.
-		return
-	}
-	a.breaks.applyBreakInfos(items)
-}
-
-// refreshBreakpointsAfterStop re-queries live breakpoints after *stopped.
-// Retries briefly: right after file/target remote the first -break-list capture
-// can be empty/stale while GDB is still settling.
-func (a *DebuggerApp) refreshBreakpointsAfterStop() {
-	if a.gdbMcp == nil {
-		return
-	}
-	for attempt := 0; attempt < 6; attempt++ {
-		if attempt > 0 {
-			time.Sleep(40 * time.Millisecond)
-		}
-		items, ok := a.fetchBreakInfos()
-		if !ok {
-			continue
-		}
-		a.breaks.applyBreakInfos(items)
-		return
-	}
-}
-
-func (a *DebuggerApp) fetchBreakInfos() ([]models.BreakInfo, bool) {
-	if a.gdbMcp == nil || a.backend == nil {
-		return nil, false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	items, ok := a.backend.FetchBreakpoints(ctx, a.gdbMcp)
-	if !ok && a.ctx.Log != nil {
-		// Keep quiet on incomplete captures; FetchBreakpoints returns false.
-	}
-	return items, ok
-}
-
-// paintCodeBreakmarks paints line-number gutters from AppState break colors
-// (enabled / disabled backgrounds).
-func (a *DebuggerApp) paintCodeBreakmarks(items []models.BreakInfo) {
-	seen := make(map[*widgets.CodeWidget]bool)
-	for path, w := range a.fileBuffers {
-		if w == nil {
-			continue
-		}
-		w.SetBreakInfos(breaksForFile(items, path))
-		seen[w] = true
-	}
-	if a.primaryCode != nil && !seen[a.primaryCode] {
-		if p := a.primaryCode.Path(); p != "" {
-			a.primaryCode.SetBreakInfos(breaksForFile(items, p))
-		}
-	}
-}
-
-func (a *DebuggerApp) rebuildCodeBreakGutters() {
-	seen := make(map[*widgets.CodeWidget]bool)
-	for _, w := range a.fileBuffers {
-		if w == nil {
-			continue
-		}
-		w.RebuildBuffer()
-		seen[w] = true
-	}
-	if a.primaryCode != nil && !seen[a.primaryCode] {
-		a.primaryCode.RebuildBuffer()
-	}
-}
-
-func breaksForFile(items []models.BreakInfo, path string) []models.BreakInfo {
-	out := make([]models.BreakInfo, 0)
-	for _, it := range items {
-		if models.SameSourcePath(it.File, path) {
-			out = append(out, it)
-		}
-	}
-	return out
 }
