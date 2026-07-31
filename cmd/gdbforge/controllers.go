@@ -1,10 +1,12 @@
 package main
 
-// breakCtl owns breakpoint send/sync/toggle intents. Wired as
-// bpWidget.OnActivate = a.breaks.Activate (methods live on breakCtl, not DebuggerApp).
+// breakCtl owns breakpoint send/sync helpers still shared by CodeWidget and
+// domain paths (syncBreakpointViews, sendBreakpointCmd, …). List-widget
+// intents (ToggleBreakpoint, ActivateBreakpoint, …) live on *DebuggerApp.
 type breakCtl struct{ app *DebuggerApp }
 
-// navCtl owns call-stack / thread activate intents.
+// navCtl is reserved for navigation helpers; ActivateThread / ActivateCallStack
+// live on *DebuggerApp.
 type navCtl struct{ app *DebuggerApp }
 
 // consoleCtl owns debugger console submit/interrupt/EOF/paint apply.

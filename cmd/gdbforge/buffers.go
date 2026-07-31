@@ -217,7 +217,7 @@ func (a *DebuggerApp) OnBuffer(args ...any) {
 		a.preferAsm = false
 		if cw := a.codeBufferForB(); cw != nil {
 			a.placeCodeInSlot(cw)
-			a.activateCodePane()
+			a.FocusCode()
 			a.RequestFrame()
 			return
 		}
@@ -264,12 +264,12 @@ func (a *DebuggerApp) OnEdit(args ...any) {
 		}
 		return
 	}
-	a.openSourcePath(path)
+	a.OpenSourcePath(path)
 }
 
-// openSourcePath shows path in a CodeWidget, replacing the focused pane
+// OpenSourcePath shows path in a CodeWidget, replacing the focused pane
 // (used by :edit <name> and FileListWidget selection).
-func (a *DebuggerApp) openSourcePath(path string) {
+func (a *DebuggerApp) OpenSourcePath(path string) {
 	if path == "" || a.tab == nil {
 		return
 	}

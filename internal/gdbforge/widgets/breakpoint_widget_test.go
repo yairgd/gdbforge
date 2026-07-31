@@ -10,7 +10,7 @@ import (
 )
 
 func TestBreakpointWidgetEmptyMessage(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	lines := w.LinesForTest()
 	if len(lines) != 1 || lines[0] != "no breakpoints" {
 		t.Fatalf("empty=%v", lines)
@@ -18,7 +18,7 @@ func TestBreakpointWidgetEmptyMessage(t *testing.T) {
 }
 
 func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
@@ -27,7 +27,7 @@ func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 		t.Fatalf("display=%q", lines)
 	}
 	var gotIdx int = -1
-	w.OnToggle = func(i int) { gotIdx = i }
+	w.SetHost(stubBreakpointHost{toggle: func(i int) { gotIdx = i }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)) {
 		t.Fatal("e")
 	}
@@ -37,12 +37,12 @@ func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 }
 
 func TestBreakpointWidgetDeleteIntent(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetItems([]models.BreakInfo{
 		{Number: 3, Enabled: true, File: "/tmp/a.c", Line: 5},
 	})
 	var gotIdx int = -1
-	w.OnDelete = func(i int) { gotIdx = i }
+	w.SetHost(stubBreakpointHost{delete: func(i int) { gotIdx = i }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone)) {
 		t.Fatal("d")
 	}
@@ -58,7 +58,7 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	st.SetBreakCondColor(tcell.ColorOrange)
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetAppState(st)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
@@ -105,7 +105,7 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 	st.SetCurrentLocation("/tmp/a.c", 2)
 	st.SetStopLocation("/tmp/a.c", 2)
 
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetAppState(st)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
@@ -137,14 +137,14 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 }
 
 func TestBreakpointWidgetActivateOnMove(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
 	var got models.BreakInfo
-	w.OnActivate = func(bp models.BreakInfo) { got = bp }
+	w.SetHost(stubBreakpointHost{activate: func(bp models.BreakInfo) { got = bp }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -160,15 +160,17 @@ func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 }
 
 func TestBreakpointWidgetEnterFocusesCode(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
 	var focus int
-	w.OnActivate = func(models.BreakInfo) {}
-	w.OnFocusCode = func() { focus++ }
+	w.SetHost(stubBreakpointHost{
+		activate:  func(models.BreakInfo) {},
+		focusCode: func() { focus++ },
+	})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -184,14 +186,14 @@ func TestBreakpointWidgetEnterFocusesCode(t *testing.T) {
 }
 
 func TestBreakpointWidgetWheelActivates(t *testing.T) {
-	w := NewBreakpointWidget()
+	w := NewBreakpointWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
 	var got models.BreakInfo
-	w.OnActivate = func(bp models.BreakInfo) { got = bp }
+	w.SetHost(stubBreakpointHost{activate: func(bp models.BreakInfo) { got = bp }})
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.Number != 2 {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)

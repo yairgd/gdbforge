@@ -18,6 +18,13 @@ const (
 	asmGutterCols = 3 + 1 + asmAddrCols + 3
 )
 
+// AssemblyHost receives assembly pane intents from AssemblyWidget.
+type AssemblyHost interface {
+	BrowseAssembly(addr string, rows int)
+	ToggleAsmBreak(addr string)
+	ToggleAsmBreakEnable()
+}
+
 // AssemblyWidget shows disassembly around browse address X.
 // ━━▶ marks real $pc; the blue line is the browse caret (same as CodeWidget).
 // Space / e fire breakpoint intents at the browse address (app owns GDB).
@@ -33,19 +40,13 @@ type AssemblyWidget struct {
 
 	bpByAddr map[string]models.BreakGutter
 
-	// OnBreakToggle is Space — insert/clear breakpoint at browse addr.
-	OnBreakToggle func(addr string)
-	// OnToggleEnable is "e" — enable/disable at browse addr.
-	OnToggleEnable func()
-
-	// OnBrowse asks the app to refetch a window centered on addr (edge / resize).
-	OnBrowse func(addr string, rows int)
+	host AssemblyHost
 
 	lastHeight int
 	fetching   bool
 }
 
-func NewAssemblyWidget() *AssemblyWidget {
+func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -59,6 +60,7 @@ func NewAssemblyWidget() *AssemblyWidget {
 		viewport:   vp,
 		buf:        buf,
 		selIdx:     0,
+		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetSearchContentOffset(asmGutterCols)
@@ -69,6 +71,11 @@ func NewAssemblyWidget() *AssemblyWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
+}
+
+// SetHost replaces the assembly host (tests).
+func (w *AssemblyWidget) SetHost(host AssemblyHost) {
+	w.host = host
 }
 
 func (w *AssemblyWidget) SetAppState(st *debugstate.State) {
@@ -90,8 +97,8 @@ func (w *AssemblyWidget) initKeyBindings() {
 	w.BindKeyFunc("page-down", func(args ...any) { w.MoveSel(w.pageRows()) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.BreakAtSel() }, " ")
 	w.BindKeyFunc("break-enable-toggle", func(args ...any) {
-		if w.OnToggleEnable != nil {
-			w.OnToggleEnable()
+		if w.host != nil {
+			w.host.ToggleAsmBreakEnable()
 		}
 	}, "e")
 }
@@ -177,7 +184,7 @@ func (w *AssemblyWidget) MoveSel(delta int) {
 }
 
 func (w *AssemblyWidget) requestBrowse() {
-	if w == nil || w.OnBrowse == nil || w.fetching {
+	if w == nil || w.host == nil || w.fetching {
 		return
 	}
 	addr := w.SelAddr()
@@ -189,7 +196,7 @@ func (w *AssemblyWidget) requestBrowse() {
 		rows = 20
 	}
 	w.fetching = true
-	w.OnBrowse(addr, rows)
+	w.host.BrowseAssembly(addr, rows)
 }
 
 // SelAddr returns the browse caret address.
@@ -200,16 +207,16 @@ func (w *AssemblyWidget) SelAddr() string {
 	return w.items[w.selIdx].Addr
 }
 
-// BreakAtSel fires OnBreakToggle for the selected address (Space).
+// BreakAtSel fires ToggleAsmBreak for the selected address (Space).
 func (w *AssemblyWidget) BreakAtSel() {
-	if w == nil || w.OnBreakToggle == nil {
+	if w == nil || w.host == nil {
 		return
 	}
 	addr := w.SelAddr()
 	if addr == "" {
 		return
 	}
-	w.OnBreakToggle(addr)
+	w.host.ToggleAsmBreak(addr)
 }
 
 // HasEnabledBreak reports an enabled breakpoint mark at addr.
@@ -341,7 +348,7 @@ func (w *AssemblyWidget) Draw(c termui.Canvas) {
 	if h > 0 && h != w.lastHeight {
 		w.lastHeight = h
 		// Refetch so the window fills the new rectangle.
-		if len(w.items) > 0 && w.OnBrowse != nil && !w.fetching {
+		if len(w.items) > 0 && w.host != nil && !w.fetching {
 			w.requestBrowse()
 		}
 	}

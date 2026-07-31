@@ -7,8 +7,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 )
 
-func (c *navCtl) ActivateCallStack(fr models.StackFrame) {
-	a := c.app
+func (a *DebuggerApp) ActivateCallStack(fr models.StackFrame) {
 	if a == nil {
 		return
 	}
@@ -44,8 +43,7 @@ func (c *navCtl) ActivateCallStack(fr models.StackFrame) {
 	gdb.SendCmd(sess, a.State(), a.Debug(), cmd)
 }
 
-func (c *navCtl) ActivateThread(th models.ThreadInfo) {
-	a := c.app
+func (a *DebuggerApp) ActivateThread(th models.ThreadInfo) {
 	if a == nil {
 		return
 	}

@@ -128,8 +128,7 @@ func breakInsertCmd(file string, line int) string {
 	return "break " + loc
 }
 
-func (c *breakCtl) onBreakpointToggle(index int) {
-	a := c.app
+func (a *DebuggerApp) ToggleBreakpoint(index int) {
 	if a.breakpoints == nil {
 		return
 	}
@@ -139,11 +138,11 @@ func (c *breakCtl) onBreakpointToggle(index int) {
 	if !ok {
 		return
 	}
-	c.syncBreakpointViews()
+	a.breaks.syncBreakpointViews()
 	if a.bpWidget != nil {
 		a.bpWidget.SelectIndex(index)
 	}
-	c.sendBreakpointCmd(cmd)
+	a.breaks.sendBreakpointCmd(cmd)
 	// Re-enable only inserts the break; restore condition after GDB assigns a number.
 	if strings.HasPrefix(cmd, "break ") && cond != "" {
 		it, ok := a.breakpoints.At(index)
@@ -153,8 +152,7 @@ func (c *breakCtl) onBreakpointToggle(index int) {
 	}
 }
 
-func (c *breakCtl) onBreakpointDelete(index int) {
-	a := c.app
+func (a *DebuggerApp) DeleteBreakpoint(index int) {
 	if a.breakpoints == nil {
 		return
 	}
@@ -162,8 +160,8 @@ func (c *breakCtl) onBreakpointDelete(index int) {
 	if !ok {
 		return
 	}
-	c.syncBreakpointViews()
-	c.sendBreakpointCmd(cmd)
+	a.breaks.syncBreakpointViews()
+	a.breaks.sendBreakpointCmd(cmd)
 }
 
 func (c *breakCtl) onCodeBreakToggle(path string, line int) {
@@ -179,8 +177,7 @@ func (c *breakCtl) onCodeBreakToggle(path string, line int) {
 	c.sendBreakpointCmd(cmd)
 }
 
-func (c *breakCtl) onAsmBreakToggle(addr string) {
-	a := c.app
+func (a *DebuggerApp) ToggleAsmBreak(addr string) {
 	if a.breakpoints == nil {
 		return
 	}
@@ -192,8 +189,8 @@ func (c *breakCtl) onAsmBreakToggle(addr string) {
 	if !ok {
 		return
 	}
-	c.syncBreakpointViews()
-	c.sendBreakpointCmd(cmd)
+	a.breaks.syncBreakpointViews()
+	a.breaks.sendBreakpointCmd(cmd)
 }
 
 func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
@@ -224,8 +221,7 @@ func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 	a.breaks.reapplyConditionAfterEnable(cmd, path, line, "", prevCond)
 }
 
-func (c *breakCtl) toggleAsmBreakEnable() {
-	a := c.app
+func (a *DebuggerApp) ToggleAsmBreakEnable() {
 	if a.assemblyWidget == nil || a.breakpoints == nil {
 		return
 	}
@@ -243,11 +239,11 @@ func (c *breakCtl) toggleAsmBreakEnable() {
 	if !ok {
 		return
 	}
-	c.syncBreakpointViews()
+	a.breaks.syncBreakpointViews()
 	if a.bpWidget != nil && idx >= 0 {
 		a.bpWidget.SelectIndex(idx)
 	}
-	c.sendBreakpointCmd(cmd)
+	a.breaks.sendBreakpointCmd(cmd)
 	a.breaks.reapplyConditionAfterEnable(cmd, "", 0, addr, prevCond)
 }
 
@@ -311,8 +307,7 @@ func (a *DebuggerApp) paintAsmBreakmarks(items []models.BreakInfo) {
 }
 
 
-func (c *breakCtl) Activate(bp models.BreakInfo) {
-	a := c.app
+func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 	if a == nil {
 		return
 	}

@@ -21,6 +21,11 @@ type asmRefreshMsg struct {
 	err     string
 }
 
+// BrowseAssembly refetches disassembly centered on addr (widget edge/resize).
+func (a *DebuggerApp) BrowseAssembly(addr string, rows int) {
+	go a.runAssemblyRefresh(addr, rows, false)
+}
+
 // armAssemblyRefresh fetches disassembly around X on a background goroutine.
 // When resetToPC is true, X is set to $pc; otherwise X stays on center (or
 // the widget's current browse address when center is empty).
@@ -225,7 +230,7 @@ func (a *DebuggerApp) openAssemblyBuffer() {
 	}
 	a.preferAsm = true
 	a.placeAsmInSlot(a.assemblyWidget)
-	a.activateCodePane()
+	a.FocusCode()
 	a.armAssemblyRefresh(true)
 	a.RequestFrame()
 }
@@ -255,7 +260,7 @@ func (a *DebuggerApp) prepareCodeForAsmSplit() bool {
 		}
 		a.tab.SetLeafMark(leafMarkCode, leaf)
 	}
-	a.activateCodePane()
+	a.FocusCode()
 	return a.focusedLeaf() != nil && !a.isGdbLeaf(a.focusedLeaf())
 }
 

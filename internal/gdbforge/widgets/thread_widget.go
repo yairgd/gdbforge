@@ -12,11 +12,16 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
+// ThreadHost receives thread list intents from ThreadWidget.
+type ThreadHost interface {
+	ActivateThread(th models.ThreadInfo)
+}
+
 // ThreadWidget shows GDB threads.
 //
-//	j/k or Up/Down — move selection and OnActivate (like Enter)
+//	j/k or Up/Down — move selection and ActivateThread (like Enter)
 //	wheel — same as j/k (Code / GDB follow the selected thread)
-//	Enter / click — OnActivate
+//	Enter / click — ActivateThread
 type ThreadWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -30,14 +35,13 @@ type ThreadWidget struct {
 	// every drag sample (which flooded GDB with thread/frame console noise).
 	mouseDown     bool
 	pressSelected int
-	lastActID   string
-	lastActTime time.Time
+	lastActID     string
+	lastActTime   time.Time
 
-	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
-	OnActivate func(models.ThreadInfo)
+	host ThreadHost
 }
 
-func NewThreadWidget() *ThreadWidget {
+func NewThreadWidget(host ThreadHost) *ThreadWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -48,6 +52,7 @@ func NewThreadWidget() *ThreadWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Threads"},
 		viewport:   vp,
 		buf:        buf,
+		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -57,6 +62,11 @@ func NewThreadWidget() *ThreadWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
+}
+
+// SetHost replaces the thread host (tests).
+func (w *ThreadWidget) SetHost(host ThreadHost) {
+	w.host = host
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
@@ -174,7 +184,7 @@ func (w *ThreadWidget) syncSelectedFromViewport() {
 }
 
 func (w *ThreadWidget) activateSelected() {
-	if w.OnActivate == nil || len(w.items) == 0 {
+	if w.host == nil || len(w.items) == 0 {
 		return
 	}
 	if w.selected < 0 || w.selected >= len(w.items) {
@@ -187,7 +197,7 @@ func (w *ThreadWidget) activateSelected() {
 	}
 	w.lastActID = th.ID
 	w.lastActTime = now
-	w.OnActivate(th)
+	w.host.ActivateThread(th)
 }
 
 // SetItems replaces the thread list and rebuilds the viewport.

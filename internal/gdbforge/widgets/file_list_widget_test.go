@@ -9,7 +9,7 @@ import (
 )
 
 func TestFileListWidgetSetItems(t *testing.T) {
-	w := NewFileListWidget()
+	w := NewFileListWidget(nil)
 	if got := w.LinesForTest(); len(got) != 1 || got[0] != "no files" {
 		t.Fatalf("empty=%v", got)
 	}
@@ -21,12 +21,12 @@ func TestFileListWidgetSetItems(t *testing.T) {
 }
 
 func TestFileListWidgetOpenEnter(t *testing.T) {
-	w := NewFileListWidget()
+	w := NewFileListWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]string{"/tmp/a.c", "/tmp/b.c"})
 	w.move(1)
 	var opened string
-	w.OnOpen = func(path string) { opened = path }
+	w.SetHost(stubFileListHost{open: func(path string) { opened = path }})
 	w.openSelected()
 	if opened != "/tmp/b.c" {
 		t.Fatalf("opened=%q", opened)
@@ -34,11 +34,11 @@ func TestFileListWidgetOpenEnter(t *testing.T) {
 }
 
 func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
-	w := NewFileListWidget()
+	w := NewFileListWidget(nil)
 	w.SetFocused(true)
 	w.SetItems([]string{"/tmp/a.c", "/tmp/b.c"})
 	var opened string
-	w.OnOpen = func(path string) { opened = path }
+	w.SetHost(stubFileListHost{open: func(path string) { opened = path }})
 
 	// First click on row 1: select only.
 	w.viewport.CursorLine = 1
@@ -70,7 +70,7 @@ func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
 func TestFileListWidgetMarkColorFromState(t *testing.T) {
 	st := debugstate.New(platform.NewAppState())
 	st.SetMarkColor(tcell.ColorNavy)
-	w := NewFileListWidget()
+	w := NewFileListWidget(nil)
 	w.SetAppState(st)
 	if w.markColor() != tcell.ColorNavy {
 		t.Fatalf("mark=%v", w.markColor())

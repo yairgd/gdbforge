@@ -8,7 +8,7 @@ import (
 )
 
 func TestAssemblyWidgetDualCursors(t *testing.T) {
-	w := NewAssemblyWidget()
+	w := NewAssemblyWidget(nil)
 	items := []models.AsmLine{
 		{Addr: "0x1000", Inst: "push"},
 		{Addr: "0x1001", Inst: "mov"},
@@ -44,7 +44,7 @@ func TestAssemblyWidgetDualCursors(t *testing.T) {
 }
 
 func TestAssemblyWidgetSyncSelFromViewport(t *testing.T) {
-	w := NewAssemblyWidget()
+	w := NewAssemblyWidget(nil)
 	items := []models.AsmLine{
 		{Addr: "0x1000", Inst: "a"},
 		{Addr: "0x1001", Inst: "b"},

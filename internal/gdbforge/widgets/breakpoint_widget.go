@@ -10,15 +10,23 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
+// BreakpointHost receives breakpoint list intents from BreakpointWidget.
+type BreakpointHost interface {
+	ActivateBreakpoint(bp models.BreakInfo)
+	FocusCode()
+	ToggleBreakpoint(index int)
+	DeleteBreakpoint(index int)
+}
+
 // BreakpointWidget is a view of the shared breakpoint model.
 // The app owns Merge/Toggle/Delete and GDB sends; this widget only paints
-// SetItems and fires OnActivate / OnToggle / OnDelete intents.
+// SetItems and fires host intents.
 //
-//	j/k or Up/Down — move selection and OnActivate (browse Code, keep BP focus)
+//	j/k or Up/Down — move selection and ActivateBreakpoint (browse Code, keep BP focus)
 //	wheel / click — same (browse only; do not steal focus)
-//	Enter — OnActivate then OnFocusCode (status line → Code)
-//	e — OnToggle(selected)
-//	d — OnDelete(selected)
+//	Enter — ActivateBreakpoint then FocusCode (status line → Code)
+//	e — ToggleBreakpoint(selected)
+//	d — DeleteBreakpoint(selected)
 type BreakpointWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -34,17 +42,10 @@ type BreakpointWidget struct {
 	mouseDown     bool
 	pressSelected int
 
-	// OnActivate is called when the user selects a row (browse).
-	OnActivate func(models.BreakInfo)
-	// OnFocusCode is called after Enter (commit focus to Code pane).
-	OnFocusCode func()
-	// OnToggle is e — enable/disable at selected index.
-	OnToggle func(index int)
-	// OnDelete is d — remove selected index.
-	OnDelete func(index int)
+	host BreakpointHost
 }
 
-func NewBreakpointWidget() *BreakpointWidget {
+func NewBreakpointWidget(host BreakpointHost) *BreakpointWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -55,6 +56,7 @@ func NewBreakpointWidget() *BreakpointWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Breakpoints"},
 		viewport:   vp,
 		buf:        buf,
+		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -64,6 +66,11 @@ func NewBreakpointWidget() *BreakpointWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
+}
+
+// SetHost replaces the breakpoint host (tests).
+func (w *BreakpointWidget) SetHost(host BreakpointHost) {
+	w.host = host
 }
 
 // SetAppState wires mark / break colors for painting.
@@ -90,13 +97,13 @@ func (w *BreakpointWidget) initKeyBindings() {
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected(true) }, "<Enter>", "<C-m>")
 	w.BindKeyFunc("toggle", func(args ...any) {
-		if w.OnToggle != nil && len(w.items) > 0 {
-			w.OnToggle(w.selected)
+		if w.host != nil && len(w.items) > 0 {
+			w.host.ToggleBreakpoint(w.selected)
 		}
 	}, "e")
 	w.BindKeyFunc("delete", func(args ...any) {
-		if w.OnDelete != nil && len(w.items) > 0 {
-			w.OnDelete(w.selected)
+		if w.host != nil && len(w.items) > 0 {
+			w.host.DeleteBreakpoint(w.selected)
 		}
 	}, "d")
 }
@@ -233,11 +240,11 @@ func (w *BreakpointWidget) activateSelected(commitFocus bool) {
 	if w.selected < 0 || w.selected >= len(w.items) {
 		return
 	}
-	if w.OnActivate != nil {
-		w.OnActivate(w.items[w.selected])
+	if w.host != nil {
+		w.host.ActivateBreakpoint(w.items[w.selected])
 	}
-	if commitFocus && w.OnFocusCode != nil {
-		w.OnFocusCode()
+	if commitFocus && w.host != nil {
+		w.host.FocusCode()
 	}
 }
 

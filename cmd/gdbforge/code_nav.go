@@ -195,7 +195,7 @@ func (a *DebuggerApp) activateLastOrCodePane() {
 			return
 		}
 	}
-	a.activateCodePane()
+	a.FocusCode()
 }
 
 // findGdbLeaf returns the remembered GDB leaf if it still shows GDB, else any
@@ -276,8 +276,8 @@ func (a *DebuggerApp) onEscape() {
 	a.RequestRedraw()
 }
 
-// activateCodePane leaves insert mode and focuses the code slot (Logo/Code/Asm).
-func (a *DebuggerApp) activateCodePane() {
+// FocusCode leaves insert mode and focuses the code slot (Logo/Code/Asm).
+func (a *DebuggerApp) FocusCode() {
 	if a.tab == nil {
 		return
 	}

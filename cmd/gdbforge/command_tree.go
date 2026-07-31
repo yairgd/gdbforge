@@ -39,7 +39,7 @@ func (a *DebuggerApp) ExapData() {
 			commands.Cmd("interrupt", a.GdbInterrupt),
 			commands.Group("break",
 				commands.Cmd("file", a.BreakFile),
-				commands.Cmd("delete", a.DeleteBreakpoint),
+				commands.Cmd("delete", a.CmdDeleteBreakpoint),
 			),
 			commands.Group("info",
 				commands.Cmd("registers", a.ShowRegisters),

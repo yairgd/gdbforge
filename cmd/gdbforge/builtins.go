@@ -110,44 +110,30 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.threads = &models.ThreadList{}
 	a.callstack = &models.CallStack{}
 	a.assembly = &models.AssemblyList{}
-	a.assemblyWidget = widgets.NewAssemblyWidget()
+	a.assemblyWidget = widgets.NewAssemblyWidget(a)
 	a.assemblyWidget.SetClipboard(a.ClipboardIO())
 	a.assemblyWidget.SetAppState(a.Debug())
-	a.assemblyWidget.OnBrowse = func(addr string, rows int) {
-		go a.runAssemblyRefresh(addr, rows, false)
-	}
-	a.assemblyWidget.OnBreakToggle = a.breaks.onAsmBreakToggle
-	a.assemblyWidget.OnToggleEnable = a.breaks.toggleAsmBreakEnable
 	a.registerBuiltin("asm", a.assemblyWidget)
 	a.registerBuiltin("assembly", a.assemblyWidget)
 
-	a.bpWidget = widgets.NewBreakpointWidget()
+	a.bpWidget = widgets.NewBreakpointWidget(a)
 	a.bpWidget.SetClipboard(a.ClipboardIO())
 	a.bpWidget.SetAppState(a.Debug())
-	a.bpWidget.OnToggle = a.breaks.onBreakpointToggle
-	a.bpWidget.OnDelete = a.breaks.onBreakpointDelete
-	a.bpWidget.OnActivate = a.breaks.Activate
-	a.bpWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("breakpoint", a.bpWidget)
 
-	a.threadWidget = widgets.NewThreadWidget()
+	a.threadWidget = widgets.NewThreadWidget(a)
 	a.threadWidget.SetClipboard(a.ClipboardIO())
 	a.threadWidget.SetAppState(a.Debug())
-	a.threadWidget.OnActivate = a.nav.ActivateThread
 	a.registerBuiltin("threads", a.threadWidget)
 
-	a.callstackWidget = widgets.NewCallStackWidget()
+	a.callstackWidget = widgets.NewCallStackWidget(a)
 	a.callstackWidget.SetClipboard(a.ClipboardIO())
 	a.callstackWidget.SetAppState(a.Debug())
-	a.callstackWidget.OnActivate = a.nav.ActivateCallStack
-	a.callstackWidget.OnFocusCode = a.activateCodePane
 	a.registerBuiltin("callstack", a.callstackWidget)
 
-	a.fileListWidget = widgets.NewFileListWidget()
+	a.fileListWidget = widgets.NewFileListWidget(a)
 	a.fileListWidget.SetClipboard(a.ClipboardIO())
 	a.fileListWidget.SetAppState(a.Debug())
-	a.fileListWidget.OnOpen = a.openSourcePath
-
 	a.luaCmds = make(map[string]*luahost.Runtime)
 	a.loadUserLuaScripts()
 

@@ -346,7 +346,7 @@ func (a *DebuggerApp) tryCodeToggleEnable() bool {
 		return false
 	}
 	if aw, ok := a.focusedWidget().(*widgets.AssemblyWidget); ok && aw != nil {
-		a.breaks.toggleAsmBreakEnable()
+		a.ToggleAsmBreakEnable()
 		a.RequestFrame()
 		return true
 	}

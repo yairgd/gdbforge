@@ -463,7 +463,7 @@ func (a *DebuggerApp) openBufferForLua(name string, from *luahost.Runtime) {
 		if cw := a.codeBufferForB(); cw != nil {
 			a.placeCodeInSlot(cw)
 		}
-		a.activateCodePane()
+		a.FocusCode()
 		a.RequestFrame()
 	case "gdb":
 		// Focus existing GDB leaf only — never relocate GDB onto the Code leaf.

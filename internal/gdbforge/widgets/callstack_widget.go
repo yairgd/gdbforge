@@ -12,11 +12,17 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
+// CallStackHost receives call-stack list intents from CallStackWidget.
+type CallStackHost interface {
+	ActivateCallStack(fr models.StackFrame)
+	FocusCode()
+}
+
 // CallStackWidget shows GDB stack frames.
 //
-//	j/k or Up/Down — move selection and OnActivate (browse Code, keep stack focus)
+//	j/k or Up/Down — move selection and ActivateCallStack (browse Code, keep stack focus)
 //	wheel / click — same (browse only; do not steal focus)
-//	Enter — OnActivate then OnFocusCode (status line → Code)
+//	Enter — ActivateCallStack then FocusCode (status line → Code)
 type CallStackWidget struct {
 	termui.BaseWidget
 	viewport *termui.Viewport
@@ -33,13 +39,10 @@ type CallStackWidget struct {
 	lastActLevel  int
 	lastActTime   time.Time
 
-	// OnActivate is called on Enter, click, or keyboard j/k / arrows.
-	OnActivate func(models.StackFrame)
-	// OnFocusCode is called after Enter (commit focus to Code pane).
-	OnFocusCode func()
+	host CallStackHost
 }
 
-func NewCallStackWidget() *CallStackWidget {
+func NewCallStackWidget(host CallStackHost) *CallStackWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -50,6 +53,7 @@ func NewCallStackWidget() *CallStackWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Call Stack"},
 		viewport:   vp,
 		buf:        buf,
+		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -59,6 +63,11 @@ func NewCallStackWidget() *CallStackWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
+}
+
+// SetHost replaces the call-stack host (tests).
+func (w *CallStackWidget) SetHost(host CallStackHost) {
+	w.host = host
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
@@ -185,17 +194,17 @@ func (w *CallStackWidget) activateSelected(commitFocus bool) {
 		return
 	}
 	fr := w.items[w.selected]
-	if w.OnActivate != nil {
+	if w.host != nil {
 		// Collapse duplicate activates from noisy mouse press/release sequences.
 		now := time.Now()
 		if fr.Level != w.lastActLevel || now.Sub(w.lastActTime) >= 300*time.Millisecond {
 			w.lastActLevel = fr.Level
 			w.lastActTime = now
-			w.OnActivate(fr)
+			w.host.ActivateCallStack(fr)
 		}
 	}
-	if commitFocus && w.OnFocusCode != nil {
-		w.OnFocusCode()
+	if commitFocus && w.host != nil {
+		w.host.FocusCode()
 	}
 }
 
@@ -225,7 +234,7 @@ func (w *CallStackWidget) SetItems(items []models.StackFrame) {
 	w.rebuild()
 }
 
-// SelectLevel highlights the frame with the given GDB level (no OnActivate).
+// SelectLevel highlights the frame with the given GDB level (no ActivateCallStack).
 func (w *CallStackWidget) SelectLevel(level int) {
 	for i, it := range w.items {
 		if it.Level == level {

@@ -50,7 +50,7 @@ func (app *DebuggerApp) BreakFile(args ...any) {
 	log.Info("break file")
 }
 
-func (app *DebuggerApp) DeleteBreakpoint(args ...any) {
+func (app *DebuggerApp) CmdDeleteBreakpoint(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("delete breakpoint")
 }
