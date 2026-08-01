@@ -44,7 +44,7 @@ flowchart LR
 | Client | `internal/execcli.ExecClient` | Thin wrapper (`*ptyx.Client` + initial winsize) |
 | Event | `core.ExecOutputMsg` | UI-routed PTY chunks to the UI thread |
 | Widget | `widgets.ExecWidget` | View — ConsolePane + live prompt + ANSI; `SetOnSubmit` |
-| App | `DebuggerApp.OnRun` | Owns `ExecClient`; wire intents; `swapFocusedWidget`; insert mode |
+| App | `DebuggerApp.OnRun` | Owns `ExecClient`; wire intents; `Workspace.swapFocusedWidget`; insert mode |
 
 GDB uses the same `ptyx.Client` via app-owned `gdb.GDBClient`. Exec reuses **ConsolePane** but has **no MI parser** — plain text + ANSI.
 
@@ -101,11 +101,11 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 
 ## Jump list (`Ctrl-O`)
 
-`DebuggerApp.swapFocusedWidget` pushes the outgoing widget before `:b` / `:e` / `:!` swaps.
+`Workspace.swapFocusedWidget` (thin `DebuggerApp` delegate) pushes the outgoing widget before `:b` / `:e` / `:!` swaps.
 
 | API | Role |
 |-----|------|
-| `pushWidgetJump` | Append (dedupe consecutive, cap 32) |
+| `pushWidgetJump` | Append (dedupe consecutive, cap 32) — on `Workspace` |
 | `JumpBack` | Pop and `ReplaceFocusedWidget` without pushing |
 | Binding | `<C-o>` in `cmd/gdbforge/keybindings.go` (normal mode) |
 
@@ -128,7 +128,8 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 |------|----------------|
 | `cmd/gdbforge/command_tree.go` | `LeafRest("!", a.OnRun)` |
 | `cmd/gdbforge/actions.go` | `OnRun` |
-| `cmd/gdbforge/builtins.go` | `swapFocusedWidget`, `JumpBack` |
+| `cmd/gdbforge/workspace_place.go` | `swapFocusedWidget`, `JumpBack`, jump list |
+| `cmd/gdbforge/builtins.go` | Thin `DebuggerApp` delegates to `Workspace` |
 | `cmd/gdbforge/keybindings.go` | `<C-o>` |
 | `internal/execcli/exec_client.go` | PTY process I/O |
 | `internal/gdbforge/widgets/exec_widget.go` | Exec console view (`SetOn*`) |

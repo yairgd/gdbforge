@@ -5,38 +5,62 @@ alwaysApply: true
 
 # Architecture map (read first)
 
-`DebuggerApp` (`cmd/gdbforge`) = **system-context orchestrator**. It owns and wires `GDBClient`, models, MCP/AI, and widgets. It is not “only” an MVC controller — it **hosts** GUI controller methods.
+`DebuggerApp` (`cmd/gdbforge`) = **composition root / system-context orchestrator**. It wires `backend.Backend`, host-backed `*Ctl` controllers, `Workspace`, MCP/AI, and widgets. Domain logic lives on controllers, not as flat methods on the app alone.
 
 ## Roles
 
 | Piece | Role |
 |-------|------|
-| `DebuggerApp` | Orchestrator / system context |
-| `cmd/gdbforge/*.go` methods | GUI controller (intents → model → Send / SetItems) |
+| `DebuggerApp` | Composition root — wires hosts, owns chrome/orchestration |
+| `*Ctl` (`breakCtl`, `consoleCtl`, …) | GUI controllers (intents → model → Send / SetItems) |
+| `Workspace` | Pane policy above `termui.TabWidget` (marks, placement, layout apply) |
+| `backend.Backend` | GDB vs Delve policy; owns the concrete client |
 | `internal/mcp` (`GdbMcpService`) | Peer controller (AI) on the same session |
-| `internal/gdb` (`GDBClient`, `SendCmd`) | Shared session / pipe — not a controller |
-| `internal/gdbforge/models` | Shared MVC data (`BreakpointList`, …) |
+| `core.Session` via `app.GDB()` | Shared session / pipe — not a controller |
+| `internal/gdbforge/models` | Shared MVC data (`BreakpointList`, …) owned by ctls |
 | `internal/gdbforge/domain` | `DebugDomain` surface for AI / future Lua |
-| `internal/gdbforge/widgets`, `internal/termui` | Views only (paint + callbacks) |
+| `internal/gdbforge/widgets`, `internal/termui` | Views only (paint + host intents / callbacks) |
 
 ## One shared resource, two controllers
 
-`GDBClient` is owned by `DebuggerApp`. GUI and AI both use it. Widgets never own the session.
+`backend.Backend` is owned by `DebuggerApp` (`-g gdb|dlv`). GUI and AI both use `app.GDB()` (`core.Session`). Widgets never own the session.
+
+## Controllers (`*Ctl`)
+
+| Ctl | Owns | Host iface |
+|-----|------|------------|
+| `breakCtl` | `BreakpointList`, BP refresh/toggle, gutter paint | `breakHost` |
+| `asmCtl` | Assembly widget/list, `preferAsm`/`autoAsm` | `asmHost` |
+| `bufferCtl` | per-path `CodeWidget` map (`files`) | `bufferHost` |
+| `debugInfoCtl` | threads / call stack | `debugInfoHost` |
+| `consoleCtl` | GDB/Delve console submit + paint | `consoleHost` |
+| `inferiorIOCtl` | Inferior PTY → OutputWidget | `inferiorHost` |
+| `completionCtl` | Wildmenu / completion bar | `completionHost` |
+| `searchCtl` | `/` n/N \*/# | — |
+| `luaCtl` | Lua panes / jobs | — |
+| `dlvCtl` | Delve confirm + frame-nav bookkeeping | — |
+
+`initControllers()` sets each ctl’s host to `*DebuggerApp`. Widget hosts (`BreakpointHost`, `ThreadHost`, …) are also implemented by the app and forward into ctls.
 
 ## Where to edit (common)
 
 | Task | Look here first |
 |------|-----------------|
-| Set/clear BP (Space) | `widgets/code_widget.go` → `cmd/gdbforge/breakpoints.go` → `models/breakpoints.go` |
-| BP list e/d | `widgets/breakpoint_widget.go` → `breakpoints.go` → model |
-| GDB console submit/paint | `gdb_console.go` + `widgets/gdb_widget.go` |
+| Set/clear BP (Space) | `widgets/code_widget.go` → `breakpoints.go` (`breakCtl`) → `models` |
+| BP list e/d | `widgets/breakpoint_widget.go` → `breakCtl` → model |
+| Asm BP / `:b asm` / autoAsm | `assembly.go` (`asmCtl`) + `assembly_widget.go` |
+| GDB/Delve console submit/paint | `gdb_console.go` (`consoleCtl`) + `widgets/gdb_widget.go` |
 | Threads / callstack | `debug_info.go` / `stopped.go` + widgets |
-| `:b` completions | `buffers.go` (`bufferCompletions`, `bufferListed`) |
-| AI / MCP tools | `internal/mcp/tools.go` + `cmd/gdbforge/debug_domain.go` implements `gdbforge/domain` |
+| Pane marks / sticky GDB / layouts | `workspace*.go` (not `TabWidget`) |
+| `:b` completions | `buffers.go` (`bufferCtl`) |
+| GDB vs Delve policy | `internal/gdbforge/backend` |
+| AI / MCP tools | `internal/mcp/tools.go` + `cmd/gdbforge/debug_domain.go` |
 | MVC docs | `docs/ARCHITECTURE.md` § MVC |
 
 ## Do not
 
-- Put GDB `Send` / session ownership in widgets
-- Duplicate breakpoint truth outside `models.BreakpointList`
+- Put GDB/`Backend` `Send` / session ownership in widgets
+- Duplicate breakpoint truth outside `models.BreakpointList` (on `breakCtl`)
+- Put gdbforge pane policy into `termui.TabWidget` (use `Workspace`)
 - Treat `gdb.SendCmd` as the MVC controller (it is a transport helper)
+- Scatter new `isDLV()` branches — prefer `Backend` methods

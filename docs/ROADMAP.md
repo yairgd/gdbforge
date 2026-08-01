@@ -142,7 +142,7 @@ Dates are indicative — adjust as development progresses.
 |---------|-------------|
 | OpenOCD telnet client | Embedded target debugging |
 | GDB remote | `target remote` sessions |
-| Backend selector | Per-tab or per-session |
+| Multi-session / per-tab backend | Today: one `backend.Backend` per process (`-g gdb\|dlv`) |
 
 ### M6 — Extensibility
 

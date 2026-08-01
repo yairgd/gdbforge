@@ -276,7 +276,7 @@ const (
 )
 ```
 
-`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Ctrl-Z). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide`. IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `DebuggerApp` (`focus.go` / `code_nav.go`).
+`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Ctrl-Z). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide` (+ optional `asm`). IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `Workspace` (`workspace_policy.go` / `code_nav.go` delegates).
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 

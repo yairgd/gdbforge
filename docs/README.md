@@ -1,8 +1,8 @@
 # gdbforge Documentation
 
-**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The **GDB debugger** is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
+**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The debugger app (`-g gdb|dlv`) is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
 
-The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: application models created at startup, widgets as views (callbacks + paint), controllers in `cmd/gdbforge`, a recursive split-tree workspace, a replaceable rendering pipeline, and services that do not depend on the UI layer. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
+The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` as composition root, domain on host-backed `*Ctl` controllers, widgets as views (host intents + paint), `backend.Backend` for GDB/Delve, a recursive split-tree workspace (`Workspace` above `TabWidget`), and services that do not depend on the UI layer. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
 Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencasts: [`media/gdbforge-demo-r5.mp4`](media/gdbforge-demo-r5.mp4) (Cortex-R5 / J-Link; program: [`../examples/stack_demo.c`](../examples/stack_demo.c)), [`media/gdbforge-demo-linux-app.mp4`](media/gdbforge-demo-linux-app.mp4) (external terminal vs internal IO), [`media/gdbforge-debug-itself.mp4`](media/gdbforge-debug-itself.mp4) (gdbforge debugging itself).
 

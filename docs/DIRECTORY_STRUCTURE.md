@@ -87,33 +87,45 @@ gdbforge/
 
 ### `cmd/gdbforge` layout
 
+`DebuggerApp` is a **composition root**: it wires `backend.Backend` and host-backed `*Ctl` controllers (`initControllers`). Domain state lives on controllers; orchestration (stop pipeline, modes, layouts) stays on the app. See `facade.go`.
+
 | File | Responsibility |
 |------|----------------|
 | `main.go` | `main()` entry |
-| `app.go` | `DebuggerApp`, models fields, `NewDebuggerApp`, `Close` |
-| `setup.go` | `InitB` — chrome, mode handlers (`withGlobalKeys` for Ctrl-Z), Cmd `SetOnExecute` |
-| `builtins.go` | Create models + views; wire intents; start GDB/IO bridges |
-| `gdb_console.go` | GDB controller — Submit / MI paint / quit / suspend |
-| `io_console.go` | Inferior PTY bridge + OutputWidget intents |
-| `breakpoints.go` | Breakpoint model sync / toggle / delete / code Space; YAML restore |
-| `debug_info.go` | Thread / call-stack / file-list view sync |
+| `flags.go` | `SessionConfig`, `-g gdb\|dlv` |
+| `app.go` | `DebuggerApp` fields (`backend`, `*Ctl`, `ws`), `NewDebuggerApp`, `GDB()`, `Close` |
+| `facade.go` | Package comment — composition-root / controller ownership |
+| `controllers.go` | `initControllers`, host iface compile checks, peer forwards (`Backend()`, `Tab()`, `Workspace()`) |
+| `setup.go` | `InitB` — chrome, `newWorkspace`, mode handlers (`withGlobalKeys` for Ctrl-Z), Cmd `SetOnExecute` |
+| `builtins.go` | Create Backend + models + views; `New*Widget(a)` host wiring; MCP; bridges |
+| `gdb_console.go` | `consoleCtl` — GDB/Delve submit / paint / quit / suspend |
+| `io_console.go` | `inferiorIOCtl` — Inferior PTY bridge + OutputWidget intents |
+| `console_wire.go` | Shared `wireConsole` / `SetOn*` for GDB / IO / Exec |
+| `breakpoints.go` | `breakCtl` — BP sync / toggle / delete / Code+Asm gutters; YAML restore |
+| `assembly.go` | `asmCtl` — Assembly widget, `:b asm`, `preferAsm` / `autoAsm` |
+| `buffers.go` | `bufferCtl` — per-path CodeWidgets, `:b` / `:edit` |
+| `debug_info.go` | `debugInfoCtl` — Thread / call-stack view sync + activate |
+| `completion.go` | `completionCtl` — CompletionMenu → CompletionView |
+| `search.go` | `searchCtl` — `/` n/N \*/# on focused pane |
+| `dlv_ctl.go` | `dlvCtl` — Delve confirm gate; frame-nav / suppress-stop bookkeeping |
+| `coalesce.go` | `coalesceRunner` for BP / debug-info refresh bursts |
 | `command_tree.go` | `ExapData` colon-command DSL |
 | `keybindings.go` | `InitKeyBindings` (n/s/c, Space, …) |
 | `actions.go` | Command actions (focus, split, quit, `:!` Exec, …) |
 | `input.go` | Mode key handlers, global Ctrl-Z, mouse, resize, completion refresh |
-| `completion.go` | CompletionMenu → CompletionView |
-| `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
+| `layout.go` | `:layout` (+ optional `asm`); wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
 | `workspace.go` | `Workspace` — pane marks, slot predicates; owns `TabWidget` |
 | `workspace_policy.go` | Code/GDB/last activation, `FocusCode`, mark healing |
 | `workspace_place.go` | `placeCodeInSlot`, logo slot, sticky-GDB swap / JumpBack |
 | `workspace_layout.go` | `ApplyLayout` mounts layout `WidgetTree` onto Tab |
-| `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` |
+| `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` via `Backend.MapExec` |
+| `inferior_tty.go` | `:set inferior-tty` (GDB live / DLV restart) |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
-| `stopped.go` | Stop handling; StopLocation; arm/trigger thread-stack refresh; MI thread/frame select |
-| `debug_info.go` | `syncThreadViews` / `syncCallStackViews` / model setters |
-| `lua.go` | ModeLua enter/leave; `:lua` / embedded script builtins |
+| `stopped.go` | Stop pipeline; `presentLocation` (Code vs autoAsm); thread/frame select |
+| `lua.go` | `luaCtl` — ModeLua; `:lua` / embedded script builtins |
+| `debug_domain.go` | `appDebugDomain` → `domain.DebugDomain` for MCP |
 
 Build all commands:
 
@@ -172,29 +184,40 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/gdbforge
 
-**gdbforge application layer** — shared models, layout builders, and debugger views.
+**gdbforge application layer** — backend policy, shared models, layout builders, and debugger views.
 
 | Path | Responsibility |
 |------|----------------|
+| `backend/` | `Backend` iface — GDB vs Delve policy (`Kind`, `MapExec`, `SupportsAssembly`, …) |
+| `backend/gdb_backend.go` | Wraps `*gdb.GDBClient` |
+| `backend/dlv_backend.go` | Wraps `*dlv.Client` |
+| `backend/refresh.go` | Shared threads/stack query helpers |
 | `models/breakpoints.go` | `BreakpointList` — shared BP model (GUI + MCP) |
+| `models/types.go` | `BreakInfo`, `BreakGutter`, `GuttersByLine` / `GuttersByAddr` |
 | `models/threads.go` | `ThreadList` — stop snapshot |
 | `models/callstack.go` | `CallStack` — frame snapshot |
+| `models/assembly.go` | `AssemblyList` / `AsmLine` |
+| `parse/disassemble.go` | Disassembly parse for Assembly pane |
 | `persist/breakpoints.go` | `./.gdbforge/breakpoints.yaml` save/load |
 | `domain/domain.go` | `DebugDomain` — peer-controller surface (AI now; future Lua) |
-| `layout/` | Named workspace trees (`default`, `panels`, `classic`) — geometry only |
+| `layout/` | Named workspace trees (`default`, `panels`, `classic`, `wide`) — geometry only |
 | `layout/default.go` | Multi-pane: Code/GDB left; IO / BP / Threads / Callstack right |
 | `layout/panels.go` | Code/GDB left; IO over (Threads\|Callstack) over Breakpoints |
 | `layout/classic.go` | Original cgdb: full-width Code over GDB |
-| `widgets/code_widget.go` | Source view; Space → `OnBreakToggle`; gutters from `SetBreakInfos` |
-| `widgets/breakpoint_widget.go` | `:b breakpoint`; `SetItems` + toggle/delete/activate intents |
-| `widgets/thread_widget.go` | `:b threads`; `SetItems` from app model |
-| `widgets/callstack_widget.go` | `:b callstack`; `SetItems` from app model |
+| `widgets/code_widget.go` | Source view; Space → break toggle; gutters via `BreakGutter` |
+| `widgets/assembly_widget.go` | `:b asm`; addr breakpoints; `AssemblyHost` |
+| `widgets/break_paint.go` | Shared gutter colors (disabled / conditional / enabled) |
+| `widgets/breakpoint_widget.go` | `:b breakpoint`; `BreakpointHost` intents |
+| `widgets/thread_widget.go` | `:b threads`; `ThreadHost` |
+| `widgets/callstack_widget.go` | `:b callstack`; `CallStackHost` |
+| `widgets/file_list_widget.go` | `:edit` picker; `FileListHost` |
 | `widgets/output_widget.go` | `:b io`; paint inferior I/O; no PTY ownership |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |
 | `widgets/logo_widget.go` | Startup splash in the code leaf until source loads |
-| `widgets/gdb_widget.go` | GDB console view — ConsolePane + paint / `SetOn*` |
+| `widgets/gdb_widget.go` | GDB/Delve console view — ConsolePane + paint / `SetOn*` |
 | `widgets/exec_widget.go` | Exec/shell console view — `SetOn*` + paint (`:!bash`) |
+| `widgets/lua_widget.go` | Lua script panes |
 
 ## internal/mcp
 

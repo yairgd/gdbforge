@@ -28,7 +28,7 @@ gdbforge should feel like **cgdb for the 2020s**: a keyboard-driven debugger wor
 The long-term vision:
 
 - A **Vim-inspired interaction framework** — normal mode, focus mode, and a `:` command line — applied to arbitrary application data, not only text files.
-- A **single UI codebase** that adapts to GDB today, OpenOCD/JTAG tomorrow, and other domains (trading, monitoring, …) via application-specific models and services.
+- A **single UI codebase** that adapts to GDB and Delve today (`-g gdb|dlv`), OpenOCD/JTAG tomorrow, and other domains (trading, monitoring, …) via application-specific models and services.
 - **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
 - **Efficient rendering** through an off-screen grid and future diff-based terminal updates.
 
@@ -42,7 +42,7 @@ gdbforge is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.
 |------|-------------|
 | **Model-driven UI** | Services → event bus → models → widgets; widgets never talk to services |
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
-| **Backend agnostic** | `core.Session` interface; GDB is the first implementation; `:AI` shares the live session |
+| **Backend agnostic** | `core.Session` + `backend.Backend`; GDB and Delve via `-g gdb\|dlv`; `:AI` shares the live session |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
 | **Low latency feel** | Off-screen grid; path to diff rendering to minimize I/O |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |

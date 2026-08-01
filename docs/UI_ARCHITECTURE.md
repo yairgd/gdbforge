@@ -109,25 +109,29 @@ classDiagram
 |------|------|
 | `InputLine` | Single-line editor + readline history |
 | `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
-| `GDBWidget` | View-only GDB console; app owns `GDBClient` (`SetOnSubmit` / paint) |
-| `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space → `OnBreakToggle`; gutters from model |
-| `BreakpointWidget` | Builtin `:b breakpoint`; `SetItems` + `OnToggle` / `OnDelete` / `OnActivate` |
-| `ThreadWidget` | Builtin `:b threads`; `SetItems` from app `ThreadList` |
-| `CallStackWidget` | Builtin `:b callstack`; `SetItems` from app `CallStack` |
+| `GDBWidget` | View-only debugger console; app owns `Backend` (`SetOnSubmit` / paint) |
+| `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space → break toggle; gutters from `BreakGutter` |
+| `AssemblyWidget` | Disassembly Viewport; addr breakpoints; `AssemblyHost`; `:b asm` |
+| `BreakpointWidget` | Builtin `:b breakpoint`; `SetItems` + `BreakpointHost` (activate / toggle / delete / FocusCode) |
+| `ThreadWidget` | Builtin `:b threads`; `SetItems` + `ThreadHost` |
+| `CallStackWidget` | Builtin `:b callstack`; `SetItems` + `CallStackHost` |
+| `FileListWidget` | `:edit` picker; `FileListHost` |
 | `OutputWidget` | Builtin `:b io`; paint inferior I/O; app owns PTY Send/Subscribe |
 | `ExecWidget` | View-only exec console; app owns `ExecClient` (`:!bash`) |
 
-**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b io` / `:b output`, `:b exec`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use `swapFocusedWidget`, which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
+**Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b io` / `:b output`, `:b exec`, `:b asm`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use sticky-GDB-aware placement (`Workspace`), which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
-The **`"gdb"` layout leaf is fixed**: `swapFocusedWidget` / `JumpBack` refuse non-GDB widgets on that slot so the original GDB pane cannot be overwritten. Open buffers on another focused leaf (or use `:b gdb` / `i` only to restore focus).
+The **`"gdb"` layout leaf is fixed**: placement / `JumpBack` refuse non-GDB widgets on that slot so the original GDB pane cannot be overwritten. Open buffers on another focused leaf (or use `:b gdb` / `i` only to restore focus).
 
-**Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one calls `ReplaceFocusedWidget` on the active leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `fileBuffers` (keyed by path; PaneName = basename).
+**Built-in views** are singleton widgets owned by `DebuggerApp` and registered in `initBuiltins`. Showing one swaps the focused leaf — O(1) widget swap, no split, no new window, no disk load. The tree never knows the concrete type. File buffers are created on demand in `bufferCtl.files` (keyed by path; PaneName = basename). Assembly is owned by `asmCtl` (`:b asm`, optional `:layout … asm`, auto-swap when source is missing).
+
+**Host interfaces:** list widgets take `*DebuggerApp` as host at construction (`NewBreakpointWidget(a)`, …). Consoles still use `wireConsole` → `SetOn*`. See [ARCHITECTURE.md — Controllers and hosts](ARCHITECTURE.md#controllers-and-hosts).
 
 **Why an interface, not a base struct?** Go embedding supplies defaults via `BaseWidget`, but the `Widget` interface keeps containers and prototypes independent. Not every widget embeds `BaseWidget`.
 
 **Design decision:** widgets receive `Canvas`, not `tcell.Screen`. This prevents accidental full-screen draws and enforces layout boundaries.
 
-**Design decision:** widgets bind to models at creation time. The window manager (`WidgetTree`, `TabWidget`, `:b` / `:e` dispatch) owns widget lifecycle; models are owned by the application and outlive any single pane.
+**Design decision:** widgets bind to models at creation time. The window manager (`WidgetTree`, `TabWidget`) plus gdbforge `Workspace` / `:b` / `:e` dispatch own widget lifecycle; models are owned by `*Ctl` controllers and outlive any single pane.
 
 ---
 

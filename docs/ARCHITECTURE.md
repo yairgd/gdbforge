@@ -10,54 +10,82 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 
 ## MVC (current)
 
-The GDB debugger app is organized as **Model–View–Controller**:
+The debugger app is organized as **Model–View–Controller** with a **composition root**:
 
-**One shared model, two controllers (GUI + MCP/AI), views only for humans.**
-Peer controllers are **symmetrical** on an app-owned **domain surface** (list/set breakpoints, threads, frames): AI tools call the same helpers as the GUI. A future Lua controller can bind that surface too (must use the PTY write mux). Raw `gdb_command` remains an escape hatch only.
+**One shared model, two peer controllers (GUI `*Ctl` + MCP/AI), views only for humans.**
+`DebuggerApp` wires everything; domain logic lives on host-backed controllers (`breakCtl`, `consoleCtl`, …). AI tools call the same domain surface as the GUI. A future Lua controller can bind that surface too (must use the PTY write mux). Raw `gdb_command` remains an escape hatch only.
 
 ```mermaid
 flowchart TB
+    subgraph root ["Composition root"]
+        App["DebuggerApp<br/>cmd/gdbforge"]
+        WS["Workspace<br/>pane policy"]
+        BE["backend.Backend<br/>GDB · Delve"]
+    end
+
     subgraph controllers ["Controllers"]
-        GUI["GUI · DebuggerApp<br/>cmd/gdbforge"]
+        GUI["GUI · *Ctl<br/>break · asm · console · …"]
         MCP["MCP / AI · GdbMcpService<br/>peer on same Session"]
     end
 
     subgraph model ["Shared model"]
-        Sess["Session · GDBClient"]
-        Dom["Domain snapshots<br/>BreakpointList · ThreadList · CallStack · AppState · …"]
+        Sess["Session · core.Session"]
+        Dom["Domain snapshots<br/>BreakpointList · ThreadList · CallStack · AssemblyList · AppState · …"]
         Surf["gdbforge/domain.DebugDomain"]
     end
 
     subgraph views ["Views · humans only"]
-        W["Widgets<br/>Code · GDB · Threads · Call Stack · Breakpoints · IO · …"]
+        W["Widgets<br/>Code · Asm · GDB · Threads · Call Stack · Breakpoints · IO · …"]
     end
 
+    App --> WS
+    App --> BE
+    App -->|"wires host = a"| GUI
+    BE --> Sess
     GUI -->|"Send / Query / Merge"| Sess
     GUI -->|"update"| Dom
-    GUI -->|"implements"| Surf
+    App -->|"implements"| Surf
     MCP -->|"domain tools + gdb_command"| Surf
     MCP -->|"Send / Query / WithWrite"| Sess
     Surf -->|"reads/writes"| Dom
 
     Dom -->|"SetItems / Paint"| W
-    W -->|"OnActivate / OnToggle / OnSubmit · intents only"| GUI
+    W -->|"Host intents / OnSubmit"| App
+    App -->|"forwards"| GUI
 ```
 
 | Layer | Owns | Lives in |
 |-------|------|----------|
-| **Model** | Session + domain snapshots (breakpoints, threads, call stack, AppState, …) | `DebuggerApp`, `internal/gdb`, `internal/gdbforge/models` |
-| **Domain surface** | Peer ops (list/set BP, threads, frames) for AI / future Lua | `internal/gdbforge/domain` (iface) · `cmd/gdbforge/debug_domain.go` (impl) |
-| **Controller** | Intents → mutate model → push paint / `Send` | GUI: `cmd/gdbforge` · MCP/AI: `internal/mcp` (peer on `app.GDB()`) |
-| **View** | Paint + chrome + callbacks only (`SetItems`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
+| **Composition root** | Wire hosts, chrome, stop pipeline, layouts | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
+| **Workspace** | Pane marks, Code/GDB placement, layout apply | `cmd/gdbforge/workspace*.go` above `termui.TabWidget` |
+| **Backend** | GDB vs Delve policy; owns concrete client | `internal/gdbforge/backend` |
+| **Model** | Session + domain snapshots (on `*Ctl`, not app fields) | `breakCtl.list`, `debugInfoCtl`, `asmCtl`, `internal/gdbforge/models` |
+| **Domain surface** | Peer ops (list/set BP, threads, frames) for AI / future Lua | `internal/gdbforge/domain` · `cmd/gdbforge/debug_domain.go` |
+| **Controller** | Intents → mutate model → push paint / `Send` | GUI: `*Ctl` · MCP/AI: `internal/mcp` (peer on `app.GDB()`) |
+| **View** | Paint + host intents / callbacks (`SetItems`, `BreakpointHost`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
 
 ```text
-View (widget)  --OnToggle / OnSubmit-->  Controller (DebuggerApp)
-Controller     --Send / Query-->         Model (GDBClient, BreakpointList, …)
-Controller     --SetItems / Paint-->     View
-MCP / AI       --Send / Query-->         same Model  (no widget ownership)
+View (widget)  --Host / OnSubmit-->  DebuggerApp (forwards)
+*Ctl           --Send / Query-->     Model (Session via Backend, BreakpointList, …)
+*Ctl           --SetItems / Paint--> View
+MCP / AI       --Send / Query-->     same Model  (no widget ownership)
 ```
 
-GUI and MCP/AI share the same models (e.g. `BreakpointList`); widgets never own `GDBClient`, `ptyx.TTY`, or domain merge logic. MCP does not paint — views exist for the human TUI only.
+GUI and MCP/AI share the same models (e.g. `breaks.list` → `BreakpointList`); widgets never own `Backend` / `Session`, `ptyx.TTY`, or domain merge logic. MCP does not paint — views exist for the human TUI only.
+
+### Controllers and hosts
+
+| Controller | Domain | Notes |
+|------------|--------|-------|
+| `breakCtl` | Breakpoints, gutter paint (`BreakGutter`) | Code Space + BP list e/d |
+| `asmCtl` | Assembly list/widget, `preferAsm` / `autoAsm` | `:b asm`, missing-source swap |
+| `bufferCtl` | Per-path `CodeWidget` map | `:b` / `:edit` |
+| `debugInfoCtl` | Threads / call stack | Stop refresh |
+| `consoleCtl` | GDB **or** Delve console | Submit / paint / interrupt |
+| `inferiorIOCtl` | Inferior PTY → IO pane | |
+| `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` | Completion, `/` search, Lua, Delve confirm/frame sync | |
+
+List widgets take `*DebuggerApp` as a **host interface** (`BreakpointHost`, `ThreadHost`, `CallStackHost`, `AssemblyHost`, …). Consoles still use `SetOn*` via `wireConsole`. Controllers talk to the app through private `*Host` interfaces (`breakHost`, `consoleHost`, …) set in `initControllers()`.
 
 ### What `DebugDomain` means (naming)
 
@@ -83,6 +111,7 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 
 - [MVC (current)](#mvc-current)
 - [What `DebugDomain` means (naming)](#what-debugdomain-means-naming)
+- [Controllers and hosts](#controllers-and-hosts)
 - [System context](#system-context)
 - [Application framework](#application-framework)
 - [Startup](#startup)
@@ -108,21 +137,23 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 
 ## System context
 
-gdbforge runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through abstract interfaces. The first backend is **GDB over MI2** via a pseudo-terminal.
+gdbforge runs as a terminal application. It owns the UI event loop, renders into an off-screen grid, and communicates with debugger backends through `backend.Backend` (`-g gdb|dlv`). GDB (MI2) and Delve share the same UI controllers via that policy surface.
 
 ```mermaid
 flowchart LR
     User["Developer"]
     Term["Terminal"]
     gdbforge["gdbforge · TermApp"]
-    GDB["GDB MI2"]
+    BE["backend.Backend"]
+    GDB["GDB MI2 / Delve"]
     Target["Debug target"]
 
     User --> Term
     Term <--> gdbforge
-    gdbforge <-->|"PTY#1 MI"| GDB
-    gdbforge <-->|"PTY#2 stdio"| Target
-    GDB -.->|"-inferior-tty-set"| Target
+    gdbforge --> BE
+    BE <-->|"PTY#1 debugger"| GDB
+    BE <-->|"PTY#2 stdio"| Target
+    GDB -.->|"inferior tty"| Target
 ```
 
 GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
@@ -182,13 +213,14 @@ Services communicate with the outside world. They publish events through the eve
 
 | Service | Application |
 |---------|-------------|
-| `gdb.GDBClient` / `ptyx.Client` | GDB debugger — **owned by `DebuggerApp`**; widgets use callbacks + paint APIs |
+| `backend.Backend` | GDB vs Delve policy — **owned by `DebuggerApp`**; wraps `gdb.GDBClient` or `dlv.Client` |
+| `core.Session` (`app.GDB()`) | Shared debugger session (name is historical; works for `-g dlv` too) |
 | `execcli.ExecClient` | Vim-style `:!` shell / SSH PTYs — owned by `DebuggerApp` |
-| `mcp.GdbMcpService` | In-app `:AI` / tool access to the live GDB `Session` (`app.GDB()`) |
+| `mcp.GdbMcpService` | In-app `:AI` / tool access to the live `Session` (`app.GDB()`) |
 | `IBKRClient` | Trader (planned) |
 | `MSPV2Client` | MSP monitoring (planned) |
 
-Each application wires its own services during startup. Controllers update domain models and push snapshots to views; MCP is a peer controller on the same `Session`.
+Each application wires its own services during startup. Controllers update domain models and push snapshots to views; MCP is a peer controller on the same `Session`. Prefer `Backend` methods over new `isDLV()` branches.
 
 ---
 
@@ -211,19 +243,20 @@ Widgets **never subscribe directly to external services**. Models own applicatio
 Examples:
 
 ```text
-GDBClient / MCP  →  models.BreakpointList  →  BreakpointWidget + Code gutters
-GDBClient        →  gdb_console controller →  GDBWidget (paint + OnSubmit)
-GDBClient        →  models.CallStack / ThreadList → CallStackWidget / ThreadWidget
-GdbMcpService    →  same Session (WithWrite + Subscribe)
+Backend / MCP     →  breakCtl.list (BreakpointList)  →  BreakpointWidget + Code/Asm gutters
+Backend           →  consoleCtl                      →  GDBWidget (paint + OnSubmit)
+Backend           →  debugInfoCtl (CallStack/Threads) → CallStackWidget / ThreadWidget
+Backend           →  asmCtl (AssemblyList)           → AssemblyWidget (when supported)
+GdbMcpService     →  same Session (WithWrite + Subscribe)
 ```
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Service / Session** | Talk to external systems; `Send` / `Subscribe` / `WithWrite` |
+| **Backend / Session** | Talk to external systems; GDB/Delve policy; `Send` / `Subscribe` / `WithWrite` |
 | **Event bus** | Route events to controllers / model refresh |
-| **Model** | Own application state; live for the app lifetime |
-| **Controller** | `DebuggerApp` methods — intents, MI refresh, sync views |
-| **Widget** | Display a model / console chrome; callbacks only; no `Send` |
+| **Model** | Own application state on `*Ctl`; live for the app lifetime |
+| **Controller** | `*Ctl` (+ app orchestration) — intents, refresh, sync views |
+| **Widget** | Display a model / console chrome; host intents / callbacks only; no `Send` |
 
 The sections below on terminal input, domain events, and GDB output describe how this flow is wired in the current Go implementation (`termui.Event`, `HandleCoreEvents`, `ptyx`, etc.).
 
@@ -443,9 +476,11 @@ flowchart TB
     end
 
     subgraph Application["Application · cmd/gdbforge + internal/gdbforge"]
-        DebuggerApp["DebuggerApp"]
+        DebuggerApp["DebuggerApp · composition root"]
+        Ctls["*Ctl · break · asm · console · …"]
+        WS["Workspace · pane policy"]
+        BE["backend.Backend"]
         AppState["AppState · modes"]
-        Trie["Trie · key sequences"]
         HandleCore["HandleCoreEvents"]
     end
 
@@ -453,16 +488,19 @@ flowchart TB
         Events["termui.Event bus"]
         Buffer["Buffer / Viewport"]
         History["History / Autocomplete · termui"]
-        DebuggerIF["Debugger interface"]
+        DebuggerIF["Debugger / Session"]
     end
 
-    subgraph Infrastructure["Infrastructure · internal/gdb"]
-        Client["GDBClient · PTY"]
-        MI["MI parser · MiMsg"]
+    subgraph Infrastructure["Infrastructure · gdb / dlv / ptyx"]
+        Client["GDBClient · dlv.Client · PTY"]
+        MI["MI / Delve parse"]
     end
 
     TermApp --> RootLayout --> SplitTree --> Widgets --> Render
     Widgets --> Application
+    DebuggerApp --> Ctls
+    DebuggerApp --> WS
+    DebuggerApp --> BE
     Application --> Domain
     Domain --> Infrastructure
 ```
@@ -475,23 +513,24 @@ flowchart TB
 
 | Subsystem | Package | Responsibility |
 |-----------|---------|----------------|
-| **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, …) | Communicate with external systems; produce events |
+| **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, `internal/dlv`, …) | Communicate with external systems; produce events |
 | **Event bus** | `termui.Event` channel | Distribute events to models and application dispatch |
-| **Models** | `internal/gdbforge/models` + `DebuggerApp` fields | Own application state; controllers push `SetItems` / paint |
-| **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Layout, widget lifecycle, model-to-widget binding |
+| **Models** | `internal/gdbforge/models` on `*Ctl` | Own application state; controllers push `SetItems` / paint |
+| **Workspace** | `cmd/gdbforge/workspace*.go` | Pane marks, placement, focus policy, layout apply above Tab |
+| **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Generic layout / focus / splits (no debugger roles) |
 | **Terminal application** | `termui.TermApp` | Event loop, screen init, widget registry, redraw orchestration |
-| **Root layout** | `termui` (planned `RootLayout`) | Fixed TabBar, flexible Workspace, fixed CmdLine |
+| **Root layout** | `termui` (planned `RootLayout`) | Fixed TabBar, flexible Workspace band, fixed CmdLine |
 | **Split tree** | `termui.WidgetTree`, `Node` | Recursive pane division inside Workspace |
-| **Widget layer** | `termui.Widget` implementations | Views that display models; per-pane input handling; no business logic |
+| **Widget layer** | `termui.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
 | **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model (legacy)** | `core.Buffer`, `core.Viewport` | Scrollable line storage — used today by console/source widgets; target is explicit domain models per pane |
 | **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
 | **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
-| **Debugger backend** | `ptyx.Client`, `ptyx.TTY`, `gdb.GDBClient`, `core.Session` | GDB MI PTY + inferior stdio PTY; MI2 parsing in gdb |
+| **Debugger backend** | `gdbforge/backend`, `ptyx`, `gdb` / `dlv`, `core.Session` | Policy surface + MI/Delve PTY + inferior stdio PTY |
 | **AI / tools** | `mcp.GdbMcpService` | Same-process `:AI` on live Session |
-| **Application shell** | `cmd/gdbforge` (`DebuggerApp`) | Composes UI, widgets, GDB, MCP; owns modes, trie, `HandleCoreEvents` |
+| **Application shell** | `cmd/gdbforge` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleCoreEvents` |
 
 ---
 
@@ -652,9 +691,9 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 
 ### Services
 
-- Communicate with external systems (`GDBClient`, `IBKRClient`, `MSPV2Client`, `SSHClient`, …).
+- Communicate with external systems (`backend.Backend` → GDB/Delve, `IBKRClient`, `MSPV2Client`, `SSHClient`, …).
 - Publish events on the event bus; never import UI packages; never talk to widgets directly.
-- Example: `internal/gdb.GDBClient` — PTY I/O, MI2 parsing.
+- Example: `internal/gdbforge/backend` wraps `gdb.GDBClient` / `dlv.Client` — PTY I/O, MI2 / Delve parse.
 
 ### Event bus
 
@@ -665,16 +704,16 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 ### Models
 
 - Own application state for a domain concern (breakpoints, source, console output, …).
-- Application-specific types (`BreakpointModel`, `OrdersModel`, `MSPV2InfoModel`, …) that implement generic widget interfaces (`TextModel`, `GraphModel`, `TableModel`, …).
+- Application-specific types (`BreakpointList`, `AssemblyList`, …) held by `*Ctl` controllers.
 - Subscribe to events; update internal data continuously.
 - Exist for the application lifetime; independent of widget lifetime.
-- **Current:** `models.BreakpointList`, `models.ThreadList`, `models.CallStack`, plus `AppState` (source files, location, colors). Controllers sync views via `SetItems` / paint APIs.
+- **Current:** `breakCtl.list`, `debugInfoCtl` threads/stack, `asmCtl` assembly, `bufferCtl.files`, plus `AppState` (source files, location, colors). Controllers sync views via `SetItems` / paint APIs.
 - **Still aspirational:** generic `TextModel` / `TableModel` interfaces for reusable widgets across apps.
 
 ### Widgets
 
-- Display models via small interfaces; never depend on application-specific model types.
-- Never own business logic; never communicate directly with services.
+- Display models; list panes use **host interfaces** (`BreakpointHost`, …); consoles use `SetOn*`.
+- Never own business logic; never communicate directly with services / `Backend`.
 - Created on demand when the user displays a model (`:buffer`, splits); destroyed when a pane closes.
 - Multiple widgets may bind to the same model.
 - Rendering style (line graph vs histogram, table columns, etc.) is decided by the widget, not the model.
@@ -684,7 +723,7 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 - Manages layout (split tree, tabs).
 - Creates and destroys widget instances.
 - Binds widgets to existing models.
-- Implementation: `termui.WidgetTree`, `TabWidget`, `HandleCoreEvents` layout commands.
+- Implementation: `termui.WidgetTree`, `TabWidget`; gdbforge **`Workspace`** for pane marks / sticky GDB / layout apply.
 
 ### Presentation (`internal/termui`)
 
@@ -699,14 +738,14 @@ See [TermUI layer](#termui-layer). Owns:
 ### Application (`cmd/gdbforge` + `internal/gdbforge`)
 
 - Declares available models and services at startup.
-- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and owns:
+- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and is the **composition root**:
   - **`HandleCoreEvents`** — single dispatch hub for domain events.
   - **`AppState`** (`platform.AppState` via `TermApp.State()`) — interaction mode, PTY write owner (`ui`/`mcp`), layout policy (`equalalways`).
   - **`keyBindings`** — multi-key chords (`InitKeyBindings`, `SearchPartial` in normal mode).
-  - Direct references to **`TabWidget`** and **`CmdWidget`** for layout and command-line routing.
-  - **`gdbClient`** — owns `GDBClient` / `Session`; widgets never hold it.
-  - **`gdbMcp`** — `GdbMcpService` peer on `app.GDB()` (does not own Close of GDB).
-  - Domain models — `breakpoints`, `threads`, `callstack`, …
+  - **`ws *Workspace`** — pane policy; owns `TabWidget`; `CmdWidget` for command-line routing.
+  - **`backend`** — `backend.Backend` (GDB or Delve); `app.GDB()` exposes `core.Session`; widgets never hold it.
+  - **`*Ctl` controllers** — own domain models (`breaks.list`, `debugInfo`, `asm`, `bufs.files`, …).
+  - **`gdbMcp`** — `GdbMcpService` peer on `app.GDB()` (does not own Close of the session).
 - Defines app-specific `CommandID` values (break, continue, quit, …).
 - **`ModeNormal` / `ModeCommand`** are wired; focus and search modes are reserved.
 
@@ -859,15 +898,16 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 
 | Component | Target | Current state |
 |-----------|--------|---------------|
-| Application models | Explicit model per domain; created at startup | **Done for BP / threads / call stack**; `AppState` for files/location |
-| Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete DTOs (`mcp.BreakInfo`, …) |
-| Model → widget binding | `:buffer` activates widget for existing model | **Partial** — builtins + `:b` / `:e`; models on app |
-| Service → controller → model → view | GDB events update models; widgets paint snapshots | **Done** — app owns `GDBClient`; views are callbacks + `Set*` |
+| Application models | Explicit model per domain; created at startup | **Done** — on `*Ctl` (BP / threads / call stack / assembly / buffers); `AppState` for files/location |
+| Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete DTOs / host ifaces |
+| Model → widget binding | `:buffer` activates widget for existing model | **Partial** — builtins + `:b` / `:e`; models on controllers |
+| Backend → controller → model → view | Debugger events update models; widgets paint snapshots | **Done** — `backend.Backend` + `*Ctl`; views are hosts / `Set*` |
+| Composition root | Thin app wires controllers | **Done** — `DebuggerApp` + host-backed `*Ctl` + `Workspace` |
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` / `platform` |
 | Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both migrating |
 | Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
-| Workspace | Split tree only | `WidgetTree` / `TabWidget` implemented |
+| Workspace | Split tree + app pane policy | `WidgetTree` / `TabWidget` + gdbforge `Workspace` |
 | CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |
 | Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
 | Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
@@ -875,7 +915,7 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
-| Debugger | App-owned `Session`; MCP peer; view-only GDB/IO/Exec | **Working** — [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
+| Debugger | App-owned `Session` via Backend; MCP peer; view-only consoles | **Working** — GDB + Delve (`-g`); [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 
 Entry point: `cmd/gdbforge/` (`main.go` + `app.go`, `setup.go`, …).
 

@@ -1,6 +1,6 @@
 # Debugger Integration
 
-gdbforge connects to debug targets through **backend adapters** that implement `core.Session` (`Debugger` + lifetime + PTY mux). The first adapter is **GDB MI2** (`gdb.GDBClient`): one PTY for GDB/MI, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY` + `-inferior-tty-set`). The GDB session is **owned by `DebuggerApp`** and shared by the GDB console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
+gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB MI2** (`gdb.GDBClient`) and **Delve** (`dlv.Client`) via `-g gdb|dlv`. One PTY for the debugger, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY`). The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
 
 **Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -56,24 +56,24 @@ flowchart TB
         Inf["ptyx.TTY · inferior stdio"]
     end
 
-    subgraph Backend["gdb"]
-        Client["GDBClient · owned by DebuggerApp"]
-        MI["GdbInputState · MiUpdate"]
+    subgraph BackendPkg["backend.Backend"]
+        Client["GDBClient or dlv.Client · owned via Backend"]
+        MI["InputState · MiUpdate / Delve parse"]
     end
 
     subgraph External["External"]
-        GDB["GDB --interpreter=mi2"]
+        GDB["GDB --interpreter=mi2 · or dlv"]
         Prog["Debugged program"]
         LLM["Claude / OpenAI API"]
     end
 
     GDBW --> Cons
-    Ctrl -->|"owns"| Client
+    Ctrl -->|"owns Backend"| Client
     Ctrl -->|"SetItems / Paint"| GDBW
     Ctrl -->|"Paint"| IOW
     Ctrl --> Models
     Client --> Pty
-    Client -->|"-inferior-tty-set"| Inf
+    Client -->|"inferior tty"| Inf
     Ctrl -->|"Send / Subscribe"| Inf
     Inf <--> Prog
     MCP -->|"Session only"| SessIF
@@ -89,12 +89,12 @@ flowchart TB
 
 **Dependency rules:**
 
-- `internal/gdb` and `internal/ptyx` must not import `internal/termui`
-- `DebuggerApp` owns the concrete `GDBClient`; views never hold `Session`
-- External APIs use `app.GDB() core.Session`
+- `internal/gdb`, `internal/dlv`, and `internal/ptyx` must not import `internal/termui`
+- `DebuggerApp` owns `backend.Backend` (concrete GDB or Delve client); views never hold `Session`
+- External APIs use `app.GDB() core.Session` (works for `-g dlv` too)
+- Prefer `Backend` methods over new `isDLV()` branches
 - Never `Close()` the session from MCP/AI — the app owns lifetime
 ---
-
 ## Debugger interface
 
 ```go
@@ -121,7 +121,7 @@ Minimal by design — sends commands to the backend. Responses arrive asynchrono
 
 **Design rationale:** MI2 and GDB CLI are streaming protocols. Blocking `Send` → response would deadlock when async `*stopped` records arrive mid-command. `GdbMcpService.GdbCommand` adds a **windowed capture** on a private subscription for tool results (best-effort until tokenized MI waiters).
 
-**Ownership:** `DebuggerApp` creates and owns the `GDBClient` (`initBuiltins` → `Close`). `gdbMcp` is a peer constructed from `app.GDB()`. Views (`GDBWidget`, `OutputWidget`, …) receive paint APIs and `SetOn*` callbacks only.
+**Ownership:** `DebuggerApp` creates and owns `backend.Backend` in `initBuiltins` (`backend.NewGDB` / `NewDLV` → `Close`). `gdbMcp` is a peer constructed from `app.GDB()`. Views (`GDBWidget`, `OutputWidget`, …) receive paint APIs and host intents / `SetOn*` only. Domain models live on controllers (`breakCtl.list`, …).
 
 Future extensions (separate interfaces):
 
@@ -281,13 +281,13 @@ flowchart LR
   GDB -.->|"-inferior-tty-set slave"| PROG
 ```
 
-**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `StopFile` / `StopLine` (**StopLocation** — real PC from `*stopped`, drives ━━▶), `CurrentFile` / `CurrentLine` (browse / frame selection — blue cursor), theme colors (`MarkColor`, `MarkDimColor`, `BreakColor`, `BreakDisabledColor`, `PCColor`, `StackBreakColor`, `CodeSelColor`, `MutedColor`; see `:set`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; skipped when restoring `./.gdbforge/breakpoints.yaml` or when `HasInitScript`; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` (not re-painted from a stale list on every stop).
+**Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `StopFile` / `StopLine` (**StopLocation** — real PC from `*stopped`, drives ━━▶), `CurrentFile` / `CurrentLine` (browse / frame selection — blue cursor), theme colors (`MarkColor`, `MarkDimColor`, `BreakColor`, `BreakDisabledColor`, `BreakCondColor`, `PCColor`, `StackBreakColor`, `CodeSelColor`, `MutedColor`; see `:set`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; skipped when restoring `./.gdbforge/breakpoints.yaml` or when `HasInitScript`; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. When source is missing and the backend supports assembly, `asmCtl.autoAsm` swaps the location leaf to Assembly and reclaims Code when a readable frame returns. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` into `BreakGutter` maps (line and addr).
 
 ---
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the GDB console, CodeWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/gdbforge/events.go`) on `platform.EventBus`; `DebuggerApp` Subscribes and refreshes from that event (no sleep/timer debounce).
+Breakpoints are coordinated across the debugger console, CodeWidget, AssemblyWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/gdbforge/events.go`) on `platform.EventBus`; `breakCtl` refreshes from that event (coalesced; no sleep/timer debounce).
 
 ## Breakpoints while the inferior is running
 
@@ -306,38 +306,40 @@ Other App PTY commands (`-stack-select-frame`, `-thread-select`, …) also inter
 
 | Surface | How to open | Keys |
 |---------|-------------|------|
-| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — select and **browse** Code at that BP (blue cursor; ━━▶ stays on StopLocation); row at stop PC uses `stackbreakcolor` (stays green when selected); **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow bg) |
+| **BreakpointWidget** | `:b breakpoint` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — select and **browse** Code at that BP (blue cursor; ━━▶ stays on StopLocation); Enter focuses Code; row at stop PC uses `stackbreakcolor` (stays green when selected); **`e`** — toggle enable/disable; `d` — delete; rows use AppState break colors (red/yellow/orange for conditional) |
 | **OutputWidget (IO)** | `:b io` (alias `:b output`; default pane, top-right) | Program stdin/stdout via inferior PTY; type + Enter → stdin; PgUp/PgDn scroll; `<C-l>` clear; Ctrl-C/D → inferior; Ctrl-Z → SIGTSTP; ANSI |
-| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-thread-select <id>` + refresh stack + show code (no CLI `[Switching to thread…]` spam); green when current thread matches StopLocation; filled on stop |
-| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-stack-select-frame <level>` + show code (no CLI frame dump); green on **frame 0** only when it matches StopLocation; shared libs / missing sources → centered **not available** + path |
+| **ThreadWidget** | `:b threads` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-thread-select <id>` + refresh stack + show code; Enter focuses Code; green when current thread matches StopLocation; filled on stop |
+| **CallStackWidget** | `:b callstack` (default pane) | `j`/`k` or Up/Down / Enter / click-**release** — bold selection **and** MI `-stack-select-frame <level>` + show code; Enter focuses Code; green on **frame 0** only when it matches StopLocation; shared libs / missing sources → centered **not available** + path (may autoAsm) |
 | **FileListWidget** | `:edit` | `j`/`k` or Up/Down — mark color from `:set markcolor`; Enter opens; mouse: first click selects, second click on marked row opens CodeWidget |
-| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — blue browse cursor (`codeselcolor`); ━━▶ = StopLocation (`pccolor`); **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled). Missing file or `.so` path: centered **not available** title with the path underneath. Global **`n`/`s`/`c`** (normal; insert when Code focused) → `-exec-next` / `-exec-step` / `-exec-continue`. |
+| **CodeWidget** | `:edit name` / stop / `:b file` | Up/Down or `j`/`k` — blue browse cursor (`codeselcolor`); ━━▶ = StopLocation (`pccolor`); **Space** — insert/remove break; **`e`** — enable/disable (yellow gutter when disabled; orange when conditional). Missing file or `.so` path: centered **not available** (Assembly may auto-swap). Global **`n`/`s`/`c`** (normal; insert when Code focused) → `-exec-next` / `-exec-step` / `-exec-continue`. |
+| **AssemblyWidget** | `:b asm` / `:layout … asm` / autoAsm | Disassembly; Space toggles addr breakpoint; synced from frame/stop like Code |
 
 Empty Breakpoint list shows `no breakpoints`. Otherwise each row is breakpoint info only (no column header), e.g. `1  y  hello.c:23`. Disabled rows are gray (`n`).
 
 ### Ownership of the list
 
-`models.BreakpointList` on `DebuggerApp` is the **shared model** (GUI + MCP):
+`models.BreakpointList` on `breakCtl` (`a.breaks.list`) is the **shared model** (GUI + MCP):
 
-| Action | Model | GDB | CodeWidget gutters |
+| Action | Model | GDB | Code/Asm gutters |
 |--------|-------|-----|--------------------|
-| **e** while enabled | Row stays, `Enabled=false` | `-break-delete` | Cleared for that line |
+| **e** while enabled | Row stays, `Enabled=false` | `-break-delete` | Cleared for that line/addr |
 | **e** while disabled | Row stays, `Enabled=true` | `break file:line` | Restored |
 | **d** | Row removed | Deleted if it was in GDB | Cleared |
-| External `b` / Space / MCP | `MergeFromGDB` on the model | As GDB reports | Enabled rows only |
+| External `b` / Space / MCP | `MergeFromGDB` on the model | As GDB reports | Enabled rows; conditional → orange (`BreakCondColor`) |
 
-Disabled rows are **kept** across `-break-list` refresh (they are intentionally absent from GDB). Controllers call `syncBreakpointViews()` → `BreakpointWidget.SetItems` + code gutters.
+Disabled rows are **kept** across `-break-list` refresh (they are intentionally absent from GDB). Controllers call `syncBreakpointViews()` → `BreakpointWidget.SetItems` + `BreakGutter` paint on Code/Asm.
 
-### Callback chain
+### Host / callback chain
 
-Wired in `cmd/gdbforge/builtins.go` / `breakpoints.go`:
+Wired in `cmd/gdbforge/builtins.go` / `breakpoints.go` (`breakCtl`):
 
 | Hook | Handler |
 |------|---------|
 | `GdbMcpService.OnBreakpointsChanged` | `onBreakpointsChanged` → `Publish(BreakpointsChangedMsg)` |
-| `EventBus` Subscribe | `onBreakpointsChangedMsg` → coalesced `-break-list` |
-| `BreakpointWidget.OnToggle` / `OnDelete` | `onBreakpointToggle` / `onBreakpointDelete` → model + `SendCmd` |
-| `CodeWidget.SetOnBreakToggle` | `onCodeBreakToggle` → model + `SendCmd` |
+| `EventBus` Subscribe | coalesced `-break-list` via `breakCtl` |
+| `BreakpointHost` (toggle / delete / activate) | `breakCtl` → model + `SendCmd` |
+| `CodeWidget.SetOnBreakToggle` | `breakCtl` → model + `SendCmd` |
+| `AssemblyHost` (asm break toggle) | `breakCtl` / `asmCtl` → model + `SendCmd` |
 
 ```mermaid
 flowchart TD
@@ -346,16 +348,18 @@ flowchart TD
   MCPCB --> OBC
   OBC --> BUS["Publish BreakpointsChangedMsg"]
   BUS --> SUB["Subscribe → coalesce -break-list"]
-  SUB --> MERGE["breakpoints.MergeFromGDB"]
+  SUB --> MERGE["breaks.list.MergeFromGDB"]
   MERGE --> SYNC["syncBreakpointViews"]
-  BP["bpWidget OnToggle/OnDelete"] --> CTRL["breakpoints.go controller"]
+  BP["BreakpointHost e/d"] --> CTRL["breakCtl"]
   CODE["CodeWidget OnBreakToggle"] --> CTRL
+  ASM["AssemblyHost ToggleAsmBreak"] --> CTRL
   CTRL --> MERGE
   SYNC --> CW["CodeWidget.SetBreakInfos"]
+  SYNC --> AW["AssemblyWidget.SetBreakInfos"]
   SYNC --> BPW["BreakpointWidget.SetItems"]
 ```
 
-`DebuggerApp` Subscribes to `BreakpointsChangedMsg` in `initBuiltins` and runs a coalesced `-break-list`:
+`breakCtl` Subscribes to `BreakpointsChangedMsg` in `initBuiltins` and runs a coalesced `-break-list`:
 
 | State | Behavior |
 |-------|----------|
@@ -631,16 +635,18 @@ Delve plugs into the **same** architecture as GDB — no new control plane:
 | Piece | Role |
 |-------|------|
 | CLI | `gdbforge -g dlv [-d dlv] prog [args…]` |
+| `backend.DLVBackend` | Policy wrapper; `DebuggerApp.backend` |
 | `internal/dlv.Client` | Implements `core.Session` over `ptyx` (`dlv exec -- prog…`) |
 | `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `[Y/n]?` confirms, `> file:line` stops, BP lines |
-| Console | Same `GDBWidget`; prompt token `(dlv)` |
-| Pane refresh | Local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
+| Console | Same `GDBWidget` + `consoleCtl`; prompt token `(dlv)` |
+| Pane refresh | Via `Backend` + local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
 
 ```mermaid
 flowchart LR
   CLI["gdbforge -g gdb|dlv"] --> App["DebuggerApp"]
-  App --> GDB["gdb.GDBClient"]
-  App --> DLV["dlv.Client"]
+  App --> BE["backend.Backend"]
+  BE --> GDB["gdb.GDBClient"]
+  BE --> DLV["dlv.Client"]
   GDB --> Sess["core.Session"]
   DLV --> Sess
   Sess --> PTY["ptyx"]

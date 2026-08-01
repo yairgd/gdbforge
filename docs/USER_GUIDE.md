@@ -8,7 +8,7 @@ Browse this file on GitHub or via `./docs/serve.sh`. For Lua scripting details s
 
 ### Overview
 
-gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger built on GDB. The screen is a multi-pane workspace: Code (or logo), GDB console, IO, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
+gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger for GDB and Delve (`-g gdb|dlv`). The screen is a multi-pane workspace: Code (or logo / Assembly), debugger console, IO, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
 
 **Status line colors:**
 
@@ -61,8 +61,8 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | `c` | GDB continue via MI `-exec-continue` (also in insert when Code is focused) |
 | `f` | GDB finish via MI `-exec-finish` (Delve: `stepout`; also in insert when Code is focused) |
 | Up / Down | move Code browse cursor (does not move ━━▶) |
-| Space | toggle breakpoint: Call Stack selection, or Code cursor line (never steals Space from GDB) |
-| `e` | enable/disable breakpoint at Code cursor |
+| Space | toggle breakpoint: Call Stack selection, Code cursor line, or Asm addr (never steals Space from GDB) |
+| `e` | enable/disable breakpoint at Code/Asm cursor |
 | Ctrl-W h/j/k/l | focus left / down / up / right |
 | Ctrl-W arrows | same as hjkl |
 | Ctrl-W o | only — close other panes, keep focused |
@@ -74,11 +74,12 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 
 - `:help` — open this manual (same as `:b help`)
 - `:b <name>` — switch builtin or already-open file buffer
-- `:b help|about|gdb|output|breakpoint|threads|callstack|logger|exec`
+- `:b help|about|gdb|output|breakpoint|threads|callstack|logger|exec|asm`
 - `:edit` — project source file picker
 - `:edit <file>` — open that source in a CodeWidget
 - `:e` — unique prefix of `:edit`
 - `:N` / `:0` — jump Code browse cursor (blue line) to line N (`:0` → 1)
+- `:b asm` / `:b assembly` — show Assembly in the location leaf (GDB; sticky until `:b code` or source returns)
 
 **Layout**
 
@@ -86,8 +87,10 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `:layout panels` — Code|GDB left; IO + Threads|Callstack over Breakpoints
 - `:layout default` — six-pane workspace
 - `:layout classic` — full-width Code over GDB
+- `:layout <name> asm` — same layout with an Assembly split (classic/wide/panels)
 - `:layout` — re-apply wide
 - `:vs` / `:split` — vertical / horizontal split
+- `:vs asm` / `:sp asm` — Assembly right of / below Code
 - `:only` — keep focused pane only (same as Ctrl-W o)
 
 **Settings (`:set …`)**
@@ -110,6 +113,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - `markdimcolor <name>` — unfocused selection (default gray)
 - `breakcolor <name>` — enabled BP bg (default red)
 - `breakdisabledcolor <name>` — disabled BP bg (default yellow)
+- `breakcondcolor <name>` — conditional BP bg (default orange)
 - `pccolor <name>` — Code ━━▶ row bg (default darkslategray)
 - `stackbreakcolor <name>` — green mark at stop PC on Breakpoints / Call Stack #0 / current Thread (default green)
 - `codeselcolor <name>` — Code browse cursor bg (default darkblue)
@@ -137,9 +141,17 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 - ━━▶ — real program counter (`StopLocation` from `*stopped`)
 - Blue cursor line — browse selection (j/k, or jump from Breakpoints); does not move ━━▶
 - Space — insert/remove breakpoint at cursor
-- `e` — enable/disable BP (yellow gutter when disabled)
-- Missing/.so src — centered "not available" + path
+- `e` — enable/disable BP (yellow gutter when disabled; orange when conditional)
+- Missing/.so src — centered "not available" + path; under GDB, Assembly may auto-swap into the location leaf until source returns
 - Status line — full file path when focused
+
+**Assembly (`:b asm`)**
+
+- Disassembly for the current frame (GDB; not available under Delve)
+- Space — toggle breakpoint at address; `e` — enable/disable
+- Synced from stop / frame / `f` / `up` / `down` like Code
+- Sticky after `:b asm`; autoAsm (missing source) reclaims Code when a readable frame returns
+- `:layout <name> asm` / `:vs asm` / `:sp asm` for a dedicated Assembly split
 
 **GDB / Delve console**
 

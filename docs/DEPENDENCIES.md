@@ -27,7 +27,7 @@ The repo is split so a future non-debugger TUI app can reuse the same host witho
 | Layer | Packages | Role |
 |-------|----------|------|
 | **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `execcli`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
-| **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg`, `InferiorOutputMsg`) |
+| **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*` (incl. `backend`), `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg`, `InferiorOutputMsg`) |
 | **APP (demo)** | `internal/demo`, `cmd/demo` | Host showcase — same chrome, basic commands; no debugger |
 
 **Composition root:** only `cmd/gdbforge` (and tests) should wire APP packages into FRAMEWORK surfaces.
@@ -155,8 +155,9 @@ flowchart BT
 | **`internal/gdbforge/mitext`** | stdlib | — (debugger MI string helpers; used by `gdb` + widgets) |
 | **`internal/luahost`** | stdlib, gopher-lua | `gdb`, `dlv`, `mcp`, `gdbforge` (app wires debugger Lua) |
 | **`internal/platform`** | stdlib, `termui` (as needed) | `gdb`, `dlv`, `mcp`, `gdbforge` |
-| **`internal/gdbforge/widgets`** | `termui`, `platform`, `gdbforge/mitext`, `gdbforge/events`, stdlib | `gdb`, `mcp`, `dlv` |
-| **`internal/gdbforge/*`** | app helpers (`models`, `parse`, `debugstate`, `events`, …) | must not be imported by FRAMEWORK packages |
+| **`internal/gdbforge/backend`** | `gdb`, `dlv`, `core`, `ptyx`, `models`, `platform` | `termui`, `tcell`, widgets |
+| **`internal/gdbforge/widgets`** | `termui`, `platform`, `gdbforge/mitext`, `gdbforge/events`, `gdbforge/models`, stdlib | `gdb`, `mcp`, `dlv` |
+| **`internal/gdbforge/*`** | app helpers (`models`, `parse`, `debugstate`, `events`, `backend`, …) | must not be imported by FRAMEWORK packages |
 | **`cmd/gdbforge`** | FRAMEWORK + APP packages | — (composition root) |
 | **`cmd/docserve`** | stdlib only | — |
 
@@ -168,7 +169,7 @@ flowchart BT
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`gdbforge`** | `cmd/gdbforge` | `termui`, widgets, `core`, `gdb`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
+| **`gdbforge`** | `cmd/gdbforge` | `termui`, widgets, `backend`, `core`, `gdb`, `dlv`, `ptyx`, `execcli`, `mcp`, `tcell`, `creack/pty` |
 | **`docserve`** | `cmd/docserve` | stdlib only |
 
 Build all commands: `task build` or `go build ./cmd/...`.

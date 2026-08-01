@@ -94,32 +94,35 @@ Do **not** introduce a separate popup/z-order system for one-line chrome.
 
 ## Workspace concept
 
-The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist.
+The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`Workspace` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above `TabWidget` — see [Workspace (gdbforge) vs Tab](#workspace-gdbforge-vs-tab).
 
-Workspace panes are **widgets** — views bound to application **models** owned by `DebuggerApp`. Typical GDB models and their views:
+Workspace panes are **widgets** — views bound to application **models** owned by `*Ctl` controllers. Typical models and their views:
 
 | Model | Widget (view) | Purpose |
 |-------|---------------|---------|
-| Source buffer (per file) | CodeWidget | File, PC `━━▶`, BP gutters |
-| `models.BreakpointList` | BreakpointWidget | Breakpoint list; toggle/delete intents |
-| `GDBClient` (via controller) | GDBWidget | GDB console paint + `OnSubmit` |
-| Inferior `ptyx.TTY` (via controller) | OutputWidget | Program stdin/stdout |
-| `models.ThreadList` | ThreadWidget | Thread list on stop |
-| `models.CallStack` | CallStackWidget | Stack frames on stop |
+| Source buffer (per file, `bufferCtl`) | CodeWidget | File, PC `━━▶`, BP gutters (`BreakGutter`) |
+| `AssemblyList` (`asmCtl`) | AssemblyWidget | Disassembly; addr BPs; autoAsm when source missing |
+| `BreakpointList` (`breakCtl`) | BreakpointWidget | Breakpoint list; host intents |
+| Session via `consoleCtl` | GDBWidget | Debugger console paint + `OnSubmit` |
+| Inferior `ptyx.TTY` (`inferiorIOCtl`) | OutputWidget | Program stdin/stdout |
+| `ThreadList` (`debugInfoCtl`) | ThreadWidget | Thread list on stop |
+| `CallStack` (`debugInfoCtl`) | CallStackWidget | Stack frames on stop |
 | `AppState.SourceFiles` | FileListWidget | `:edit` project picker |
 | `ExecClient` (via controller) | ExecWidget | `:!` shell / SSH |
 | Logger sink | LoggerWidget | Application log |
 
 ```text
-DebuggerApp
-├── models.BreakpointList  →  BreakpointWidget
-├── models.ThreadList      →  ThreadWidget
-├── models.CallStack       →  CallStackWidget
-├── GDBClient              →  GDBWidget (controller paints)
-└── …
+DebuggerApp (composition root)
+├── backend.Backend          →  Session (GDB or Delve)
+├── breakCtl.list            →  BreakpointWidget + Code/Asm gutters
+├── asmCtl                   →  AssemblyWidget
+├── debugInfoCtl             →  ThreadWidget / CallStackWidget
+├── bufferCtl.files          →  CodeWidget(s)
+├── consoleCtl               →  GDBWidget
+└── Workspace                →  TabWidget (geometry + focus)
 ```
 
-Each pane is a **leaf widget** in the split tree. The Workspace does not draw content itself — it delegates geometry to `WidgetTree.BuildLayout`. Models exist whether or not a widget is currently displaying them.
+Each pane is a **leaf widget** in the split tree. The Workspace band does not draw content itself — it delegates geometry to `WidgetTree.BuildLayout`. Models exist whether or not a widget is currently displaying them.
 
 ---
 
@@ -327,7 +330,7 @@ Planned flow details: see [INPUT.md](INPUT.md#vim-like-command-system) and [ARCH
 
 ## Buffer command
 
-**Implemented today:** Vim-like `:b name` switches among builtins (`help`, `about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic` (`internal/gdbforge/layout`).
+**Implemented today:** Vim-like `:b name` switches among builtins (`help`, `about`, `logger`, `gdb`, `breakpoint`, `threads`, `callstack`, `output`, `exec`, `asm`) and open file CodeWidgets; `:edit` / `:edit file` opens the project picker or a per-file source buffer (`:e` is the unique prefix). Workspace trees: `:layout default|panels|classic|wide` with optional `asm` (`internal/gdbforge/layout`).
 
 The layout **`"gdb"` leaf is a fixed slot**: `:b` / `:edit` / `:help` / `:!` / Ctrl-O refuse to replace `GDBWidget` there. Focus another pane first to open a different view. `:b gdb` / `i` still focus (and restore) GDB on that leaf.
 
@@ -374,7 +377,7 @@ Future model names (aspirational):
 
 The architecture does **not** use `:attach <name>`. All models exist from startup; the user only chooses which to display. See [ARCHITECTURE.md](ARCHITECTURE.md#why-not-attach).
 
-**Current state:** `:b` / `:edit` bind views to models owned by `DebuggerApp` (`models.*`, `AppState`). See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
+**Current state:** `:b` / `:edit` bind views to models owned by `*Ctl` controllers (`models.*`, `AppState`). See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
 ---
 

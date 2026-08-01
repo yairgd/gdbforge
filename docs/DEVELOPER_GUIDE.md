@@ -50,14 +50,15 @@ Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `in
 
 ```text
 Application startup
-  ├── Services          (ptyx / GDBClient / GdbMcpService, …) — talk to external systems
+  ├── Backend           (backend.NewGDB / NewDLV) — GDB vs Delve policy
+  ├── Services          (ptyx / Session / GdbMcpService, …) — talk to external systems
   ├── Event bus         (termui.Event channel)
-  ├── Models            (CodeModel, BreakpointModel, …) — created once, live until exit
+  ├── Controllers (*Ctl) — own models (BreakpointList, ThreadList, …)
   ├── Logger
-  └── Runtime           (TermApp, window manager)
+  └── Runtime           (TermApp, Workspace → TabWidget)
 
 User displays a model (:buffer, :split)
-  └── Window manager creates Widget → binds to existing Model
+  └── Window manager creates Widget → binds to existing Model (via host / SetItems)
 
 TermApp
   ├── AppApi (implemented by DebuggerApp)
@@ -67,9 +68,9 @@ TermApp
   ├── screen tcell.Screen                — poll, lifecycle, Show (owned by TermApp)
   ├── events chan termui.Event           — bus; services and widgets may publish
   ├── DebuggerApp fields
-  │     ├── appState *platform.AppState    — Mode, PTYOwner, EqualAlways
-  │     ├── trie termui.Trie               — multi-key bindings
-  │     ├── ws *Workspace                  — workspace policy over TabWidget
+  │     ├── backend Backend                — GDB / Delve
+  │     ├── breaks / asm / bufs / …        — *Ctl domain owners
+  │     ├── ws *Workspace                  — pane policy over TabWidget
   │     └── cmdWidget *CmdWidget
   ├── top-level widgets (tab + cmd line)
   │     └── CmdWidget.Events → events channel
@@ -80,28 +81,30 @@ Widget (view)
   ├── displays Model state
   ├── HandleEvent(tcell.Event)   — local keys / mouse
   ├── Draw(Canvas)
-  └── publish termui.Event       — when app-level action needed (not service calls)
+  └── host intents / SetOn*      — when app-level action needed (not service calls)
 
 Data flow (target):
   Service → Event Bus → Model → Widget
 
-GDB path (MVC):
-  GDB PTY reader → Subscribe → EventInterrupt(GdbOutputMsg) → DebuggerApp controller → GDBWidget paint
-  Inferior TTY → Subscribe → InferiorOutputMsg → app → OutputWidget.AppendInferior
-  Domain lists → models.* → SetItems on Thread / CallStack / Breakpoint views
+GDB/Delve path (MVC):
+  Backend PTY reader → Subscribe → EventInterrupt → *Ctl (consoleCtl / …) → GDBWidget paint
+  Inferior TTY → Subscribe → InferiorOutputMsg → inferiorIOCtl → OutputWidget.AppendInferior
+  Domain lists → *Ctl models → SetItems on Thread / CallStack / Breakpoint / Asm views
   GdbMcpService / :AI → same Session (WithWrite exclusive, Subscribe shared)
 ```
 
 **Rules:**
 
-- Models are created at startup; widgets are views (often singleton builtins).
+- Models are created at startup on controllers; widgets are views (often singleton builtins).
 - Widgets never call services directly — controllers own `Send` / Query; models hold domain state.
 - High-rate service output → controller → paint APIs on the view.
-- Domain actions → publish `termui.Event` or app callbacks — not widget business logic.
+- Domain actions → host interface methods or `SetOn*` — not widget business logic.
 - App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
 - Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
+- Pane policy (marks, sticky GDB, layout apply) belongs in **`Workspace`**, not `TabWidget`.
 - Console editing/layout is shared (`InputLine` / `ConsolePane`); debugger backends only supply protocol glue.
 - PTY writes are exclusive (`WithWrite`); all subscribers see output. Do not spawn a second GDB for AI.
+- Prefer `Backend` methods over new `isDLV()` branches.
 
 ---
 
@@ -109,19 +112,21 @@ GDB path (MVC):
 
 | Term | Meaning |
 |------|---------|
-| **Model** | Domain state on `DebuggerApp` / `internal/gdbforge/models` (e.g. `BreakpointList`); created at startup |
-| **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; callbacks only; no `Send` / no session |
-| **Controller** | `DebuggerApp` methods — intents, refresh, `sync*Views` |
-| **Service** | External-system adapter (`ptyx` / `GDBClient` / `GdbMcpService`); never imports UI |
-| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; owned by app; MCP/AI external API |
+| **Composition root** | `DebuggerApp` — wires `Backend`, `*Ctl`, `Workspace`, chrome; orchestration only |
+| **Controller (`*Ctl`)** | Domain owner (`breakCtl`, `consoleCtl`, …) — intents, refresh, `SetItems` |
+| **Host interface** | Narrow iface widgets/ctls call (`BreakpointHost`, `breakHost`, …); app implements |
+| **Model** | Domain state on `*Ctl` / `internal/gdbforge/models` (e.g. `BreakpointList`) |
+| **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; host intents / callbacks only; no `Send` |
+| **Backend** | `gdbforge/backend.Backend` — GDB vs Delve policy surface |
+| **Service** | External-system adapter (`ptyx` / `GDBClient` / `dlv.Client` / `GdbMcpService`); never imports UI |
+| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; via `app.GDB()`; MCP/AI external API |
 | **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
 | **Grid** | Off-screen `[][]Cell` framebuffer |
 | **Node** | Split tree node (leaf or split) |
-| **WidgetTree** | Split tree + focus tracking |
 | **WidgetTree** | Split tree + focus + geometry (`BuildLayout`) |
-| **Workspace** | Middle band containing the split tree only |
+| **Workspace** | (1) Middle chrome band; (2) `cmd/gdbforge.Workspace` pane-policy layer over Tab |
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
 | **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
@@ -132,6 +137,8 @@ GDB path (MVC):
 | **MiMsg** | Parsed batch of MI lines (helper / tests) |
 | **MiUpdate** | Streaming display update from `GdbInputState.PushRaw` |
 | **GdbInputState** | Newline splitter; streams complete MI lines (no debounce timer) |
+| **BreakGutter** | Per-line/addr BP view (`Numbers`, `Enabled`, `Condition`) for Code/Asm |
+| **autoAsm** | Swap location leaf to Assembly when source is missing; reclaim Code when it returns |
 | **InputLine** | Shared readline editor (text, cursor, history) |
 | **ConsolePane** | Shared natural REPL shell (scrollback + walking prompt) |
 
