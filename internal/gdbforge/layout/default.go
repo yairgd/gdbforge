@@ -13,14 +13,14 @@ type DefaultSpec struct {
 
 func (s DefaultSpec) Name() string { return Default }
 
-func (s DefaultSpec) Build(title string, panes Panes) *termui.TabWidget {
-	return BuildDefault(title, panes, s.Ratios)
+func (s DefaultSpec) Build(panes Panes) *termui.WidgetTree {
+	return BuildDefault(panes, s.Ratios)
 }
 
 // BuildDefault builds:
 //
 //	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
-func BuildDefault(title string, panes Panes, ratios platform.DefaultLayoutRatios) *termui.TabWidget {
+func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termui.WidgetTree {
 	ratios.Left = clampRatio(ratios.Left)
 	ratios.Output = clampRatio(ratios.Output)
 	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
@@ -38,7 +38,7 @@ func BuildDefault(title string, panes Panes, ratios platform.DefaultLayoutRatios
 	tree.FocusWidget(panes.GDB)
 	applyDefaultRatios(tree.Root(), ratios)
 	tree.SetEqualAlways(false)
-	return termui.NewTabWidget(title, tree)
+	return tree
 }
 
 func applyDefaultRatios(root *termui.Node, ratios platform.DefaultLayoutRatios) {

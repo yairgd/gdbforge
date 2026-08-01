@@ -29,8 +29,8 @@ func TestBuildDefaultRatios(t *testing.T) {
 	ratios := platform.DefaultLayoutRatios{
 		Left: 2.0 / 3.0, Output: 1.0 / 2.0, BottomFirst: 1.0 / 3.0,
 	}
-	tw := BuildDefault("dbg", stubPanes(), ratios)
-	root := tw.ActiveTree().Root()
+	tree := BuildDefault(stubPanes(), ratios)
+	root := tree.Root()
 	if root == nil || root.Type != termui.NodeSplit || root.Dir != termui.Vertical {
 		t.Fatal("expected outer vertical split")
 	}
@@ -57,7 +57,7 @@ func TestBuildDefaultSetEqualAlwaysKeepsRatio(t *testing.T) {
 	ratios := platform.DefaultLayoutRatios{
 		Left: 2.0 / 3.0, Output: 0.5, BottomFirst: 1.0 / 3.0,
 	}
-	tree := BuildDefault("dbg", stubPanes(), ratios).ActiveTree()
+	tree := BuildDefault(stubPanes(), ratios)
 	tree.SetEqualAlways(true)
 	if math.Abs(tree.Root().Ratio-ratios.Left) > 1e-9 {
 		t.Fatalf("SetEqualAlways wiped ratio=%v", tree.Root().Ratio)
@@ -65,8 +65,8 @@ func TestBuildDefaultSetEqualAlwaysKeepsRatio(t *testing.T) {
 }
 
 func TestBuildPanelsStructure(t *testing.T) {
-	tw := BuildPanels("panels", stubPanes())
-	root := tw.ActiveTree().Root()
+	tree := BuildPanels(stubPanes())
+	root := tree.Root()
 	if root == nil || root.Dir != termui.Vertical {
 		t.Fatal("expected outer vertical")
 	}
@@ -103,8 +103,8 @@ func TestBuildPanelsStructure(t *testing.T) {
 }
 
 func TestBuildClassicStructure(t *testing.T) {
-	tw := BuildClassic("classic", stubPanes())
-	root := tw.ActiveTree().Root()
+	tree := BuildClassic(stubPanes())
+	root := tree.Root()
 	if root == nil || root.Type != termui.NodeSplit || root.Dir != termui.Horizontal {
 		t.Fatal("expected single horizontal Code/GDB")
 	}
@@ -125,8 +125,8 @@ func TestBuildClassicStructure(t *testing.T) {
 }
 
 func TestBuildWideStructure(t *testing.T) {
-	tw := BuildWide("wide", stubPanes())
-	root := tw.ActiveTree().Root()
+	tree := BuildWide(stubPanes())
+	root := tree.Root()
 	if root == nil || root.Dir != termui.Horizontal {
 		t.Fatal("expected outer horizontal (top/bottom)")
 	}

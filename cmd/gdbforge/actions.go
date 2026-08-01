@@ -17,7 +17,7 @@ import (
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("send left command")
-	app.tab.FocusLeft()
+	app.Tab().FocusLeft()
 	app.rememberCodeLeafFromFocus()
 }
 
@@ -25,7 +25,7 @@ func (app *DebuggerApp) OnFocusRight(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("send right command")
 
-	app.tab.FocusRight()
+	app.Tab().FocusRight()
 	app.rememberCodeLeafFromFocus()
 }
 
@@ -33,7 +33,7 @@ func (app *DebuggerApp) OnFocusUp(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("send up command")
 
-	app.tab.FocusUp()
+	app.Tab().FocusUp()
 	app.rememberCodeLeafFromFocus()
 }
 
@@ -41,7 +41,7 @@ func (app *DebuggerApp) OnFocusDown(args ...any) {
 	log := app.ctx.Log.Named("MainApp")
 	log.Info("send down command")
 
-	app.tab.FocusDown()
+	app.Tab().FocusDown()
 	app.rememberCodeLeafFromFocus()
 }
 
@@ -147,7 +147,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 	w.PaneName = "[No Name]"
 	w.SetClipboard(app.ClipboardIO())
 	app.bufs.wire(w)
-	app.tab.VerticalSplit(w)
+	app.Tab().VerticalSplit(w)
 	app.RequestRedraw()
 }
 
@@ -169,7 +169,7 @@ func isAsmSplitArg(args ...any) bool {
 
 func (app *DebuggerApp) EnterInsertMode(args ...any) {
 	app.lua.leaveMode()
-	app.tab.SetInsertActive(true)
+	app.Tab().SetInsertActive(true)
 	app.SetMode(platform.ModeInsert)
 	app.RequestRedraw()
 }
@@ -184,10 +184,10 @@ func (app *DebuggerApp) ClearFocus(args ...any) {
 
 // OnlyFocus closes every pane except the focused one (Vim Ctrl-W o / :only).
 func (app *DebuggerApp) OnlyFocus(args ...any) {
-	if app.tab == nil {
+	if app.Tab() == nil {
 		return
 	}
-	if !app.tab.OnlyFocus() {
+	if !app.Tab().OnlyFocus() {
 		return
 	}
 	app.rememberCodeLeafFromFocus()
@@ -196,7 +196,7 @@ func (app *DebuggerApp) OnlyFocus(args ...any) {
 
 // OnHelp opens the Viewport user manual in the focused pane (:help).
 func (app *DebuggerApp) OnHelp(args ...any) {
-	if app.helpWidget == nil || app.tab == nil {
+	if app.helpWidget == nil || app.Tab() == nil {
 		return
 	}
 	if app.swapFocusedWidget(app.helpWidget) {
@@ -228,10 +228,10 @@ func cmdArgsHasBang(args []any) bool {
 // ClosePane removes the focused split (:close). Does not exit the app when
 // only one pane remains (unlike the old vim-style :quit).
 func (app *DebuggerApp) ClosePane(args ...any) {
-	if app.tab == nil {
+	if app.Tab() == nil {
 		return
 	}
-	if app.tab.DeleteFocus() {
+	if app.Tab().DeleteFocus() {
 		// Last pane — nothing to close; stay in the session.
 		return
 	}
@@ -240,9 +240,9 @@ func (app *DebuggerApp) ClosePane(args ...any) {
 
 func (app *DebuggerApp) SetEqualAlwaysOn(args ...any) {
 	app.State().SetEqualAlways(true)
-	if app.tab != nil {
-		app.tab.SetEqualAlways(true)
-		if tree := app.tab.ActiveTree(); tree != nil {
+	if app.Tab() != nil {
+		app.Tab().SetEqualAlways(true)
+		if tree := app.Tab().ActiveTree(); tree != nil {
 			tree.Rebalance()
 		}
 	}
@@ -251,8 +251,8 @@ func (app *DebuggerApp) SetEqualAlwaysOn(args ...any) {
 
 func (app *DebuggerApp) SetEqualAlwaysOff(args ...any) {
 	app.State().SetEqualAlways(false)
-	if app.tab != nil {
-		app.tab.SetEqualAlways(false)
+	if app.Tab() != nil {
+		app.Tab().SetEqualAlways(false)
 	}
 	app.RequestFrame()
 }
@@ -457,7 +457,7 @@ func (app *DebuggerApp) OnRun(args ...any) {
 	if w == nil {
 		return
 	}
-	if app.tab != nil && app.swapFocusedWidget(w) {
+	if app.Tab() != nil && app.swapFocusedWidget(w) {
 		app.EnterInsertMode()
 		app.RequestFrame()
 	}

@@ -2,7 +2,6 @@ package models
 
 import (
 	"testing"
-
 )
 
 func TestThreadListSetItems(t *testing.T) {

@@ -5,11 +5,11 @@ import "github.com/yairgd/gdbforge/internal/termui"
 // Wide ratios: top Code|IO half height; bottom GDB | side column;
 // side = (Threads|Callstack) 2/3 over Breakpoints 1/3.
 const (
-	wideTopRatio                = 1.0 / 2.0
-	wideCodeRatio               = 1.0 / 2.0 // Code | Output
-	wideGdbRatio                = 1.0 / 2.0 // GDB | side
-	wideThreadsCallstackRatio   = 2.0 / 3.0
-	wideThreadsRatio            = 1.0 / 2.0 // Threads | Callstack
+	wideTopRatio              = 1.0 / 2.0
+	wideCodeRatio             = 1.0 / 2.0 // Code | Output
+	wideGdbRatio              = 1.0 / 2.0 // GDB | side
+	wideThreadsCallstackRatio = 2.0 / 3.0
+	wideThreadsRatio          = 1.0 / 2.0 // Threads | Callstack
 )
 
 // WideSpec builds Code|IO over GDB|(Threads|Callstack / Breakpoints).
@@ -17,15 +17,15 @@ type WideSpec struct{}
 
 func (WideSpec) Name() string { return Wide }
 
-func (WideSpec) Build(title string, panes Panes) *termui.TabWidget {
-	return BuildWide(title, panes)
+func (WideSpec) Build(panes Panes) *termui.WidgetTree {
+	return BuildWide(panes)
 }
 
 // BuildWide builds:
 //
 //	Horizontal: top = Code | Output; bottom = GDB | side.
 //	Side: (Threads | Callstack) over Breakpoints — top pair 2/3, BP 1/3.
-func BuildWide(title string, panes Panes) *termui.TabWidget {
+func BuildWide(panes Panes) *termui.WidgetTree {
 	tree := termui.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Horizontal, panes.GDB)
@@ -40,7 +40,7 @@ func BuildWide(title string, panes Panes) *termui.TabWidget {
 	tree.FocusWidget(panes.GDB)
 	applyWideRatios(tree.Root())
 	tree.SetEqualAlways(false)
-	return termui.NewTabWidget(title, tree)
+	return tree
 }
 
 func applyWideRatios(root *termui.Node) {

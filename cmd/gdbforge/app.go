@@ -31,7 +31,7 @@ type DebuggerApp struct {
 	insertKeys     *commands.KeyBindingRegistry
 	completionKeys *commands.KeyBindingRegistry
 
-	tab       *termui.TabWidget
+	ws        *Workspace
 	cmdWidget *termui.CmdWidget
 	ctx       platform.AppContext
 	debug     *debugstate.State
@@ -57,10 +57,6 @@ type DebuggerApp struct {
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
-
-	// widgetJump is a Vim-style jump list of prior widgets in the focused pane
-	// (pushed on :b / :e / :! swaps; Ctrl-O pops).
-	widgetJump []termui.Widget
 
 	// builtins are singleton views created once at startup (:b about, :b gdb, …).
 	builtins    map[string]termui.Widget

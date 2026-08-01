@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 )
 
 func TestCoalesceGdbOutputBatchesChunks(t *testing.T) {

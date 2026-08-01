@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
 )
 
 func TestSaveLoadBreakpoints(t *testing.T) {

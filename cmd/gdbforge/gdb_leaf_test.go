@@ -24,13 +24,13 @@ func newGdbLeafApp() *DebuggerApp {
 	other := &stubView{id: "other"}
 	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
-		tab:       tab,
 		gdbWidget: gdb,
 		builtins:  map[string]termui.Widget{"other": other},
 	}
-	a.tab.FocusWidget(gdb)
-	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(func(w termui.Widget) bool { return w == code }))
-	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == gdb }))
+	a.ws = newWorkspace(a, tab)
+	a.Tab().FocusWidget(gdb)
+	a.Tab().SetLeafMark(leafMarkCode, a.Tab().FindLeaf(func(w termui.Widget) bool { return w == code }))
+	a.Tab().SetLeafMark(leafMarkGDB, a.Tab().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
 	return a
 }
 
@@ -48,7 +48,7 @@ func TestSwapFocusedWidgetRefusesGdbLeaf(t *testing.T) {
 	if a.focusedWidget() != gdb {
 		t.Fatal("GDB leaf widget should be unchanged")
 	}
-	if len(a.widgetJump) != 0 {
+	if len(a.ws.widgetJump) != 0 {
 		t.Fatal("refused swap must not push jump list")
 	}
 }
@@ -56,11 +56,11 @@ func TestSwapFocusedWidgetRefusesGdbLeaf(t *testing.T) {
 func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 	a := newGdbLeafApp()
 	other := a.builtins["other"]
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
+	codeLeaf := a.Tab().LeafMark(leafMarkCode)
 	if codeLeaf == nil {
 		t.Fatal("missing code leaf mark")
 	}
-	if !a.tab.FocusLeaf(codeLeaf) {
+	if !a.Tab().FocusLeaf(codeLeaf) {
 		t.Fatal("focus code leaf")
 	}
 	if a.isGdbLeaf(a.focusedLeaf()) {
@@ -72,7 +72,7 @@ func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 	if a.focusedWidget() != other {
 		t.Fatal("expected other widget on focused leaf")
 	}
-	gdbLeaf := a.tab.LeafMark(leafMarkGDB)
+	gdbLeaf := a.Tab().LeafMark(leafMarkGDB)
 	if gdbLeaf == nil || gdbLeaf.GetWidget() != a.gdbWidget {
 		t.Fatal("GDB leaf must still show gdbWidget")
 	}
@@ -81,13 +81,13 @@ func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 func TestJumpBackRefusesGdbLeaf(t *testing.T) {
 	a := newGdbLeafApp()
 	other := a.builtins["other"]
-	a.widgetJump = []termui.Widget{other}
+	a.ws.widgetJump = []termui.Widget{other}
 
 	a.JumpBack()
 	if a.focusedWidget() != a.gdbWidget {
 		t.Fatal("JumpBack must not replace GDB leaf")
 	}
-	if len(a.widgetJump) != 1 || a.widgetJump[0] != other {
+	if len(a.ws.widgetJump) != 1 || a.ws.widgetJump[0] != other {
 		t.Fatal("JumpBack refuse must leave jump stack untouched")
 	}
 }

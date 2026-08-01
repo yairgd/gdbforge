@@ -99,51 +99,9 @@ func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
 
 // ApplyLayout rebuilds the active tab tree for a registered layout name.
 func (a *DebuggerApp) ApplyLayout(name string) {
-	if a.tab == nil || !a.State().HasLayout(name) {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("layout").Error("unknown layout: " + name)
-		}
-		return
+	if a.ws != nil {
+		a.ws.ApplyLayout(name)
 	}
-	tw := a.buildLayoutTab(name)
-	if tw == nil {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("layout").Error("layout not implemented: " + name)
-		}
-		return
-	}
-	if tree := tw.ActiveTree(); tree != nil {
-		a.tab.SetActiveTree(tree)
-	}
-	a.finishLayoutApply(name)
-}
-
-func (a *DebuggerApp) buildLayoutTab(name string) *termui.TabWidget {
-	code := a.layoutCodePane()
-	panes := a.debugPanes(code)
-	switch name {
-	case layout.Default:
-		return layout.BuildDefault("basic debugger", panes, a.State().DefaultLayoutRatios())
-	case layout.Panels:
-		return layout.BuildPanels("panels", panes)
-	case layout.Classic:
-		return layout.BuildClassic("classic", panes)
-	case layout.Wide:
-		return layout.BuildWide("wide", panes)
-	default:
-		return nil
-	}
-}
-
-func (a *DebuggerApp) finishLayoutApply(name string) {
-	a.State().SetCurrentLayout(name)
-	a.State().SetEqualAlways(true)
-	a.tab.SetEqualAlways(true)
-	a.tab.FocusWidget(a.gdbWidget)
-	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
-	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
-	a.EnterInsertMode()
-	a.RequestFrame()
 }
 
 // layoutCodePane returns the widget for the code leaf (source buffer or logo splash).
@@ -178,5 +136,11 @@ func (a *DebuggerApp) registerLayouts() {
 
 // newStartupTab builds the initial wide workspace tab.
 func (a *DebuggerApp) newStartupTab(code termui.Widget) *termui.TabWidget {
-	return layout.BuildWide("wide", a.debugPanes(code))
+	return termui.NewTabWidget("wide", layout.BuildWide(a.debugPanes(code)))
+}
+
+func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
+	if a.ws != nil {
+		a.ws.placeCodeInSlot(w)
+	}
 }

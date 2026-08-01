@@ -34,8 +34,8 @@ type stubCtl struct {
 	suppressNotes           int
 }
 
-func (s *stubCtl) InferiorRunning() bool       { return s.running }
-func (s *stubCtl) ContinueAfterClear() bool    { return s.contAfterClear }
+func (s *stubCtl) InferiorRunning() bool      { return s.running }
+func (s *stubCtl) ContinueAfterClear() bool   { return s.contAfterClear }
 func (s *stubCtl) NoteTransientStopSuppress() { s.suppressNotes++ }
 
 func TestSendCmdFrameWhileRunningDoesNotContinue(t *testing.T) {

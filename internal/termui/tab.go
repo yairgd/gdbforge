@@ -8,27 +8,33 @@ import (
 // Tab model
 //
 
-// Tab represents a single tab entry.
-// For now, we always have exactly one tab.
+// Tab is chrome for one tab entry (title + content).
+//
+// Today content is a *WidgetTree. Long-term Tab should host a generic view
+// (any Widget / container): forms, text viewers, alternate window managers,
+// or whole apps — not only a split tree. Do not add new Tab APIs that assume
+// WidgetTree; prefer forwarding through the Widget interface when extending.
+// A content redesign is deferred; the tree field is the known coupling point.
 type Tab struct {
 	Title string
-	tree  *WidgetTree
+	tree  *WidgetTree // TODO: generalize to content Widget (not always WidgetTree)
 }
 
 //
 // TabWidget
 //
 
-// TabWidget is a simple container that forwards
-// events and drawing to the active tab's WidgetTree.
+// TabWidget manages a list of Tabs and forwards Draw/HandleEvent to the active
+// tab's content.
 //
 // Current implementation is intentionally degenerate:
 //   - Always exactly one tab
 //   - No tab switching
 //   - No tab header rendering
+//   - Content is still *WidgetTree (see Tab)
 //
-// This keeps the architecture ready for future
-// multi-tab support without adding complexity now.
+// Tree-specific methods (ActiveTree, Split, LeafMark, …) are transitional
+// convenience forwarders — not the long-term Tab surface.
 type TabWidget struct {
 	Widget
 
@@ -40,8 +46,9 @@ type TabWidget struct {
 // Constructor
 //
 
-// NewTabWidget creates a TabWidget with a single tab.
-// This is the default behavior for now.
+// NewTabWidget creates a TabWidget with a single tab whose content is tree.
+// Prefer this over inventing more tree-specific constructors; when Tab content
+// generalizes, a NewTabWidgetFrom(Widget) (or similar) can sit beside this.
 func NewTabWidget(
 	title string,
 	tree *WidgetTree,
@@ -78,16 +85,15 @@ func (t *TabWidget) IsSeparatorAt(x, y int) bool {
 	return false
 }
 
-// Draw forwards the draw call to the active tab tree.
+// Draw forwards the draw call to the active tab tree using the full assigned
+// rect. Apps own chrome banding (cmdline / wildmenu) via HandleResize.
 func (t *TabWidget) Draw(c Canvas) {
 	tree := t.ActiveTree()
 	if tree == nil {
 		return
 	}
-	r := c.Rect()
-	inner := c.WithRect(NewRect(r.X(), r.Y(), r.W(), r.H()-2))
-	tree.BuildLayout(inner)
-	tree.Draw(inner)
+	tree.BuildLayout(c)
+	tree.Draw(c)
 }
 
 func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}
@@ -97,6 +103,7 @@ func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}
 //
 
 // ActiveTree returns the WidgetTree of the currently selected tab.
+// WidgetTree-centric: valid only while Tab content is a split tree.
 func (t *TabWidget) ActiveTree() *WidgetTree {
 	if len(t.tabs) == 0 {
 		return nil
@@ -105,6 +112,7 @@ func (t *TabWidget) ActiveTree() *WidgetTree {
 }
 
 // SetActiveTree replaces the WidgetTree of the currently selected tab.
+// WidgetTree-centric: layout apply / remount path for split-tree tabs only.
 func (t *TabWidget) SetActiveTree(tree *WidgetTree) {
 	if len(t.tabs) == 0 || tree == nil {
 		return

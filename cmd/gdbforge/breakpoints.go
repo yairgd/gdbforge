@@ -532,7 +532,7 @@ func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 		}
 		a.asm.placeInSlot(aw)
 		if leaf := a.asm.findLeaf(); leaf != nil && a.asm.hasSplit() {
-			_ = a.tab.FocusLeaf(leaf)
+			_ = a.Tab().FocusLeaf(leaf)
 		}
 		go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
 		a.RequestFrame()

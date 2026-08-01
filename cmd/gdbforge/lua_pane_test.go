@@ -30,8 +30,8 @@ func TestLuaPaneInstanceName(t *testing.T) {
 
 type discardPane struct{}
 
-func (discardPane) AppendPrint(string)                  {}
-func (discardPane) ClearAll()                           {}
-func (discardPane) ClearCells()                         {}
-func (discardPane) SetCell(int, int, rune, string)      {}
-func (discardPane) Size() (int, int)                    { return 0, 0 }
+func (discardPane) AppendPrint(string)             {}
+func (discardPane) ClearAll()                      {}
+func (discardPane) ClearCells()                    {}
+func (discardPane) SetCell(int, int, rune, string) {}
+func (discardPane) Size() (int, int)               { return 0, 0 }

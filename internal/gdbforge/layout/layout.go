@@ -36,10 +36,10 @@ type Panes struct {
 	Callstack   termui.Widget
 }
 
-// Spec builds a TabWidget for one named layout.
+// Spec builds a WidgetTree for one named layout.
 type Spec interface {
 	Name() string
-	Build(title string, panes Panes) *termui.TabWidget
+	Build(panes Panes) *termui.WidgetTree
 }
 
 func clampRatio(r float64) float64 {

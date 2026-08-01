@@ -26,8 +26,8 @@ func NewGDB(client *gdb.GDBClient) *GDBBackend {
 	}
 }
 
-func (b *GDBBackend) Kind() Kind              { return GDB }
-func (b *GDBBackend) Session() core.Session   { return b.client() }
+func (b *GDBBackend) Kind() Kind            { return GDB }
+func (b *GDBBackend) Session() core.Session { return b.client() }
 func (b *GDBBackend) Close() {
 	if c := b.client(); c != nil {
 		c.Close()
@@ -58,13 +58,13 @@ func (b *GDBBackend) ConfigureInferiorTTY() error {
 	}
 	return nil
 }
-func (b *GDBBackend) PromptToken() string       { return gdb.MIPromptToken }
+func (b *GDBBackend) PromptToken() string        { return gdb.MIPromptToken }
 func (b *GDBBackend) PaintTargetInConsole() bool { return false }
 
-func (b *GDBBackend) SupportsAssembly() bool         { return true }
-func (b *GDBBackend) SupportsSourceFileList() bool   { return true }
-func (b *GDBBackend) SupportsLiveInferiorTTY() bool  { return true }
-func (b *GDBBackend) BreakRefreshImmediate() bool    { return true }
+func (b *GDBBackend) SupportsAssembly() bool        { return true }
+func (b *GDBBackend) SupportsSourceFileList() bool  { return true }
+func (b *GDBBackend) SupportsLiveInferiorTTY() bool { return true }
+func (b *GDBBackend) BreakRefreshImmediate() bool   { return true }
 
 func (b *GDBBackend) MapExec(cmd string) (string, bool) {
 	send := gdb.CLIExecToMI(cmd)

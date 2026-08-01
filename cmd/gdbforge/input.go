@@ -137,13 +137,13 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 				return true
 			}
 		}
-		a.tab.HandleEvent(ev)
+		a.Tab().HandleEvent(ev)
 		return true
 	}
 	if a.tryKeyBindings(a.insertKeys, ev) {
 		return true
 	}
-	a.tab.HandleEvent(ev)
+	a.Tab().HandleEvent(ev)
 	return true
 }
 
@@ -156,7 +156,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		return true
 	}
 	if isCopyKey(ev) {
-		a.tab.HandleEvent(ev)
+		a.Tab().HandleEvent(ev)
 		return true
 	}
 	// Focused scrollable panes (e.g. Log) handle their bindings without insert mode.
@@ -270,7 +270,7 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	if a.comp.isForGDB() {
 		a.comp.setForGDB(false)
 		a.SetMode(platform.ModeInsert)
-		a.tab.HandleEvent(ev)
+		a.Tab().HandleEvent(ev)
 	} else {
 		a.SetMode(platform.ModeCommand)
 		a.cmdWidget.HandleEvent(ev)
@@ -326,7 +326,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	if primary {
-		if !a.tab.IsSeparatorAt(x, y) && a.tab.FocusAt(x, y) {
+		if !a.Tab().IsSeparatorAt(x, y) && a.Tab().FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)
@@ -337,7 +337,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	if wheel {
-		if a.tab.FocusAt(x, y) {
+		if a.Tab().FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)
@@ -347,7 +347,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 		}
 	}
 
-	a.tab.HandleEvent(ev)
+	a.Tab().HandleEvent(ev)
 	// Always repaint so green stop marks / selection update after clicks.
 	a.RequestFrame()
 }
@@ -358,8 +358,8 @@ func (a *DebuggerApp) enterCommandMode() {
 	a.lua.leaveMode()
 	a.comp.setForGDB(false)
 	a.comp.clear()
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if a.Tab() != nil {
+		a.Tab().SetInsertActive(false)
 	}
 	a.search.clearTarget()
 	if a.cmdWidget != nil && !a.cmdWidget.Active() {
@@ -375,8 +375,8 @@ func (a *DebuggerApp) enterSearchMode() {
 	a.lua.leaveMode()
 	a.comp.setForGDB(false)
 	a.comp.clear()
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if a.Tab() != nil {
+		a.Tab().SetInsertActive(false)
 	}
 	a.search.captureFocused()
 	if a.cmdWidget != nil {
@@ -452,8 +452,8 @@ func (a *DebuggerApp) HandleResize() {
 	if len(w) < 3 {
 		return
 	}
-	// Tab keeps full height (it insets H-2 internally). Bar overlays H-2; cmd at H-1.
-	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
+	// Workspace band is H-2; completion bar overlays row H-2; cmdline at H-1.
+	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))
 	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }

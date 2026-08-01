@@ -303,20 +303,7 @@ func (a *DebuggerApp) clearCodePane() {
 
 // placeLogoInCodeSlot puts the startup logo back in the code leaf (after kill).
 func (a *DebuggerApp) placeLogoInCodeSlot() {
-	if a.tab == nil {
-		return
-	}
-	logo := a.logoWidget
-	if logo == nil {
-		logo = widgets.NewLogoWidget()
-		a.logoWidget = logo
-	}
-	if _, ok := a.focusedWidget().(*widgets.CodeWidget); ok && !a.isGdbLeaf(a.focusedLeaf()) {
-		_ = a.tab.ReplaceFocusedWidget(logo)
-		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
-		return
-	}
-	if a.tab.ReplaceMatchingLeafWidget(logo, isCodeSlot) {
-		a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
+	if a.ws != nil {
+		a.ws.placeLogoInCodeSlot()
 	}
 }

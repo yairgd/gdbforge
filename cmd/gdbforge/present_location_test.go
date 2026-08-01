@@ -15,27 +15,27 @@ func newLocationLeafApp() *DebuggerApp {
 	gdb := widgets.NewGDBWidget()
 	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
-		tab:       tab,
 		gdbWidget: gdb,
 	}
+	a.ws = newWorkspace(a, tab)
 	a.asm.host = a
 	a.asm.widget = asm
 	a.bufs.host = a
 	a.bufs.initMaps()
 	a.bufs.setPrimary(code)
-	codeLeaf := a.tab.FindLeaf(func(w termui.Widget) bool { return w == code })
-	a.tab.SetLeafMark(leafMarkCode, codeLeaf)
-	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == gdb }))
-	_ = a.tab.FocusLeaf(codeLeaf)
+	codeLeaf := a.Tab().FindLeaf(func(w termui.Widget) bool { return w == code })
+	a.Tab().SetLeafMark(leafMarkCode, codeLeaf)
+	a.Tab().SetLeafMark(leafMarkGDB, a.Tab().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
+	_ = a.Tab().FocusLeaf(codeLeaf)
 	return a
 }
 
 func TestHasSplitIgnoresSharedLocationAsm(t *testing.T) {
 	a := newLocationLeafApp()
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
+	codeLeaf := a.Tab().LeafMark(leafMarkCode)
 	codeLeaf.SetWidget(a.asm.Widget())
 	// Contaminated mark: shared leaf also bookmarked as asm (old rememberCodeLeafFromFocus).
-	a.tab.SetLeafMark(leafMarkAsm, codeLeaf)
+	a.Tab().SetLeafMark(leafMarkAsm, codeLeaf)
 	if a.asm.hasSplit() {
 		t.Fatal("shared location leaf must not count as :vs/:sp asm split")
 	}
@@ -43,14 +43,14 @@ func TestHasSplitIgnoresSharedLocationAsm(t *testing.T) {
 
 func TestRememberFocusKeepsSharedAsmOnCodeMark(t *testing.T) {
 	a := newLocationLeafApp()
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
+	codeLeaf := a.Tab().LeafMark(leafMarkCode)
 	codeLeaf.SetWidget(a.asm.Widget())
-	_ = a.tab.FocusLeaf(codeLeaf)
+	_ = a.Tab().FocusLeaf(codeLeaf)
 	a.rememberCodeLeafFromFocus()
-	if a.tab.LeafMark(leafMarkAsm) != nil {
+	if a.Tab().LeafMark(leafMarkAsm) != nil {
 		t.Fatal("shared Asm must not set leafMarkAsm")
 	}
-	if a.tab.LeafMark(leafMarkCode) != codeLeaf {
+	if a.Tab().LeafMark(leafMarkCode) != codeLeaf {
 		t.Fatal("shared Asm must keep leafMarkCode")
 	}
 }
@@ -59,12 +59,12 @@ func TestPresentLocationReclaimsCodeAfterAutoAsm(t *testing.T) {
 	a := newLocationLeafApp()
 	code := a.bufs.Primary()
 	aw := a.asm.Widget()
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
+	codeLeaf := a.Tab().LeafMark(leafMarkCode)
 
 	// Simulate autoAsm: location leaf shows Assembly, focus still on that leaf.
 	a.asm.setAutoAsm(true)
 	codeLeaf.SetWidget(aw)
-	_ = a.tab.FocusLeaf(codeLeaf)
+	_ = a.Tab().FocusLeaf(codeLeaf)
 	a.rememberCodeLeafFromFocus()
 	if a.asm.hasSplit() {
 		t.Fatal("autoAsm must not look like a dedicated split")
@@ -84,20 +84,20 @@ func TestPresentLocationReclaimsCodeWhenFocusElsewhere(t *testing.T) {
 	a := newLocationLeafApp()
 	code := a.bufs.Primary()
 	aw := a.asm.Widget()
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
-	gdbLeaf := a.tab.LeafMark(leafMarkGDB)
+	codeLeaf := a.Tab().LeafMark(leafMarkCode)
+	gdbLeaf := a.Tab().LeafMark(leafMarkGDB)
 
 	a.asm.setAutoAsm(true)
 	codeLeaf.SetWidget(aw)
 	// Old bug: mark shared leaf as asm, then focus GDB so reclaim uses findCodeLeaf.
-	a.tab.SetLeafMark(leafMarkAsm, codeLeaf)
-	_ = a.tab.FocusLeaf(gdbLeaf)
+	a.Tab().SetLeafMark(leafMarkAsm, codeLeaf)
+	_ = a.Tab().FocusLeaf(gdbLeaf)
 
 	a.presentLocation(code, nil)
 	if codeLeaf.GetWidget() != code {
 		t.Fatalf("expected Code reclaim with GDB focused, got %T", codeLeaf.GetWidget())
 	}
-	if a.tab.LeafMark(leafMarkAsm) != nil {
+	if a.Tab().LeafMark(leafMarkAsm) != nil {
 		t.Fatal("mistaken asm mark on shared leaf should be cleared")
 	}
 }

@@ -85,10 +85,10 @@ func TestWalkLuaScriptsMissing(t *testing.T) {
 
 func TestWalkLuaScriptsFS(t *testing.T) {
 	fsys := fstest.MapFS{
-		"r5_debug/r5_debug.lua":   &fstest.MapFile{Data: []byte("function main() end")},
-		"games/snake/snake.lua":   &fstest.MapFile{Data: []byte("function main() end")},
-		"r5_debug/r5_target.xml":  &fstest.MapFile{Data: []byte("<target/>")},
-		"README.md":               &fstest.MapFile{Data: []byte("# hi")},
+		"r5_debug/r5_debug.lua":  &fstest.MapFile{Data: []byte("function main() end")},
+		"games/snake/snake.lua":  &fstest.MapFile{Data: []byte("function main() end")},
+		"r5_debug/r5_target.xml": &fstest.MapFile{Data: []byte("<target/>")},
+		"README.md":              &fstest.MapFile{Data: []byte("# hi")},
 	}
 	files, err := WalkLuaScriptsFS(fsys, ".")
 	if err != nil {
@@ -125,10 +125,10 @@ func TestResolveLuaScriptsFirstWins(t *testing.T) {
 	mustWrite(home, "remotegdb/remotegdb.lua", "function main() end -- home")
 
 	emb := fstest.MapFS{
-		"r5_debug/r5_debug.lua":     &fstest.MapFile{Data: []byte("function main() end -- emb")},
-		"remotegdb/remotegdb.lua":   &fstest.MapFile{Data: []byte("function main() end -- emb")},
-		"dlv_port/dlv_port.lua":     &fstest.MapFile{Data: []byte("function main() end -- emb")},
-		"r5_debug/r5_target.xml":    &fstest.MapFile{Data: []byte("<target/>")},
+		"r5_debug/r5_debug.lua":   &fstest.MapFile{Data: []byte("function main() end -- emb")},
+		"remotegdb/remotegdb.lua": &fstest.MapFile{Data: []byte("function main() end -- emb")},
+		"dlv_port/dlv_port.lua":   &fstest.MapFile{Data: []byte("function main() end -- emb")},
+		"r5_debug/r5_target.xml":  &fstest.MapFile{Data: []byte("<target/>")},
 	}
 
 	// Point cache at temp so materialize does not touch the real user cache.
@@ -195,7 +195,7 @@ func TestMaterializeEmbeddedLua(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(base, "cache"))
 	fsys := fstest.MapFS{
-		"a/a.lua":   &fstest.MapFile{Data: []byte("-- a")},
+		"a/a.lua":    &fstest.MapFile{Data: []byte("-- a")},
 		"a/side.txt": &fstest.MapFile{Data: []byte("side")},
 	}
 	dest, err := MaterializeEmbeddedLua(fsys)

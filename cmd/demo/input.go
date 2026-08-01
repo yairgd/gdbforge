@@ -18,7 +18,8 @@ func (a *DemoApp) HandleResize() {
 	if len(w) < 3 {
 		return
 	}
-	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))
+	// Workspace band is H-2; completion bar overlays row H-2; cmdline at H-1.
+	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))
 	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }

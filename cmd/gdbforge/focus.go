@@ -8,10 +8,10 @@ import (
 // focusedWidget returns the focused leaf widget via Tab (generic shell only).
 // Debugger-specific type knowledge lives in the helpers below, not at call sites.
 func (a *DebuggerApp) focusedWidget() termui.Widget {
-	if a.tab == nil {
-		return nil
+	if tab := a.Tab(); tab != nil {
+		return tab.FocusedWidget()
 	}
-	return a.tab.FocusedWidget()
+	return nil
 }
 
 // focusedCode returns the focused pane as a CodeWidget, or nil.

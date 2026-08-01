@@ -68,7 +68,7 @@ func openaiTools() []map[string]any {
 			"function": map[string]any{
 				"name":        t.Name,
 				"description": t.Description,
-				"parameters":   params,
+				"parameters":  params,
 			},
 		})
 	}

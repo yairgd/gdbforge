@@ -69,7 +69,7 @@ TermApp
   ├── DebuggerApp fields
   │     ├── appState *platform.AppState    — Mode, PTYOwner, EqualAlways
   │     ├── trie termui.Trie               — multi-key bindings
-  │     ├── tab *TabWidget                 — window manager (split tree)
+  │     ├── ws *Workspace                  — workspace policy over TabWidget
   │     └── cmdWidget *CmdWidget
   ├── top-level widgets (tab + cmd line)
   │     └── CmdWidget.Events → events channel

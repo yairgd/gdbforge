@@ -105,7 +105,11 @@ gdbforge/
 | `layout.go` | `:layout` apply / completions; wires `internal/gdbforge/layout` builders |
 | `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
 | `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
-| `code_nav.go` | Leaf marks (`code`/`gdb`/`last`), Esc/`i` pane policy; `CLIExecToMI` for n/s/c |
+| `workspace.go` | `Workspace` — pane marks, slot predicates; owns `TabWidget` |
+| `workspace_policy.go` | Code/GDB/last activation, `FocusCode`, mark healing |
+| `workspace_place.go` | `placeCodeInSlot`, logo slot, sticky-GDB swap / JumpBack |
+| `workspace_layout.go` | `ApplyLayout` mounts layout `WidgetTree` onto Tab |
+| `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `stopped.go` | Stop handling; StopLocation; arm/trigger thread-stack refresh; MI thread/frame select |
 | `debug_info.go` | `syncThreadViews` / `syncCallStackViews` / model setters |

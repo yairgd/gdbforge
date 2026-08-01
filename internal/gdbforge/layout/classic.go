@@ -7,12 +7,12 @@ type ClassicSpec struct{}
 
 func (ClassicSpec) Name() string { return Classic }
 
-func (ClassicSpec) Build(title string, panes Panes) *termui.TabWidget {
-	return BuildClassic(title, panes)
+func (ClassicSpec) Build(panes Panes) *termui.WidgetTree {
+	return BuildClassic(panes)
 }
 
 // BuildClassic builds a single horizontal split: Code over GDB.
-func BuildClassic(title string, panes Panes) *termui.TabWidget {
+func BuildClassic(panes Panes) *termui.WidgetTree {
 	tree := termui.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Horizontal, panes.GDB)
@@ -22,5 +22,5 @@ func BuildClassic(title string, panes Panes) *termui.TabWidget {
 		root.Ratio = 2.0 / 3.0
 	}
 	tree.SetEqualAlways(false)
-	return termui.NewTabWidget(title, tree)
+	return tree
 }

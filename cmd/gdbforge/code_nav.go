@@ -10,17 +10,6 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// Named leaf marks on the active WidgetTree (role names live only in cmd/gdbforge).
-const (
-	leafMarkCode = "code"
-	leafMarkGDB  = "gdb"
-	leafMarkAsm  = "asm"
-	// leafMarkLast is the Esc restore target when the user last focused a pane
-	// that is neither Code nor GDB (breakpoints, callstack, …). Focusing Code
-	// clears it; focusing GDB leaves it unchanged.
-	leafMarkLast = "last"
-)
-
 // activeCodeWidget returns the CodeWidget buffer Esc / global keys should drive.
 func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
 	if cw := a.focusedCode(); cw != nil {
@@ -42,227 +31,65 @@ func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
 	return a.layoutCodeWidget()
 }
 
-func isCodeWidget(w termui.Widget) bool {
-	_, ok := w.(*widgets.CodeWidget)
-	return ok
-}
+// --- Workspace policy delegates (hosts / keybindings call these) ---
 
-// isCodeSlot is the startup code leaf: Logo / Code, or single-pane Assembly
-// when there is no dedicated :vs asm / :sp asm leaf.
-func isCodeSlot(w termui.Widget) bool {
-	if isCodeWidget(w) {
-		return true
-	}
-	if _, ok := w.(*widgets.LogoWidget); ok {
-		return true
-	}
-	return isAssemblyWidget(w)
-}
-
-// isSourceCodeSlot is a leaf that shows source (or the logo placeholder).
-func isSourceCodeSlot(w termui.Widget) bool {
-	if isCodeWidget(w) {
-		return true
-	}
-	_, ok := w.(*widgets.LogoWidget)
-	return ok
-}
-
-// findCodeLeaf returns the remembered code leaf if still valid, else any leaf
-// currently showing a CodeWidget or LogoWidget (not a dedicated asm split pane).
 func (a *DebuggerApp) findCodeLeaf() *termui.Node {
-	if a.tab == nil {
+	if a.ws == nil {
 		return nil
 	}
-	if leaf := a.tab.LeafMark(leafMarkCode); leaf != nil {
-		w := leaf.GetWidget()
-		if isSourceCodeSlot(w) {
-			return leaf
-		}
-		// Shared location leaf showing Assembly (:b asm / autoAsm).
-		// Never clear the code mark just because the leaf currently holds Asm —
-		// that used to make hasSplit() look true and block reclaiming Code.
-		if isAssemblyWidget(w) {
-			if a.tab.LeafMark(leafMarkAsm) == leaf {
-				a.tab.SetLeafMark(leafMarkAsm, nil)
-			}
-			return leaf
-		}
-	}
-	if leaf := a.tab.FindLeaf(isSourceCodeSlot); leaf != nil {
-		a.tab.SetLeafMark(leafMarkCode, leaf)
-		return leaf
-	}
-	// Heal contamination: asm mark on the only location leaf (no Code/Logo).
-	if asm := a.tab.LeafMark(leafMarkAsm); asm != nil && isAssemblyWidget(asm.GetWidget()) {
-		a.tab.SetLeafMark(leafMarkCode, asm)
-		a.tab.SetLeafMark(leafMarkAsm, nil)
-		return asm
-	}
-	a.tab.SetLeafMark(leafMarkCode, nil)
-	return nil
+	return a.ws.findCodeLeaf()
 }
 
-// rememberCodeLeafFromFocus updates code/gdb marks and the Esc "last" mark.
-// Non-code/non-gdb focus becomes the Esc restore target; Code clears that
-// target; GDB does not overwrite it (so Esc after `i` can return to e.g. BPs).
 func (a *DebuggerApp) rememberCodeLeafFromFocus() {
-	if a.tab == nil {
-		return
-	}
-	tree := a.tab.ActiveTree()
-	if tree == nil {
-		return
-	}
-	leaf := tree.FocusedLeaf()
-	if leaf == nil {
-		return
-	}
-	w := leaf.GetWidget()
-	switch {
-	case isAssemblyWidget(w):
-		codeLeaf := a.tab.LeafMark(leafMarkCode)
-		// Dedicated :vs/:sp asm only when distinct from the location leaf.
-		if codeLeaf != nil && codeLeaf != leaf {
-			a.tab.SetLeafMark(leafMarkAsm, leaf)
-			break
-		}
-		// Shared location leaf (:b asm / autoAsm) — keep the code mark.
-		a.tab.SetLeafMark(leafMarkCode, leaf)
-		a.tab.SetLeafMark(leafMarkAsm, nil)
-		a.tab.SetLeafMark(leafMarkLast, nil)
-	case isSourceCodeSlot(w):
-		a.tab.SetLeafMark(leafMarkCode, leaf)
-		a.tab.SetLeafMark(leafMarkLast, nil)
-	case isCodeSlot(w):
-		// Single-pane asm occupying the code leaf.
-		a.tab.SetLeafMark(leafMarkCode, leaf)
-		a.tab.SetLeafMark(leafMarkAsm, nil)
-		a.tab.SetLeafMark(leafMarkLast, nil)
-	case w == a.gdbWidget:
-		a.tab.SetLeafMark(leafMarkGDB, leaf)
-	default:
-		a.tab.SetLeafMark(leafMarkLast, leaf)
+	if a.ws != nil {
+		a.ws.rememberCodeLeafFromFocus()
 	}
 }
 
-// focusedLeaf returns the focused leaf in the active tab tree.
 func (a *DebuggerApp) focusedLeaf() *termui.Node {
-	if a.tab == nil {
+	if a.ws == nil {
 		return nil
 	}
-	tree := a.tab.ActiveTree()
-	if tree == nil {
-		return nil
-	}
-	return tree.FocusedLeaf()
+	return a.ws.focusedLeaf()
 }
 
-// isGdbLeaf reports whether leaf is the layout's GDB slot (marked "gdb" or
-// currently showing gdbWidget). That leaf must not host other widgets.
 func (a *DebuggerApp) isGdbLeaf(leaf *termui.Node) bool {
-	if leaf == nil || a.tab == nil {
+	if a.ws == nil {
 		return false
 	}
-	if m := a.tab.LeafMark(leafMarkGDB); m != nil && m == leaf {
-		return true
-	}
-	return a.gdbWidget != nil && leaf.GetWidget() == a.gdbWidget
+	return a.ws.isGdbLeaf(leaf)
 }
 
-// focusIsCodeOrGdb reports whether the focused pane is Code/Logo or GDB (or empty).
-// Other panes keep their own Up/Down/Space handling.
 func (a *DebuggerApp) focusIsCodeOrGdb() bool {
-	w := a.focusedWidget()
-	if w == nil {
+	if a.ws == nil {
 		return true
 	}
-	if isCodeSlot(w) {
-		return true
-	}
-	return w == a.gdbWidget
+	return a.ws.focusIsCodeOrGdb()
 }
 
-// activateLastOrCodePane focuses the remembered non-code/non-gdb leaf when
-// still valid; otherwise falls back to the Code pane (EscToCode path).
 func (a *DebuggerApp) activateLastOrCodePane() {
-	if a.tab == nil {
-		return
+	if a.ws != nil {
+		a.ws.activateLastOrCodePane()
 	}
-	if leaf := a.tab.LeafMark(leafMarkLast); leaf != nil {
-		w := leaf.GetWidget()
-		if w != nil && !isCodeSlot(w) && w != a.gdbWidget {
-			a.tab.SetInsertActive(false)
-			a.SetMode(platform.ModeNormal)
-			_ = a.tab.FocusLeaf(leaf)
-			a.RequestRedraw()
-			return
-		}
-	}
-	a.FocusCode()
 }
 
-// findGdbLeaf returns the remembered GDB leaf if it still shows GDB, else any
-// leaf currently showing the GDBWidget.
 func (a *DebuggerApp) findGdbLeaf() *termui.Node {
-	if a.tab == nil || a.gdbWidget == nil {
+	if a.ws == nil {
 		return nil
 	}
-	if leaf := a.tab.LeafMark(leafMarkGDB); leaf != nil && leaf.GetWidget() == a.gdbWidget {
-		return leaf
-	}
-	leaf := a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget })
-	a.tab.SetLeafMark(leafMarkGDB, leaf)
-	return leaf
+	return a.ws.findGdbLeaf()
 }
 
-// pickGdbFallbackLeaf chooses a leaf to host GDB when it is not in the tree.
-func (a *DebuggerApp) pickGdbFallbackLeaf() *termui.Node {
-	if a.tab == nil {
-		return nil
-	}
-	// Prefer the remembered gdb leaf even if it currently shows something else.
-	if leaf := a.tab.LeafMark(leafMarkGDB); leaf != nil {
-		return leaf
-	}
-	tree := a.tab.ActiveTree()
-	if tree == nil {
-		return nil
-	}
-	codeLeaf := a.tab.LeafMark(leafMarkCode)
-	for _, n := range termui.CollectLeaves(tree.Root()) {
-		if n != codeLeaf {
-			return n
-		}
-	}
-	return a.tab.TopLeftLeaf()
-}
-
-// activateGdbPane focuses the pane that holds GDB (restoring it on the remembered
-// leaf if needed). Used when entering insert mode with 'i'.
 func (a *DebuggerApp) activateGdbPane() {
-	if a.tab == nil || a.gdbWidget == nil {
-		return
+	if a.ws != nil {
+		a.ws.activateGdbPane()
 	}
-	leaf := a.findGdbLeaf()
-	if leaf == nil {
-		leaf = a.pickGdbFallbackLeaf()
-	}
-	if leaf == nil {
-		return
-	}
-	if leaf.GetWidget() != a.gdbWidget {
-		leaf.SetWidget(a.gdbWidget)
-	}
-	_ = a.tab.FocusLeaf(leaf)
-	a.tab.SetLeafMark(leafMarkGDB, leaf)
 }
 
-// activateGdbInsertMode focuses the GDB pane then enters insert mode ('i').
 func (a *DebuggerApp) activateGdbInsertMode() {
-	a.rememberCodeLeafFromFocus()
-	a.activateGdbPane()
-	a.EnterInsertMode()
+	if a.ws != nil {
+		a.ws.activateGdbInsertMode()
+	}
 }
 
 // onEscape leaves insert/normal Esc handling. When AppState.EscToCode is set
@@ -273,8 +100,8 @@ func (a *DebuggerApp) onEscape() {
 		a.activateLastOrCodePane()
 		return
 	}
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if tab := a.Tab(); tab != nil {
+		tab.SetInsertActive(false)
 	}
 	a.SetMode(platform.ModeNormal)
 	a.RequestRedraw()
@@ -282,31 +109,9 @@ func (a *DebuggerApp) onEscape() {
 
 // FocusCode leaves insert mode and focuses the code slot (Logo/Code/Asm).
 func (a *DebuggerApp) FocusCode() {
-	if a.tab == nil {
-		return
+	if a.ws != nil {
+		a.ws.FocusCode()
 	}
-	a.tab.SetInsertActive(false)
-	a.SetMode(platform.ModeNormal)
-
-	leaf := a.findCodeLeaf()
-	if leaf == nil {
-		leaf = a.tab.TopLeftLeaf()
-	}
-	if leaf == nil {
-		a.RequestRedraw()
-		return
-	}
-
-	if aw := a.asm.Widget(); a.asm.PreferAsm() && aw != nil && !a.asm.hasSplit() {
-		if leaf.GetWidget() != aw {
-			leaf.SetWidget(aw)
-		}
-	} else if cw := a.activeCodeWidget(); cw != nil && leaf.GetWidget() != cw {
-		leaf.SetWidget(cw)
-	}
-	_ = a.tab.FocusLeaf(leaf)
-	a.tab.SetLeafMark(leafMarkCode, leaf)
-	a.RequestRedraw()
 }
 
 // sendGdbExec sends an execution command on the shared debugger PTY.

@@ -58,8 +58,8 @@ func (c *luaCtl) enterMode(w *widgets.LuaWidget) {
 		c.active.StopTicks()
 	}
 	c.active = w
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if a.Tab() != nil {
+		a.Tab().SetInsertActive(false)
 	}
 	a.SetMode(platform.ModeLua)
 	w.SetFrameRequester(a.RequestFrame)
@@ -483,13 +483,13 @@ func (c *luaCtl) openBuffer(name string, from *luahost.Runtime) {
 	case "gdb":
 		// Focus existing GDB leaf only — never relocate GDB onto the Code leaf.
 		c.leaveMode()
-		if a.tab != nil && a.gdbWidget != nil {
+		if a.Tab() != nil && a.gdbWidget != nil {
 			if leaf := a.findGdbLeaf(); leaf != nil {
-				_ = a.tab.FocusLeaf(leaf)
+				_ = a.Tab().FocusLeaf(leaf)
 			} else {
-				a.tab.FocusWidget(a.gdbWidget)
+				a.Tab().FocusWidget(a.gdbWidget)
 			}
-			a.tab.SetInsertActive(true)
+			a.Tab().SetInsertActive(true)
 		}
 		a.SetMode(platform.ModeInsert)
 		a.RequestFrame()

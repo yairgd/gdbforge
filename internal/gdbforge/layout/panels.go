@@ -16,8 +16,8 @@ type PanelsSpec struct{}
 
 func (PanelsSpec) Name() string { return Panels }
 
-func (PanelsSpec) Build(title string, panes Panes) *termui.TabWidget {
-	return BuildPanels(title, panes)
+func (PanelsSpec) Build(panes Panes) *termui.WidgetTree {
+	return BuildPanels(panes)
 }
 
 // BuildPanels builds:
@@ -25,7 +25,7 @@ func (PanelsSpec) Build(title string, panes Panes) *termui.TabWidget {
 //	Vertical: left = Code over GDB; right = Output over bottom half.
 //	Bottom half: (Threads | Callstack) over Breakpoints — Threads left, Callstack
 //	right, taking 2/3 of the bottom half; Breakpoints the remaining 1/3.
-func BuildPanels(title string, panes Panes) *termui.TabWidget {
+func BuildPanels(panes Panes) *termui.WidgetTree {
 	tree := termui.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Vertical, panes.Output)
@@ -40,7 +40,7 @@ func BuildPanels(title string, panes Panes) *termui.TabWidget {
 	tree.FocusWidget(panes.GDB)
 	applyPanelsRatios(tree.Root())
 	tree.SetEqualAlways(false)
-	return termui.NewTabWidget(title, tree)
+	return tree
 }
 
 func applyPanelsRatios(root *termui.Node) {

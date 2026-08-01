@@ -42,13 +42,13 @@ type CodeWidget struct {
 	// onToggleEnable is "e" — enable/disable at cursor.
 	onToggleEnable func()
 
-	path       string
-	pcLine     int // 1-based program counter
-	selLine    int // 1-based cursor / bold line
-	preferCol  int // preferred source column (0-based, past gutter)
-	rawLines   []string
-	hiLines    []string // chroma ANSI lines (same length as rawLines)
-	bpByLine   map[int]models.BreakGutter
+	path      string
+	pcLine    int // 1-based program counter
+	selLine   int // 1-based cursor / bold line
+	preferCol int // preferred source column (0-based, past gutter)
+	rawLines  []string
+	hiLines   []string // chroma ANSI lines (same length as rawLines)
+	bpByLine  map[int]models.BreakGutter
 
 	// unavailable: source path cannot be shown (missing file, .so without sources).
 	unavailable      bool

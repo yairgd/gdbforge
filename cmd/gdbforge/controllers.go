@@ -80,7 +80,23 @@ func (a *DebuggerApp) initControllers() {
 
 func (a *DebuggerApp) Backend() backend.Backend { return a.backend }
 func (a *DebuggerApp) Session() core.Session    { return a.GDB() }
-func (a *DebuggerApp) Tab() *termui.TabWidget   { return a.tab }
+
+// Tab returns the generic TabWidget owned by Workspace (tree ops only).
+// Workspace policy lives on Workspace / DebuggerApp delegates, not here.
+func (a *DebuggerApp) Tab() *termui.TabWidget {
+	if a == nil || a.ws == nil {
+		return nil
+	}
+	return a.ws.Tab()
+}
+
+// Workspace returns the gdbforge workspace policy layer above TabWidget.
+func (a *DebuggerApp) Workspace() *Workspace {
+	if a == nil {
+		return nil
+	}
+	return a.ws
+}
 
 func (a *DebuggerApp) BPWidget() *widgets.BreakpointWidget {
 	return a.bpWidget

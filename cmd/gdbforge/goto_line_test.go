@@ -4,9 +4,9 @@ import "testing"
 
 func TestParseGotoLineCmd(t *testing.T) {
 	cases := []struct {
-		in      string
-		want    int
-		wantOK  bool
+		in     string
+		want   int
+		wantOK bool
 	}{
 		{":42", 42, true},
 		{"42", 42, true},

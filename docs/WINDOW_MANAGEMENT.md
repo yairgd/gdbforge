@@ -69,13 +69,13 @@ graph TB
 **TermApp chrome** is a flat `AddWidget` list. **`DebuggerApp.HandleResize`** assigns rects today (`cmd/gdbforge/setup.go` order = index order):
 
 ```go
-// setup: AddWidget(tab), AddWidget(completionBar), AddWidget(cmdWidget)
-w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()))       // TabWidget (workspace; insets H-2 internally)
+// setup: AddWidget(workspace.Widget()), AddWidget(completionBar), AddWidget(cmdWidget)
+w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))     // TabWidget (workspace band)
 w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))     // CompletionBarWidget (overlay row)
 w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))     // CmdWidget (: line)
 ```
 
-`TermApp.Draw` paints in that order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
+Apps own chrome banding in `HandleResize`; `TabWidget.Draw` uses its full assigned rect. `TermApp.Draw` paints in that order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
 
 Called on startup (`NewDebuggerApp`) and on every `EventResize`.
 
@@ -218,28 +218,57 @@ Per-layout normal-mode key policy is registered in `cmd/gdbforge/layout_behavior
 
 ---
 
+## Workspace (gdbforge) vs Tab (termui)
+
+gdbforge owns a **`Workspace`** layer (`cmd/gdbforge/workspace*.go`) above `termui.TabWidget`:
+
+| Layer | Owns |
+|-------|------|
+| **`Workspace`** | Pane marks (`code` / `gdb` / `asm` / `last`), Code/GDB activation, placement (`placeCodeInSlot`, sticky GDB swap), layout apply — assumes Tab content is a split tree |
+| **`TabWidget`** | Tab list chrome; forwards Draw/HandleEvent to active tab content |
+| **`DebuggerApp` / `*Ctl`** | Debugger domain (breakpoints, stops, threads, buffers, …) |
+
+`Workspace` is **workspace policy**, not debugger policy. Split-tree ops stay on `TabWidget` via `Workspace.Tab()` / `DebuggerApp.Tab()`.
+
+### Future: Tab as a generic content host
+
+**Long-term:** a `Tab` should host a **generic view/container** (any `Widget`), not always a `WidgetTree`. Examples: form UI, text viewer, custom WM, LazyGit-style UI, Stock Trader Dashboard.
+
+**Today (deferred redesign):** `Tab.tree` is still `*WidgetTree`. Do **not** add new termui APIs that deepen that assumption; prefer `Widget` when extending. Known WidgetTree-centric surfaces on `TabWidget`:
+
+| API / field | Why it is tree-coupled |
+|-------------|------------------------|
+| `Tab.tree` | Content type is hardcoded |
+| `NewTabWidget(title, *WidgetTree)` | Constructor requires a tree |
+| `ActiveTree` / `SetActiveTree` | Layout remount for split trees |
+| `VerticalSplit` / `HorizontalSplit` / `OnlyFocus` / `DeleteFocus` | Split-tree geometry |
+| `SetLeafMark` / `LeafMark` / `FindLeaf` / `FocusLeaf` / … | Leaf navigation on a tree |
+| `ReplaceFocusedWidget` / `ReplaceMatchingLeafWidget` | Leaf buffer swap |
+
+gdbforge `Workspace` may remain the **split-tree policy** layer even after Tab generalizes; other tab contents would use different app policy.
+
 ## Tab management
 
-Each tab owns an independent **`WidgetTree`** (split-tree workspace). **Tab** is chrome only (title + tree): current focus and named leaf marks (`SetLeafMark` / `LeafMark`) live on the **WidgetTree**, not on Tab. Mark **names** and focus policy are **app-private**: `cmd/gdbforge` chooses `"code"` / `"gdb"` / `"last"` for Esc / `i` restore. TermUI stays reusable for other apps (e.g. lazygit-style layouts) with no debugger role knowledge.
+**Today** each tab’s content is a **`WidgetTree`**. **Tab** is chrome (title + content). Focus and named leaf marks live on the **WidgetTree**. Mark **names** and focus policy are **app-private** on `Workspace`. TermUI itself should stay free of debugger roles so other apps can reuse it.
 
 ```mermaid
 flowchart LR
     TabBar["TabBar"]
-    T1["Tab 1 · WidgetTree"]
-    T2["Tab 2 · WidgetTree"]
-    T3["Tab 3 · WidgetTree"]
+    T1["Tab 1 · content"]
+    T2["Tab 2 · content"]
+    T3["Tab 3 · content"]
 
     TabBar --> T1
     TabBar --> T2
     TabBar --> T3
 ```
 
-Current `TabWidget` implementation:
+Current `TabWidget` implementation (tree-coupled; see above):
 
 ```go
 type Tab struct {
     Title string
-    tree  *WidgetTree
+    tree  *WidgetTree // future: generic content Widget
 }
 
 type TabWidget struct {
@@ -252,15 +281,16 @@ type TabWidget struct {
 |---------|--------|
 | Single tab container | Implemented |
 | Forward events/draw to active tab | Implemented |
-| Named leaf marks on WidgetTree | Implemented |
+| Named leaf marks on WidgetTree | Implemented (tree-centric) |
+| Generic non-tree tab content | Not implemented (deferred) |
 | Tab header rendering | Not implemented |
 | Tab switching | Not implemented |
 | Tab close / new tab | Not implemented |
 | Persist layout per tab | Not implemented |
 
-**Design decision:** tabs are **workspace presets**, not separate debugger sessions (initially). A tab might represent "source + console" vs "registers + memory". Multi-session tabs may come later with backend association per tab.
+**Design decision:** gdbforge tabs are **workspace presets**, not separate debugger sessions (initially). A tab might represent "source + console" vs "registers + memory". Multi-session tabs may come later with backend association per tab.
 
-`TabWidget.Draw` currently shaves 2 rows from height (`r.H()-2`) — a temporary adjustment pending proper Root layout integration.
+Named layout builders (`internal/gdbforge/layout`) return a `*WidgetTree`; `Workspace` mounts it via `SetActiveTree` onto its single `TabWidget`.
 
 ---
 

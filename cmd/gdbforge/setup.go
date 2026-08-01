@@ -28,16 +28,17 @@ func (a *DebuggerApp) InitB() error {
 		a.logoWidget = logo
 	}
 
-	a.tab = a.newStartupTab(logo)
+	a.ws = newWorkspace(a, a.newStartupTab(logo))
+	tab := a.Tab()
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
-	a.tab.FocusWidget(a.gdbWidget)
-	a.tab.SetLeafMark(leafMarkCode, a.tab.FindLeaf(isCodeSlot))
-	a.tab.SetLeafMark(leafMarkGDB, a.tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
+	tab.FocusWidget(a.gdbWidget)
+	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
+	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
-	a.tab.SetOnResize(a.RequestFrame)
+	tab.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
-	a.tab.SetEqualAlways(true)
-	a.AddWidget(a.tab)
+	tab.SetEqualAlways(true)
+	a.AddWidget(a.ws.Widget())
 
 	// DebuggerApp wires the wildmenu into the layout; completionCtl owns it.
 	bar := termui.NewCompletionBarWidget(a.ctx)
