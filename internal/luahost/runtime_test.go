@@ -255,6 +255,59 @@ end
 	}
 }
 
+// Regression: ModeLua Draw/tick must not block forever while CallNamed holds
+// rt.mu (worker open_buffer → callOnUI). That froze :lua snake after the pane opened.
+func TestDispatchTickSkipsWhenCallNamedHoldsLock(t *testing.T) {
+	p := &memPane{w: 8, h: 4}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	rt.SetOpenBuffer(func(name string) {
+		close(entered)
+		<-release
+	})
+	if err := rt.LoadString(`
+function on_tick(dt) end
+gdbforge.register("go", function()
+  gdbforge.open_buffer("pane")
+end)
+`, "tick-lock"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("go") }()
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("open_buffer not reached")
+	}
+
+	tickDone := make(chan struct{})
+	go func() {
+		rt.DispatchTick(0.1)
+		close(tickDone)
+	}()
+	select {
+	case <-tickDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("DispatchTick blocked while CallNamed held rt.mu")
+	}
+
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("CallNamed did not finish")
+	}
+}
+
 // Regression: app-installed Lua funcs (luadebug) call AppendPrint while CallNamed
 // holds rt.mu. Re-locking AppendPrint froze :lua dlv_ext_port.
 func TestAppendPrintFromHostFuncUnderCallNamed(t *testing.T) {

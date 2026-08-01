@@ -313,7 +313,11 @@ func (rt *Runtime) DispatchDraw() {
 }
 
 func (rt *Runtime) callGlobal(name string, args ...lua.LValue) {
-	rt.mu.Lock()
+	// TryLock: never block the UI paint/key path on CallNamed (worker job).
+	// Skipping a tick/draw/key frame is preferable to freezing the whole TUI.
+	if !rt.mu.TryLock() {
+		return
+	}
 	defer rt.mu.Unlock()
 	if rt.L == nil {
 		return

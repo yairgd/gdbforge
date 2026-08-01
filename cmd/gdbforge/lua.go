@@ -165,6 +165,16 @@ func (c *luaCtl) OnCmd(args ...any) {
 		a.RequestFrame()
 		return
 	}
+	// ModeLua pane scripts (on_key/on_tick): run main() on the UI thread.
+	// startJob + callOnUI deadlocks — CallNamed holds rt.mu while open_buffer
+	// waits for the UI, and StartTicks/Draw need the same lock for on_tick.
+	if rt.HasPaneHooks() {
+		if err := rt.CallNamed(name, strArgs...); err != nil && a.ctx.Log != nil {
+			a.ctx.Log.Named("lua").Error(err.Error())
+		}
+		a.RequestFrame()
+		return
+	}
 	c.startJob(rt, name, strArgs)
 }
 

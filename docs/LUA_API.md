@@ -61,6 +61,8 @@ Respects job cancel: **Ctrl-C** during an async `:lua` job aborts sleep with an 
 
 Automation `:lua <name>` runs **off the UI thread** so the TUI stays responsive. Only one job at a time; a second `:lua` while busy prints a notice. **Ctrl-C** cancels the job: aborts the Lua VM (including after a blocking call returns), interrupts `sleep` / `wait_port`, and kills any in-flight `gdbforge.system` process group. Prefer `gdbforge.system` over `io.popen` for ssh/scp so Ctrl-C can stop them immediately.
 
+ModeLua pane scripts (`on_key` / `on_tick`, e.g. `:lua snake`) run `main()` **on the UI thread** so `open_buffer` cannot deadlock against the tick/draw path.
+
 ### `gdbforge.system(cmd)` → `status, output`
 
 Run a shell command (`sh -c`). Returns exit status (number) and combined stdout+stderr (string). On job cancel, the process group is SIGKILL'd and Lua raises an error. Catalog scripts (`remotegdb`, `r5_openamp_jlink`) use this for remote `ssh`/`scp`.
