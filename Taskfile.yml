@@ -14,11 +14,16 @@ tasks:
       - task: build
 
   build:
-    desc: Build all commands inside cmd/ (gdbforge version from exact git tag, else "dev")
+    desc: Build cmd/* into bin/ and install copies into $(go env GOPATH)/bin
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - |
         VERSION=$(git describe --tags --exact-match 2>/dev/null || echo dev)
+        GOBIN="$(go env GOBIN)"
+        if [ -z "$GOBIN" ]; then
+          GOBIN="$(go env GOPATH)/bin"
+        fi
+        mkdir -p "$GOBIN"
         for dir in $(ls cmd); do
           echo "Building $dir -> {{.BIN_DIR}}/$dir (version=$VERSION)..."
           if [ "$dir" = "gdbforge" ]; then
@@ -26,7 +31,12 @@ tasks:
           else
             go build -o {{.BIN_DIR}}/$dir ./cmd/$dir
           fi
+          cp -f "{{.BIN_DIR}}/$dir" "$GOBIN/$dir"
+          echo "Installed $dir -> $GOBIN/$dir"
         done
+      # Drop stale embedded Lua catalog; next run rematerializes from the new binary.
+      # Best-effort: ignore permission errors so build still succeeds.
+      - rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/gdbforge/embedded-lua" || true
     silent: true
 
   run:

@@ -31,6 +31,7 @@ func (a *DemoApp) Init() error {
 		Side: a.sidePane,
 		Log:  a.logPane,
 	})
+	a.tab.SetStatusClipboard(a.ClipboardIO())
 	a.tab.FocusWidget(a.mainPane)
 	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)

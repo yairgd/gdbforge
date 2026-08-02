@@ -702,6 +702,11 @@ func (w *CodeWidget) statusLabel() string {
 	return w.PaneName
 }
 
+// StatusLabel implements termui.StatusLabeler (copyable status-band text).
+func (w *CodeWidget) StatusLabel() string {
+	return w.statusLabel()
+}
+
 // DrawStatusLine shows the full file path on the pane status bar.
 func (w *CodeWidget) DrawStatusLine(c termui.Canvas, active bool) {
 	name := w.statusLabel()

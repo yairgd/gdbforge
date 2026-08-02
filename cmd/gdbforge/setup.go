@@ -30,6 +30,7 @@ func (a *DebuggerApp) InitB() error {
 
 	a.ws = newWorkspace(a, a.newStartupTab(logo))
 	tab := a.Tab()
+	tab.SetStatusClipboard(a.ClipboardIO())
 	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	tab.FocusWidget(a.gdbWidget)
 	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))

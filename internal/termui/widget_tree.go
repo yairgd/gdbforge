@@ -2,6 +2,8 @@ package termui
 
 import (
 	"math"
+	"time"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -38,7 +40,18 @@ type WidgetTree struct {
 	grid             *Grid
 	mousePrimaryHeld bool
 
+	statusClip ClipboardIO
+	statusSel  statusSel
+
 	geom map[*Node]layoutGeom
+}
+
+// SetStatusClipboard wires copy for status-band mouse selection.
+func (w *WidgetTree) SetStatusClipboard(io ClipboardIO) {
+	if w == nil {
+		return
+	}
+	w.statusClip = io
 }
 
 func (w *WidgetTree) SetOnResize(fn func()) {
@@ -336,11 +349,24 @@ func (l *WidgetTree) handleMouse(me *tcell.EventMouse) bool {
 	if primary {
 		if !l.mousePrimaryHeld {
 			l.mousePrimaryHeld = true
+			// Double-click on the visible name → copy full label. Single click /
+			// drag on the whole status row keeps separator resize (unchanged).
+			if n := l.leafAtStatus(mx, my); n != nil && l.statusClickOnLabel(n, mx) {
+				if l.noteStatusDoubleClick(n, mx, me.When()) {
+					l.focus = n
+					l.statusCopyFullLabel(n)
+					return true
+				}
+			} else {
+				l.statusSel.clickCount = 0
+			}
 			if split := l.findSeparator(mx, my); split != nil {
+				l.statusSel.clearHighlight()
 				l.dragSplit = split
 				l.updateSplitDrag(mx, my)
 				return true
 			}
+			l.statusSel.clearHighlight()
 			l.FocusAt(mx, my)
 		}
 		return false
@@ -348,6 +374,95 @@ func (l *WidgetTree) handleMouse(me *tcell.EventMouse) bool {
 
 	l.mousePrimaryHeld = false
 	return false
+}
+
+func (l *WidgetTree) leafAtStatus(x, y int) *Node {
+	for _, n := range CollectLeaves(l.root) {
+		if statusBandContains(l.leafRect(n), x, y) {
+			return n
+		}
+	}
+	return nil
+}
+
+// statusClickOnLabel is true when x hits the visible name text only
+// (not the "▎ " prefix and not empty bar to the right of the painted name).
+func (l *WidgetTree) statusClickOnLabel(n *Node, x int) bool {
+	if n == nil {
+		return false
+	}
+	label := statusLabelOf(n.Widget)
+	if label == "" {
+		return false
+	}
+	r := l.leafRect(n)
+	localX := x - r.X()
+	nameStart := statusLabelPrefixCols
+	nameEnd := nameStart + utf8.RuneCountInString(label)
+	if nameEnd > r.W() {
+		nameEnd = r.W()
+	}
+	return localX >= nameStart && localX < nameEnd
+}
+
+// noteStatusDoubleClick updates multi-click state; true on the second click.
+func (l *WidgetTree) noteStatusDoubleClick(n *Node, mx int, when time.Time) bool {
+	label := statusLabelOf(n.Widget)
+	r := l.leafRect(n)
+	col := runeIndexAtLocalX(label, mx-r.X(), statusLabelPrefixCols)
+	same := col == l.statusSel.lastClickCol && l.statusSel.leaf == n
+	if same && !when.IsZero() && when.Sub(l.statusSel.lastClickAt) <= clickMultiTimeoutMs*time.Millisecond {
+		l.statusSel.clickCount++
+	} else {
+		l.statusSel.clickCount = 1
+	}
+	l.statusSel.lastClickAt = when
+	l.statusSel.lastClickCol = col
+	l.statusSel.leaf = n
+	return l.statusSel.clickCount == 2
+}
+
+func (l *WidgetTree) statusCopyFullLabel(n *Node) {
+	label := statusLabelOf(n.Widget)
+	if label == "" {
+		return
+	}
+	l.statusSel.leaf = n
+	l.statusSel.label = label
+	l.statusSel.nameStartCol = statusLabelPrefixCols
+	runes := []rune(label)
+	l.statusSel.anchor = 0
+	l.statusSel.cursor = len(runes)
+	l.statusSel.hasSel = len(runes) > 0
+	l.statusSel.dragging = false
+	l.statusSel.suppressDrag = false
+	l.statusSel.clickCount = 0
+	l.copyStatusText(label)
+}
+
+func (l *WidgetTree) copyStatusText(text string) {
+	if text == "" || l.statusClip.Copy == nil {
+		return
+	}
+	l.statusClip.Copy(text)
+}
+
+func (l *WidgetTree) paintStatusSelection() {
+	s := &l.statusSel
+	if s.leaf == nil || !s.hasSel {
+		return
+	}
+	start, end := s.ordered()
+	if start >= end {
+		return
+	}
+	c := l.leafCanvas(s.leaf)
+	active := l.insertActive
+	if s.leaf == l.focus {
+		PaintStatusBarSel(c, s.label, active, start, end)
+	} else {
+		PaintInactiveStatusBarSel(c, s.label, start, end)
+	}
 }
 
 func (l *WidgetTree) findSeparator(x, y int) *Node {
@@ -419,7 +534,8 @@ func (l *WidgetTree) IsDraggingSeparator() bool {
 
 func (t *WidgetTree) FocusAt(x, y int) bool {
 	for _, n := range CollectLeaves(t.root) {
-		if t.leafRect(n).Contains(x, y) {
+		r := t.leafRect(n)
+		if r.Contains(x, y) || statusBandContains(r, x, y) {
 			t.focus = n
 			return true
 		}
@@ -680,6 +796,7 @@ func (l *WidgetTree) Draw(c Canvas) {
 	WalkLeaves(l.root, func(n *Node) {
 		n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
 	})
+	l.paintStatusSelection()
 }
 
 func (l *WidgetTree) redrawGrid(node *Node, c Canvas) {

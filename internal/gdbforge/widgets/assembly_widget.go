@@ -424,7 +424,7 @@ func (w *AssemblyWidget) SetFocused(focused bool) {
 	}
 }
 
-func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (w *AssemblyWidget) StatusLabel() string {
 	title := "Assembly"
 	if w.pcAddr != "" {
 		title = fmt.Sprintf("Assembly  pc=%s", w.pcAddr)
@@ -432,6 +432,11 @@ func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
 			title = fmt.Sprintf("Assembly  pc=%s  @%s", w.pcAddr, sel)
 		}
 	}
+	return title
+}
+
+func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	title := w.StatusLabel()
 	w.PaneName = title
 	if w.Focused() {
 		termui.PaintStatusBar(c, title, active)

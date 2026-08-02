@@ -38,8 +38,22 @@ type Tab struct {
 type TabWidget struct {
 	Widget
 
-	tabs   []Tab
-	active int
+	tabs       []Tab
+	active     int
+	statusClip ClipboardIO
+}
+
+// SetStatusClipboard wires status-band mouse copy for all tab trees.
+func (t *TabWidget) SetStatusClipboard(io ClipboardIO) {
+	if t == nil {
+		return
+	}
+	t.statusClip = io
+	for i := range t.tabs {
+		if t.tabs[i].tree != nil {
+			t.tabs[i].tree.SetStatusClipboard(io)
+		}
+	}
 }
 
 //
@@ -67,6 +81,7 @@ func NewTabWidget(
 // HandleEvent forwards the event to the active tab tree.
 func (t *TabWidget) HandleEvent(ev tcell.Event) {
 	if tree := t.ActiveTree(); tree != nil {
+		tree.SetStatusClipboard(t.statusClip)
 		tree.HandleEvent(ev)
 	}
 }
@@ -118,6 +133,7 @@ func (t *TabWidget) SetActiveTree(tree *WidgetTree) {
 		return
 	}
 	t.tabs[t.active].tree = tree
+	tree.SetStatusClipboard(t.statusClip)
 }
 
 // FocusedWidget returns the focused leaf widget in the active tab.

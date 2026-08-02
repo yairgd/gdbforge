@@ -326,7 +326,9 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	if primary {
-		if !a.Tab().IsSeparatorAt(x, y) && a.Tab().FocusAt(x, y) {
+		// FocusAt includes the status band; IsSeparatorAt ignores status rows
+		// that share a horizontal gutter so Code status clicks still focus.
+		if a.Tab().FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)

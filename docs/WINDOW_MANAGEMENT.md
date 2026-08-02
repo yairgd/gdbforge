@@ -397,9 +397,16 @@ Each leaf pane in the split tree has a one-row **status band** at local `y = c.H
 3. Redraw split separators (`redrawGrid`) — restores border glyphs and default style
 4. Paint status on **every** leaf (`DrawStatusLine`) — focused bar vs inactive name overlay (no dash fill)
 
-Widgets set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Container widgets (`TabWidget`, `CmdWidget`) use a no-op.
+Widgets set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Container widgets (`TabWidget`, `CmdWidget`) use a no-op. Prefer `StatusLabel()` when the copyable text differs from `PaneName` (Code uses the full source path).
 
-Implementation: `status_line.go`, `base_widget.go`, `widget_tree.go` (`drawWidgets`, `clearStatusRows`, `redrawGrid`, `drawStatusLines`).
+**Mouse on the status band** (row at `Bottom()` of the leaf, outside content):
+
+| Gesture | Action |
+|---------|--------|
+| Double-click on the **name text** | Copy the full status label (path for Code); brief white highlight |
+| Click or drag anywhere on the status row | Unchanged: split resize / focus — same as before status-copy |
+
+Implementation: `status_line.go`, `status_sel.go`, `base_widget.go`, `widget_tree.go` (`drawWidgets`, `clearStatusRows`, `redrawGrid`, `drawStatusLines`).
 
 ---
 

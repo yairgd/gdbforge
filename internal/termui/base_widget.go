@@ -126,15 +126,24 @@ func (b *BaseWidget) Start(handler func(Event)) {
 	}()
 }
 
+// StatusLabel is the copyable status-band text (default: PaneName).
+func (b *BaseWidget) StatusLabel() string {
+	if b == nil {
+		return ""
+	}
+	return b.PaneName
+}
+
 func (b *BaseWidget) DrawStatusLine(c Canvas, active bool) {
-	if b.PaneName == "" {
+	name := b.StatusLabel()
+	if name == "" {
 		return
 	}
 	if b.focused {
-		PaintStatusBar(c, b.PaneName, active)
+		PaintStatusBar(c, name, active)
 		return
 	}
-	PaintInactiveStatusBar(c, b.PaneName)
+	PaintInactiveStatusBar(c, name)
 }
 
 // send event into the widget

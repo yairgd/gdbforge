@@ -223,8 +223,9 @@ Implementation: `internal/collections/trie.go` via `KeyBindingRegistry`.
 | Click cmdline | Enter command mode; set caret from column |
 | Scroll wheel | Scroll focused viewport (source / console / lists) |
 | Drag in viewport | Text selection; copy to CLIPBOARD and X11 PRIMARY (`platform/clipboard.go`) |
-| Double-click | Select word (`termui/viewport_word.go`) and copy |
-| Triple-click | Select line and copy |
+| Double-click (content) | Select word (`termui/viewport_word.go`) and copy |
+| Triple-click (content) | Select line and copy |
+| Status band | Double-click name text → copy full label. Single-click / drag anywhere on the row → split resize as before (`status_sel.go`) |
 | Middle-click | Paste PRIMARY (preferred) or CLIPBOARD — **rising edge only** (debounce ~120ms) |
 | Thread / Call Stack / Breakpoints click | Activate on **button release** (not every drag sample); skip same-row drag that was a text select; debounce duplicate activate ~300ms |
 
