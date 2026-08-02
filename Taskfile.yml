@@ -1,0 +1,99 @@
+# go-task runner: https://taskfile.dev
+# Install: go install github.com/go-task/task/v3/cmd/task@latest
+# Ensure $(go env GOPATH)/bin is on PATH (e.g. ~/go/bin).
+version: '3'
+
+vars:
+  APP_NAME: gdbforge
+  BIN_DIR: bin
+
+tasks:
+  default:
+    desc: Build the project (default task)
+    cmds:
+      - task: build
+
+  build:
+    desc: Build all commands inside cmd/ (gdbforge version from exact git tag, else "dev")
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - |
+        VERSION=$(git describe --tags --exact-match 2>/dev/null || echo dev)
+        for dir in $(ls cmd); do
+          echo "Building $dir -> {{.BIN_DIR}}/$dir (version=$VERSION)..."
+          if [ "$dir" = "gdbforge" ]; then
+            go build -ldflags "-X main.version=${VERSION}" -o {{.BIN_DIR}}/$dir ./cmd/$dir
+          else
+            go build -o {{.BIN_DIR}}/$dir ./cmd/$dir
+          fi
+        done
+    silent: true
+
+  run:
+    desc: Run the gdbforge debugger
+    cmds:
+      - go run ./cmd/gdbforge
+
+  debug:
+    desc: Run gdbforge with Delve (headless)
+    cmds:
+      - dlv debug ./cmd/gdbforge --headless --listen=:2345 --api-version=2
+
+  test:
+    desc: Run all tests (gdb/dlv/pty cases skip if tools or hello binary missing)
+    cmds:
+      # Exclude repo-root sample hello.go/hello.c (not a real package).
+      - go test ./cmd/... ./internal/...
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+
+  check-imports:
+    desc: Fail on forbidden framework→app / widgets→gdb|mcp / dlv→termui imports
+    cmds:
+      - ./scripts/check_imports.sh
+
+  vet:
+    desc: Vet Go code
+    cmds:
+      - go vet ./...
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+
+  docs:
+    desc: Serve gdbforge documentation locally
+    cmds:
+      - go run ./cmd/docserve
+
+  docs:export:
+    desc: Export static docs site (GitHub Pages)
+    cmds:
+      - go run ./cmd/docserve --export _site --base /gdbforge/ --site-origin ${GDBFORGE_DOCS_SITE_ORIGIN:-https://yairgd.github.io}
+
+  docs:preview:
+    desc: Preview exported static site locally
+    deps: [docs:export]
+    cmds:
+      - go run ./cmd/docserve --serve-static _site --base /gdbforge/ --port 8766
+
+  build-linux:
+    desc: Cross-compile gdbforge for Linux
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - |
+        VERSION=$(git describe --tags --exact-match 2>/dev/null || echo dev)
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${VERSION}" -o {{.BIN_DIR}}/gdbforge-linux ./cmd/gdbforge
+
+  build-mac:
+    desc: Cross-compile gdbforge for macOS
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - |
+        VERSION=$(git describe --tags --exact-match 2>/dev/null || echo dev)
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${VERSION}" -o {{.BIN_DIR}}/gdbforge-mac ./cmd/gdbforge

@@ -65,8 +65,8 @@ gdbforge/
 │   ├── gdb/               # GDB MI2 backend ★
 │   ├── dlv/               # Delve CLI backend ★
 │   ├── mcp/               # HTTP/MCP surface (thin; parsers elsewhere)
-│   ├── playground/        # Experiments (not production)
-│   └── tests/
+│   └── playground/        # Experiments (not production)
+│                          # Tests: *_test.go next to each package (no internal/tests/)
 ├── docs/                  # gdbforge documentation ★
 ├── go.mod
 ├── Taskfile.yml
