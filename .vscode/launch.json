@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    
+
+    // --- חיבור אוטומטי ל-TUI (מונע Timeout) ---
+    {
+      "name": "Debug TUI: ex1",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "preLaunchTask": "start-dlv-ex1"
+    },
+    {
+      "name": "Debug TUI: ex2",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "preLaunchTask": "start-dlv-ex2"
+    },
+    {
+      "name": "Debug TUI: ex3",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "preLaunchTask": "start-dlv-ex3"
+    },
+
+
+
+    // --- דיבאג רגיל (לא TUI) או תתי-אפליקציות ---
+    {
+      "name": "Launch ex1 (Standard)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/ex1",
+      "console": "integratedTerminal"
+    },
+
+    // --- דיבאג של טסטים ---
+    {
+      "name": "Debug Current Test File",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}"
+    },
+
+       {
+      "name": "Debug TUI: app",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "preLaunchTask": "start-dlv-tui-app"
+    },
+
+    
+    // --- חיבור ידני (ליתר ביטחון) ---
+    {
+      "name": "Manual Attach (Port 2345)",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "port": 2345,
+      "host": "127.0.0.1"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+graph TB
+    WS["Workspace"]
+    VS["VerticalSplit"]
+    SRC["Source View"]
+    HS["HorizontalSplit"]
+    BP["Breakpoints"]
+    CON["Console"]
+
+    WS --> VS
+    VS --> SRC
+    VS --> HS
+    HS --> BP
+    HS --> CON

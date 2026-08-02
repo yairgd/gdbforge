@@ -1,0 +1,279 @@
+# User guide
+
+In-app twin: **`:help`** / **`:b help`** (source: `buildHelpLines()` in [`internal/gdbforge/widgets/help_widget.go`](../internal/gdbforge/widgets/help_widget.go)).
+
+Browse this file on GitHub or via `./docs/serve.sh`. For Lua scripting details see [LUA_API.md](LUA_API.md). Script catalog: [../lua/README.md](../lua/README.md).
+
+---
+
+### Overview
+
+gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger for GDB and Delve (`-g gdb|dlv`). The screen is a multi-pane workspace: Code (or logo / Assembly), debugger console, IO, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
+
+**Status line colors:**
+
+- Green — insert mode (pane actively typing / focused for edit)
+- Blue — normal mode (pane remembered / not insert-active)
+
+### Modes
+
+**Normal**
+
+Default navigation mode. Global keys (`n`/`s`/`c`, Space, window focus) and focused-pane keys apply. Esc leaves insert into normal.
+
+**Insert**
+
+Type into the focused console (usually GDB). Enter with `i` (focuses GDB) or by clicking a pane. Esc returns to normal. When GDB is focused, printable keys (including Space) go to GDB.
+
+**Command**
+
+Enter with `:` or by clicking the bottom cmdline. Type a command, Tab for completion, Enter to run, Esc to cancel.
+
+**Search**
+
+Enter with `/` in normal mode. Searches the **focused** pane (Code, GDB, IO, lists, Help, …). Matches highlight live as you type; Enter commits (highlights stay). Esc reverts to the last committed pattern and leaves search mode. History is separate from `:`. Tab does not complete. On Code, a real caret (`h`/`l` or arrows) marks the column; `*` / `#` search that word; `N` previous match; **`n` is always GDB next** (same as `s`/`c` run-control). On other panes, `n` / `N` jump search matches when a pattern is active.
+
+**Completion**
+
+After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cycle; type letters to narrow (CompletionMenu); Enter accepts; Esc cancels. The completion bar is a replaceable view over that menu.
+
+### Global keys (any mode)
+
+| Key | Action |
+|-----|--------|
+| Ctrl-Z | suspend inferior if running, else suspend gdbforge |
+| Ctrl-C | interrupt inferior / debugger (same as GDB console Ctrl-C) |
+| Ctrl-D | send `q` / quit (confirm if inferior alive); app exits when the debugger session ends |
+
+### Global keys (normal mode)
+
+| Key | Action |
+|-----|--------|
+| `:` | enter command mode |
+| `/` | search in focused pane (live highlight; Enter commits) |
+| `*` / `#` | search word under Code caret (or selection) forward / backward |
+| `n` / `N` | Code: `n` = GDB next (like `s`/`c`); `N` = prev search. Other panes: search next/prev |
+| `h` / `l` | move Code caret left / right (also ←/→) |
+| `i` | focus GDB leaf and enter insert |
+| `Esc` | leave insert; focus last non-Code/non-GDB pane if one was active, else the Code/logo leaf (`:set noesctocode` keeps focus on current pane) |
+| `n` | GDB next via MI `-exec-next` (also in insert when Code is focused) |
+| `s` | GDB step via MI `-exec-step` (also in insert when Code is focused) |
+| `c` | GDB continue via MI `-exec-continue` (also in insert when Code is focused) |
+| `f` | GDB finish via MI `-exec-finish` (Delve: `stepout`; also in insert when Code is focused) |
+| Up / Down | move Code browse cursor (does not move ━━▶) |
+| Space | toggle breakpoint: Call Stack selection, Code cursor line, or Asm addr (never steals Space from GDB) |
+| `e` | enable/disable breakpoint at Code/Asm cursor |
+| Ctrl-W h/j/k/l | focus left / down / up / right |
+| Ctrl-W arrows | same as hjkl |
+| Ctrl-W o | only — close other panes, keep focused |
+| Ctrl-O | jump back after `:b` / `:edit` / `:!` |
+
+### Colon commands
+
+**Buffers and views**
+
+- `:help` — open this manual (same as `:b help`)
+- `:b <name>` — switch builtin or already-open file buffer
+- `:b help|about|gdb|output|breakpoint|threads|callstack|logger|exec|asm`
+- `:edit` — project source file picker
+- `:edit <file>` — open that source in a CodeWidget
+- `:e` — unique prefix of `:edit`
+- `:N` / `:0` — jump Code browse cursor (blue line) to line N (`:0` → 1)
+- `:b asm` / `:b assembly` — show Assembly in the location leaf (GDB; sticky until `:b code` or source returns)
+
+**Layout**
+
+- `:layout wide` — startup layout (Code|IO over GDB|(Threads|Callstack / Breakpoints))
+- `:layout panels` — Code|GDB left; IO + Threads|Callstack over Breakpoints
+- `:layout default` — six-pane workspace
+- `:layout classic` — full-width Code over GDB
+- `:layout <name> asm` — same layout with an Assembly split (classic/wide/panels)
+- `:layout` — re-apply wide
+- `:vs` / `:split` — vertical / horizontal split
+- `:vs asm` / `:sp asm` — Assembly right of / below Code
+- `:only` — keep focused pane only (same as Ctrl-W o)
+
+**Settings (`:set …`)**
+
+- `equalalways` / `noequalalways`
+- `clearoutput` / `noclearoutput` — clear IO pane when GDB session starts (default on)
+- `continueafterclear` / `nocontinueafterclear` — after removing a BP while running, auto-continue (default off). Inserting a BP while running still auto-continues. `frame`/`thread` commands never auto-continue.
+- `esctocode` / `noesctocode` — Esc restores last pane / Code (default on)
+- `breakmain` / `nobreakmain` — insert `break main` on GDB start (default on); skipped when restoring `./.gdbforge/breakpoints.yaml` or when using `-x`/`-ex`
+- `gdblistenprint` / `nogdblistenprint` — paint App/MCP replies in GDB console (default on)
+- `gdbtargetprint` / `nogdbtargetprint` — also paint program stdout in GDB console like a classic terminal (default off); IO pane always uses the inferior PTY
+- `inferior-tty` / `inferior-tty internal` — route program stdio to an **external terminal** (TUI apps need a real VT; `:b io` is only a line console):
+  - bare `:set inferior-tty` — open a terminal (`GDBFORGE_TERMINAL`) and attach stdio there
+  - `:set inferior-tty internal` — restore the in-app IO pane
+  - optional `/dev/pts/N` — use an already-open slave; startup: `GDBFORGE_INFERIOR_TTY`
+  - **GDB:** live `-inferior-tty-set` (no restart)
+  - **Delve (`-g dlv`):** restarts `dlv exec --tty …` (same program args). For Go TUIs prefer `:lua dlv_port` (headless dlv in another window + `dlv connect` — stdio stays there)
+  - Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets)
+- `markcolor <name>` — focused list selection (default blue)
+- `markdimcolor <name>` — unfocused selection (default gray)
+- `breakcolor <name>` — enabled BP bg (default red)
+- `breakdisabledcolor <name>` — disabled BP bg (default yellow)
+- `breakcondcolor <name>` — conditional BP bg (default orange)
+- `pccolor <name>` — Code ━━▶ row bg (default darkslategray)
+- `stackbreakcolor <name>` — green mark at stop PC on Breakpoints / Call Stack #0 / current Thread (default green)
+- `codeselcolor <name>` — Code browse cursor bg (default darkblue)
+- `mutedcolor <name>` — empty-list / dim text (default gray)
+- `searchcolor <name>` — `/` search match background (default darkorange)
+
+**Other**
+
+- `:! <cmd>` — run shell in an Exec pane
+- `:AI <question>` — in-app LLM against live GDB (`:ai` alias)
+- `:clear` — clear focused clearable pane
+- `:close` — close focused pane/split (no-op if last pane)
+- `:quit` / `:q` — quit app (confirm if inferior alive; same as Ctrl-D)
+- `:quit!` / `:q!` — force quit with no Quit-anyway question
+- `:window left|right|up|down` — focus direction
+- `:gdb run|start|continue|next|step|finish|nexti|stepi|interrupt`
+- `:gdb break file` / `:gdb break delete`
+- `:gdb info registers|threads`
+
+### Per-pane reference
+
+**Code (or startup logo)**
+
+- Startup shows the gdbforge logo until a source file is opened (`*stopped`, `:edit`, or file picker). Then Logo is replaced by Code.
+- ━━▶ — real program counter (`StopLocation` from `*stopped`)
+- Blue cursor line — browse selection (j/k, or jump from Breakpoints); does not move ━━▶
+- Space — insert/remove breakpoint at cursor
+- `e` — enable/disable BP (yellow gutter when disabled; orange when conditional)
+- Missing/.so src — centered "not available" + path; under GDB, Assembly may auto-swap into the location leaf until source returns
+- Status line — full file path when focused
+
+**Assembly (`:b asm`)**
+
+- Disassembly for the current frame (GDB; not available under Delve)
+- Space — toggle breakpoint at address; `e` — enable/disable
+- Synced from stop / frame / `f` / `up` / `down` like Code
+- Sticky after `:b asm`; autoAsm (missing source) reclaims Code when a readable frame returns
+- `:layout <name> asm` / `:vs asm` / `:sp asm` for a dedicated Assembly split
+
+**GDB / Delve console**
+
+- Insert mode to type CLI; Enter submits; Tab completes (wildmenu); unique Tab completion appends a trailing space (e.g. `ju` → `jump `)
+- **Tab (GDB):** MI `-complete` (commands, files, symbols)
+- **Tab (Delve `-g dlv`):** command names from a static list; for `b` / `break` / `trace` / … locspecs, runs `funcs ^<prefix>` (e.g. `b main.` → `main.main`). File:`line` locspecs are not completed yet
+- Enter on empty line repeats the last command
+- `n`/`s`/`c` keys and typed `next`/`step`/`continue` use MI `-exec-*` under GDB (no CLI source dump — Code pane follows `*stopped`); under Delve they are plain CLI
+- Ctrl-C interrupt (only when the inferior is running under Delve); Ctrl-Z suspend / Ctrl-D quit (any mode); Ctrl-L clear; Ctrl-V / middle-click paste
+- After exit, Delve may ask `Set a suspended breakpoint … [Y/n]?` — answer `y`/`n` on the live host (Ctrl-C sends `n`)
+- `frame` / `f` / `up` / `down` sync Code + Call Stack after `(gdb)` / `(dlv)` prompt
+- Mouse drag selects scrollback; double-click word / triple-click line; Ctrl-C copies selection
+
+**Breakpoints (`:b breakpoint`)**
+
+- j/k or Up/Down / Enter / click-release — select; Code jumps with blue cursor (━━▶ stays on real PC). Selected row at stop PC stays green
+- `e` — toggle enable (disabled rows stay in list, removed from GDB)
+- `d` — delete from list and GDB
+- Row colors: `breakcolor` / `breakdisabledcolor`; green = stop PC (`stackbreakcolor`)
+- Persist: saved to `./.gdbforge/breakpoints.yaml` on quit (`q` / Ctrl-D); restored on next start from the same cwd
+
+**Threads (`:b threads`)**
+
+- j/k Up/Down Enter click-release — select thread (`-thread-select`), refresh stack, show current frame source
+- Green row: current thread whose location matches stop PC (━━▶)
+
+**Call Stack (`:b callstack`)**
+
+- j/k Up/Down Enter click-release — select frame (`-stack-select-frame`), show source (or not-available placeholder); no CLI frame dump
+- Space — toggle breakpoint at selected frame location
+- Green row: frame 0 only, when it matches stop PC (━━▶)
+
+**IO console (`:b io`, alias `:b output`)**
+
+- Default: program stdin/stdout on a **dedicated PTY** (GDB: `-inferior-tty-set`; Delve: `dlv exec --tty`); debugger console uses a separate PTY
+- Type here while the inferior is running; Enter sends to the program
+- PgUp/PgDn scroll; Ctrl-L clear; Ctrl-C → program interrupt; ANSI colors
+- **Not a VT emulator** — for TUI/curses targets use an external terminal
+- **High-rate stdout (GUI limit):** `:b io` shares gdbforge’s UI event loop. A tight `printf` storm stays **interruptible** (Ctrl-C works; the PTY applies backpressure), but scrolling/paint will **not** feel as smooth as mate-terminal/kitty. Prefer an external tty for flood-heavy or full-screen programs — that is expected, not a bug.
+
+### Why `:set inferior-tty` (external stdio)
+
+Route program stdin/stdout to a **real terminal emulator** (`GDBFORGE_TERMINAL`) instead of `:b io`:
+
+| Advantage | What you get |
+|-----------|----------------|
+| **Smooth high-volume output** | The emulator owns the PTY master — built for flood scroll/paint |
+| **Real VT / TUI** | curses, menus, alternate screen, correct `isatty` |
+| **Responsive input under load** | Keys and display live in that window; gdbforge stays free for GDB/Delve |
+| **Clear separation** | Debugger chrome (`:b gdb`, source, BPs) stays in gdbforge; program I/O next door |
+
+| | GDB | Delve (`-g dlv`) |
+|--|-----|------------------|
+| `:set inferior-tty` | Live `-inferior-tty-set` | Restarts session with `--tty` |
+| Recommended TUI / flood flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [prog args…]` (alias `dlv_port`) — headless dlv in another window + connect; I/O stays there |
+| Env | `GDBFORGE_INFERIOR_TTY`, `GDBFORGE_TERMINAL` | same |
+
+- When external, `:b io` shows a note only (type in the other window). Closing that window does not auto-rewire — `:set inferior-tty internal`
+- Global Ctrl-D quits the debugger (same as GDB pane); it is not sent as program EOF
+
+### External terminal (quick start)
+
+```bash
+# Shared: pick the emulator for spawn_terminal / external tty / dlv_ext_port
+export GDBFORGE_TERMINAL=mate-terminal
+
+# GDB — TUI target in another window
+./bin/gdbforge ./my_tui
+# then:  :set inferior-tty
+# or:    :lua terminal_debug
+
+# Delve — Go (preferred: headless dlv in another window + connect)
+./bin/gdbforge -g dlv ./hello-go
+# install:  mkdir -p .gdbforge/lua && cp -r lua/dlv_ext_port .gdbforge/lua/
+# then:     :lua dlv_ext_port 1234              # optional extra prog args follow
+# Alias:    :lua dlv_port …
+
+# Embedded Linux board — scp (if changed) + ssh gdbserver + target remote
+export GDBFORGE_REMOTE_HOST=192.168.20.50
+./bin/gdbforge ./hello
+# install:  cp -r lua/remotegdb .gdbforge/lua/
+# then:     :lua remotegdb
+#           :lua remotegdb ./hello 192.168.20.50 1234
+```
+
+Full per-script recipes and env vars: [`../lua/README.md`](../lua/README.md).
+
+**About (`:b about`)**
+
+- Version, build info, and license
+
+### Session / GDB startup
+
+- `gdbforge [opts] [--] [gdb opts]` — e.g. `-- -nx -x script.gdb elf`
+- Waits for first `(gdb)` before app MI (so `-x` remote/load can finish)
+- Injects `set pagination off` (no `--Type <RET>` during load)
+- Breakpoints YAML: `./.gdbforge/breakpoints.yaml` (cwd — usually the build dir)
+
+### Clipboard and mouse
+
+- Ctrl-C / Ctrl-X — copy / cut selection (viewports) or cmdline text
+- Ctrl-V — paste into console input or `:` cmdline
+- Middle-click — paste (Linux terminal style)
+- Click `:` line — enter command mode; caret follows column
+- Click outside `:` — leave command mode, then focus that pane
+- Drag in scrollback — select text; release copies
+
+### Breakpoints while the inferior is running
+
+Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only for insert (or clear if `continueafterclear`). Switching threads/frames while running interrupts but does not auto-continue.
+
+### Tips
+
+- Tab after `:b` or `:edit` lists candidates in the wildmenu
+- Use `:layout wide` if the workspace looks wrong after splits
+- Prefer `:edit` for project files; `:b` is for open buffers + builtins
+- Run gdbforge from the build dir so `./.gdbforge/breakpoints.yaml` matches your project
+
+### See also
+
+- `:b about` — version and license
+- `:help` — in-app summary of this guide
+- [LUA_API.md](LUA_API.md) — Lua / `gdbforge.*` reference
+- [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) — how GDB/Delve PTYs, `:b io`, and external terminals connect
+- [../lua/README.md](../lua/README.md) — installable Lua workflows

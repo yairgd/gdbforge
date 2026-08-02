@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph Input["Input paths"]
+        User["User keyboard / mouse"]
+        Async["Async sources · GDB PTY"]
+    end
+
+    subgraph TermApp["TermApp event loop"]
+        Poll["PollEvent · tcell.Event"]
+        Bus["events chan · termui.Event"]
+        TermHandler["TermApp.HandleEvent"]
+        HandleKey["AppApi.HandleKey"]
+        Widgets["widget HandleEvent"]
+        CoreHub["HandleCoreEvents"]
+        Draw["Draw pipeline"]
+        Screen["Terminal screen"]
+    end
+
+    subgraph App["Application layer"]
+        Dispatch["Command / event dispatch"]
+        Debugger["Debugger backend"]
+        Model["Buffer / Viewport / state"]
+    end
+
+    User --> Poll
+    Async --> Poll
+    Poll --> TermHandler
+    TermHandler --> HandleKey --> Widgets
+    Widgets -->|"publish domain events"| Bus
+    Async -.->|"planned: publish"| Bus
+    Bus --> CoreHub --> Dispatch
+    Dispatch --> Debugger
+    Debugger --> Model
+    Dispatch --> Model
+    Widgets --> Draw
+    Draw --> Screen

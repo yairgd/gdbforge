@@ -1,0 +1,29 @@
+flowchart TB
+    subgraph UI["UI Layer · internal/termui"]
+        TermApp
+        Widget
+        WidgetTree
+        Canvas
+        Grid
+    end
+
+    subgraph App["Orchestration · cmd/gdbforge"]
+        DebuggerApp["DebuggerApp"]
+        HandleCore["HandleCoreEvents"]
+    end
+
+    subgraph Core["Business Logic · internal/core"]
+        Events
+        Buffer
+        Viewport
+    end
+
+    subgraph Backends["Debugger Backends · internal/gdb"]
+        GDB_MI["GDB MI2 Client"]
+        Future["OpenOCD / JTAG / Kernel · planned"]
+    end
+
+    TermApp --> App
+    App --> Core
+    Core --> Backends
+    UI -.->|"no direct import"| Backends

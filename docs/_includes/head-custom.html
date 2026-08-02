@@ -1,0 +1,7 @@
+{% comment %}
+  GitHub Pages (branch → /docs + Jekyll) loads this after the theme CSS.
+  Gives dark gdbforge styling + Mermaid rendering without requiring Actions/docserve.
+{% endcomment %}
+<link rel="stylesheet" href="{{ '/www/site.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/www/jekyll-overrides.css' | relative_url }}">
+<script src="{{ '/www/jekyll-mermaid.js' | relative_url }}" defer></script>

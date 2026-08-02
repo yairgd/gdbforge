@@ -1,0 +1,9 @@
+flowchart TB
+    Root["Root"]
+    TabBar["TabBar<br/>(fixed height)"]
+    Workspace["Workspace<br/>(remaining area)"]
+    CmdLine["CmdLine<br/>(fixed height)"]
+
+    Root --> TabBar
+    Root --> Workspace
+    Root --> CmdLine

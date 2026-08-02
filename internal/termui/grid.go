@@ -1,0 +1,267 @@
+package termui
+
+import (
+	"github.com/gdamore/tcell/v2"
+)
+
+type Grid struct {
+	W int
+	H int
+
+	Cells     [][]Cell
+	BackCells [][]Cell
+
+	// System text cursor (DECSCUSR + ShowCursor), not a drawn rune.
+	cursorVisible bool
+	cursorX       int
+	cursorY       int
+	cursorStyle   tcell.CursorStyle
+
+	// System mouse pointer shape (OSC 22), empty means reset stack.
+	pointerShape string
+
+	// Set when a widget requests the native text cursor this frame.
+	nativeCursorSet bool
+}
+
+func NewGrid(w, h int) *Grid {
+
+	g := &Grid{
+		W: w,
+		H: h,
+	}
+
+	g.Cells = make([][]Cell, w)
+	g.BackCells = make([][]Cell, w)
+
+	for x := range g.Cells {
+		g.Cells[x] = make([]Cell, h)
+		g.BackCells[x] = make([]Cell, h)
+	}
+
+	return g
+}
+
+func (g *Grid) SetContent(
+	x,
+	y int,
+	ch rune,
+	style tcell.Style,
+) {
+
+	if x < 0 || x >= g.W ||
+		y < 0 || y >= g.H {
+		return
+	}
+
+	cell := &g.Cells[x][y]
+	cell.Style = style
+	cell.Rune = ch
+}
+
+func (g *Grid) Print(
+	x,
+	y int,
+	style tcell.Style,
+	text string,
+) {
+
+	if y < 0 || y >= g.H {
+		return
+	}
+
+	col := x
+
+	for _, r := range text {
+
+		if col >= g.W {
+			break
+		}
+
+		if col >= 0 {
+			g.SetContent(
+				col,
+				y,
+				r,
+				style,
+			)
+		}
+
+		col++
+	}
+}
+
+func (g *Grid) Clear() {
+
+	for y := 0; y < g.H; y++ {
+
+		for x := 0; x < g.W; x++ {
+
+			g.Cells[x][y] = Cell{}
+		}
+	}
+}
+
+func (g *Grid) DrawVertical(
+	x,
+	y1,
+	y2 int,
+	bold bool,
+) {
+
+	for y := y1; y < y2; y++ {
+
+		if x < 0 || x >= g.W ||
+			y < 0 || y >= g.H {
+			continue
+		}
+
+		c := &g.Cells[x][y]
+
+		c.Rune = 0
+		c.Style = tcell.StyleDefault
+		c.Bold = bold
+
+		if y == y1 {
+			c.Down = true
+		} else if y == y2-1 {
+			c.Up = true
+		} else {
+			c.Up = true
+			c.Down = true
+		}
+	}
+}
+
+func (g *Grid) DrawHorizontal(
+	y,
+	x1,
+	x2 int,
+	bold bool,
+) {
+
+	for x := x1; x < x2; x++ {
+
+		if x < 0 || x >= g.W ||
+			y < 0 || y >= g.H {
+			continue
+		}
+
+		c := &g.Cells[x][y]
+
+		c.Rune = 0
+		c.Style = tcell.StyleDefault
+		c.Bold = bold
+
+		if x == x1 {
+			c.Right = true
+		} else if x == x2-1 {
+			c.Left = true
+		} else {
+			c.Left = true
+			c.Right = true
+		}
+	}
+}
+
+func (g *Grid) Draw(
+	screen tcell.Screen,
+) {
+
+	for y := 0; y < g.H; y++ {
+
+		for x := 0; x < g.W; x++ {
+
+			cell := &g.Cells[x][y]
+
+			//
+			// If no explicit rune was written,
+			// generate one from border edges.
+			//
+			if cell.Rune == 0 {
+				cell.EdgesToRune()
+			}
+
+			if g.BackCells[x][y] != *cell {
+
+				g.BackCells[x][y] = *cell
+
+				screen.SetContent(
+					x,
+					y,
+					cell.Rune,
+					nil,
+					cell.Style,
+				)
+			}
+		}
+	}
+}
+
+func (g *Grid) ClearLine(y int, style tcell.Style) {
+	if y < 0 || y >= g.H {
+		return
+	}
+
+	for x := 0; x < g.W; x++ {
+		g.SetContent(x, y, ' ', style)
+	}
+}
+
+func (g *Grid) ShowCursor(x, y int) {
+	if g.isBorderCell(x, y) {
+		g.cursorVisible = false
+		g.pointerShape = PointerDefault
+		return
+	}
+
+	g.cursorVisible = false
+	g.cursorX = x
+	g.cursorY = y
+	g.cursorStyle = tcell.CursorStyleDefault
+	g.pointerShape = PointerText
+}
+
+func (g *Grid) ShowNativeCursor(x, y int) {
+	g.ShowNativeCursorStyle(x, y, tcell.CursorStyleSteadyBlock)
+}
+
+func (g *Grid) ShowNativeCursorStyle(x, y int, style tcell.CursorStyle) {
+	if style == 0 {
+		style = tcell.CursorStyleSteadyBlock
+	}
+	g.cursorVisible = true
+	g.cursorX = x
+	g.cursorY = y
+	g.cursorStyle = style
+	g.pointerShape = ""
+	g.nativeCursorSet = true
+}
+
+func (g *Grid) isBorderCell(x, y int) bool {
+	if x < 0 || x >= g.W || y < 0 || y >= g.H {
+		return false
+	}
+	return g.Cells[x][y].IsBorder()
+}
+
+func (g *Grid) isSplitSeparatorCell(x, y int, dir SplitDir) bool {
+	if x < 0 || x >= g.W || y < 0 || y >= g.H {
+		return false
+	}
+	c := &g.Cells[x][y]
+	switch dir {
+	case Vertical:
+		return c.Up && c.Down
+	case Horizontal:
+		return c.Left && c.Right
+	default:
+		return false
+	}
+}
+
+func (g *Grid) HideCursor() {
+	g.cursorVisible = false
+	g.pointerShape = ""
+	g.nativeCursorSet = false
+}

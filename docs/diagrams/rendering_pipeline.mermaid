@@ -1,0 +1,9 @@
+flowchart LR
+    W["Widgets"]
+    C["Canvas<br/>(local Rect)"]
+    G["Grid<br/>(Cell framebuffer)"]
+    T["tcell Screen"]
+
+    W -->|"Draw(c Canvas)"| C
+    C -->|"writes Cells"| G
+    G -->|"Draw / diff"| T
