@@ -2,7 +2,7 @@
 
 User-facing reference for scripting gdbforge.
 
-**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
+**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
  In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
 
 Scripts are discovered in this order (first basename wins; nested dirs OK):
@@ -74,6 +74,28 @@ Absolute directory of the **current** script file (for sidecars: XML, configs ne
 ### `gdbforge.program()`
 
 Debuggee path from the current gdbforge session (may be `""` if none). Prefer this over hard-coding binaries in scripts that attach to the session program.
+
+### `gdbforge.current_file()` → `path`
+
+Absolute path of the active CodeWidget file (browse cursor / focused source). Empty string if none.
+
+### `gdbforge.current_line()` → `line`
+
+1-based browse cursor line in the active CodeWidget (or `0` if unknown).
+
+### `gdbforge.stop_file()` → `path`
+
+Source path for the stop PC (`━━▶` from `*stopped`). Empty if no stop location yet.
+
+### `gdbforge.stop_line()` → `line`
+
+1-based stop PC line (`━━▶`), or `0` if unknown.
+
+```lua
+local f = gdbforge.stop_file()
+local n = gdbforge.stop_line()
+-- e.g. :lua gvim / :lua vscode → open at PC when stopped
+```
 
 ### `gdbforge.wait_port(host_port [, timeout_sec])`
 

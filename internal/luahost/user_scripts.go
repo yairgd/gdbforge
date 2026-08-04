@@ -412,7 +412,11 @@ func (rt *Runtime) luaSystem(L *lua.LState) int {
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			_ = cmd.Process.Kill()
 		}
-		<-done
+		// Do not block forever if Wait never returns (e.g. sticky GUI child).
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
 		L.RaiseError("%s", ErrJobCancelled.Error())
 		return 0
 	case err := <-done:

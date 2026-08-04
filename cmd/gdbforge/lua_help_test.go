@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/luahost"
 )
 
@@ -26,6 +28,26 @@ func TestCancelLuaJob(t *testing.T) {
 	case <-ctx.Done():
 	default:
 		t.Fatal("context not cancelled")
+	}
+}
+
+func TestCtrlZCancelsLuaWhenInferiorIdle(t *testing.T) {
+	a := &DebuggerApp{}
+	a.lua.app = a
+	ctx, cancel := context.WithCancel(context.Background())
+	a.lua.jobMu.Lock()
+	a.lua.jobCancel = cancel
+	a.lua.jobBusy.Store(true)
+	a.lua.jobMu.Unlock()
+
+	ev := tcell.NewEventKey(tcell.KeyCtrlZ, 0, tcell.ModNone)
+	if !a.tryGlobalSuspend(ev) {
+		t.Fatal("Ctrl-Z should be handled")
+	}
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("lua job should be cancelled by Ctrl-Z when inferior is idle")
 	}
 }
 

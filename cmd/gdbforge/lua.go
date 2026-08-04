@@ -235,6 +235,7 @@ func (c *luaCtl) cancelJob() bool {
 
 // callOnUI runs fn on the UI thread when invoked from the Lua worker.
 // Synchronous host APIs (open_buffer, gdb echo) need this to avoid racing the tree.
+// Respects job cancel so Ctrl-C cannot wedge the worker on <-done.
 func (c *luaCtl) callOnUI(fn func()) {
 	a := c.app
 	if fn == nil {
@@ -255,7 +256,17 @@ func (c *luaCtl) callOnUI(fn func()) {
 		fn()
 		return
 	}
-	<-done
+	var ctxDone <-chan struct{}
+	c.jobMu.Lock()
+	rt := c.jobRT
+	c.jobMu.Unlock()
+	if rt != nil {
+		ctxDone = rt.JobContext().Done()
+	}
+	select {
+	case <-done:
+	case <-ctxDone:
+	}
 }
 
 // isLuaHelpRequest is true for a sole rest arg help / -h / --help.
@@ -456,6 +467,58 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 		},
 		SpawnDlvHeadless: a.SpawnDlvHeadless,
 		Program:          a.SessionProgram,
+		CurrentFile: func() string {
+			var path string
+			c.callOnUI(func() {
+				if cw := a.activeCodeWidget(); cw != nil {
+					path = cw.Path()
+				}
+				if path == "" && a.Debug() != nil {
+					path = a.Debug().CurrentFile()
+				}
+			})
+			return path
+		},
+		CurrentLine: func() int {
+			var line int
+			c.callOnUI(func() {
+				if cw := a.activeCodeWidget(); cw != nil {
+					line = cw.SelLine()
+				}
+				if line < 1 && a.Debug() != nil {
+					line = a.Debug().CurrentLine()
+				}
+			})
+			return line
+		},
+		StopFile: func() string {
+			var path string
+			c.callOnUI(func() {
+				if a.Debug() != nil {
+					path = a.Debug().StopFile()
+				}
+				if path == "" {
+					if cw := a.activeCodeWidget(); cw != nil && cw.PCLine() > 0 {
+						path = cw.Path()
+					}
+				}
+			})
+			return path
+		},
+		StopLine: func() int {
+			var line int
+			c.callOnUI(func() {
+				if a.Debug() != nil {
+					line = a.Debug().StopLine()
+				}
+				if line < 1 {
+					if cw := a.activeCodeWidget(); cw != nil {
+						line = cw.PCLine()
+					}
+				}
+			})
+			return line
+		},
 		GDB: func(cmd string) {
 			c.callOnUI(func() {
 				cmd = strings.TrimSpace(cmd)

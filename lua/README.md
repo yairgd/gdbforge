@@ -53,6 +53,8 @@ Per-script env vars are listed in each section below.
 | [`cortex_r5/`](cortex_r5/) | `r5_baremetal_openocd_digilent` | GDB | Cortex-R5 + Digilent HS2 OpenOCD bare-metal |
 | [`cortex_r5/`](cortex_r5/) | `r5_openamp_jlink` | GDB | Cortex-R5 OpenAMP + J-Link attach |
 | [`cortex_r5/`](cortex_r5/) | `r5_openamp_openocd_digilent` | GDB | Cortex-R5 OpenAMP + Digilent HS2 OpenOCD attach |
+| [`gvim/`](gvim/) | `gvim` | — | Open CodeWidget file in gVim (`--servername`, new tab) |
+| [`vscode/`](vscode/) | `vscode` | — | Open CodeWidget file in VS Code / VSCodium (+ project workspace) |
 | [`games/snake/`](games/snake/) | `snake` | — | Demo pane |
 | [`games/tetris/`](games/tetris/) | `tetris` | — | Demo pane |
 
@@ -215,6 +217,53 @@ Background probe GDB server (Code pane stays), `wait_port`, then architecture / 
 | `GDBFORGE_TDESC` | Target description XML (default: script dir `r5_target.xml`) |
 
 Optional: `:b exec` for probe logs. Does **not** use `GDBFORGE_TERMINAL` (background spawn).
+
+---
+
+## `gvim` — open Code source in gVim
+
+Reuse one gVim instance (`--servername`); each `:lua gvim` opens the CodeWidget **blue pointer** line (browse cursor — same as j/k; on PC after a stop) in a **new tab**.
+
+```text
+:lua gvim                 # blue pointer line
+:lua gvim hello.c 42      # optional path + line
+```
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GDBFORGE_GVIM_SERVER` | `GDBFORGE` | `--servername` id (same app across calls) |
+| `GDBFORGE_GVIM` | `gvim` | Binary on `PATH` |
+
+Requires host `gvim` with `+clientserver` (typical GUI builds).
+
+---
+
+## `vscode` — open Code source in VS Code / VSCodium
+
+Reuse the editor window; each `:lua vscode` opens/focuses the CodeWidget **blue pointer** line (browse cursor — on PC after a stop) and, when possible, opens the **project folder as the workspace**.
+
+```text
+:lua vscode                 # blue pointer line (+ workspace if detected)
+:lua vscode hello.c 42      # optional path + line
+```
+
+Auto-detects the first of `code` / `codium` on `PATH`.
+
+Workspace root (first match walking up from the file):
+
+- `.git/`
+- `.gdbforge/`
+- `go.mod`
+- `CMakeLists.txt`
+
+If none is found, opens the file only.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GDBFORGE_VSCODE` | _(auto)_ | Force binary (`code` or `codium`) |
+| `GDBFORGE_VSCODE_WORKSPACE` | _(auto)_ | Force folder or `.code-workspace` path |
+
+Uses `BIN -r [WORKSPACE] -g FILE:LINE` (reuse window + goto line).
 
 ---
 
