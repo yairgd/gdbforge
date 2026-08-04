@@ -37,6 +37,7 @@ type consoleHost interface {
 	Screen() tcell.Screen
 	RequestFrame()
 	Suspend()
+	activateGdbInsertMode()
 	sendInferior(tty *ptyx.TTY, send func())
 	// Stop pipeline / peer-controller hooks.
 	onGdbStopped(stop *gdb.MiStopMsg)
@@ -153,6 +154,7 @@ func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
 		act := cli.Quit.Answer(raw)
 		if act == gdb.QuitReprompt {
 			w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
+			h.activateGdbInsertMode()
 			return
 		}
 		w.EchoSubmit(display)
@@ -169,6 +171,7 @@ func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
 				w.EchoSubmit(cmd)
 			}
 			w.BeginLiveHost(gdb.QuitConfirmLines(cli.Quit.InferiorPID()), gdb.QuitConfirmHost)
+			h.activateGdbInsertMode()
 			return
 		}
 		if cmd != "" {
@@ -342,8 +345,10 @@ func (c *consoleCtl) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
 			w.EchoSubmit(echoCmd)
 		}
 		w.BeginLiveHost(gdb.QuitConfirmLines(gb.Client.Quit.InferiorPID()), gdb.QuitConfirmHost)
+		h.activateGdbInsertMode()
 	case gdb.QuitReprompt:
 		w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
+		h.activateGdbInsertMode()
 	default:
 		w.ForceFollowTailAndScroll()
 	}

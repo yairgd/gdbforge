@@ -167,6 +167,16 @@ gdbforge.spawn("JLinkGDBServer", "-device", "XCZU3CG_R5_0", "-if", "JTAG", "-por
 
 Interactive shell / `:!` path — replaces the focused pane with an Exec session. Prefer `spawn` when you must keep Code focused.
 
+### `gdbforge.foreground(argv...)`
+
+Suspend the gdbforge TUI (`tcell` Suspend), run `argv` on the **real** stdin/stdout/stderr, then Resume. Use for terminal editors (`vim`, `nvim`, `less`) that must own the tty until they exit. Blocks the Lua job (and UI) until the process finishes; gdbforge redraws afterward.
+
+```lua
+gdbforge.foreground("vim", "+42", "/path/to/file.c")
+```
+
+Catalog: `:lua vim` (see [../lua/README.md](../lua/README.md)).
+
 ### `gdbforge.spawn_terminal(argv...)`
 
 Open a **real terminal emulator** running `argv`. Emulator selection:

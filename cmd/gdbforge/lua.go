@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -451,6 +452,17 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 	})
 	rt.SetSpawn(func(argv []string) error {
 		return a.SpawnExec(argv)
+	})
+	rt.SetForeground(func(argv []string) error {
+		var err error
+		c.callOnUI(func() {
+			if a.TermApp == nil {
+				err = fmt.Errorf("gdbforge.foreground: no screen")
+				return
+			}
+			err = a.RunForeground(argv)
+		})
+		return err
 	})
 	rt.SetOpenExternalTTY(a.OpenExternalTTY)
 	rt.SetSpawnTerminal(a.SpawnTerminal)

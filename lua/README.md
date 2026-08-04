@@ -54,6 +54,7 @@ Per-script env vars are listed in each section below.
 | [`cortex_r5/`](cortex_r5/) | `r5_openamp_jlink` | GDB | Cortex-R5 OpenAMP + J-Link attach |
 | [`cortex_r5/`](cortex_r5/) | `r5_openamp_openocd_digilent` | GDB | Cortex-R5 OpenAMP + Digilent HS2 OpenOCD attach |
 | [`gvim/`](gvim/) | `gvim` | — | Open CodeWidget file in gVim (`--servername`, new tab) |
+| [`vim/`](vim/) | `vim` | — | Open CodeWidget file in terminal vim (over gdbforge; resumes on quit) |
 | [`vscode/`](vscode/) | `vscode` | — | Open CodeWidget file in VS Code / VSCodium (+ project workspace) |
 | [`games/snake/`](games/snake/) | `snake` | — | Demo pane |
 | [`games/tetris/`](games/tetris/) | `tetris` | — | Demo pane |
@@ -235,6 +236,23 @@ Reuse one gVim instance (`--servername`); each `:lua gvim` opens the CodeWidget 
 | `GDBFORGE_GVIM` | `gvim` | Binary on `PATH` |
 
 Requires host `gvim` with `+clientserver` (typical GUI builds).
+
+---
+
+## `vim` — open Code source in terminal vim
+
+Suspends the gdbforge TUI and runs terminal `vim` on the same tty. When vim exits (`:q`), gdbforge resumes and redraws.
+
+```text
+:lua vim                  # blue pointer line
+:lua vim hello.c 42       # optional path + line
+```
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GDBFORGE_VIM` | `vim` | Binary on `PATH` (`nvim`, …) |
+
+Uses `gdbforge.foreground(VIM, "+LINE", FILE)`. Prefer `:lua gvim` / `:lua vscode` for a separate GUI editor.
 
 ---
 

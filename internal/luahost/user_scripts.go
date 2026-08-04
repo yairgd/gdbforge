@@ -28,6 +28,9 @@ type RunFunc func(argv []string)
 // SpawnFunc starts a background PTY process; return error if start fails.
 type SpawnFunc func(argv []string) error
 
+// ForegroundFunc suspends the TUI, runs argv on the real tty, then resumes.
+type ForegroundFunc func(argv []string) error
+
 // OpenExternalTTYFunc opens a real terminal holding a pts and returns its path.
 type OpenExternalTTYFunc func() (string, error)
 
@@ -47,6 +50,11 @@ func (rt *Runtime) SetRun(fn RunFunc) {
 // SetSpawn installs gdbforge.spawn(...) — background exec, no focus steal.
 func (rt *Runtime) SetSpawn(fn SpawnFunc) {
 	rt.setHostAPI(func() { rt.spawn = fn }, "spawn", rt.luaSpawn)
+}
+
+// SetForeground installs gdbforge.foreground(...) — suspend TUI, run on real tty, resume.
+func (rt *Runtime) SetForeground(fn ForegroundFunc) {
+	rt.setHostAPI(func() { rt.foreground = fn }, "foreground", rt.luaForeground)
 }
 
 // SetOpenExternalTTY installs gdbforge.open_external_tty() → pts path.
@@ -242,6 +250,36 @@ func (rt *Runtime) luaSpawn(L *lua.LState) int {
 		return 0
 	}
 	rt.emitPrint("spawned: " + strings.Join(argv, " "))
+	return 0
+}
+
+func (rt *Runtime) luaForeground(L *lua.LState) int {
+	n := L.GetTop()
+	argv := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		s := strings.TrimSpace(L.ToString(i))
+		if s != "" {
+			argv = append(argv, s)
+		}
+	}
+	if len(argv) == 0 {
+		L.RaiseError("gdbforge.foreground: need at least one argument")
+		return 0
+	}
+	if rt.foreground == nil {
+		L.RaiseError("gdbforge.foreground: not available")
+		return 0
+	}
+	select {
+	case <-rt.JobContext().Done():
+		L.RaiseError("%s", ErrJobCancelled.Error())
+		return 0
+	default:
+	}
+	if err := rt.foreground(argv); err != nil {
+		L.RaiseError("%s", err.Error())
+		return 0
+	}
 	return 0
 }
 

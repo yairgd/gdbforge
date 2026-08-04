@@ -1,9 +1,12 @@
 package termui
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -162,6 +165,32 @@ func (app *TermApp) resumeAfterSuspend() error {
 		app.Api.HandleResize()
 	}
 	return nil
+}
+
+// RunForeground suspends the tcell screen, runs argv on the real stdin/stdout
+// (terminal vim, less, …), then resumes gdbforge. Must run on the UI thread.
+func (app *TermApp) RunForeground(argv []string) error {
+	if app == nil || app.screen == nil {
+		return fmt.Errorf("no screen")
+	}
+	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
+		return fmt.Errorf("empty command")
+	}
+	if err := app.screen.Suspend(); err != nil {
+		return err
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	runErr := cmd.Run()
+	if err := app.resumeAfterSuspend(); err != nil {
+		if runErr == nil {
+			return err
+		}
+		return fmt.Errorf("%v (resume: %v)", runErr, err)
+	}
+	return runErr
 }
 
 func (app *TermApp) AddWidget(w Widget) {
