@@ -8,7 +8,23 @@ description: Documentation for gdbforge, a Vim-inspired multi-pane terminal fron
 
 The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` as composition root, domain on host-backed `*Ctl` controllers, widgets as views (host intents + paint), `backend.Backend` for GDB/Delve, a recursive split-tree workspace (`Workspace` above `TabWidget`), and services that do not depend on the UI layer. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
-Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gdbforge/tree/main/docs/diagrams). Demo screencasts: [`media/gdbforge-demo-r5.mp4`](media/gdbforge-demo-r5.mp4) (Cortex-R5 / J-Link; program: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c)), [`media/gdbforge-demo-linux-app.mp4`](media/gdbforge-demo-linux-app.mp4) (external terminal vs internal IO), [`media/gdbforge-debug-itself.mp4`](media/gdbforge-debug-itself.mp4) (gdbforge debugging itself).
+Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gdbforge/tree/main/docs/diagrams).
+
+---
+
+## Demos
+
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c). [Full video](https://github.com/user-attachments/assets/a5612bb4-c617-401d-b57b-3b8c5543277c).
+
+![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
+
+**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Full video](https://github.com/user-attachments/assets/7393b858-e661-44b1-af7e-dbc5d4beef3b).
+
+![Linux application debugging demo](media/gdbforge-demo-linux-app.gif){ loading=lazy }
+
+**Debug itself** — gdbforge attached to a live gdbforge session (Go / Delve), stepping its own code. [Full video](https://github.com/user-attachments/assets/6d2466c4-f455-4c7e-a919-62ba330d025b).
+
+![gdbforge debugging its own running session](media/gdbforge-debug-itself.gif){ loading=lazy }
 
 ---
 
