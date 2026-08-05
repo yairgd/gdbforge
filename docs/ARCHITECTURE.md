@@ -1,3 +1,7 @@
+---
+description: High-level architecture of gdbforge, covering MVC boundaries, controllers, services, events, workspaces, and debugger backends.
+---
+
 # Architecture Overview
 
 This document describes the high-level architecture of **gdbforge**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.

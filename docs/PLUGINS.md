@@ -1,10 +1,14 @@
+---
+description: Understand the gdbforge Lua plugin architecture and how to create custom debugger panes and automated workflows.
+---
+
 # Plugin Architecture
 
 gdbforge is designed for **extensibility**: custom debugger panes, scripted automation, and user-defined workflows. This document describes the planned plugin system centered on **Lua** integration.
 
 **Status:** MVP landed — embedded `gopher-lua`, `ModeLua`, `LuaWidget` (cell draw / keys / tick for demos), `:lua` DSL, `gdbforge.*` API. Automation `gdbforge.print` → `:b io`. Pane demos: `:lua snake` / `:lua tetris` (then `:b` to refocus). User extensions: `./.gdbforge/lua/**/*.lua` → `:lua <basename>`. Use `gdbforge.spawn` for JLink; `spawn_terminal` for gdbserver/TUI; `gdbforge.run` is interactive `:!`.
 
-**User API reference:** **[LUA_API.md](LUA_API.md)**. Script catalog: [../lua/README.md](../lua/README.md).
+**User API reference:** **[LUA_API.md](LUA_API.md)**. Script catalog: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 **Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
 
@@ -165,7 +169,7 @@ For TUI inferiors, do not pipe through `:b io`. Use:
 | `gdbforge.spawn_terminal(...)` | Real terminal emulator + argv (gdbserver / headless dlv) |
 | `gdbforge.wait_port(port, timeout)` | Wait until listen (pattern A) |
 
-Examples: [`lua/external_tty`](../lua/external_tty), [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_port`](../lua/dlv_port), [`lua/terminal_debug`](../lua/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [lua/README.md](../lua/README.md).
+Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/external_tty), [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/gdbserver_tui), [`lua/dlv_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_port), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 

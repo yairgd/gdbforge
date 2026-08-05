@@ -1,3 +1,7 @@
+---
+description: Explore the gdbforge command tree, parser, DSL, key bindings, rest arguments, and tab-completion architecture.
+---
+
 # Command System
 
 gdbforge routes user actions through a **hierarchical command tree**. Colon commands (`:window left`), tab completion, and key chords (`Ctrl+W h`) all resolve against the same `CommandNode` types, but through different entry points.
@@ -15,7 +19,7 @@ gdbforge routes user actions through a **hierarchical command tree**. Colon comm
 - [DSL — building the tree](#dsl--building-the-tree)
 - [Rest-args leaves](#rest-args-leaves)
 - [CmdWidget integration](#cmdwidget-integration)
-- [Tab completion presenter](#tab-completion-presenter)
+- [Tab completion via EventBus](#tab-completion-via-eventbus)
 - [Key bindings](#key-bindings)
 - [Adding commands](#adding-commands)
 

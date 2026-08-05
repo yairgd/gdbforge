@@ -1,3 +1,7 @@
+---
+description: Learn how gdbforge handles keyboard, mouse, interaction modes, Vim-style commands, and asynchronous debugger input.
+---
+
 # Input System
 
 gdbforge handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
@@ -10,12 +14,12 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 
 - [Input overview](#input-overview)
 - [Keyboard handling](#keyboard-handling)
-- [Key-sequence trie](#key-sequence-trie)
+- [Key-sequence bindings](#key-sequence-bindings)
 - [Mouse handling](#mouse-handling)
 - [Interaction modes](#interaction-modes)
 - [Vim-like command system](#vim-like-command-system)
 - [Async input from debugger](#async-input-from-debugger)
-- [Planned keybindings](#planned-keybindings)
+- [Keybindings](#keybindings)
 
 ---
 

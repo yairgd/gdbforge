@@ -77,20 +77,19 @@ tasks:
       - rm -rf {{.BIN_DIR}}
 
   docs:
-    desc: Serve gdbforge documentation locally
+    desc: Serve the MkDocs site locally
     cmds:
-      - go run ./cmd/docserve
+      - python3 -m mkdocs serve --dev-addr 127.0.0.1:8765
 
   docs:export:
-    desc: Export static docs site (GitHub Pages)
+    desc: Build the static MkDocs site
     cmds:
-      - go run ./cmd/docserve --export _site --base /gdbforge/ --site-origin ${GDBFORGE_DOCS_SITE_ORIGIN:-https://yairgd.github.io}
+      - python3 -m mkdocs build --clean
 
   docs:preview:
-    desc: Preview exported static site locally
-    deps: [docs:export]
+    desc: Preview the production MkDocs build locally
     cmds:
-      - go run ./cmd/docserve --serve-static _site --base /gdbforge/ --port 8766
+      - python3 -m mkdocs serve --dev-addr 127.0.0.1:8766 --clean
 
   build-linux:
     desc: Cross-compile gdbforge for Linux

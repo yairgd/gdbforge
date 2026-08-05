@@ -1,8 +1,12 @@
+---
+description: Learn how to install, configure, navigate, and debug programs with the gdbforge terminal debugger.
+---
+
 # User guide
 
-In-app twin: **`:help`** / **`:b help`** (source: `buildHelpLines()` in [`internal/gdbforge/widgets/help_widget.go`](../internal/gdbforge/widgets/help_widget.go)).
+In-app twin: **`:help`** / **`:b help`** (source: `buildHelpLines()` in [`internal/gdbforge/widgets/help_widget.go`](https://github.com/yairgd/gdbforge/blob/main/internal/gdbforge/widgets/help_widget.go)).
 
-Browse this file on GitHub or via `./docs/serve.sh`. For Lua scripting details see [LUA_API.md](LUA_API.md). Script catalog: [../lua/README.md](../lua/README.md).
+Browse this file on GitHub or via `./docs/serve.sh`. For Lua scripting details see [LUA_API.md](LUA_API.md). Script catalog: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 
@@ -237,7 +241,7 @@ export GDBFORGE_REMOTE_HOST=192.168.20.50
 #           :lua remotegdb ./hello 192.168.20.50 1234
 ```
 
-Full per-script recipes and env vars: [`../lua/README.md`](../lua/README.md).
+Full per-script recipes and env vars: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 **About (`:b about`)**
 
@@ -276,4 +280,4 @@ Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only
 - `:help` — in-app summary of this guide
 - [LUA_API.md](LUA_API.md) — Lua / `gdbforge.*` reference
 - [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) — how GDB/Delve PTYs, `:b io`, and external terminals connect
-- [../lua/README.md](../lua/README.md) — installable Lua workflows
+- [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — installable Lua workflows

@@ -1,3 +1,7 @@
+---
+description: Learn how gdbforge executes shell commands in interactive panes with live input, process control, and terminal integration.
+---
+
 # Exec / shell panes (`:!`)
 
 gdbforge can open an **external PTY session** in the focused pane, similar to Vim’s `:!` but as a persistent console widget (not a one-shot filter).

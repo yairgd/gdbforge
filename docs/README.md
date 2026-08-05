@@ -1,10 +1,14 @@
+---
+description: Documentation for gdbforge, a Vim-inspired multi-pane terminal front-end for debugging with GDB and Delve.
+---
+
 # gdbforge Documentation
 
 **gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The debugger app (`-g gdb|dlv`) is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
 
 The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` as composition root, domain on host-backed `*Ctl` controllers, widgets as views (host intents + paint), `backend.Backend` for GDB/Delve, a recursive split-tree workspace (`Workspace` above `TabWidget`), and services that do not depend on the UI layer. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
-Standalone diagram sources live under [`diagrams/`](diagrams/). Demo screencasts: [`media/gdbforge-demo-r5.mp4`](media/gdbforge-demo-r5.mp4) (Cortex-R5 / J-Link; program: [`../examples/stack_demo.c`](../examples/stack_demo.c)), [`media/gdbforge-demo-linux-app.mp4`](media/gdbforge-demo-linux-app.mp4) (external terminal vs internal IO), [`media/gdbforge-debug-itself.mp4`](media/gdbforge-debug-itself.mp4) (gdbforge debugging itself).
+Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gdbforge/tree/main/docs/diagrams). Demo screencasts: [`media/gdbforge-demo-r5.mp4`](media/gdbforge-demo-r5.mp4) (Cortex-R5 / J-Link; program: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c)), [`media/gdbforge-demo-linux-app.mp4`](media/gdbforge-demo-linux-app.mp4) (external terminal vs internal IO), [`media/gdbforge-debug-itself.mp4`](media/gdbforge-debug-itself.mp4) (gdbforge debugging itself).
 
 ---
 
@@ -55,23 +59,12 @@ The prototype registers a split workspace, a functional `:` command line with **
 ### View documentation in a browser
 
 ```bash
+python3 -m pip install -r requirements-docs.txt
 ./docs/serve.sh
-# or: go run ./cmd/docserve
+# or: task docs
 ```
 
-Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) for this index with embedded Mermaid. **GitHub Pages** (docserve static export via Actions — not Jekyll `/docs`): see [HOSTING.md](HOSTING.md#github-pages).
-
-| Page | Local (`docserve`) | GitHub Pages |
-|------|--------------------|--------------|
-| User guide | [/doc/USER_GUIDE.html](http://127.0.0.1:8765/doc/USER_GUIDE.html) | [/doc/USER_GUIDE.html](doc/USER_GUIDE.html) |
-| Lua API | [/doc/LUA_API.html](http://127.0.0.1:8765/doc/LUA_API.html) | [/doc/LUA_API.html](doc/LUA_API.html) |
-| Overview | [/doc/OVERVIEW.html](http://127.0.0.1:8765/doc/OVERVIEW.html) | [/doc/OVERVIEW.html](doc/OVERVIEW.html) |
-| Architecture | [/doc/ARCHITECTURE.html](http://127.0.0.1:8765/doc/ARCHITECTURE.html) | [/doc/ARCHITECTURE.html](doc/ARCHITECTURE.html) |
-| PTY / I/O architecture | [/doc/PTY_ARCHITECTURE.html](http://127.0.0.1:8765/doc/PTY_ARCHITECTURE.html) | [/doc/PTY_ARCHITECTURE.html](doc/PTY_ARCHITECTURE.html) |
-| Developer guide | [/doc/DEVELOPER_GUIDE.html](http://127.0.0.1:8765/doc/DEVELOPER_GUIDE.html) | [/doc/DEVELOPER_GUIDE.html](doc/DEVELOPER_GUIDE.html) |
-| Diagrams index | [/diagrams/](http://127.0.0.1:8765/diagrams/) | [/diagrams/](diagrams/) |
-
-Do **not** open `*.md` on Pages — those are sources (or raw text). Use the **`.html`** viewer URLs above.
+Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/). MkDocs provides navigation, search, syntax highlighting, dark/light themes, and embedded Mermaid diagrams. Deployment details are in [HOSTING.md](HOSTING.md).
 
 ---
 
@@ -167,5 +160,5 @@ Full tracker: [ROADMAP.md](ROADMAP.md).
 
 ## Related links
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [README.md (project root)](../README.md) — gdbforge overview
+- [CONTRIBUTING.md](https://github.com/yairgd/gdbforge/blob/main/CONTRIBUTING.md) — contribution workflow
+- [README.md (project root)](https://github.com/yairgd/gdbforge#readme) — gdbforge overview

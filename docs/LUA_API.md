@@ -1,15 +1,19 @@
+---
+description: Reference for the gdbforge Lua API, including panes, processes, terminals, GDB, Delve, and plugin automation.
+---
+
 # Lua API (`gdbforge.*`)
 
 User-facing reference for scripting gdbforge.
 
 **Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
- In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
+ In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 Scripts are discovered in this order (first basename wins; nested dirs OK):
 
 1. `./.gdbforge/lua/**/*.lua` (project)
 2. `~/.gdbforge/lua/**/*.lua` (user home)
-3. Embedded catalog shipped with the binary (same tree as [`../lua/`](../lua/))
+3. Embedded catalog shipped with the binary (same tree as [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua))
 
 Each file gets its own Lua VM, loaded **lazily on first** `:lua <basename>` (indexed at startup only — snake/tetris do not run at init). Basename without `.lua` is the command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
 
@@ -175,7 +179,7 @@ Suspend the gdbforge TUI (`tcell` Suspend), run `argv` on the **real** stdin/std
 gdbforge.foreground("vim", "+42", "/path/to/file.c")
 ```
 
-Catalog: `:lua vim` (see [../lua/README.md](../lua/README.md)).
+Catalog: `:lua vim` (see [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md)).
 
 ### `gdbforge.spawn_terminal(argv...)`
 
@@ -230,7 +234,7 @@ Open an external terminal running headless Delve for `gdbforge.program()` (plus 
 
 Replace the local Delve session with `dlv connect addr` (e.g. `127.0.0.1:2345`). Inferior stdio stays with the headless process / its terminal.
 
-Catalog scripts: `:lua dlv_ext_port [port] [extra args…]` (alias `dlv_port`). Step-by-step for every plugin: [../lua/README.md](../lua/README.md).
+Catalog scripts: `:lua dlv_ext_port [port] [extra args…]` (alias `dlv_port`). Step-by-step for every plugin: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 
@@ -283,4 +287,4 @@ end
 
 - [USER_GUIDE.md](USER_GUIDE.md) — keys, `:set`, panes, external terminal UX
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets) — PTY / tty architecture
-- [../lua/README.md](../lua/README.md) — every catalog script, env vars, recipes
+- [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — every catalog script, env vars, recipes

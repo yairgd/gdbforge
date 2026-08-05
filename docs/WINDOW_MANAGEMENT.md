@@ -1,3 +1,7 @@
+---
+description: Understand gdbforge workspaces, split trees, tabs, buffers, command lines, pane status, and window operations.
+---
+
 # Window Management
 
 gdbforge organizes debugger panes through a **Workspace** containing a recursive **split tree**, managed at the top level by **tabs** and a global **command line**. Each workspace pane shows a **per-pane status line** at its bottom edge when focused; a global debugger status bar is still planned above the command line.
@@ -94,7 +98,7 @@ Do **not** introduce a separate popup/z-order system for one-line chrome.
 
 ## Workspace concept
 
-The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`Workspace` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above `TabWidget` — see [Workspace (gdbforge) vs Tab](#workspace-gdbforge-vs-tab).
+The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`Workspace` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above `TabWidget` — see [Workspace (gdbforge) vs Tab](#workspace-gdbforge-vs-tab-termui).
 
 Workspace panes are **widgets** — views bound to application **models** owned by `*Ctl` controllers. Typical models and their views:
 

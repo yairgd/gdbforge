@@ -1,8 +1,12 @@
+---
+description: How gdbforge connects GDB, Delve, inferior processes, internal IO panes, external terminals, and headless targets through PTYs.
+---
+
 # PTY architecture — how the pieces talk
 
 High-level view of **who holds which PTY end** (master vs slave), how the **GDB console** and the **under-debug program** get separate terminals, how **Delve** differs (PTY vs TCP), and how **`:b io`** / **external terminals** plug in.
 
-For MI protocol, MCP, and backend details see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md). For user recipes see [USER_GUIDE.md](USER_GUIDE.md) and [../lua/README.md](../lua/README.md).
+For MI protocol, MCP, and backend details see [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md). For user recipes see [USER_GUIDE.md](USER_GUIDE.md) and [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 
@@ -352,4 +356,4 @@ Bare `:set inferior-tty` opens `GDBFORGE_TERMINAL` and points GDB at that pts (`
 - [ARCHITECTURE.md](ARCHITECTURE.md) — app-wide MVC / subsystems
 - [EXEC_SHELL.md](EXEC_SHELL.md) — `:!` also uses `ptyx.Client` (separate from debugger)
 - [LUA_API.md](LUA_API.md) — `open_external_tty`, `spawn_terminal`, `spawn_dlv_headless`, `dlv_connect`
-- [../lua/README.md](../lua/README.md) — `dlv_ext_port`, `terminal_debug`, `remotegdb` recipes
+- [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — `dlv_ext_port`, `terminal_debug`, `remotegdb` recipes

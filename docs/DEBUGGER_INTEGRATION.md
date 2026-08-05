@@ -1,3 +1,7 @@
+---
+description: Technical guide to gdbforge debugger integration with GDB MI2, Delve, PTYs, remote targets, and in-app AI services.
+---
+
 # Debugger Integration
 
 gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB MI2** (`gdb.GDBClient`) and **Delve** (`dlv.Client`) via `-g gdb|dlv`. One PTY for the debugger, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY`). The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
@@ -237,13 +241,13 @@ The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gd
 
 1. Lua `gdbforge.open_external_tty()` opens kitty/xterm/… (`GDBFORGE_TERMINAL`) that runs `tty > file; sleep infinity`.
 2. `gdbforge.set_inferior_tty(pts)` → GDB `-inferior-tty-set` (live). Delve restarts `dlv exec --tty …` with the new path (same program args).
-3. Examples: [`lua/external_tty`](../lua/external_tty), [`lua/terminal_debug`](../lua/terminal_debug).
+3. Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/external_tty), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/terminal_debug).
 
 **Pattern A — gdbserver / headless dlv in the other window**
 
 1. GDB: `gdbforge.spawn_terminal("gdbserver", ":2345", "./my_tui")` then `target remote`.
 2. Delve: `:lua dlv_ext_port` / `dlv_port` (or `spawn_dlv_headless` + `dlv_connect`) — inferior inherits that terminal’s stdio.
-3. Examples and **how to use each script**: [`lua/README.md`](../lua/README.md); code: [`lua/gdbserver_tui`](../lua/gdbserver_tui), [`lua/dlv_ext_port`](../lua/dlv_ext_port).
+3. Examples and **how to use each script**: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md); code: [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/gdbserver_tui), [`lua/dlv_ext_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_ext_port).
 
 Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an external slave at the same time. Closing the external window does not auto-rewire IO — use `:set inferior-tty internal`.
 
