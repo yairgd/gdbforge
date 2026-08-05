@@ -1,15 +1,19 @@
+---
+description: Reference for the gdbforge Lua API, including panes, processes, terminals, GDB, Delve, and plugin automation.
+---
+
 # Lua API (`gdbforge.*`)
 
 User-facing reference for scripting gdbforge.
 
-**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
- In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [../lua/README.md](../lua/README.md).
+**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`) are installed by `cmd/gdbforge` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
+ In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 Scripts are discovered in this order (first basename wins; nested dirs OK):
 
 1. `./.gdbforge/lua/**/*.lua` (project)
 2. `~/.gdbforge/lua/**/*.lua` (user home)
-3. Embedded catalog shipped with the binary (same tree as [`../lua/`](../lua/))
+3. Embedded catalog shipped with the binary (same tree as [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua))
 
 Each file gets its own Lua VM, loaded **lazily on first** `:lua <basename>` (indexed at startup only — snake/tetris do not run at init). Basename without `.lua` is the command name (e.g. `r5_debug/r5_debug.lua` → `:lua r5_debug`).
 
@@ -74,6 +78,28 @@ Absolute directory of the **current** script file (for sidecars: XML, configs ne
 ### `gdbforge.program()`
 
 Debuggee path from the current gdbforge session (may be `""` if none). Prefer this over hard-coding binaries in scripts that attach to the session program.
+
+### `gdbforge.current_file()` → `path`
+
+Absolute path of the active CodeWidget file (browse cursor / focused source). Empty string if none.
+
+### `gdbforge.current_line()` → `line`
+
+1-based browse cursor line in the active CodeWidget (or `0` if unknown).
+
+### `gdbforge.stop_file()` → `path`
+
+Source path for the stop PC (`━━▶` from `*stopped`). Empty if no stop location yet.
+
+### `gdbforge.stop_line()` → `line`
+
+1-based stop PC line (`━━▶`), or `0` if unknown.
+
+```lua
+local f = gdbforge.stop_file()
+local n = gdbforge.stop_line()
+-- e.g. :lua gvim / :lua vscode → open at PC when stopped
+```
 
 ### `gdbforge.wait_port(host_port [, timeout_sec])`
 
@@ -145,6 +171,16 @@ gdbforge.spawn("JLinkGDBServer", "-device", "XCZU3CG_R5_0", "-if", "JTAG", "-por
 
 Interactive shell / `:!` path — replaces the focused pane with an Exec session. Prefer `spawn` when you must keep Code focused.
 
+### `gdbforge.foreground(argv...)`
+
+Suspend the gdbforge TUI (`tcell` Suspend), run `argv` on the **real** stdin/stdout/stderr, then Resume. Use for terminal editors (`vim`, `nvim`, `less`) that must own the tty until they exit. Blocks the Lua job (and UI) until the process finishes; gdbforge redraws afterward.
+
+```lua
+gdbforge.foreground("vim", "+42", "/path/to/file.c")
+```
+
+Catalog: `:lua vim` (see [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md)).
+
 ### `gdbforge.spawn_terminal(argv...)`
 
 Open a **real terminal emulator** running `argv`. Emulator selection:
@@ -198,7 +234,7 @@ Open an external terminal running headless Delve for `gdbforge.program()` (plus 
 
 Replace the local Delve session with `dlv connect addr` (e.g. `127.0.0.1:2345`). Inferior stdio stays with the headless process / its terminal.
 
-Catalog scripts: `:lua dlv_ext_port [port] [extra args…]` (alias `dlv_port`). Step-by-step for every plugin: [../lua/README.md](../lua/README.md).
+Catalog scripts: `:lua dlv_ext_port [port] [extra args…]` (alias `dlv_port`). Step-by-step for every plugin: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 
@@ -251,4 +287,4 @@ end
 
 - [USER_GUIDE.md](USER_GUIDE.md) — keys, `:set`, panes, external terminal UX
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets) — PTY / tty architecture
-- [../lua/README.md](../lua/README.md) — every catalog script, env vars, recipes
+- [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — every catalog script, env vars, recipes

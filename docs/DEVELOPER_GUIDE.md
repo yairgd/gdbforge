@@ -1,3 +1,7 @@
+---
+description: Set up a gdbforge development environment, understand the codebase, run checks, and contribute changes safely.
+---
+
 # Developer Guide
 
 **Audience:** engineers onboarding to gdbforge, code reviewers, and contributors implementing UI or debugger features.
@@ -448,4 +452,4 @@ Always update docs when changing architecture-visible behavior.
 - [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) — deep UI dive
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB MI2 details
 - [ROADMAP.md](ROADMAP.md) — what's planned
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — commit conventions
+- [CONTRIBUTING.md](https://github.com/yairgd/gdbforge/blob/main/CONTRIBUTING.md) — commit conventions

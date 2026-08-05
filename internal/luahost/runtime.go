@@ -42,6 +42,7 @@ type Runtime struct {
 	openBuffer      OpenBufferFunc
 	run             RunFunc
 	spawn           SpawnFunc
+	foreground      ForegroundFunc
 	openExternalTTY OpenExternalTTYFunc
 	spawnTerminal   SpawnTerminalFunc
 	scriptDir       string // directory of the loaded user script (lua_dir())
@@ -347,6 +348,7 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "open_buffer", L.NewFunction(rt.luaOpenBuffer))
 	L.SetField(gf, "run", L.NewFunction(rt.luaRun))
 	L.SetField(gf, "spawn", L.NewFunction(rt.luaSpawn))
+	L.SetField(gf, "foreground", L.NewFunction(rt.luaForeground))
 	L.SetField(gf, "spawn_terminal", L.NewFunction(rt.luaSpawnTerminal))
 	L.SetField(gf, "open_external_tty", L.NewFunction(rt.luaOpenExternalTTY))
 	L.SetField(gf, "wait_port", L.NewFunction(rt.luaWaitPort))

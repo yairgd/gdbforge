@@ -33,11 +33,27 @@ func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	}
 }
 
-// tryGlobalSuspend handles Ctrl-Z in any mode/focus: SIGTSTP inferior if
-// running, otherwise suspend gdbforge (same as GDB job control).
+// tryGlobalSuspend handles Ctrl-Z in any mode/focus.
+// Prefer suspending a running inferior. If a :lua worker job is the foreground
+// work (inferior not running), cancel that job — suspending gdbforge while a
+// stuck system()/wait_port job is active looks like "Ctrl-Z does nothing" and
+// blocks further job control until the job clears.
 func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	if !isCtrlZ(ev) {
 		return false
+	}
+	running := false
+	if a != nil && a.TermApp != nil && a.State() != nil && a.Debug() != nil {
+		running = a.Debug().InferiorRunning()
+	}
+	if !running && a.lua.cancelJob() {
+		if a.outputWidget != nil {
+			a.outputWidget.AppendHostLine("cancelled (Ctrl-Z)")
+		}
+		if a.TermApp != nil {
+			a.RequestFrame()
+		}
+		return true
 	}
 	a.console.onGdbConsoleSuspend()
 	return true
@@ -674,3 +690,9 @@ func isExpectedPtyClose(err error) bool {
 	return strings.Contains(msg, "input/output error") ||
 		strings.Contains(msg, "file already closed")
 }
+
+
+
+
+
+

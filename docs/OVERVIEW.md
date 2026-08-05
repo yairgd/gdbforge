@@ -1,3 +1,7 @@
+---
+description: Discover the goals, capabilities, use cases, and design direction of the gdbforge terminal debugging environment.
+---
+
 # Project Overview
 
 **gdbforge** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI with a modular architecture that supports multiple debugger backends and long-term extensibility.

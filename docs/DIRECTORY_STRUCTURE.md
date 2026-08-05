@@ -1,3 +1,7 @@
+---
+description: Navigate the gdbforge repository structure and understand the responsibility of each command, package, document, and asset.
+---
+
 # Directory Structure
 
 This document maps the **gdbforge** repository packages to their responsibilities.

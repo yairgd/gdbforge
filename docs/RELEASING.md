@@ -1,12 +1,16 @@
+---
+description: Release gdbforge with version tags, cross-platform builds, GitHub Release artifacts, and documentation deployment.
+---
+
 # Releasing gdbforge
 
-Automated builds and GitHub Releases are driven by [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+Automated builds and GitHub Releases are driven by [`.github/workflows/release.yml`](https://github.com/yairgd/gdbforge/blob/main/.github/workflows/release.yml).
 
 ## What the workflow does
 
 | Trigger | Result |
 |---------|--------|
-| Push tag `v*` (e.g. `v1.0.0`) | Cross-build binaries → GitHub Release with assets **and** refresh GitHub Pages (`docserve --export _site`) |
+| Push tag `v*` (e.g. `v1.0.0`) | Cross-build binaries → GitHub Release with assets **and** refresh GitHub Pages (`mkdocs build`) |
 | Push tag with a hyphen (e.g. `v1.0.0-rc.1`) | Same, but marked **prerelease** (Pages still updates) |
 | Actions → **Release** → Run workflow (`dry_run=true`) | Build only; upload workflow **artifacts** (no Release, **no** Pages) |
 
@@ -58,6 +62,6 @@ Watch **Actions → Release**; the GitHub Release page fills in with notes + bin
 ## Notes
 
 - Do **not** put auto-release on every push to `main` — tags keep history clean.
-- Day-to-day docs still deploy via [docs.yml](../.github/workflows/docs.yml) (`push` to `main` under `docs/`). A release **also** redeploys Pages so the site matches the tagged tree.
+- Day-to-day docs still deploy via [docs.yml](https://github.com/yairgd/gdbforge/blob/main/.github/workflows/docs.yml) (`push` to `main` under `docs/`). A release **also** redeploys Pages so the site matches the tagged tree.
 - Pages needs **Settings → Pages → Source = GitHub Actions**. Private repos need a plan that allows private Pages (or make the repo public).
 - Prefer annotated tags (`git tag -a`) for releases.

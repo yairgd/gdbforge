@@ -1,3 +1,7 @@
+---
+description: Architecture of the gdbforge terminal UI, including widgets, layouts, canvas, grid, rendering, focus, and event handling.
+---
+
 # UI Architecture
 
 This document covers the gdbforge presentation layer: the widget system, split-tree layout, canvas and grid abstractions, rendering pipeline, focus management, and event handling.
@@ -16,7 +20,7 @@ This document covers the gdbforge presentation layer: the widget system, split-t
 - [Grid abstraction](#grid-abstraction)
 - [Rendering pipeline](#rendering-pipeline)
 - [Focus management](#focus-management)
-- [Key-sequence trie](#key-sequence-trie)
+- [Key-sequence bindings](#key-sequence-bindings)
 - [Event handling](#event-handling)
 - [TermApp lifecycle](#termapp-lifecycle)
 - [Existing widgets](#existing-widgets)

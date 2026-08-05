@@ -1,3 +1,7 @@
+---
+description: Review gdbforge software dependencies, package boundaries, internal import rules, and framework-versus-application separation.
+---
+
 # Software Dependencies
 
 This document describes **Go module dependencies** (third-party libraries) and **internal package dependencies** (how code in this repository imports other packages).

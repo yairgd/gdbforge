@@ -25,6 +25,7 @@ build/*
 /.vscode
 junk
 bin
+.venv-docs/
 game-controller/*build*
 _site/
 gdbforge.log

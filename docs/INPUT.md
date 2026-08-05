@@ -1,3 +1,7 @@
+---
+description: Learn how gdbforge handles keyboard, mouse, interaction modes, Vim-style commands, and asynchronous debugger input.
+---
+
 # Input System
 
 gdbforge handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
@@ -10,12 +14,12 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 
 - [Input overview](#input-overview)
 - [Keyboard handling](#keyboard-handling)
-- [Key-sequence trie](#key-sequence-trie)
+- [Key-sequence bindings](#key-sequence-bindings)
 - [Mouse handling](#mouse-handling)
 - [Interaction modes](#interaction-modes)
 - [Vim-like command system](#vim-like-command-system)
 - [Async input from debugger](#async-input-from-debugger)
-- [Planned keybindings](#planned-keybindings)
+- [Keybindings](#keybindings)
 
 ---
 
@@ -82,7 +86,7 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running, otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`); **Ctrl-C** interrupts via the debugger PTY (GDB/dlv); **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
+   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running; if a `:lua` worker job is active and the inferior is not running, cancels that job (so a stuck script cannot eat job control); otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`). **Ctrl-C** cancels an active `:lua` job if any, else interrupts via the debugger PTY (GDB/dlv). **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
    - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z / Ctrl-D).

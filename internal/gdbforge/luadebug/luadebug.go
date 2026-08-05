@@ -16,12 +16,17 @@ type Hooks struct {
 	DlvConnect       func(addr string) error
 	SpawnDlvHeadless func(port string, extraArgs []string) error
 	Program          func() string
+	CurrentFile      func() string
+	CurrentLine      func() int
+	StopFile         func() string
+	StopLine         func() int
 	GDB              func(cmd string)
 }
 
 // Install registers gdbforge.set_inferior_tty, dlv_connect, spawn_dlv_headless,
-// program, and gdb on rt. Safe to call after luahost.New; no-op fields raise
-// "not available" (or return "" for program / no-op for gdb).
+// program, current_file, current_line, stop_file, stop_line, and gdb on rt.
+// Safe to call after luahost.New; no-op fields raise "not available" (or return
+// "" / 0 for program / current_* / stop_* / no-op for gdb).
 func Install(rt *luahost.Runtime, h Hooks) {
 	if rt == nil {
 		return
@@ -89,6 +94,38 @@ func Install(rt *luahost.Runtime, h Hooks) {
 			return 1
 		}
 		L.Push(lua.LString(h.Program()))
+		return 1
+	})
+	rt.SetGdbforgeFunc("current_file", func(L *lua.LState) int {
+		if h.CurrentFile == nil {
+			L.Push(lua.LString(""))
+			return 1
+		}
+		L.Push(lua.LString(h.CurrentFile()))
+		return 1
+	})
+	rt.SetGdbforgeFunc("current_line", func(L *lua.LState) int {
+		if h.CurrentLine == nil {
+			L.Push(lua.LNumber(0))
+			return 1
+		}
+		L.Push(lua.LNumber(h.CurrentLine()))
+		return 1
+	})
+	rt.SetGdbforgeFunc("stop_file", func(L *lua.LState) int {
+		if h.StopFile == nil {
+			L.Push(lua.LString(""))
+			return 1
+		}
+		L.Push(lua.LString(h.StopFile()))
+		return 1
+	})
+	rt.SetGdbforgeFunc("stop_line", func(L *lua.LState) int {
+		if h.StopLine == nil {
+			L.Push(lua.LNumber(0))
+			return 1
+		}
+		L.Push(lua.LNumber(h.StopLine()))
 		return 1
 	})
 	rt.SetGdbforgeFunc("gdb", func(L *lua.LState) int {

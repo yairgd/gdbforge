@@ -1,3 +1,7 @@
+---
+description: Learn how gdbforge renders terminal cells, borders, Unicode content, grids, canvases, and efficient screen updates.
+---
+
 # Rendering System
 
 gdbforge renders through an off-screen **Grid** of **Cells**, composed by widgets via **Canvas**, and flushed to **tcell**. This document covers the cell model, border drawing, Unicode text, screen synchronization, and the path to **diff-based rendering**.

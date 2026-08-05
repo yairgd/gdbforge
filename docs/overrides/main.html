@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% if page %}
+  {% set seo_title = page.title ~ " | " ~ config.site_name %}
+  {% set seo_description = page.meta.description if page.meta and page.meta.description else config.site_description %}
+  {% set seo_image = config.extra.seo.image %}
+
+  <meta name="author" content="{{ config.extra.seo.author }}">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+
+  <meta property="og:type" content="{{ 'website' if page.is_homepage else 'article' }}">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ seo_title }}">
+  <meta property="og:description" content="{{ seo_description }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  <meta property="og:image" content="{{ seo_image }}">
+  <meta property="og:image:alt" content="{{ config.extra.seo.image_alt }}">
+  <meta property="og:locale" content="en_US">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ seo_title }}">
+  <meta name="twitter:description" content="{{ seo_description }}">
+  <meta name="twitter:image" content="{{ seo_image }}">
+  <meta name="twitter:image:alt" content="{{ config.extra.seo.image_alt }}">
+
+  {% if page.is_homepage %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": {{ config.site_name | tojson }},
+        "description": {{ seo_description | tojson }},
+        "url": {{ page.canonical_url | tojson }},
+        "image": {{ seo_image | tojson }},
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux",
+        "codeRepository": {{ config.repo_url | tojson }}
+      }
+    </script>
+  {% else %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": {{ page.title | tojson }},
+        "description": {{ seo_description | tojson }},
+        "url": {{ page.canonical_url | tojson }},
+        "image": {{ seo_image | tojson }},
+        "author": {
+          "@type": "Organization",
+          "name": {{ config.extra.seo.author | tojson }}
+        },
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": {{ config.site_name | tojson }},
+          "url": {{ config.site_url | tojson }}
+        }
+      }
+    </script>
+  {% endif %}
+  {% else %}
+    <meta name="robots" content="noindex, follow">
+  {% endif %}
+{% endblock %}
