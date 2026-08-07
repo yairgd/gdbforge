@@ -49,6 +49,7 @@ body.pz-lightbox-open {
   background: rgba(0, 0, 0, 0.82);
 }
 
+/* Framed panel inside the dimmed page (not edge-to-edge) */
 .pz-lightbox__panel {
   position: absolute;
   inset: 3vh 3vw;
@@ -61,9 +62,11 @@ body.pz-lightbox-open {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
+/* Toolbar above the diagram — not overlaid on it */
 .pz-lightbox__controls {
   position: relative;
   z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -92,9 +95,14 @@ body.pz-lightbox-open {
   border-color: #8b949e;
 }
 
+/* Diagram area fills the rest of the framed panel */
 .panzoom-parent {
   position: relative;
   flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   background: #0f1419;
   cursor: grab;
@@ -104,11 +112,20 @@ body.pz-lightbox-open {
   cursor: grabbing;
 }
 
-.panzoom-parent > img,
-.panzoom-parent > svg {
+.panzoom-parent > .pz-stage {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  transform-origin: center center;
+}
+
+.panzoom-parent > .pz-stage > img {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: none !important;
   max-height: none !important;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .md-typeset video {
