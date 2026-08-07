@@ -6,7 +6,7 @@
   // 2) mermaid.run() ate data-pz-* attrs and produced error SVGs (code-wrapper path).
   // 3) Page + lightbox both use mermaid.render(storedSource) instead.
 
-  console.info("[mermaid-zoom] pz-box-13");
+  console.info("[mermaid-zoom] pz-box-14");
 
   var session = null;
   var sourcesByIndex = [];
@@ -164,8 +164,6 @@
         URL.revokeObjectURL(s.blobUrl);
       }
       if (s.parent) {
-        s.parent.style.width = "";
-        s.parent.style.height = "";
         s.parent.innerHTML = "";
       }
       s.root.hidden = true;
@@ -212,16 +210,15 @@
   // Fit a stage (wrapper) to the parent with contain sizing; img fills the stage.
   // Panzoom transforms the stage only — never fights img width/height directly.
   function fitStageToParent(stage, parent, nw, nh) {
-    var pw = parent.clientWidth || window.innerWidth;
-    var ph = parent.clientHeight || window.innerHeight;
+    // Use the framed panel's diagram area (not the whole browser window).
+    var pw = parent.clientWidth;
+    var ph = parent.clientHeight;
     if (pw < 40) {
-      pw = window.innerWidth;
+      pw = Math.floor(window.innerWidth * 0.94);
     }
     if (ph < 40) {
-      ph = window.innerHeight;
+      ph = Math.floor(window.innerHeight * 0.85);
     }
-    parent.style.width = pw + "px";
-    parent.style.height = ph + "px";
 
     var scale = Math.min(pw / nw, ph / nh) * 0.96;
     if (!(scale > 0) || !isFinite(scale)) {

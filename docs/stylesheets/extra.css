@@ -46,36 +46,33 @@ body.pz-lightbox-open {
 .pz-lightbox__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.82);
 }
 
-/* Full-window panel — diagram uses the entire viewport */
+/* Framed panel inside the dimmed page (not edge-to-edge) */
 .pz-lightbox__panel {
   position: absolute;
-  inset: 0;
+  inset: 3vh 3vw;
   display: flex;
   flex-direction: column;
   background: #0f1419;
-  border: none;
-  border-radius: 0;
+  border: 1px solid #30363d;
+  border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
-/* Toolbar overlays the diagram so the figure can fill the window */
+/* Toolbar above the diagram — not overlaid on it */
 .pz-lightbox__controls {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(22, 27, 34, 0.92);
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
 }
 
 .pz-lightbox__controls button {
@@ -94,14 +91,15 @@ body.pz-lightbox-open {
 }
 
 .pz-lightbox__controls #pz-close {
-  margin-left: 0.5rem;
+  margin-left: auto;
   border-color: #8b949e;
 }
 
+/* Diagram area fills the rest of the framed panel */
 .panzoom-parent {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
