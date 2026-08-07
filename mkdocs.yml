@@ -98,8 +98,8 @@ plugins:
 
 extra:
   seo:
-    image: https://yairgd.github.io/gdbforge/media/gdbforge-demo.gif
-    image_alt: gdbforge terminal debugger interface
+    image: https://yairgd.github.io/gdbforge/media/gdbforge-demo-r5.gif
+    image_alt: gdbforge Cortex-R5 / J-Link debugging demo
     author: gdbforge contributors
 
 copyright: Copyright &copy; 2026 gdbforge contributors
