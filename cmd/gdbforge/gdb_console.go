@@ -261,9 +261,26 @@ func (c *consoleCtl) onGdbConsoleInterrupt() {
 	}
 	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
 	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
+	// Confirming-interrupt policy lives on Confirm (onConfirmingInterrupt).
 	running := h.State() != nil && h.Debug().InferiorRunning()
-	confirming := h.DlvConfirming()
-	if confirming && h.isDLV() {
+	_ = h.Backend().Interrupt(running, false)
+	h.RequestFrame()
+}
+
+// onConfirmingInterrupt is Ctrl-C while a quit/y-n gate is open (Confirm machine).
+func (c *consoleCtl) onConfirmingInterrupt() {
+	h := c.host
+	if h == nil {
+		return
+	}
+	if w := h.GDBWidget(); w != nil {
+		w.ClearInput()
+	}
+	if h.Backend() == nil {
+		return
+	}
+	running := h.State() != nil && h.Debug().InferiorRunning()
+	if h.isDLV() && h.DlvConfirming() {
 		c.withGdbUIOwner(func() { _ = h.Backend().Interrupt(running, true) })
 		h.RequestFrame()
 		return

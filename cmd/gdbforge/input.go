@@ -17,7 +17,9 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D) before a mode handler.
+// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D)
+// before a mode handler. Policy lives on Activity (C/Z) and Confirm (D) —
+// Mode only owns keymaps.
 func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	return func(ev *tcell.EventKey) bool {
 		if a.tryGlobalSuspend(ev) {
@@ -33,59 +35,30 @@ func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	}
 }
 
-// tryGlobalSuspend handles Ctrl-Z in any mode/focus.
-// Prefer suspending a running inferior. If a :lua worker job is the foreground
-// work (inferior not running), cancel that job — suspending gdbforge while a
-// stuck system()/wait_port job is active looks like "Ctrl-Z does nothing" and
-// blocks further job control until the job clears.
+// tryGlobalSuspend handles Ctrl-Z in any mode/focus via the Activity table.
 func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	if !isCtrlZ(ev) {
 		return false
 	}
-	running := false
-	if a != nil && a.TermApp != nil && a.State() != nil && a.Debug() != nil {
-		running = a.Debug().InferiorRunning()
-	}
-	if !running && a.lua.cancelJob() {
-		if a.outputWidget != nil {
-			a.outputWidget.AppendHostLine("cancelled (Ctrl-Z)")
-		}
-		if a.TermApp != nil {
-			a.RequestFrame()
-		}
-		return true
-	}
-	a.console.onGdbConsoleSuspend()
+	a.onActivityCtrlZ()
 	return true
 }
 
-// tryGlobalInterrupt handles Ctrl-C in any mode/focus.
-// If a :lua worker job is running, cancel it (unblocks sleep/wait_port).
-// Otherwise interrupt the debugger session (GDB/dlv PTY ^C).
+// tryGlobalInterrupt handles Ctrl-C in any mode/focus via Activity (+ Confirm).
 func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	if !isCtrlC(ev) {
 		return false
 	}
-	if a.lua.cancelJob() {
-		if a.outputWidget != nil {
-			a.outputWidget.AppendHostLine("cancelled (Ctrl-C)")
-		}
-		a.RequestFrame()
-		return true
-	}
-	a.console.onGdbConsoleInterrupt()
-	a.RequestFrame()
+	a.onActivityCtrlC()
 	return true
 }
 
-// tryGlobalEOF handles Ctrl-D in any mode/focus: same as GDB-console EOF
-// (send q / quit; confirm if inferior alive).
+// tryGlobalEOF handles Ctrl-D in any mode/focus via the Confirm facade.
 func (a *DebuggerApp) tryGlobalEOF(ev *tcell.EventKey) bool {
 	if !isCtrlD(ev) {
 		return false
 	}
-	a.console.onGdbConsoleEOF()
-	a.RequestFrame()
+	a.onConfirmCtrlD()
 	return true
 }
 

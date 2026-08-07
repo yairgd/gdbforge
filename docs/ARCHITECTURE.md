@@ -91,6 +91,18 @@ GUI and MCP/AI share the same models (e.g. `breaks.list` → `BreakpointList`); 
 
 List widgets take `*DebuggerApp` as a **host interface** (`BreakpointHost`, `ThreadHost`, `CallStackHost`, `AssemblyHost`, …). Consoles still use `SetOn*` via `wireConsole`. Controllers talk to the app through private `*Host` interfaces (`breakHost`, `consoleHost`, …) set in `initControllers()`.
 
+### Orthogonal input mini-machines
+
+Global job-control keys are **not** Mode policy. Three orthogonal mini-machines compose at `withGlobalKeys`:
+
+| Machine | Owns | Lives in |
+|---------|------|----------|
+| **Mode** | Keymaps, Esc, `:` / `/`, ModeLua | `platform.Mode` + mode handlers |
+| **Activity** | Ctrl-C / Ctrl-Z from inferior + Lua job busy | `cmd/gdbforge/activity.go` |
+| **Confirm** | Ctrl-D quit / y-n gates; confirming interrupt | `cmd/gdbforge/confirm_router.go` + QuitGate / ConfirmGate |
+
+See [INPUT.md](INPUT.md) § Dispatch.
+
 ### What `DebugDomain` means (naming)
 
 In architecture, **domain** is the debugger problem space (breakpoints, threads, stack) and its data in `internal/gdbforge/models`.
@@ -116,6 +128,7 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 - [MVC (current)](#mvc-current)
 - [What `DebugDomain` means (naming)](#what-debugdomain-means-naming)
 - [Controllers and hosts](#controllers-and-hosts)
+- [Orthogonal input mini-machines](#orthogonal-input-mini-machines)
 - [System context](#system-context)
 - [Application framework](#application-framework)
 - [Startup](#startup)
@@ -915,7 +928,7 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |
 | Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
 | Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
-| Interaction modes | Normal / Focus / Command / Completion / Insert | Wired via `platform.AppState` |
+| Interaction modes | Mode + Activity + Confirm mini-machines | **Done** — Mode via `AppState`; Activity `activity.go`; Confirm `confirm_router.go` |
 | Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
 | Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |

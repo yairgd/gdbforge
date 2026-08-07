@@ -86,7 +86,11 @@ sequenceDiagram
 1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
-   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first: **Ctrl-Z** suspends the inferior if running; if a `:lua` worker job is active and the inferior is not running, cancels that job (so a stuck script cannot eat job control); otherwise suspends gdbforge (`TermApp.Suspend` / tcell `Suspend`+`Resume`). **Ctrl-C** cancels an active `:lua` job if any, else interrupts via the debugger PTY (GDB/dlv). **Ctrl-D** sends quit to GDB/dlv (confirm if inferior alive). Works with any focused pane (Code, GDB, cmdline, Lua, …).
+   - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
+     - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
+     - **Activity** — [`activity.go`](../cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`TermApp.Suspend`).
+     - **Confirm** — [`confirm_router.go`](../cmd/gdbforge/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
+     Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
    - **`ModeCommand`** — all keys go to `CmdWidget` (after global Ctrl-Z / Ctrl-D).
@@ -281,7 +285,7 @@ const (
 )
 ```
 
-`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Ctrl-Z). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide` (+ optional `asm`). IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `Workspace` (`workspace_policy.go` / `code_nav.go` delegates).
+`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Activity Ctrl-C/Z + Confirm Ctrl-D). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide` (+ optional `asm`). IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `Workspace` (`workspace_policy.go` / `code_nav.go` delegates).
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 

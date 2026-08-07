@@ -218,6 +218,11 @@ func (c *luaCtl) startJob(rt *luahost.Runtime, name string, strArgs []string) {
 	a.RequestFrame()
 }
 
+// JobBusy reports whether an async :lua worker job is in flight.
+func (c *luaCtl) JobBusy() bool {
+	return c != nil && c.jobBusy.Load()
+}
+
 // cancelJob cancels the in-flight :lua worker job. Returns true if one was active.
 func (c *luaCtl) cancelJob() bool {
 	c.jobMu.Lock()
