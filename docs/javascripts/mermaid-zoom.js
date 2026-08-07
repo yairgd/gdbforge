@@ -6,7 +6,7 @@
   // 2) mermaid.run() ate data-pz-* attrs and produced error SVGs (code-wrapper path).
   // 3) Page + lightbox both use mermaid.render(storedSource) instead.
 
-  console.info("[mermaid-zoom] pz-box-10");
+  console.info("[mermaid-zoom] pz-box-13");
 
   var session = null;
   var sourcesByIndex = [];
@@ -147,6 +147,9 @@
     if (session) {
       var s = session;
       session = null;
+      if (s.onResize) {
+        window.removeEventListener("resize", s.onResize);
+      }
       if (s.parent && s.zoomWithWheel) {
         s.parent.removeEventListener("wheel", s.zoomWithWheel);
       }
@@ -160,7 +163,11 @@
       if (s.blobUrl) {
         URL.revokeObjectURL(s.blobUrl);
       }
-      s.parent.innerHTML = "";
+      if (s.parent) {
+        s.parent.style.width = "";
+        s.parent.style.height = "";
+        s.parent.innerHTML = "";
+      }
       s.root.hidden = true;
     } else {
       var root = document.getElementById("pz-lightbox");
@@ -172,8 +179,9 @@
   }
 
   function sizeFromSvgXml(xml) {
-    var w = Math.max(480, Math.floor(window.innerWidth * 0.85));
-    var h = Math.max(320, Math.floor(window.innerHeight * 0.75));
+    // Keep intrinsic aspect; Panzoom will scale to fill the window.
+    var w = 800;
+    var h = 600;
     var wm = xml.match(/\bwidth="([\d.]+)"/);
     var hm = xml.match(/\bheight="([\d.]+)"/);
     var vbm = xml.match(/\bviewBox="([^"]+)"/);
@@ -191,14 +199,40 @@
         h = Math.round(parts[3]);
       }
     }
-    var maxW = Math.floor(window.innerWidth * 0.9);
-    var maxH = Math.floor(window.innerHeight * 0.8);
-    var scale = Math.min(maxW / w, maxH / h, 2.5);
-    if (scale > 1.05) {
+    // Render a large SVG bitmap so it stays sharp when fitted to the window.
+    var maxEdge = Math.max(window.innerWidth, window.innerHeight) * 2;
+    var scale = Math.min(maxEdge / w, maxEdge / h, 3);
+    if (scale > 1) {
       w = Math.round(w * scale);
       h = Math.round(h * scale);
     }
     return { w: w, h: h };
+  }
+
+  // Fit a stage (wrapper) to the parent with contain sizing; img fills the stage.
+  // Panzoom transforms the stage only — never fights img width/height directly.
+  function fitStageToParent(stage, parent, nw, nh) {
+    var pw = parent.clientWidth || window.innerWidth;
+    var ph = parent.clientHeight || window.innerHeight;
+    if (pw < 40) {
+      pw = window.innerWidth;
+    }
+    if (ph < 40) {
+      ph = window.innerHeight;
+    }
+    parent.style.width = pw + "px";
+    parent.style.height = ph + "px";
+
+    var scale = Math.min(pw / nw, ph / nh) * 0.96;
+    if (!(scale > 0) || !isFinite(scale)) {
+      scale = 1;
+    }
+    var dw = Math.max(1, Math.round(nw * scale));
+    var dh = Math.max(1, Math.round(nh * scale));
+    stage.style.width = dw + "px";
+    stage.style.height = dh + "px";
+    stage.style.transform = "";
+    return { scale: scale, dw: dw, dh: dh, pw: pw, ph: ph };
   }
 
   function showSvgXml(xml) {
@@ -225,44 +259,82 @@
     var blobUrl = URL.createObjectURL(
       new Blob([xml], { type: "image/svg+xml;charset=utf-8" })
     );
+
+    var stage = document.createElement("div");
+    stage.className = "pz-stage";
+
     var img = document.createElement("img");
     img.alt = "Diagram";
     img.draggable = false;
-    img.width = size.w;
-    img.height = size.h;
-    img.style.width = size.w + "px";
-    img.style.height = size.h + "px";
-    img.style.maxWidth = "none";
-    img.style.maxHeight = "none";
-    img.style.display = "block";
     img.src = blobUrl;
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.display = "block";
+    img.style.objectFit = "contain";
+    stage.appendChild(img);
 
     parent.innerHTML = "";
-    parent.appendChild(img);
+    parent.appendChild(stage);
     root.hidden = false;
     document.body.classList.add("pz-lightbox-open");
 
     function attach() {
-      var panzoom = Panzoom(img, {
+      var nw = img.naturalWidth || size.w;
+      var nh = img.naturalHeight || size.h;
+      var fitted = fitStageToParent(stage, parent, nw, nh);
+
+      var panzoom = Panzoom(stage, {
         cursor: "grab",
-        maxScale: 5,
-        minScale: 0.2,
+        maxScale: 8,
+        minScale: 0.25,
+        startScale: 1,
+        contain: false,
       });
       parent.addEventListener("wheel", panzoom.zoomWithWheel);
-      zoomIn.onclick = panzoom.zoomIn;
-      zoomOut.onclick = panzoom.zoomOut;
-      reset.onclick = panzoom.reset;
+
+      function fit() {
+        try {
+          panzoom.reset({ animate: false });
+        } catch (e) {
+          /* ignore */
+        }
+        var f = fitStageToParent(stage, parent, nw, nh);
+        console.info("[mermaid-zoom] fitted", f);
+        return f;
+      }
+
+      zoomIn.onclick = function () {
+        panzoom.zoomIn();
+      };
+      zoomOut.onclick = function () {
+        panzoom.zoomOut();
+      };
+      reset.onclick = fit;
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(fit);
+      });
+
+      function onResize() {
+        if (session && session.fit) {
+          session.fit();
+        }
+      }
+      window.addEventListener("resize", onResize);
+
       session = {
         root: root,
         parent: parent,
         panzoom: panzoom,
         zoomWithWheel: panzoom.zoomWithWheel,
         blobUrl: blobUrl,
+        fit: fit,
+        onResize: onResize,
       };
-      console.info("[mermaid-zoom] lightbox ready scale=", panzoom.getScale());
+      console.info("[mermaid-zoom] lightbox fitted", fitted);
     }
 
-    if (img.complete) {
+    if (img.complete && img.naturalWidth) {
       attach();
     } else {
       img.onload = attach;

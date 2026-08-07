@@ -86,12 +86,12 @@ markdown_extensions:
       alternate_style: true
 
 extra_css:
-  - stylesheets/extra.css?v=pz-box-10
+  - stylesheets/extra.css?v=pz-box-13
 
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js
   - javascripts/vendor/panzoom.min.js
-  - javascripts/mermaid-zoom.js?v=pz-box-10
+  - javascripts/mermaid-zoom.js?v=pz-box-13
 
 plugins:
   - search

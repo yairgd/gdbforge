@@ -46,30 +46,36 @@ body.pz-lightbox-open {
 .pz-lightbox__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.82);
+  background: rgba(0, 0, 0, 0.92);
 }
 
+/* Full-window panel — diagram uses the entire viewport */
 .pz-lightbox__panel {
   position: absolute;
-  inset: 3vh 3vw;
+  inset: 0;
   display: flex;
   flex-direction: column;
   background: #0f1419;
-  border: 1px solid #30363d;
-  border-radius: 8px;
+  border: none;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
+/* Toolbar overlays the diagram so the figure can fill the window */
 .pz-lightbox__controls {
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: rgba(22, 27, 34, 0.92);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .pz-lightbox__controls button {
@@ -88,13 +94,17 @@ body.pz-lightbox-open {
 }
 
 .pz-lightbox__controls #pz-close {
-  margin-left: auto;
+  margin-left: 0.5rem;
   border-color: #8b949e;
 }
 
 .panzoom-parent {
-  position: relative;
-  flex: 1 1 auto;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   background: #0f1419;
   cursor: grab;
@@ -104,11 +114,20 @@ body.pz-lightbox-open {
   cursor: grabbing;
 }
 
-.panzoom-parent > img,
-.panzoom-parent > svg {
+.panzoom-parent > .pz-stage {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  transform-origin: center center;
+}
+
+.panzoom-parent > .pz-stage > img {
   display: block;
+  width: 100%;
+  height: 100%;
   max-width: none !important;
   max-height: none !important;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .md-typeset video {
