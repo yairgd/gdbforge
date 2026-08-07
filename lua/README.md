@@ -44,6 +44,9 @@ Per-script env vars are listed in each section below.
 | Directory | `:lua` | Backend | Purpose |
 |-----------|--------|---------|---------|
 | [`remotegdb/`](remotegdb/) | `remotegdb` | **GDB** | Embedded Linux: scp (if changed) + ssh gdbserver + `target remote` |
+| [`kgdb_uart/`](kgdb_uart/) | `kgdb_uart` | **GDB** | Kernel kgdb over UART via **kdmx** + minicom → stopped debug mode |
+| [`kgdb_net/`](kgdb_net/) | `kgdb_net` | **GDB** | Kernel kgdb over Ethernet TCP (`target remote`) → stopped debug mode |
+| [`kgdb_common/`](kgdb_common/) | `kgdb_common` | — | Shared helpers for kgdb_* (not a workflow) |
 | [`dlv_ext_port/`](dlv_ext_port/) | `dlv_ext_port` | Delve | Go TUI: headless dlv in another window + connect |
 | [`dlv_port/`](dlv_port/) | `dlv_port` | Delve | Alias of `dlv_ext_port` |
 | [`terminal_debug/`](terminal_debug/) | `terminal_debug` | GDB | External tty + optional `file` / `break` / `run` |
@@ -119,6 +122,43 @@ Edit placeholders at the top of [`remotegdb/remotegdb.lua`](remotegdb/remotegdb.
 | `APP HOST PORT` | Path + board + gdbserver port |
 
 Requires host tools: `ssh`, `scp`, `md5sum` (or `md5`); board: `gdbserver`.
+
+---
+
+## `kgdb_uart` / `kgdb_net` — kernel kgdb
+
+Full write-up: [`docs/KERNEL_KGDB.md`](../docs/KERNEL_KGDB.md).
+
+```bash
+mkdir -p .gdbforge/lua
+cp -r lua/kgdb_common lua/kgdb_uart lua/kgdb_net .gdbforge/lua/
+
+# Path 1 — shared UART + kdmx
+export GDBFORGE_KGDB_UART=/dev/ttyUSB0
+export GDBFORGE_KGDB_VMLINUX=/path/to/vmlinux
+export GDBFORGE_KGDB_MODULES=/path/to/kernel/build   # optional
+export GDBFORGE_TERMINAL=mate-terminal
+# board waiting: kgdboc=…,kgdbwait ; host: kdmx on PATH
+:lua kgdb_uart 8250
+
+# Path 2 — Ethernet kgdb (no mux)
+export GDBFORGE_REMOTE_HOST=192.168.20.50
+export GDBFORGE_KGDB_PORT=6443
+:lua kgdb_net 8250
+```
+
+Both leave GDB **stopped** in debug mode (`target remote` + `lx-symbols`). Then set breakpoints, `continue`, and trigger from the console.
+
+| Variable | Used by | Meaning |
+|----------|---------|---------|
+| `GDBFORGE_KGDB_UART` | uart | Serial device (required for uart) |
+| `GDBFORGE_KGDB_BAUD` | uart | Baud (default `115200`) |
+| `GDBFORGE_KGDB_VMLINUX` | both | Path to `vmlinux` |
+| `GDBFORGE_KGDB_MODULES` | both | Extra path for `lx-symbols` |
+| `GDBFORGE_KGDB_PORT` | net | TCP port (default `6443`) |
+| `GDBFORGE_REMOTE_HOST` | net | Board IP |
+| `GDBFORGE_KGDB_SSH_CONSOLE` | net | `1` → open `ssh -t` window |
+| `GDBFORGE_KGDB_KO` | net | Optional `.ko` + SSH sysfs → `add-symbol-file` |
 
 ---
 

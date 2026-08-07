@@ -25,7 +25,7 @@ gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbf
 - [Delve backend (peer of GDB)](#delve-backend-peer-of-gdb)
 - [Future OpenOCD integration](#future-openocd-integration)
 - [Future JTAG integration](#future-jtag-integration)
-- [Future kernel debugging](#future-kernel-debugging)
+- [Kernel debugging](#kernel-debugging)
 - [Design constraints](#design-constraints)
 
 ---
@@ -722,9 +722,11 @@ These are **feature panes** ([PLUGINS.md](PLUGINS.md)), not core UI changes.
 
 ---
 
-## Future kernel debugging
+## Kernel debugging
 
-Kernel debugging introduces unique requirements:
+**Current (Lua):** kgdb bring-up without Go mux — `:lua kgdb_uart` (UART + external `kdmx`) and `:lua kgdb_net` (Ethernet / `target remote`). See **[KERNEL_KGDB.md](KERNEL_KGDB.md)**. Same design rule as `remotegdb`: GDB owns RSP; gdbforge is MI UI + orchestration.
+
+Kernel debugging still introduces longer-term UI requirements:
 
 | Requirement | UI response |
 |-------------|-------------|
@@ -733,9 +735,9 @@ Kernel debugging introduces unique requirements:
 | Remote targets | Backend connection manager (not UI) |
 | Module / symbol load | Async events → source pane refresh |
 
-Planned backend options:
+Further planned options:
 
-- GDB remote (`target remote :1234`)
+- Optional in-process UART mux (replace external `kdmx`; same `:lua kgdb_uart` UX)
 - `crash` utility integration for dump analysis
 - Custom `/proc/kcore` readers
 

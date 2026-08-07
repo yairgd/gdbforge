@@ -34,6 +34,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
+| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel & module kgdb (UART+kdmx / Ethernet Lua workflows) |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |

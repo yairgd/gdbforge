@@ -239,9 +239,16 @@ export GDBFORGE_REMOTE_HOST=192.168.20.50
 # install:  cp -r lua/remotegdb .gdbforge/lua/
 # then:     :lua remotegdb
 #           :lua remotegdb ./hello 192.168.20.50 1234
+
+# Kernel / module (kgdb) — see docs/KERNEL_KGDB.md
+# install:  cp -r lua/kgdb_common lua/kgdb_uart .gdbforge/lua/   # UART+kdmx
+#           cp -r lua/kgdb_net .gdbforge/lua/                    # Ethernet
+export GDBFORGE_KGDB_UART=/dev/ttyUSB0
+export GDBFORGE_KGDB_VMLINUX=/path/to/vmlinux
+# then:     :lua kgdb_uart 8250    # or :lua kgdb_net [module] [host] [port]
 ```
 
-Full per-script recipes and env vars: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
+Full per-script recipes and env vars: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md). Kernel kgdb: [`KERNEL_KGDB.md`](KERNEL_KGDB.md).
 
 **About (`:b about`)**
 

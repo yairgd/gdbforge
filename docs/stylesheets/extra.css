@@ -11,12 +11,104 @@
   --md-typeset-a-color: #58a6ff;
 }
 
-.md-typeset .mermaid {
+.md-typeset .mermaid,
+.md-typeset .mermaid-diagram {
   background: var(--md-code-bg-color);
   border: 1px solid var(--md-default-fg-color--lightest);
   border-radius: 0.4rem;
   padding: 1rem;
   text-align: center;
+}
+
+.md-typeset .mermaid--zoomable {
+  cursor: zoom-in;
+}
+
+.md-typeset .mermaid--zoomable:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0 1px var(--md-accent-fg-color);
+}
+
+body.pz-lightbox-open {
+  overflow: hidden;
+}
+
+#pz-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+}
+
+#pz-lightbox[hidden] {
+  display: none !important;
+}
+
+.pz-lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.pz-lightbox__panel {
+  position: absolute;
+  inset: 3vh 3vw;
+  display: flex;
+  flex-direction: column;
+  background: #0f1419;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.pz-lightbox__controls {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.pz-lightbox__controls button {
+  cursor: pointer;
+  padding: 8px 14px;
+  font: 600 14px/1.2 system-ui, sans-serif;
+  color: #e6edf3;
+  background: #243044;
+  border: 1px solid #58a6ff;
+  border-radius: 6px;
+}
+
+.pz-lightbox__controls button:hover {
+  background: #58a6ff;
+  color: #0f1419;
+}
+
+.pz-lightbox__controls #pz-close {
+  margin-left: auto;
+  border-color: #8b949e;
+}
+
+.panzoom-parent {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: #0f1419;
+  cursor: grab;
+}
+
+.panzoom-parent:active {
+  cursor: grabbing;
+}
+
+.panzoom-parent > img,
+.panzoom-parent > svg {
+  display: block;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 .md-typeset video {
