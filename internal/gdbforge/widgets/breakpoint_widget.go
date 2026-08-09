@@ -40,6 +40,7 @@ type BreakpointWidget struct {
 	// mouseDown tracks primary-button press so we activate on release, not on
 	// every drag sample (avoids repeated Code jumps / GDB noise while selecting).
 	mouseDown     bool
+	pressOnRow    bool
 	pressSelected int
 
 	host BreakpointHost
@@ -302,27 +303,43 @@ func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 			w.activateSelected(false)
 			return
 		}
+		mx, my := e.Position()
+		hitLine, onRow := w.viewport.HitContentLine(mx, my)
 		w.viewport.HandleEvent(e)
 		if btns&tcell.ButtonPrimary != 0 {
-			w.syncSelectedFromViewport()
-			if !w.mouseDown {
-				w.mouseDown = true
-				w.pressSelected = w.selected
+			if onRow {
+				w.selected = hitLine
+				w.viewport.CursorLine = hitLine
+				if !w.mouseDown {
+					w.mouseDown = true
+					w.pressOnRow = true
+					w.pressSelected = w.selected
+				}
+			} else if !w.mouseDown {
+				w.viewport.CursorLine = w.selected
+				w.pressOnRow = false
 			}
 			return
 		}
 		if w.mouseDown {
 			w.mouseDown = false
-			w.syncSelectedFromViewport()
-			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+			if onRow {
+				w.selected = hitLine
+				w.viewport.CursorLine = hitLine
+			} else {
+				w.viewport.CursorLine = w.selected
+			}
+			if w.pressOnRow {
 				w.activateSelected(false)
 			}
+			w.pressOnRow = false
 		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
 		w.viewport.HandleEvent(e)
+		w.syncSelectedFromViewport()
 	}
 }
 
@@ -331,6 +348,7 @@ func (w *BreakpointWidget) SetFocused(focused bool) {
 	w.viewport.SetCursorVisible(false)
 	if !focused {
 		w.mouseDown = false
+		w.pressOnRow = false
 	}
 }
 

@@ -2,22 +2,28 @@ package widgets
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
+
+// styleSpan is a half-open [start,end) visible-column range in source text
+// (past the gutter) with a Canvas paint style.
+type styleSpan struct {
+	start, end int
+	style      tcell.Style
+}
 
 const (
 	pcMarker    = "━━▶"
@@ -47,7 +53,7 @@ type CodeWidget struct {
 	selLine   int // 1-based cursor / bold line
 	preferCol int // preferred source column (0-based, past gutter)
 	rawLines  []string
-	hiLines   []string // chroma ANSI lines (same length as rawLines)
+	hiSpans   [][]styleSpan // chroma spans per line (same length as rawLines)
 	bpByLine  map[int]models.BreakGutter
 
 	// unavailable: source path cannot be shown (missing file, .so without sources).
@@ -63,7 +69,7 @@ func NewCodeWidget() *CodeWidget {
 	vp.SetReadOnly(true)
 	vp.SetCursor(termui.NewInverseCursor())
 	vp.SetCursorVisible(false)
-	vp.ANSI = true
+	vp.ANSI = false
 
 	w := &CodeWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "Code"},
@@ -71,6 +77,7 @@ func NewCodeWidget() *CodeWidget {
 		buf:        buf,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.CellStyle = w.cellStyle
 	vp.SetSearchContentOffset(codeGutterCols)
 	vp.SetOnSearchJump(func(lineIdx int) {
 		w.selLine = lineIdx + 1
@@ -286,7 +293,7 @@ func (w *CodeWidget) contentCol() int {
 		return 0
 	}
 	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
-	vis := termui.VisibleANSIColAtByte(line, w.viewport.CursorCol)
+	vis := termui.VisibleColAtByte(line, w.viewport.CursorCol)
 	col := vis - codeGutterCols
 	if col < 0 {
 		return 0
@@ -303,7 +310,7 @@ func (w *CodeWidget) setCursorContentCol(contentCol int) {
 		contentCol = 0
 	}
 	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
-	maxContent := termui.VisibleANSIWidth(line) - codeGutterCols
+	maxContent := utf8.RuneCountInString(line) - codeGutterCols
 	if maxContent < 0 {
 		maxContent = 0
 	}
@@ -311,7 +318,7 @@ func (w *CodeWidget) setCursorContentCol(contentCol int) {
 		contentCol = maxContent
 	}
 	w.preferCol = contentCol
-	w.viewport.CursorCol = termui.ANSIByteIndexAtVisible(line, codeGutterCols+contentCol)
+	w.viewport.CursorCol = termui.ByteIndexAtVisibleCol(line, codeGutterCols+contentCol)
 }
 
 func (w *CodeWidget) breakAtSel() {
@@ -390,7 +397,7 @@ func (w *CodeWidget) loadAndScroll(path string, line int) error {
 		w.path = path
 		w.PaneName = filepath.Base(path)
 		w.rawLines = lines
-		w.hiLines = highlightLines(path, lines)
+		w.hiSpans = highlightSpans(path, lines)
 	}
 
 	idx := line - 1
@@ -422,7 +429,7 @@ func (w *CodeWidget) Clear() {
 	w.unavailableExtra = ""
 	w.path = ""
 	w.rawLines = nil
-	w.hiLines = nil
+	w.hiSpans = nil
 	w.pcLine = 0
 	w.selLine = 0
 	w.preferCol = 0
@@ -458,7 +465,7 @@ func (w *CodeWidget) ShowUnavailable(path, extra string) {
 	w.unavailableExtra = extra
 	w.path = path
 	w.rawLines = nil
-	w.hiLines = nil
+	w.hiSpans = nil
 	w.pcLine = 0
 	w.selLine = 0
 	w.bpByLine = nil
@@ -545,7 +552,71 @@ func (w *CodeWidget) searchColor() tcell.Color {
 	return themeFrom{w.state}.Search()
 }
 
-// RebuildBuffer refreshes gutter ANSI from current AppState break colors.
+func (w *CodeWidget) mutedColor() tcell.Color {
+	return themeFrom{w.state}.Muted()
+}
+
+// cellStyle paints gutter mark / line number / │ and syntax spans (no buffer ANSI).
+func (w *CodeWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) tcell.Style {
+	if w == nil || w.unavailable {
+		return st
+	}
+	ln := lineIdx + 1
+	if absVisCol < 3 {
+		if ln == w.pcLine {
+			return st.Foreground(tcell.ColorYellow).Bold(true)
+		}
+		return st
+	}
+	if absVisCol == 3 {
+		return st
+	}
+	if absVisCol >= 4 && absVisCol < 8 {
+		if g, ok := w.gutterAt(ln); ok {
+			bg := breakGutterColor(g, w.state)
+			return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
+		}
+		return st.Foreground(w.mutedColor())
+	}
+	if absVisCol == 8 { // │
+		return st.Foreground(tcell.ColorGray)
+	}
+	if absVisCol == 9 { // space after │
+		return st
+	}
+	contentCol := absVisCol - codeGutterCols
+	if contentCol < 0 || lineIdx < 0 || lineIdx >= len(w.hiSpans) {
+		return st
+	}
+	for _, sp := range w.hiSpans[lineIdx] {
+		if contentCol >= sp.start && contentCol < sp.end {
+			return mergeSyntaxStyle(st, sp.style)
+		}
+	}
+	return st
+}
+
+// mergeSyntaxStyle applies chroma fg/attrs onto the row style (keeps PC/sel bg).
+func mergeSyntaxStyle(base, syn tcell.Style) tcell.Style {
+	_, _, synAttrs := syn.Decompose()
+	fg, _, _ := syn.Decompose()
+	out := base
+	if fg != tcell.ColorDefault {
+		out = out.Foreground(fg)
+	}
+	if synAttrs&tcell.AttrBold != 0 {
+		out = out.Bold(true)
+	}
+	if synAttrs&tcell.AttrItalic != 0 {
+		out = out.Italic(true)
+	}
+	if synAttrs&tcell.AttrUnderline != 0 {
+		out = out.Underline(true)
+	}
+	return out
+}
+
+// RebuildBuffer refreshes gutters from current AppState break colors.
 func (w *CodeWidget) RebuildBuffer() {
 	w.rebuildBuffer()
 }
@@ -557,32 +628,25 @@ func (w *CodeWidget) rebuildBuffer() {
 	w.buf.Clear()
 	for i, text := range w.rawLines {
 		ln := i + 1
-		markANSI := pcGutterPad
+		mark := pcGutterPad
 		if ln == w.pcLine {
-			markANSI = "\x1b[1;38;5;226m" + pcMarker + "\x1b[0m"
-		}
-		src := text
-		if i < len(w.hiLines) {
-			src = w.hiLines[i]
+			mark = pcMarker
 		}
 		num := fmt.Sprintf("%4d", ln)
-		var numANSI string
-		if g, ok := w.gutterAt(ln); ok {
-			numANSI = platform.BreakNumberANSI(num, breakGutterColor(g, w.state))
-		} else {
-			numANSI = "\x1b[38;5;244m" + num + "\x1b[0m"
-		}
-		gutter := fmt.Sprintf("%s %s\x1b[38;5;240m│\x1b[0m ", markANSI, numANSI)
-		w.buf.AppendLine(gutter + src)
+		gutter := fmt.Sprintf("%s %s│ %s", mark, num, text)
+		w.buf.AppendLine(gutter)
 	}
 	if len(w.rawLines) == 0 {
 		w.buf.AppendLine(fmt.Sprintf("%s (empty file)", pcGutterPad))
 	}
-	// ANSI lines are long in bytes; never keep a stale horizontal skip.
 	w.viewport.Left = 0
 }
 
-func highlightLines(path string, lines []string) []string {
+func highlightSpans(path string, lines []string) [][]styleSpan {
+	out := make([][]styleSpan, len(lines))
+	if len(lines) == 0 {
+		return out
+	}
 	src := strings.Join(lines, "\n")
 	lexer := lexers.Match(path)
 	if lexer == nil {
@@ -597,28 +661,73 @@ func highlightLines(path string, lines []string) []string {
 	if style == nil {
 		style = styles.Fallback
 	}
-	formatter := formatters.Get("terminal256")
-	if formatter == nil {
-		formatter = formatters.Fallback
-	}
 
 	it, err := lexer.Tokenise(nil, src)
 	if err != nil {
-		return append([]string(nil), lines...)
+		return out
 	}
-	var buf bytes.Buffer
-	if err := formatter.Format(&buf, style, it); err != nil {
-		return append([]string(nil), lines...)
-	}
-	out := strings.Split(buf.String(), "\n")
-	// Preserve trailing empty line count from Split.
-	for len(out) < len(lines) {
-		out = append(out, "")
-	}
-	if len(out) > len(lines) {
-		out = out[:len(lines)]
+
+	lineIdx := 0
+	col := 0 // rune column within current line
+	for tok := it(); tok != chroma.EOF; tok = it() {
+		entry := style.Get(tok.Type)
+		tokStyle := chromaEntryStyle(entry)
+		for _, r := range tok.Value {
+			if r == '\n' {
+				lineIdx++
+				col = 0
+				if lineIdx >= len(out) {
+					return out
+				}
+				continue
+			}
+			if lineIdx >= len(out) {
+				return out
+			}
+			if !entry.Colour.IsSet() && entry.Bold != chroma.Yes &&
+				entry.Italic != chroma.Yes && entry.Underline != chroma.Yes {
+				col++
+				continue
+			}
+			spans := out[lineIdx]
+			if n := len(spans); n > 0 && spans[n-1].end == col && spans[n-1].style == tokStyle {
+				spans[n-1].end = col + 1
+				out[lineIdx] = spans
+			} else {
+				out[lineIdx] = append(spans, styleSpan{start: col, end: col + 1, style: tokStyle})
+			}
+			col++
+		}
 	}
 	return out
+}
+
+func chromaEntryStyle(entry chroma.StyleEntry) tcell.Style {
+	st := tcell.StyleDefault
+	if entry.Colour.IsSet() {
+		st = st.Foreground(tcell.NewRGBColor(
+			int32(entry.Colour.Red()),
+			int32(entry.Colour.Green()),
+			int32(entry.Colour.Blue()),
+		))
+	}
+	if entry.Background.IsSet() {
+		st = st.Background(tcell.NewRGBColor(
+			int32(entry.Background.Red()),
+			int32(entry.Background.Green()),
+			int32(entry.Background.Blue()),
+		))
+	}
+	if entry.Bold == chroma.Yes {
+		st = st.Bold(true)
+	}
+	if entry.Italic == chroma.Yes {
+		st = st.Italic(true)
+	}
+	if entry.Underline == chroma.Yes {
+		st = st.Underline(true)
+	}
+	return st
 }
 
 func readSourceLines(path string) ([]string, error) {

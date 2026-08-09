@@ -594,6 +594,12 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		a.debugInfo.syncThreadViews()
 		a.debugInfo.syncCallStackViews()
 		a.syncCodeFromCallstack()
+		// Asm stack preamble / dump can stay on the pre-Ctrl-C frame until the
+		// stack model lands — refresh against the highlighted (post-stop) level.
+		if stack := a.debugInfo.Stack(); stack != nil {
+			fr, ok := stack.ByLevel(a.debugInfo.selectedLevel())
+			a.asm.refreshAfterStackReload(fr, ok)
+		}
 		a.RequestFrame()
 	case luaUIMsg:
 		func() {
@@ -663,9 +669,5 @@ func isExpectedPtyClose(err error) bool {
 	return strings.Contains(msg, "input/output error") ||
 		strings.Contains(msg, "file already closed")
 }
-
-
-
-
 
 

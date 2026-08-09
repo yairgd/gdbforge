@@ -55,6 +55,102 @@ func TestWindowAroundCentered(t *testing.T) {
 	}
 }
 
+func TestWindowAroundPCStartsAtPC(t *testing.T) {
+	all := make([]models.AsmLine, 20)
+	for i := range all {
+		all[i] = models.AsmLine{
+			Addr: NormalizeAddr(sprintfAddr(0x1000 + uint64(i)*4)),
+			Inst: "nop",
+		}
+	}
+	got := WindowAroundPC(all, "0x1028", 5)
+	if len(got) != 5 {
+		t.Fatalf("len=%d want 5", len(got))
+	}
+	// CGDB x/Ni $pc: first line is the PC.
+	if got[0].Addr != "0x1028" {
+		t.Fatalf("pc at %q want 0x1028 (first line)", got[0].Addr)
+	}
+}
+
+func TestWindowAroundPCNearEndKeepsPCFirst(t *testing.T) {
+	all := make([]models.AsmLine, 12)
+	for i := range all {
+		all[i] = models.AsmLine{
+			Addr: NormalizeAddr(sprintfAddr(0x1000 + uint64(i)*4)),
+			Inst: "nop",
+		}
+	}
+	// Only 2 insns after 0x1028 — must not rewind to fill a 10-row window.
+	got := WindowAroundPC(all, "0x1028", 10)
+	if got[0].Addr != "0x1028" {
+		t.Fatalf("first=%q want 0x1028", got[0].Addr)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2 (only remaining after PC)", len(got))
+	}
+}
+
+func TestWindowAtAnchorKeepsCenterRow(t *testing.T) {
+	all := make([]models.AsmLine, 40)
+	for i := range all {
+		all[i] = models.AsmLine{
+			Addr: NormalizeAddr(sprintfAddr(0x1000 + uint64(i)*4)),
+			Inst: "nop",
+		}
+	}
+	got := WindowAtAnchor(all, "0x1028", 20, 5)
+	if len(got) != 20 {
+		t.Fatalf("len=%d want 20", len(got))
+	}
+	if got[5].Addr != "0x1028" {
+		t.Fatalf("anchor=%q want 0x1028 at index 5", got[5].Addr)
+	}
+}
+
+func TestBrowseAnchor(t *testing.T) {
+	// Down with caret near bottom of a 20-row view → small index (room below).
+	if a := BrowseAnchor(1, 18, 20, 80); a != 18 {
+		t.Fatalf("down anchor=%d want 18", a)
+	}
+	// Up with caret near top → large index (room above).
+	if a := BrowseAnchor(-1, 2, 20, 80); a != 80-1-(20-2-1) {
+		t.Fatalf("up anchor=%d", a)
+	}
+}
+
+func TestWindowBeforeEndsAtCenter(t *testing.T) {
+	all := make([]models.AsmLine, 20)
+	for i := range all {
+		all[i] = models.AsmLine{
+			Addr: NormalizeAddr(sprintfAddr(0x1000 + uint64(i)*4)),
+			Inst: "nop",
+		}
+	}
+	got := WindowBefore(all, "0x1028", 5)
+	if len(got) != 5 {
+		t.Fatalf("len=%d want 5", len(got))
+	}
+	if got[len(got)-1].Addr != "0x1028" {
+		t.Fatalf("last=%q want 0x1028", got[len(got)-1].Addr)
+	}
+}
+
+func TestDisassembleRangeForward(t *testing.T) {
+	start, end, ok := DisassembleRangeForward("0x1000", 40)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	s, _ := ParseAddrUint(start)
+	e, _ := ParseAddrUint(end)
+	if s >= 0x1000 {
+		t.Fatalf("start %s should be before center", start)
+	}
+	if e <= 0x1000+uint64(40*maxInsnBytes) {
+		t.Fatalf("end %s too close; want forward bias", end)
+	}
+}
+
 func TestDisassembleRange(t *testing.T) {
 	start, end, ok := DisassembleRange("0x1000", 10)
 	if !ok {

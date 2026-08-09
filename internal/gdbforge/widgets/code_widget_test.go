@@ -29,16 +29,19 @@ func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("lines=%v", lines)
 	}
-	plain1 := termui.StripANSI(lines[1])
-	if !strings.Contains(plain1, "━━▶") {
-		t.Fatalf("want ━━▶ on line 2, got %q", plain1)
+	if !strings.Contains(lines[1], "━━▶") {
+		t.Fatalf("want ━━▶ on line 2, got %q", lines[1])
 	}
-	if !strings.Contains(plain1, "│") {
-		t.Fatalf("want box-drawing │ gutter, got %q", plain1)
+	if !strings.Contains(lines[1], "│") {
+		t.Fatalf("want box-drawing │ gutter, got %q", lines[1])
 	}
-	plain0 := termui.StripANSI(lines[0])
-	if !strings.Contains(plain0, "1") {
-		t.Fatalf("want line 1 gutter, got %q", plain0)
+	if !strings.Contains(lines[0], "1") {
+		t.Fatalf("want line 1 gutter, got %q", lines[0])
+	}
+	for i, ln := range lines {
+		if strings.Contains(ln, "\x1b") {
+			t.Fatalf("buffer line %d has ANSI escape: %q", i, ln)
+		}
 	}
 }
 
@@ -62,13 +65,12 @@ func TestCodeWidgetShowSelectionKeepsPC(t *testing.T) {
 	if w.SelLine() != 3 {
 		t.Fatalf("sel=%d want 3", w.SelLine())
 	}
-	plain := termui.StripANSI(w.LinesForTest()[0])
-	if !strings.Contains(plain, "━━▶") {
-		t.Fatalf("━━▶ should remain on line 1: %q", plain)
+	if !strings.Contains(w.LinesForTest()[0], "━━▶") {
+		t.Fatalf("━━▶ should remain on line 1: %q", w.LinesForTest()[0])
 	}
 }
 
-func TestCodeWidgetBreakpointLineNumberANSI(t *testing.T) {
+func TestCodeWidgetBreakpointLineNumberStyle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.c")
 	src := "int main(void) {\n  return 0;\n}\n"
@@ -80,15 +82,19 @@ func TestCodeWidgetBreakpointLineNumberANSI(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.SetBreakpointLines([]int{2})
-	lines := w.LinesForTest()
-	if len(lines) < 2 {
-		t.Fatalf("lines=%d", len(lines))
+	// Line-number cells are visible cols 4..7.
+	st := w.cellStyle(1, 5, tcell.StyleDefault)
+	_, bg, _ := st.Decompose()
+	if bg != tcell.ColorRed {
+		t.Fatalf("want red bg on breakpoint line number, got %v", bg)
 	}
-	if !strings.Contains(lines[1], "48;5;196") {
-		t.Fatalf("want red bg on breakpoint line number, got %q", lines[1])
+	st0 := w.cellStyle(0, 5, tcell.StyleDefault)
+	_, bg0, _ := st0.Decompose()
+	if bg0 == tcell.ColorRed {
+		t.Fatalf("line 1 should not have red bp bg")
 	}
-	if strings.Contains(lines[0], "48;5;196") {
-		t.Fatalf("line 1 should not have red bp bg: %q", lines[0])
+	if strings.Contains(w.LinesForTest()[1], "\x1b") {
+		t.Fatalf("buffer must stay plain: %q", w.LinesForTest()[1])
 	}
 }
 
@@ -106,15 +112,13 @@ func TestCodeWidgetDisabledBreakpointYellow(t *testing.T) {
 	w.SetBreakInfos([]models.BreakInfo{
 		{Number: 0, Enabled: false, File: path, Line: 2},
 	})
-	lines := w.LinesForTest()
-	if len(lines) < 2 {
-		t.Fatalf("lines=%d", len(lines))
+	st := w.cellStyle(1, 5, tcell.StyleDefault)
+	_, bg, _ := st.Decompose()
+	if bg != tcell.ColorYellow {
+		t.Fatalf("want yellow bg on disabled bp line number, got %v", bg)
 	}
-	if !strings.Contains(lines[1], "48;5;226") {
-		t.Fatalf("want yellow bg on disabled bp line number, got %q", lines[1])
-	}
-	if strings.Contains(lines[1], "48;5;196") {
-		t.Fatalf("disabled should not use red: %q", lines[1])
+	if bg == tcell.ColorRed {
+		t.Fatalf("disabled should not use red")
 	}
 }
 

@@ -327,7 +327,11 @@ func (v *Viewport) searchContent(lineIdx int) string {
 	if v.Buffer == nil || lineIdx < 0 || lineIdx >= v.Buffer.NumLines() {
 		return ""
 	}
-	plain := []rune(platform.StripANSI(v.Buffer.Line(lineIdx)))
+	line := v.Buffer.Line(lineIdx)
+	plain := []rune(line)
+	if v.ANSI {
+		plain = []rune(platform.StripANSI(line))
+	}
 	off := v.searchContentOffset
 	if off > len(plain) {
 		return ""
