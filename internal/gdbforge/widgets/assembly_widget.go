@@ -62,6 +62,7 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
+	vp.SetDragAutoScroll(false) // mouse-drag must not scroll the asm dump
 	vp.SetCursor(termui.NewInverseCursor())
 	vp.SetCursorVisible(false)
 	vp.ANSI = true

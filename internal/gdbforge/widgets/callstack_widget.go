@@ -35,6 +35,7 @@ type CallStackWidget struct {
 	// mouseDown tracks primary-button press so we activate on release, not on
 	// every drag sample (which flooded GDB with `frame N` console noise).
 	mouseDown     bool
+	pressOnRow    bool // false when press was in blank padding below the list
 	pressSelected int
 	lastActLevel  int
 	lastActTime   time.Time
@@ -78,9 +79,41 @@ func (w *CallStackWidget) SetAppState(st *debugstate.State) {
 func (w *CallStackWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected(false) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected(false) }, "<Down>", "j")
+	w.BindKeyFunc("page-up", func(args ...any) { w.move(-w.pageRows()); w.activateSelected(false) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.move(w.pageRows()); w.activateSelected(false) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { w.moveTo(0); w.activateSelected(false) }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { w.moveTo(len(w.items) - 1); w.activateSelected(false) }, "<End>", "G")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected(true) }, "<Enter>", "<C-m>")
+}
+
+func (w *CallStackWidget) pageRows() int {
+	h := 0
+	if w.viewport != nil {
+		h = w.viewport.Height()
+	}
+	if h < 1 {
+		return 10
+	}
+	return h
+}
+
+func (w *CallStackWidget) moveTo(idx int) {
+	n := len(w.items)
+	if n == 0 {
+		return
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= n {
+		idx = n - 1
+	}
+	w.selected = idx
+	w.viewport.CursorLine = w.selected
+	w.viewport.CursorCol = 0
+	w.viewport.EnsureLineVisible()
 }
 
 func (w *CallStackWidget) markColor() tcell.Color {
@@ -290,29 +323,48 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 			w.activateSelected(false)
 			return
 		}
+		mx, my := e.Position()
+		hitLine, onRow := w.viewport.HitContentLine(mx, my)
 		w.viewport.HandleEvent(e)
 		if btns&tcell.ButtonPrimary != 0 {
-			w.syncSelectedFromViewport()
-			if !w.mouseDown {
-				w.mouseDown = true
-				w.pressSelected = w.selected
+			if onRow {
+				// Prefer the hit line — viewport can clamp empty-area clicks to
+				// the last frame after the list is scrolled.
+				w.selected = hitLine
+				w.viewport.CursorLine = hitLine
+				if !w.mouseDown {
+					w.mouseDown = true
+					w.pressOnRow = true
+					w.pressSelected = w.selected
+				}
+			} else if !w.mouseDown {
+				// Blank padding below the last frame: do not jump to #last.
+				w.viewport.CursorLine = w.selected
+				w.pressOnRow = false
 			}
 			return
 		}
-		// Activate on release: skip when the gesture was a text-selection drag
-		// on the same row (copy). Still activate if the row changed.
+		// Activate on release when the press landed on a real row.
 		if w.mouseDown {
 			w.mouseDown = false
-			w.syncSelectedFromViewport()
-			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+			if onRow {
+				w.selected = hitLine
+				w.viewport.CursorLine = hitLine
+			} else {
+				w.viewport.CursorLine = w.selected
+			}
+			if w.pressOnRow {
 				w.activateSelected(false)
 			}
+			w.pressOnRow = false
 		}
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
+		// Horizontal scroll only — do not let PgUp/Home desync selected vs Top.
 		w.viewport.HandleEvent(e)
+		w.syncSelectedFromViewport()
 	}
 }
 
@@ -321,6 +373,7 @@ func (w *CallStackWidget) SetFocused(focused bool) {
 	w.viewport.SetCursorVisible(false)
 	if !focused {
 		w.mouseDown = false
+		w.pressOnRow = false
 	}
 }
 

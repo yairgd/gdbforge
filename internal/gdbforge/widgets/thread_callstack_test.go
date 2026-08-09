@@ -296,6 +296,8 @@ func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 	})
 	var n int
 	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { n++ }})
+	g := termui.NewGrid(40, 10)
+	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 10)))
 
 	// Press + drag motion samples must not activate.
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.ButtonPrimary, 0))
@@ -308,6 +310,31 @@ func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 	w.HandleEvent(tcell.NewEventMouse(2, 0, tcell.ButtonNone, 0))
 	if n != 1 {
 		t.Fatalf("activate on release: %d want 1", n)
+	}
+}
+
+func TestCallStackEmptyClickDoesNotJumpToLast(t *testing.T) {
+	w := NewCallStackWidget(nil)
+	w.SetFocused(true)
+	frames := make([]models.StackFrame, 9)
+	for i := range frames {
+		frames[i] = models.StackFrame{Level: i, Func: "f"}
+	}
+	w.SetItems(frames)
+	w.moveTo(2)
+	var got int = -1
+	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { got = fr.Level }})
+	g := termui.NewGrid(40, 20)
+	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 20)))
+
+	// Click blank area below the last frame (row 15) — must not select #8.
+	w.HandleEvent(tcell.NewEventMouse(2, 15, tcell.ButtonPrimary, 0))
+	w.HandleEvent(tcell.NewEventMouse(2, 15, tcell.ButtonNone, 0))
+	if w.Selected() != 2 {
+		t.Fatalf("selected=%d want 2 (empty click must not jump to last)", w.Selected())
+	}
+	if got != -1 {
+		t.Fatalf("activate level=%d want none", got)
 	}
 }
 

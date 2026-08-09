@@ -7,6 +7,33 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
+func TestHitContentLineIgnoresEmptyBelow(t *testing.T) {
+	buf := platform.NewBuffer()
+	for i := 0; i < 5; i++ {
+		buf.AppendLine(fmt.Sprintf("frame %d", i))
+	}
+	v := NewViewport(buf)
+	v.width = 40
+	v.height = 20
+	v.screenX = 0
+	v.screenY = 0
+	v.Top = 0
+	v.padTop = 0
+
+	line, ok := v.HitContentLine(2, 3)
+	if !ok || line != 3 {
+		t.Fatalf("hit row3: line=%d ok=%v", line, ok)
+	}
+	if _, ok := v.HitContentLine(2, 10); ok {
+		t.Fatal("empty padding below last line must not hit")
+	}
+	v.Top = 2
+	line, ok = v.HitContentLine(2, 0)
+	if !ok || line != 2 {
+		t.Fatalf("scrolled hit: line=%d ok=%v want 2", line, ok)
+	}
+}
+
 func TestSelectionSurvivesScroll(t *testing.T) {
 	buf := platform.NewBuffer()
 	for i := 0; i < 40; i++ {

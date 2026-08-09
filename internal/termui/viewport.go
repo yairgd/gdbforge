@@ -49,6 +49,10 @@ type Viewport struct {
 	lastClickPos  bufferPos
 	clickCount    int
 	suppressDrag  bool // ignore drag after word/line multi-click until release
+	// dragAutoScroll enables edge auto-scroll while dragging a selection
+	// outside the pane (default on). Assembly disables this so mouse moves
+	// do not scroll the dump while selecting text.
+	dragAutoScroll bool
 
 	clipboard ClipboardIO
 	readOnly  bool // true → Cut copies only; Paste ignored
@@ -86,10 +90,19 @@ type Viewport struct {
 
 func NewViewport(buf *platform.Buffer) *Viewport {
 	return &Viewport{
-		Buffer:        buf,
-		cursor:        NewNativeCursor(),
-		cursorVisible: true,
-		readOnly:      true,
+		Buffer:         buf,
+		cursor:         NewNativeCursor(),
+		cursorVisible:  true,
+		readOnly:       true,
+		dragAutoScroll: true,
+	}
+}
+
+// SetDragAutoScroll toggles edge auto-scroll while dragging a selection out of
+// the pane. Default is on; Assembly turns it off.
+func (v *Viewport) SetDragAutoScroll(on bool) {
+	if v != nil {
+		v.dragAutoScroll = on
 	}
 }
 
@@ -500,22 +513,24 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		return
 	}
 
-	// Drag beyond the pane edges: scroll to reveal the missing area and pin
-	// the selection endpoint to that edge (lines not visible on first click).
-	for ly < 0 {
-		before := v.Top
-		v.ViewScrollLineUp()
-		ly = 0
-		if v.Top == before {
-			break
+	// Drag beyond the pane edges: optionally scroll to reveal more text and
+	// pin the selection endpoint to that edge.
+	if v.dragAutoScroll {
+		for ly < 0 {
+			before := v.Top
+			v.ViewScrollLineUp()
+			ly = 0
+			if v.Top == before {
+				break
+			}
 		}
-	}
-	for ly >= v.height {
-		before := v.Top
-		v.ViewScrollLineDown()
-		ly = v.height - 1
-		if v.Top == before {
-			break
+		for ly >= v.height {
+			before := v.Top
+			v.ViewScrollLineDown()
+			ly = v.height - 1
+			if v.Top == before {
+				break
+			}
 		}
 	}
 	if lx < 0 {
@@ -537,7 +552,9 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 	v.CursorLine = pos.line
 	v.CursorCol = pos.col
 	v.clampCursorCol()
-	v.EnsureVisible(v.width, v.height)
+	if v.dragAutoScroll {
+		v.EnsureVisible(v.width, v.height)
+	}
 }
 
 func (v *Viewport) noteClick(pos bufferPos, when time.Time) {
@@ -999,6 +1016,29 @@ func (v *Viewport) Height() int { return v.height }
 
 // Width returns the last canvas width seen in Draw (0 before first paint).
 func (v *Viewport) Width() int { return v.width }
+
+// HitContentLine reports the buffer line under screen coordinates, or false
+// when the pointer is outside the pane or on empty padding below the last line.
+// List panes use this so clicks in the blank area do not clamp to the last row.
+func (v *Viewport) HitContentLine(screenX, screenY int) (line int, ok bool) {
+	if v == nil || v.Buffer == nil || v.width <= 0 || v.height <= 0 {
+		return 0, false
+	}
+	lx := screenX - v.screenX
+	ly := screenY - v.screenY
+	if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+		return 0, false
+	}
+	if ly < v.padTop {
+		return 0, false
+	}
+	line = v.Top + (ly - v.padTop)
+	last := v.lineLimit() - 1
+	if line < 0 || line > last {
+		return 0, false
+	}
+	return line, true
+}
 
 // EnsureCursorVisible scrolls so CursorLine is on-screen using the last Draw size.
 func (v *Viewport) EnsureCursorVisible() {
