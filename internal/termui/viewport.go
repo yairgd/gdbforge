@@ -77,7 +77,7 @@ type Viewport struct {
 	searchContentOffset int
 	onSearchJump        func(lineIdx int)
 
-	// ANSI enables per-cell ANSI/SGR rendering (OSC/CSI sequences are not drawn).
+	// ANSI enables DrawANSIText for PTY scrollback only; default false for widget panes.
 	ANSI bool
 
 	// OmitTail skips this many trailing buffer lines when drawing/scrolling
@@ -120,7 +120,7 @@ func (v *Viewport) SetCursorVisible(visible bool) {
 }
 
 // cursorDrawPos maps CursorCol/CursorLine to pane-local paint coordinates.
-// In ANSI mode CursorCol is a byte index; localX uses the visible cell column.
+// CursorCol is always a byte index; localX uses the visible cell column.
 func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
 	if v == nil || v.Buffer == nil {
 		return 0, 0, ' ', false
@@ -130,15 +130,18 @@ func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
 		return 0, 0, ' ', false
 	}
 	line := v.Buffer.Line(v.CursorLine)
-	visCol := v.CursorCol
 	under = ' '
+	var visCol int
 	if v.ANSI {
 		visCol = VisibleANSIColAtByte(line, v.CursorCol)
 		under = ANSIRuneAtVisible(line, visCol)
-	} else if v.CursorCol >= 0 && v.CursorCol < len(line) {
-		r, _ := utf8.DecodeRuneInString(line[v.CursorCol:])
-		if r != utf8.RuneError {
-			under = r
+	} else {
+		visCol = VisibleANSIColAtByte(line, v.CursorCol)
+		if v.CursorCol >= 0 && v.CursorCol < len(line) {
+			r, _ := utf8.DecodeRuneInString(line[v.CursorCol:])
+			if r != utf8.RuneError {
+				under = r
+			}
 		}
 	}
 	localX = visCol - v.Left
@@ -222,17 +225,19 @@ func (v *Viewport) Draw(c Canvas) {
 		}
 
 		c.ClearLineRange(row, len(visible), width, lineStyle)
+		byteIdx := ANSIByteIndexAtVisible(full, start)
 		for col, ch := range visible {
-			bufCol := start + col
+			absVisCol := start + col
 			st := lineStyle
 			if v.CellStyle != nil {
-				st = v.CellStyle(line, bufCol, st)
+				st = v.CellStyle(line, absVisCol, st)
 			}
-			st = v.applySearchStyle(line, bufCol, st)
-			if v.containsSel(line, bufCol) {
+			st = v.applySearchStyle(line, absVisCol, st)
+			if v.containsSel(line, byteIdx) {
 				st = selStyle
 			}
 			c.SetContent(col, row, ch, st)
+			byteIdx += utf8.RuneLen(ch)
 		}
 	}
 
@@ -727,12 +732,9 @@ func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
 	lineLen := 0
 	if v.Buffer != nil && line >= 0 && line < v.Buffer.NumLines() {
 		raw := v.Buffer.Line(line)
-		if v.ANSI {
-			col = ANSIByteIndexAtVisible(raw, v.Left+lx)
-			lineLen = len(raw)
-		} else {
-			lineLen = len(raw)
-		}
+		lineLen = len(raw)
+		// CursorCol is a byte index; Left+lx is a visible/rune column.
+		col = ANSIByteIndexAtVisible(raw, v.Left+lx)
 	}
 	if col > lineLen {
 		col = lineLen
@@ -874,49 +876,35 @@ func (v *Viewport) Down() {
 }
 
 func (v *Viewport) LeftChar() {
-	if v.ANSI && v.Buffer != nil {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIColAtByte(line, v.CursorCol)
-		if vis > 0 {
-			vis--
-			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
-		}
-		if vis < v.Left {
-			v.Left = vis
+	if v.Buffer == nil {
+		if v.CursorCol > 0 {
+			v.CursorCol--
 		}
 		return
 	}
-
-	if v.CursorCol > 0 {
-		v.CursorCol--
+	line := v.Buffer.Line(v.CursorLine)
+	vis := VisibleANSIColAtByte(line, v.CursorCol)
+	if vis > 0 {
+		vis--
+		v.CursorCol = ANSIByteIndexAtVisible(line, vis)
 	}
-
-	if v.CursorCol < v.Left {
-		v.Left = v.CursorCol
+	if vis < v.Left {
+		v.Left = vis
 	}
 }
 
 func (v *Viewport) RightChar() {
-	if v.ANSI && v.Buffer != nil {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIColAtByte(line, v.CursorCol)
-		maxVis := VisibleANSIWidth(line)
-		if vis < maxVis {
-			vis++
-			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
-		}
+	if v.Buffer == nil {
+		v.CursorCol++
 		return
 	}
-
-	if v.Buffer != nil {
-		lineLen := len(v.Buffer.Line(v.CursorLine))
-		if v.CursorCol < lineLen {
-			v.CursorCol++
-		}
-		return
+	line := v.Buffer.Line(v.CursorLine)
+	vis := VisibleANSIColAtByte(line, v.CursorCol)
+	maxVis := VisibleANSIWidth(line)
+	if vis < maxVis {
+		vis++
+		v.CursorCol = ANSIByteIndexAtVisible(line, vis)
 	}
-
-	v.CursorCol++
 }
 
 func (v *Viewport) PageDown(pageSize int) {
@@ -1128,37 +1116,22 @@ func (v *Viewport) EnsureVisible(width, height int) {
 		v.Top = 0
 	}
 
-	// Horizontal scroll. In ANSI mode CursorCol is a byte offset into the
-	// escape-laden string, while Left is a visible-cell skip count — mix them
-	// carefully so the caret stays in view.
-	if v.ANSI {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIWidth(line)
-		curVis := VisibleANSIColAtByte(line, v.CursorCol)
-		if curVis < v.Left {
-			v.Left = curVis
-		}
-		if curVis >= v.Left+width {
-			v.Left = curVis - width + 1
-		}
-		if v.Left < 0 {
-			v.Left = 0
-		}
-		if vis <= width {
-			v.Left = 0
-		} else if v.Left > vis-width {
-			v.Left = vis - width
-		}
-		return
+	// CursorCol is a byte offset; Left is a visible-cell skip count.
+	line := v.Buffer.Line(v.CursorLine)
+	vis := v.lineContentWidth(line)
+	curVis := VisibleANSIColAtByte(line, v.CursorCol)
+	if curVis < v.Left {
+		v.Left = curVis
 	}
-
-	if v.CursorCol < v.Left {
-		v.Left = v.CursorCol
-	}
-	if v.CursorCol >= v.Left+width {
-		v.Left = v.CursorCol - width + 1
+	if curVis >= v.Left+width {
+		v.Left = curVis - width + 1
 	}
 	if v.Left < 0 {
 		v.Left = 0
+	}
+	if vis <= width {
+		v.Left = 0
+	} else if v.Left > vis-width {
+		v.Left = vis - width
 	}
 }

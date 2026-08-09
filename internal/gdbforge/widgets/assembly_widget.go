@@ -57,6 +57,9 @@ type AssemblyWidget struct {
 	// (-1 = none). Stops Up/Down edge refetch from jumping the caret to the
 	// opposite edge of the viewport.
 	browsePreserveRow int
+
+	// offWidth is the right-align width for <+N> in dump mode (set in rebuild).
+	offWidth int
 }
 
 func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
@@ -67,7 +70,7 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 	vp.SetDragAutoScroll(false) // mouse-drag must not scroll the asm dump
 	vp.SetCursor(termui.NewInverseCursor())
 	vp.SetCursorVisible(false)
-	vp.ANSI = true
+	vp.ANSI = false
 
 	w := &AssemblyWidget{
 		BaseWidget:        termui.BaseWidget{PaneName: "Assembly"},
@@ -76,8 +79,10 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 		selIdx:            0,
 		host:              host,
 		browsePreserveRow: -1,
+		offWidth:          asmOffsetColsMin,
 	}
 	vp.RowStyle = w.rowStyle
+	vp.CellStyle = w.cellStyle
 	vp.SetSearchContentOffset(asmGutterCols)
 	vp.SetOnSearchJump(func(lineIdx int) {
 		idx := lineIdx - w.prefix
@@ -484,6 +489,68 @@ func (w *AssemblyWidget) searchColor() tcell.Color {
 	return themeFrom{w.state}.Search()
 }
 
+func (w *AssemblyWidget) mutedColor() tcell.Color {
+	return themeFrom{w.state}.Muted()
+}
+
+// cellStyle paints mark / address / <+N>: / chrome via Canvas (no buffer ANSI).
+func (w *AssemblyWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) tcell.Style {
+	if w == nil {
+		return st
+	}
+	itemIdx := lineIdx - w.prefix
+	if itemIdx < 0 || itemIdx >= len(w.items) {
+		return st.Foreground(w.mutedColor())
+	}
+	it := w.items[itemIdx]
+	norm := normalizeAsmAddr(it.Addr)
+
+	// mark ━━▶ / pad (cols 0..2)
+	if absVisCol < 3 {
+		if norm != "" && norm == w.pcAddr {
+			return st.Foreground(tcell.ColorYellow).Bold(true)
+		}
+		return st
+	}
+
+	dumpMode := w.funcName != "" && it.Offset != ""
+	if dumpMode {
+		addrStart := 4
+		addrEnd := 4 + asmAddrCols
+		if absVisCol >= addrStart && absVisCol < addrEnd {
+			return w.addrCellStyle(norm, st)
+		}
+		offStart := addrEnd + 1 // space after addr
+		offEnd := offStart + 2 + w.offWidth + 2 + 1 // <+N>:␠
+		if absVisCol >= offStart && absVisCol < offEnd {
+			return st.Foreground(w.mutedColor())
+		}
+		return st
+	}
+
+	addr := it.Addr
+	if len(addr) > asmAddrCols {
+		addr = addr[len(addr)-asmAddrCols:]
+	}
+	addrStart := 4
+	addrEnd := addrStart + len(addr)
+	if absVisCol >= addrStart && absVisCol < addrEnd {
+		return w.addrCellStyle(norm, st)
+	}
+	if absVisCol == addrEnd { // trailing ':'
+		return st.Foreground(w.mutedColor())
+	}
+	return st
+}
+
+func (w *AssemblyWidget) addrCellStyle(norm string, st tcell.Style) tcell.Style {
+	if g, ok := w.gutterAt(norm); ok {
+		bg := breakGutterColor(g, w.state)
+		return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
+	}
+	return st.Foreground(w.mutedColor())
+}
+
 func (w *AssemblyWidget) rebuild() {
 	if w == nil || w.buf == nil {
 		return
@@ -491,30 +558,38 @@ func (w *AssemblyWidget) rebuild() {
 	w.buf.Clear()
 	w.prefix = 0
 	for _, ln := range w.ctxLines {
-		w.buf.AppendLine("\x1b[38;5;244m" + ln + "\x1b[0m")
+		w.buf.AppendLine(ln)
 		w.prefix++
 	}
 	if w.funcName != "" && len(w.items) > 0 {
-		w.buf.AppendLine(fmt.Sprintf("\x1b[38;5;244mDump of assembler code for function %s:\x1b[0m", w.funcName))
+		w.buf.AppendLine(fmt.Sprintf("Dump of assembler code for function %s:", w.funcName))
 		w.prefix++
 	}
 	if len(w.items) == 0 {
-		w.buf.AppendLine("\x1b[38;5;244m(no disassembly)\x1b[0m")
+		w.buf.AppendLine("(no disassembly)")
 		return
 	}
-	offWidth := asmOffsetColsMin
+	w.offWidth = asmOffsetColsMin
 	if w.funcName != "" {
 		for _, it := range w.items {
-			if n := len(it.Offset); n > offWidth {
-				offWidth = n
+			if n := len(it.Offset); n > w.offWidth {
+				w.offWidth = n
 			}
 		}
+	}
+	// mark + space + addr + space + "<+%*s>: " before instruction (dump mode).
+	searchOff := 3 + 1 + asmAddrCols + 1 + 2 + w.offWidth + 2 + 1
+	if w.funcName == "" {
+		searchOff = asmGutterCols
+	}
+	if w.viewport != nil {
+		w.viewport.SetSearchContentOffset(searchOff)
 	}
 	for _, it := range w.items {
 		mark := asmPCGutterPad
 		norm := normalizeAsmAddr(it.Addr)
 		if norm == w.pcAddr && w.pcAddr != "" {
-			mark = "\x1b[1;38;5;226m" + asmPCMarker + "\x1b[0m"
+			mark = asmPCMarker
 		}
 		addr := it.Addr
 		if len(addr) > asmAddrCols {
@@ -524,29 +599,17 @@ func (w *AssemblyWidget) rebuild() {
 		if it.Offset != "" && w.funcName != "" {
 			// Whole-function dump: CGDB `disassemble` style with <+N>:.
 			addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
-			var addrANSI string
-			if g, ok := w.gutterAt(norm); ok {
-				addrANSI = platform.BreakNumberANSI(addrPad, breakGutterColor(g, w.state))
-			} else {
-				addrANSI = "\x1b[38;5;245m" + addrPad + "\x1b[0m"
-			}
 			// Right-align N so <+ 0>: / <+12>: share a column.
-			off := fmt.Sprintf("\x1b[38;5;245m<+%*s>:\x1b[0m ", offWidth, it.Offset)
-			line = fmt.Sprintf("%s %s %s%s", mark, addrANSI, off, it.Inst)
+			off := fmt.Sprintf("<+%*s>: ", w.offWidth, it.Offset)
+			line = fmt.Sprintf("%s %s %s%s", mark, addrPad, off, it.Inst)
 		} else {
-			// Windowed / ?? : CGDB `x/Ni $pc` style — `0xaddr:      inst`.
-			var addrANSI string
-			if g, ok := w.gutterAt(norm); ok {
-				addrANSI = platform.BreakNumberANSI(addr, breakGutterColor(g, w.state))
-			} else {
-				addrANSI = "\x1b[38;5;245m" + addr + "\x1b[0m"
-			}
-			line = fmt.Sprintf("%s %s:\t%s", mark, addrANSI, it.Inst)
+			// Windowed / ?? : CGDB `x/Ni $pc` style — `0xaddr:  inst`.
+			line = fmt.Sprintf("%s %s:  %s", mark, addr, it.Inst)
 		}
 		w.buf.AppendLine(line)
 	}
 	if w.funcName != "" {
-		w.buf.AppendLine("\x1b[38;5;244mEnd of assembler dump.\x1b[0m")
+		w.buf.AppendLine("End of assembler dump.")
 	}
 }
 

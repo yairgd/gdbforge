@@ -276,7 +276,15 @@ Key methods:
 | `Fill(ch, style)` | Fill rect with a character and style |
 | `Print` / `Printf` | Draw text into the grid |
 | `DrawVerticalLocal` / `DrawHorizontalLocal` | Write border segments into Grid |
-| `DrawANSIText` | UTF-8 text with optional ANSI styling |
+| `DrawANSIText` | PTY path: UTF-8 + SGR parse → `SetContent` (when `Viewport.ANSI`) |
+| `SetContent` | Native path: one rune + `tcell.Style` (default for app-built UI) |
+
+**Viewport** (scroll window over `platform.Buffer`) chooses the paint path via `ANSI`:
+
+- `ANSI=false` — plain buffer + optional `RowStyle` / `CellStyle` hooks (Assembly, Code, lists).
+- `ANSI=true` — buffer may contain PTY escapes; `Draw` delegates to `DrawANSIText`.
+
+See [RENDERING.md — Viewport: two paint paths](RENDERING.md#viewport-two-paint-paths-pty-ansi-vs-native-canvas).
 | `ClearLine` | Clear one local row |
 
 **Design decision:** `Canvas` does not hold `tcell.Screen`. All widget drawing goes through the shared `Grid`; `TermApp` owns the screen and flushes after all widgets draw. Border drawing and widget content use the same grid path.
