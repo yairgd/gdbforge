@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 func TestAssemblyWidgetDualCursors(t *testing.T) {
@@ -87,6 +88,12 @@ func TestAssemblyWidgetCGDBView(t *testing.T) {
 	pcLine := w.buf.Line(6)
 	if !strings.Contains(pcLine, asmPCMarker) || !strings.Contains(pcLine, "<+26>:") {
 		t.Fatalf("pc/offset line=%q", pcLine)
+	}
+	// Offsets are right-aligned: <+ 0>: lines up with <+26>:.
+	zeroVis := termui.StripANSI(w.buf.Line(5))
+	pcVis := termui.StripANSI(pcLine)
+	if !strings.Contains(zeroVis, "<+ 0>:") || !strings.Contains(pcVis, "<+26>:") {
+		t.Fatalf("offset padding: zero=%q pc=%q", zeroVis, pcVis)
 	}
 	if w.SelAddr() != "0x7ffff7ec56ea" {
 		t.Fatalf("sel=%q", w.SelAddr())

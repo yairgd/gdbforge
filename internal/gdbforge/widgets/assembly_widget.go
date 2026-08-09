@@ -15,8 +15,10 @@ const (
 	asmPCMarker    = "━━▶"
 	asmPCGutterPad = "   "
 	// asmGutterCols: mark + addr + " <+N>: " before instruction text.
-	asmAddrCols   = 18
-	asmGutterCols = 3 + 1 + asmAddrCols + 8
+	asmAddrCols = 18
+	// asmOffsetColsMin: right-align <+N> so <+ 0>: lines up with <+12>:.
+	asmOffsetColsMin = 2
+	asmGutterCols    = 3 + 1 + asmAddrCols + 10
 )
 
 // AssemblyHost receives assembly pane intents from AssemblyWidget.
@@ -500,6 +502,14 @@ func (w *AssemblyWidget) rebuild() {
 		w.buf.AppendLine("\x1b[38;5;244m(no disassembly)\x1b[0m")
 		return
 	}
+	offWidth := asmOffsetColsMin
+	if w.funcName != "" {
+		for _, it := range w.items {
+			if n := len(it.Offset); n > offWidth {
+				offWidth = n
+			}
+		}
+	}
 	for _, it := range w.items {
 		mark := asmPCGutterPad
 		norm := normalizeAsmAddr(it.Addr)
@@ -520,7 +530,8 @@ func (w *AssemblyWidget) rebuild() {
 			} else {
 				addrANSI = "\x1b[38;5;245m" + addrPad + "\x1b[0m"
 			}
-			off := fmt.Sprintf("\x1b[38;5;245m<+%s>:\x1b[0m ", it.Offset)
+			// Right-align N so <+ 0>: / <+12>: share a column.
+			off := fmt.Sprintf("\x1b[38;5;245m<+%*s>:\x1b[0m ", offWidth, it.Offset)
 			line = fmt.Sprintf("%s %s %s%s", mark, addrANSI, off, it.Inst)
 		} else {
 			// Windowed / ?? : CGDB `x/Ni $pc` style — `0xaddr:      inst`.
