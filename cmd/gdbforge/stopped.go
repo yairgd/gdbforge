@@ -118,7 +118,10 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(stop.File, formatUnavailableExtra(stop.Func, stop.Line))
 		}
-		a.presentLocation(w, nil)
+		// Pass stop frame so Asm refreshes to $pc with the new func (not a
+		// stale FuncName from the previous browse, e.g. write → main).
+		fr := models.StackFrame{Level: 0, Func: stop.Func, File: stop.File, Line: stop.Line}
+		a.presentLocation(w, &fr)
 	} else {
 		// No fullname on *stopped — query stack (same path as frame sync).
 		a.syncCurrentFrameFromGDB()
@@ -126,7 +129,8 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 			// showFrameSource already presented.
 		} else if stop != nil && stop.Func != "" {
 			w = a.bufs.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
-			a.presentLocation(w, nil)
+			fr := models.StackFrame{Level: 0, Func: stop.Func, Line: stop.Line}
+			a.presentLocation(w, &fr)
 		}
 	}
 	return w

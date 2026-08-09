@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"fmt"
+	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
@@ -13,9 +14,9 @@ import (
 const (
 	asmPCMarker    = "━━▶"
 	asmPCGutterPad = "   "
-	// asmGutterCols: "━━▶ " + 18-char addr + " │ " ≈ mark+space+addr+sep
+	// asmGutterCols: mark + addr + " <+N>: " before instruction text.
 	asmAddrCols   = 18
-	asmGutterCols = 3 + 1 + asmAddrCols + 3
+	asmGutterCols = 3 + 1 + asmAddrCols + 8
 )
 
 // AssemblyHost receives assembly pane intents from AssemblyWidget.
@@ -34,9 +35,12 @@ type AssemblyWidget struct {
 	buf      *platform.Buffer
 	state    *debugstate.State
 
-	items  []models.AsmLine
-	pcAddr string // normalized $pc
-	selIdx int    // browse caret index into items
+	items    []models.AsmLine
+	pcAddr   string   // normalized $pc
+	selIdx   int      // browse caret index into items
+	ctxLines []string // stack-frame preamble (not selectable)
+	funcName string
+	prefix   int // buffer lines before first instruction (ctx + Dump)
 
 	bpByAddr map[string]models.BreakGutter
 
@@ -44,6 +48,13 @@ type AssemblyWidget struct {
 
 	lastHeight int
 	fetching   bool
+
+	// browseDir is -1 (Up) / +1 (Down) for the in-flight window slide; 0 otherwise.
+	browseDir int
+	// browsePreserveRow is the screen row of the blue line to keep across a slide
+	// (-1 = none). Stops Up/Down edge refetch from jumping the caret to the
+	// opposite edge of the viewport.
+	browsePreserveRow int
 }
 
 func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
@@ -56,17 +67,27 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 	vp.ANSI = true
 
 	w := &AssemblyWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Assembly"},
-		viewport:   vp,
-		buf:        buf,
-		selIdx:     0,
-		host:       host,
+		BaseWidget:        termui.BaseWidget{PaneName: "Assembly"},
+		viewport:          vp,
+		buf:               buf,
+		selIdx:            0,
+		host:              host,
+		browsePreserveRow: -1,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetSearchContentOffset(asmGutterCols)
 	vp.SetOnSearchJump(func(lineIdx int) {
-		w.selIdx = lineIdx
-		w.viewport.CursorLine = lineIdx
+		idx := lineIdx - w.prefix
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(w.items) {
+			idx = len(w.items) - 1
+		}
+		if idx >= 0 {
+			w.selIdx = idx
+			w.viewport.CursorLine = w.selIdx + w.prefix
+		}
 	})
 	w.initKeyBindings()
 	w.rebuild()
@@ -119,13 +140,37 @@ func (w *AssemblyWidget) VisibleRows() int {
 	return w.viewport.Height()
 }
 
+// SetContext sets the stack-frame preamble painted above the disassembly and
+// rebuilds immediately so ?? / stop updates are visible without waiting on disasm.
+// Does not call revealSel — that would pin Top=0 and undo Down-scroll past $pc.
+func (w *AssemblyWidget) SetContext(lines []string) {
+	if w == nil {
+		return
+	}
+	w.ctxLines = append([]string(nil), lines...)
+	w.rebuild()
+	if w.viewport != nil && len(w.items) > 0 {
+		w.viewport.CursorLine = w.selIdx + w.prefix
+	}
+}
+
+// FuncName returns the current disassembled function name, if known.
+func (w *AssemblyWidget) FuncName() string {
+	if w == nil {
+		return ""
+	}
+	return w.funcName
+}
+
 // SetItems replaces the instruction list. pcAddr is $pc for ━━▶.
 // selAddr is the browse caret (empty → keep prior sel if still present, else pc).
-func (w *AssemblyWidget) SetItems(items []models.AsmLine, pcAddr, selAddr string) {
+// dumpFunc non-empty enables the CGDB Dump/End header (whole-function only).
+func (w *AssemblyWidget) SetItems(items []models.AsmLine, pcAddr, selAddr, dumpFunc string) {
 	if w == nil {
 		return
 	}
 	w.items = append([]models.AsmLine(nil), items...)
+	w.funcName = dumpFunc
 	w.pcAddr = normalizeAsmAddr(pcAddr)
 	w.fetching = false
 
@@ -147,10 +192,122 @@ func (w *AssemblyWidget) SetItems(items []models.AsmLine, pcAddr, selAddr string
 		w.selIdx = 0
 	}
 	w.rebuild()
-	if len(w.items) > 0 {
-		w.viewport.CursorLine = w.selIdx
-		w.viewport.EnsureCursorVisible()
+	w.revealSel()
+}
+
+// revealSel places the browse caret on-screen after a fresh load.
+// Pins Top=0 (frame/Dump header visible) only when the browse line is still on
+// $pc and that line fits on the first page. Once the user moves past $pc,
+// only EnsureCursorVisible runs so Down can roll the header off-screen.
+// Edge-browse slides restore browsePreserveRow so the blue line does not jump.
+func (w *AssemblyWidget) revealSel() {
+	if w == nil || w.viewport == nil || len(w.items) == 0 {
+		return
 	}
+	selLine := w.selIdx + w.prefix
+	w.viewport.CursorLine = selLine
+	h := w.viewport.Height()
+	if h < 1 {
+		h = 20
+	}
+
+	if row := w.browsePreserveRow; row >= 0 {
+		// Keep the blue line on the same screen row. Do not clamp to maxTop —
+		// after an Up-slide the caret is at the end of the window and clamping
+		// would jump it to the bottom of the viewport again.
+		top := selLine - row
+		if top < 0 {
+			top = 0
+		}
+		w.viewport.Top = top
+		w.browsePreserveRow = -1
+		w.browseDir = 0
+		return
+	}
+
+	pcLine := selLine
+	if idx := indexOfAsmAddr(w.items, w.pcAddr); idx >= 0 {
+		pcLine = idx + w.prefix
+	}
+	selIsPC := w.pcAddr != "" && w.selIdx >= 0 && w.selIdx < len(w.items) &&
+		normalizeAsmAddr(w.items[w.selIdx].Addr) == w.pcAddr
+	if selIsPC {
+		w.viewport.CursorLine = pcLine
+		if w.completeDump() && pcLine < h {
+			// Whole-function dump: keep frame/Dump header on the first page.
+			w.viewport.Top = 0
+		} else {
+			// ?? / windowed: center $pc so code above and below is visible.
+			top := pcLine - h/2
+			if top < 0 {
+				top = 0
+			}
+			w.viewport.Top = top
+		}
+		w.viewport.CursorLine = selLine
+		return
+	}
+	w.viewport.EnsureCursorVisible()
+}
+
+// BrowseDir returns the in-flight slide direction (-1 Up, +1 Down, 0 none).
+func (w *AssemblyWidget) BrowseDir() int {
+	if w == nil {
+		return 0
+	}
+	return w.browseDir
+}
+
+// BrowsePreserveRow returns the screen row to keep for the in-flight slide (-1 none).
+func (w *AssemblyWidget) BrowsePreserveRow() int {
+	if w == nil {
+		return -1
+	}
+	return w.browsePreserveRow
+}
+
+// completeDump is true for a whole-function view (Dump/End present). No edge
+// refetch — scrolling must leave $pc and roll the frame header off-screen.
+func (w *AssemblyWidget) completeDump() bool {
+	return w != nil && w.funcName != ""
+}
+
+// endLine is the buffer index of "End of assembler dump.", or -1.
+func (w *AssemblyWidget) endLine() int {
+	if !w.completeDump() || len(w.items) == 0 {
+		return -1
+	}
+	return w.prefix + len(w.items)
+}
+
+// ensureEndVisible scrolls so "End of assembler dump." sits under the last insn.
+func (w *AssemblyWidget) ensureEndVisible() {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	el := w.endLine()
+	if el < 0 {
+		return
+	}
+	h := w.viewport.Height()
+	if h < 1 {
+		h = 20
+	}
+	if el >= w.viewport.Top+h {
+		w.viewport.Top = el - h + 1
+	}
+	if w.viewport.Top < 0 {
+		w.viewport.Top = 0
+	}
+}
+
+// ensureHeaderVisible pins Top=0 so the frame line + Dump header show again
+// when the browse line is on the first instruction of the function.
+func (w *AssemblyWidget) ensureHeaderVisible() {
+	if w == nil || w.viewport == nil {
+		return
+	}
+	w.viewport.Top = 0
 }
 
 // MoveSel moves the blue browse line by delta instructions.
@@ -170,21 +327,40 @@ func (w *AssemblyWidget) MoveSel(delta int) {
 		needBrowse = delta > 0
 	}
 	w.selIdx = next
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	w.viewport.EnsureCursorVisible()
 
-	// Near either edge → ask app to recenter the window on current X.
-	margin := 2
-	if n > 8 {
-		margin = 3
+	// Whole-function dump is finite — edge browse would re-fetch and snap the view.
+	// At the bottom show End after the last insn; at the top restore frame/Dump.
+	if w.completeDump() {
+		if w.selIdx <= 0 {
+			w.ensureHeaderVisible()
+		}
+		if w.selIdx >= n-1 {
+			w.ensureEndVisible()
+		}
+		return
 	}
-	if needBrowse || w.selIdx <= margin || w.selIdx >= n-1-margin {
-		w.requestBrowse()
+	// Windowed / ??: slide only when the caret hits a hard edge. Prefetching
+	// inside a margin re-anchored the blue line every few Down presses.
+	if !needBrowse {
+		return
 	}
+	if delta < 0 {
+		w.browseDir = -1
+	} else {
+		w.browseDir = 1
+	}
+	row := w.viewport.CursorLine - w.viewport.Top
+	if row < 0 {
+		row = 0
+	}
+	w.browsePreserveRow = row
+	w.requestBrowse()
 }
 
 func (w *AssemblyWidget) requestBrowse() {
-	if w == nil || w.host == nil || w.fetching {
+	if w == nil || w.host == nil || w.fetching || w.completeDump() {
 		return
 	}
 	addr := w.SelAddr()
@@ -255,22 +431,23 @@ func (w *AssemblyWidget) PCAddr() string {
 func (w *AssemblyWidget) ClearFetchAck() {
 	if w != nil {
 		w.fetching = false
+		w.browsePreserveRow = -1
+		w.browseDir = 0
 	}
 }
 
 func (w *AssemblyWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
-	if len(w.items) == 0 {
+	itemIdx := lineIdx - w.prefix
+	if itemIdx < 0 || itemIdx >= len(w.items) {
+		_ = line
 		return st
 	}
-	addr := ""
-	if lineIdx >= 0 && lineIdx < len(w.items) {
-		addr = normalizeAsmAddr(w.items[lineIdx].Addr)
-	}
+	addr := normalizeAsmAddr(w.items[itemIdx].Addr)
 	if addr != "" && addr == w.pcAddr {
 		st = st.Background(w.pcColor())
 	}
-	if lineIdx == w.selIdx {
+	if itemIdx == w.selIdx {
 		st = st.Bold(true)
 		if addr == "" || addr != w.pcAddr {
 			st = st.Background(w.codeSelColor())
@@ -309,6 +486,15 @@ func (w *AssemblyWidget) rebuild() {
 		return
 	}
 	w.buf.Clear()
+	w.prefix = 0
+	for _, ln := range w.ctxLines {
+		w.buf.AppendLine("\x1b[38;5;244m" + ln + "\x1b[0m")
+		w.prefix++
+	}
+	if w.funcName != "" && len(w.items) > 0 {
+		w.buf.AppendLine(fmt.Sprintf("\x1b[38;5;244mDump of assembler code for function %s:\x1b[0m", w.funcName))
+		w.prefix++
+	}
 	if len(w.items) == 0 {
 		w.buf.AppendLine("\x1b[38;5;244m(no disassembly)\x1b[0m")
 		return
@@ -323,20 +509,32 @@ func (w *AssemblyWidget) rebuild() {
 		if len(addr) > asmAddrCols {
 			addr = addr[len(addr)-asmAddrCols:]
 		}
-		addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
-		var addrANSI string
-		if g, ok := w.gutterAt(norm); ok {
-			addrANSI = platform.BreakNumberANSI(addrPad, breakGutterColor(g, w.state))
+		var line string
+		if it.Offset != "" && w.funcName != "" {
+			// Whole-function dump: CGDB `disassemble` style with <+N>:.
+			addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
+			var addrANSI string
+			if g, ok := w.gutterAt(norm); ok {
+				addrANSI = platform.BreakNumberANSI(addrPad, breakGutterColor(g, w.state))
+			} else {
+				addrANSI = "\x1b[38;5;245m" + addrPad + "\x1b[0m"
+			}
+			off := fmt.Sprintf("\x1b[38;5;245m<+%s>:\x1b[0m ", it.Offset)
+			line = fmt.Sprintf("%s %s %s%s", mark, addrANSI, off, it.Inst)
 		} else {
-			addrANSI = "\x1b[38;5;245m" + addrPad + "\x1b[0m"
+			// Windowed / ?? : CGDB `x/Ni $pc` style — `0xaddr:      inst`.
+			var addrANSI string
+			if g, ok := w.gutterAt(norm); ok {
+				addrANSI = platform.BreakNumberANSI(addr, breakGutterColor(g, w.state))
+			} else {
+				addrANSI = "\x1b[38;5;245m" + addr + "\x1b[0m"
+			}
+			line = fmt.Sprintf("%s %s:\t%s", mark, addrANSI, it.Inst)
 		}
-		inst := it.Inst
-		if it.Opcodes != "" {
-			inst = it.Opcodes + "  " + it.Inst
-		}
-		line := fmt.Sprintf("%s %s\x1b[38;5;240m │\x1b[0m %s",
-			mark, addrANSI, inst)
 		w.buf.AppendLine(line)
+	}
+	if w.funcName != "" {
+		w.buf.AppendLine("\x1b[38;5;244mEnd of assembler dump.\x1b[0m")
 	}
 }
 
@@ -347,7 +545,9 @@ func (w *AssemblyWidget) Draw(c termui.Canvas) {
 	h := c.H()
 	if h > 0 && h != w.lastHeight {
 		w.lastHeight = h
-		// Refetch so the window fills the new rectangle.
+		// Refetch so the window fills the new rectangle (no caret-row preserve).
+		w.browsePreserveRow = -1
+		w.browseDir = 0
 		if len(w.items) > 0 && w.host != nil && !w.fetching {
 			w.requestBrowse()
 		}
@@ -360,7 +560,7 @@ func (w *AssemblyWidget) syncSelFromViewport() {
 		return
 	}
 	n := len(w.items)
-	idx := w.viewport.CursorLine
+	idx := w.viewport.CursorLine - w.prefix
 	if idx < 0 {
 		idx = 0
 	}
@@ -369,16 +569,25 @@ func (w *AssemblyWidget) syncSelFromViewport() {
 	}
 	prev := w.selIdx
 	w.selIdx = idx
-	// Click near the edge of a loaded window should still refetch, like Up/Down.
-	if w.selIdx != prev {
-		margin := 2
-		if n > 8 {
-			margin = 3
-		}
-		if w.selIdx <= margin || w.selIdx >= n-1-margin {
-			w.requestBrowse()
-		}
+	w.viewport.CursorLine = w.selIdx + w.prefix
+	// Click on a hard edge of a windowed view should still refetch.
+	if w.completeDump() || w.selIdx == prev {
+		return
 	}
+	switch {
+	case w.selIdx <= 0:
+		w.browseDir = -1
+	case w.selIdx >= n-1:
+		w.browseDir = 1
+	default:
+		return
+	}
+	row := w.viewport.CursorLine - w.viewport.Top
+	if row < 0 {
+		row = 0
+	}
+	w.browsePreserveRow = row
+	w.requestBrowse()
 }
 
 func (w *AssemblyWidget) HandleEvent(ev tcell.Event) {
@@ -424,15 +633,53 @@ func (w *AssemblyWidget) SetFocused(focused bool) {
 	}
 }
 
+// StatusLabel matches CGDB's asm buffer title:
+//
+//	** #2  0x… in write () from libc… (start - end) **     — named frame
+//	**    0x…:   add … (start - end) **                   — ?? / $pc insn
 func (w *AssemblyWidget) StatusLabel() string {
-	title := "Assembly"
-	if w.pcAddr != "" {
-		title = fmt.Sprintf("Assembly  pc=%s", w.pcAddr)
-		if sel := w.SelAddr(); sel != "" && sel != w.pcAddr {
-			title = fmt.Sprintf("Assembly  pc=%s  @%s", w.pcAddr, sel)
-		}
+	if w == nil || len(w.items) == 0 {
+		return "Assembly"
 	}
-	return title
+	start := trimAsm0x(w.items[0].Addr)
+	end := trimAsm0x(w.items[len(w.items)-1].Addr)
+	rangePart := ""
+	if start != "" && end != "" {
+		rangePart = fmt.Sprintf(" (%s - %s)", start, end)
+	}
+
+	var head string
+	if len(w.ctxLines) > 0 && strings.TrimSpace(w.ctxLines[0]) != "" {
+		head = strings.TrimSpace(w.ctxLines[0])
+	} else if pc := w.pcInsnStatus(); pc != "" {
+		head = "   " + pc
+	} else if w.pcAddr != "" {
+		head = "   " + w.pcAddr
+	} else {
+		return "Assembly"
+	}
+	return fmt.Sprintf("** %s%s **", head, rangePart)
+}
+
+// pcInsnStatus is the $pc instruction text for the CGDB-style status title.
+func (w *AssemblyWidget) pcInsnStatus() string {
+	if w == nil || w.pcAddr == "" {
+		return ""
+	}
+	idx := indexOfAsmAddr(w.items, w.pcAddr)
+	if idx < 0 {
+		return ""
+	}
+	it := w.items[idx]
+	return fmt.Sprintf("%s:\t%s", it.Addr, it.Inst)
+}
+
+func trimAsm0x(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if len(addr) >= 2 && (addr[0] == '0' && (addr[1] == 'x' || addr[1] == 'X')) {
+		return addr[2:]
+	}
+	return addr
 }
 
 func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
@@ -467,7 +714,7 @@ func (w *AssemblyWidget) CommitSearch(pattern string) {
 		return
 	}
 	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	w.viewport.CommitSearch(pattern)
 }
 
@@ -490,10 +737,20 @@ func (w *AssemblyWidget) SearchNext() bool {
 		return false
 	}
 	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	ok := w.viewport.SearchNext()
 	if ok {
-		w.selIdx = w.viewport.CursorLine
+		idx := w.viewport.CursorLine - w.prefix
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(w.items) {
+			idx = len(w.items) - 1
+		}
+		if idx >= 0 {
+			w.selIdx = idx
+			w.viewport.CursorLine = w.selIdx + w.prefix
+		}
 	}
 	return ok
 }
@@ -503,10 +760,20 @@ func (w *AssemblyWidget) SearchPrev() bool {
 		return false
 	}
 	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	ok := w.viewport.SearchPrev()
 	if ok {
-		w.selIdx = w.viewport.CursorLine
+		idx := w.viewport.CursorLine - w.prefix
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(w.items) {
+			idx = len(w.items) - 1
+		}
+		if idx >= 0 {
+			w.selIdx = idx
+			w.viewport.CursorLine = w.selIdx + w.prefix
+		}
 	}
 	return ok
 }
@@ -522,7 +789,7 @@ func (w *AssemblyWidget) WordAtCursor() string {
 	if w == nil || w.viewport == nil {
 		return ""
 	}
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	return w.viewport.WordAtCursor()
 }
 
@@ -530,7 +797,7 @@ func (w *AssemblyWidget) CursorInSearchMatch() bool {
 	if w == nil || w.viewport == nil {
 		return false
 	}
-	w.viewport.CursorLine = w.selIdx
+	w.viewport.CursorLine = w.selIdx + w.prefix
 	return w.viewport.CursorInSearchMatch()
 }
 

@@ -55,6 +55,7 @@ nav:
       - UI Architecture: UI_ARCHITECTURE.md
       - PTY Architecture: PTY_ARCHITECTURE.md
       - Debugger Integration: DEBUGGER_INTEGRATION.md
+      - Kernel / kgdb: KERNEL_KGDB.md
       - Rendering: RENDERING.md
       - Dependencies: DEPENDENCIES.md
       - Directory Structure: DIRECTORY_STRUCTURE.md

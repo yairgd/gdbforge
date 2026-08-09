@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,10 +20,11 @@ import (
 )
 
 type asmRefreshMsg struct {
-	items   []models.AsmLine
-	pcAddr  string
-	selAddr string
-	err     string
+	items    []models.AsmLine
+	pcAddr   string
+	selAddr  string
+	dumpFunc string // non-empty only for whole-function (-a) dumps
+	err      string
 }
 
 // asmHost is the narrow surface asmCtl needs from the composition root.
@@ -57,6 +61,10 @@ type asmCtl struct {
 	// autoAsm means the location leaf shows Assembly because the presented
 	// frame has no readable source. Cleared when source returns or :b code.
 	autoAsm bool
+	// ctxFrame is the frame Assembly was last synced to; drives whether the
+	// preamble may show "at file:line" (cleared when viewing ?? / no-file).
+	ctxFrame models.StackFrame
+	hasCtx   bool
 }
 
 // Widget returns the shared AssemblyWidget (may be nil before InitB).
@@ -99,26 +107,66 @@ func (c *asmCtl) supported() bool {
 
 // browse refetches disassembly centered on addr (widget edge/resize).
 func (c *asmCtl) browse(addr string, rows int) {
-	go c.runRefresh(addr, rows, false)
+	hint := ""
+	dir := 0
+	preserve := -1
+	if c.widget != nil {
+		hint = c.widget.FuncName()
+		dir = c.widget.BrowseDir()
+		preserve = c.widget.BrowsePreserveRow()
+	}
+	go c.runRefresh(addr, rows, false, hint, dir, preserve)
 }
 
 // armRefresh fetches disassembly around X on a background goroutine.
 // When resetToPC is true, X is set to $pc; otherwise X stays on center (or
 // the widget's current browse address when center is empty).
+// resetToPC must not reuse a stale FuncName (e.g. after Ctrl-C left "write").
 func (c *asmCtl) armRefresh(resetToPC bool) {
 	h := c.host
 	if !c.supported() || h.GdbMcp() == nil || c.widget == nil {
 		return
 	}
 	center := ""
+	hint := ""
 	if !resetToPC {
 		center = c.widget.SelAddr()
+		hint = c.widget.FuncName()
 	}
-	go c.runRefresh(center, c.widget.VisibleRows(), resetToPC)
+	go c.runRefresh(center, c.widget.VisibleRows(), resetToPC, hint, 0, -1)
+}
+
+// refreshAfterStackReload re-syncs Assembly after a post-stop stack refresh
+// (Ctrl-C / *stopped). Uses the highlighted Call Stack level when present.
+func (c *asmCtl) refreshAfterStackReload(fr models.StackFrame, ok bool) {
+	if c == nil || c.widget == nil || !(c.hasSplit() || c.ownsLocationLeaf()) {
+		return
+	}
+	if ok {
+		c.syncToFrame(fr)
+		return
+	}
+	c.paintStackContext(c.ctxFrame, c.hasCtx)
+	c.armRefresh(true)
+}
+
+// paintStackContext updates the Asm preamble immediately (before disasm returns).
+// CGDB shows only the relevant frame above the dump (not the full backtrace).
+// ?? / unnamed frames match after-stop `x/Ni $pc`: no stack text above asm.
+func (c *asmCtl) paintStackContext(cur models.StackFrame, haveCur bool) {
+	if c == nil || c.widget == nil {
+		return
+	}
+	if !haveCur || !asmNamedFunc(cur.Func) {
+		c.widget.SetContext(nil)
+		return
+	}
+	c.widget.SetContext(formatAsmFrameContext(cur))
 }
 
 // armAround recenters Assembly browse on addr; ━━▶ stays on real $pc.
-func (c *asmCtl) armAround(addr string) {
+// funcHint skips -data-disassemble -a when empty/?? (avoids GDB console noise).
+func (c *asmCtl) armAround(addr, funcHint string) {
 	h := c.host
 	if !c.supported() || h.GdbMcp() == nil || c.widget == nil {
 		return
@@ -128,29 +176,34 @@ func (c *asmCtl) armAround(addr string) {
 		c.armRefresh(false)
 		return
 	}
-	go c.runRefresh(addr, c.widget.VisibleRows(), false)
+	go c.runRefresh(addr, c.widget.VisibleRows(), false, funcHint, 0, -1)
 }
 
-// syncToFrame updates Assembly for a call-stack frame: level 0 → $pc,
-// deeper frames → frame address (return / call site) as browse X.
+// syncToFrame updates Assembly for a call-stack frame.
+// Prefer fr.Addr for every level (including 0): Call Stack / frame select often
+// runs before GDB has switched $pc, so level-0 → $pc left Asm stuck on the
+// previous function (e.g. write → ??). ━━▶ still comes from real $pc in the query.
 func (c *asmCtl) syncToFrame(fr models.StackFrame) {
 	if c == nil || !(c.hasSplit() || c.ownsLocationLeaf()) {
 		return
 	}
-	if fr.Level == 0 {
-		c.armRefresh(true)
+	c.ctxFrame = fr
+	c.hasCtx = true
+	// Drop stale "at file:line" text immediately when moving to ?? / no-file.
+	c.paintStackContext(fr, true)
+	if fr.Addr != "" {
+		c.armAround(fr.Addr, fr.Func)
 		return
 	}
-	if fr.Addr != "" {
-		c.armAround(fr.Addr)
-	} else {
-		c.armRefresh(false)
+	if !c.supported() || c.host == nil || c.host.GdbMcp() == nil || c.widget == nil {
+		return
 	}
+	go c.runRefresh("", c.widget.VisibleRows(), fr.Level == 0, fr.Func, 0, -1)
 }
 
-func (c *asmCtl) runRefresh(center string, rows int, resetToPC bool) {
-	items, pc, sel, err := c.queryAssembly(center, rows, resetToPC)
-	msg := asmRefreshMsg{items: items, pcAddr: pc, selAddr: sel}
+func (c *asmCtl) runRefresh(center string, rows int, resetToPC bool, funcHint string, browseDir, preserveRow int) {
+	items, pc, sel, dump, err := c.queryAssembly(center, rows, resetToPC, funcHint, browseDir, preserveRow)
+	msg := asmRefreshMsg{items: items, pcAddr: pc, selAddr: sel, dumpFunc: dump}
 	if err != nil {
 		msg.err = err.Error()
 	}
@@ -161,10 +214,15 @@ func (c *asmCtl) runRefresh(center string, rows int, resetToPC bool) {
 	}
 }
 
-func (c *asmCtl) queryAssembly(center string, rows int, resetToPC bool) (items []models.AsmLine, pcAddr, selAddr string, err error) {
+func asmNamedFunc(fn string) bool {
+	fn = strings.TrimSpace(fn)
+	return fn != "" && fn != "??"
+}
+
+func (c *asmCtl) queryAssembly(center string, rows int, resetToPC bool, funcHint string, browseDir, preserveRow int) (items []models.AsmLine, pcAddr, selAddr, dumpFunc string, err error) {
 	h := c.host
 	if h == nil || h.GdbMcp() == nil {
-		return nil, "", "", fmt.Errorf("no gdb session")
+		return nil, "", "", "", fmt.Errorf("no gdb session")
 	}
 	svc := h.GdbMcp()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -172,11 +230,11 @@ func (c *asmCtl) queryAssembly(center string, rows int, resetToPC bool) (items [
 
 	pcRaw, qerr := svc.Query(ctx, "-data-evaluate-expression $pc")
 	if qerr != nil {
-		return nil, "", "", qerr
+		return nil, "", "", "", qerr
 	}
 	pc, ok := parse.ParseDataEvaluateAddr(pcRaw)
 	if !ok {
-		return nil, "", "", fmt.Errorf("cannot read $pc")
+		return nil, "", "", "", fmt.Errorf("cannot read $pc")
 	}
 	pcAddr = pc
 
@@ -188,30 +246,57 @@ func (c *asmCtl) queryAssembly(center string, rows int, resetToPC bool) (items [
 	if rows < 1 {
 		rows = parse.DefaultAsmRows
 	}
-	start, end, ok := parse.DisassembleRange(selAddr, rows)
-	if !ok {
-		return nil, pcAddr, selAddr, fmt.Errorf("bad address %s", selAddr)
+
+	// Whole-function (-a) only when we know a real symbol — otherwise GDB prints
+	// "No function contains specified address" into the console on ?? frames.
+	if asmNamedFunc(funcHint) {
+		cmd := fmt.Sprintf("-data-disassemble -a %s -- 0", selAddr)
+		raw, qerr := svc.Query(ctx, cmd)
+		if qerr == nil {
+			if all := parse.ParseDataDisassemble(raw); len(all) > 0 {
+				dump := funcHint
+				if !asmNamedFunc(dump) {
+					dump = all[0].Func
+				}
+				return all, pcAddr, selAddr, dump, nil
+			}
+		}
 	}
-	cmd := fmt.Sprintf("-data-disassemble -s %s -e %s -- 1", start, end)
+
+	// Windowed / ?? : no Dump/End / no stack-frame block (unlike write()).
+	// Show a limited sliding window with code above and below $pc (GDB-like);
+	// edge browse recenters. Named functions use -a above and are unbounded
+	// within the function.
+	fetchRows := rows * 4
+	if fetchRows < 80 {
+		fetchRows = 80
+	}
+	browseAway := parse.NormalizeAddr(selAddr) != parse.NormalizeAddr(pcAddr)
+	rangeCenter := selAddr
+	if !browseAway {
+		rangeCenter = pcAddr
+	}
+	start, end, rangeOK := parse.DisassembleRange(rangeCenter, fetchRows)
+	if !rangeOK {
+		return nil, pcAddr, selAddr, "", fmt.Errorf("bad address %s", selAddr)
+	}
+	cmd := fmt.Sprintf("-data-disassemble -s %s -e %s -- 0", start, end)
 	raw, qerr := svc.Query(ctx, cmd)
 	if qerr != nil {
-		return nil, pcAddr, selAddr, qerr
+		return nil, pcAddr, selAddr, "", qerr
 	}
 	all := parse.ParseDataDisassemble(raw)
 	if len(all) == 0 {
-		// Retry without opcodes (some stubs reject mode 1).
-		cmd = fmt.Sprintf("-data-disassemble -s %s -e %s -- 0", start, end)
-		raw, qerr = svc.Query(ctx, cmd)
-		if qerr != nil {
-			return nil, pcAddr, selAddr, qerr
-		}
-		all = parse.ParseDataDisassemble(raw)
+		return nil, pcAddr, selAddr, "", fmt.Errorf("empty disassembly")
 	}
-	if len(all) == 0 {
-		return nil, pcAddr, selAddr, fmt.Errorf("empty disassembly")
+	if !browseAway {
+		// At $pc: keep instructions both above and below (not PC-only forward).
+		items = parse.WindowAround(all, pcAddr, fetchRows)
+	} else {
+		anchor := parse.BrowseAnchor(browseDir, preserveRow, rows, fetchRows)
+		items = parse.WindowAtAnchor(all, selAddr, fetchRows, anchor)
 	}
-	items = parse.WindowAround(all, selAddr, rows)
-	return items, pcAddr, selAddr, nil
+	return items, pcAddr, selAddr, "", nil
 }
 
 func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
@@ -219,6 +304,8 @@ func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
 	if c.widget == nil {
 		return
 	}
+	// Keep preamble in sync even when disasm fails (otherwise ?? keeps old file lines).
+	c.paintStackContext(c.ctxFrame, c.hasCtx)
 	if msg.err != "" {
 		c.widget.ClearFetchAck()
 		if h != nil {
@@ -226,7 +313,12 @@ func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
 		}
 		return
 	}
-	c.widget.SetItems(msg.items, msg.pcAddr, msg.selAddr)
+	sel := msg.selAddr
+	// If the user kept moving during the fetch, keep their caret when present.
+	if cur := c.widget.SelAddr(); cur != "" && parse.IndexOfAddr(msg.items, cur) >= 0 {
+		sel = cur
+	}
+	c.widget.SetItems(msg.items, msg.pcAddr, sel, msg.dumpFunc)
 	if c.list != nil {
 		c.list.Set(msg.items, msg.pcAddr)
 	}
@@ -434,6 +526,63 @@ func isAssemblyWidget(w termui.Widget) bool {
 
 // BrowseAssembly refetches disassembly centered on addr (widget edge/resize).
 func (a *DebuggerApp) BrowseAssembly(addr string, rows int) { a.asm.browse(addr, rows) }
+
+// frameHasFileInfo reports a frame that may show "at file:line" (+ source body).
+func frameHasFileInfo(fr models.StackFrame) bool {
+	return asmNamedFunc(fr.Func) && fr.File != "" && fr.Line > 0 && fr.From == ""
+}
+
+// formatAsmFrameContext builds the single relevant-frame line CGDB shows above
+// a function dump (e.g. `#2  addr in write () from libc.so.6`).
+func formatAsmFrameContext(fr models.StackFrame) []string {
+	if !asmNamedFunc(fr.Func) {
+		return nil
+	}
+	fn := fr.Func
+	addr := fr.Addr
+	if addr == "" {
+		addr = "??"
+	}
+	var line string
+	switch {
+	case frameHasFileInfo(fr):
+		line = fmt.Sprintf("#%d  %s in %s () at %s:%d",
+			fr.Level, addr, fn, filepath.Base(fr.File), fr.Line)
+	case fr.From != "":
+		line = fmt.Sprintf("#%d  %s in %s () from %s",
+			fr.Level, addr, fn, fr.From)
+	case fr.File != "":
+		line = fmt.Sprintf("#%d  %s in %s () from %s",
+			fr.Level, addr, fn, fr.File)
+	default:
+		line = fmt.Sprintf("#%d  %s in %s ()", fr.Level, addr, fn)
+	}
+	out := []string{line}
+	if frameHasFileInfo(fr) {
+		if src := readSourceLine(fr.File, fr.Line); src != "" {
+			out = append(out, fmt.Sprintf("%-6d%s", fr.Line, src))
+		}
+	}
+	return out
+}
+
+func readSourceLine(path string, line int) string {
+	if path == "" || line < 1 {
+		return ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		if n == line {
+			return sc.Text()
+		}
+	}
+	return ""
+}
 
 // SplitAsmBelow is :sp asm / :split asm — Code on top, Assembly below.
 func (a *DebuggerApp) SplitAsmBelow(args ...any) { a.asm.splitAsm(true) }

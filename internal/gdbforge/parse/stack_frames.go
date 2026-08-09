@@ -61,6 +61,7 @@ func parseFrameChunk(chunk string) (models.StackFrame, bool) {
 		File:  unescapeMI(file),
 		Line:  line,
 		Addr:  extractQuotedField(chunk, "addr"),
+		From:  unescapeMI(extractQuotedField(chunk, "from")),
 	}
 	if fr.File == "" && fr.Func == "" && fr.Addr == "" {
 		return models.StackFrame{}, false

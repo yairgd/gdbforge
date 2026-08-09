@@ -130,6 +130,113 @@ func DisassembleRange(centerAddr string, rows int) (start, end string, ok bool) 
 // WindowAround picks up to rows instructions centered on the line nearest to
 // centerAddr. If centerAddr is missing, centers on the middle of items.
 func WindowAround(items []models.AsmLine, centerAddr string, rows int) []models.AsmLine {
+	return windowAround(items, centerAddr, rows, false)
+}
+
+// WindowAroundPC picks up to rows instructions starting at centerAddr (CGDB
+// `x/Ni $pc` style — PC is the first line, not mid-window).
+func WindowAroundPC(items []models.AsmLine, centerAddr string, rows int) []models.AsmLine {
+	return windowAround(items, centerAddr, rows, true)
+}
+
+// WindowBefore picks up to rows instructions ending at centerAddr (scroll-up
+// slide: prior code above the browse line).
+func WindowBefore(items []models.AsmLine, centerAddr string, rows int) []models.AsmLine {
+	if len(items) == 0 {
+		return nil
+	}
+	if rows < 1 {
+		rows = DefaultAsmRows
+	}
+	if rows >= len(items) {
+		return append([]models.AsmLine(nil), items...)
+	}
+	idx := indexNearestAddr(items, centerAddr)
+	if idx < 0 {
+		idx = len(items) - 1
+	}
+	end := idx + 1
+	start := end - rows
+	if start < 0 {
+		start = 0
+	}
+	return append([]models.AsmLine(nil), items[start:end]...)
+}
+
+// WindowAtAnchor returns up to rows items with centerAddr at anchorIdx so the
+// blue browse line can keep its screen row across a sliding-window refetch.
+func WindowAtAnchor(items []models.AsmLine, centerAddr string, rows, anchorIdx int) []models.AsmLine {
+	if len(items) == 0 {
+		return nil
+	}
+	if rows < 1 {
+		rows = DefaultAsmRows
+	}
+	if rows > len(items) {
+		rows = len(items)
+	}
+	idx := indexNearestAddr(items, centerAddr)
+	if idx < 0 {
+		idx = len(items) / 2
+	}
+	if anchorIdx < 0 {
+		anchorIdx = 0
+	}
+	if anchorIdx >= rows {
+		anchorIdx = rows - 1
+	}
+	start := idx - anchorIdx
+	if start < 0 {
+		start = 0
+	}
+	end := start + rows
+	if end > len(items) {
+		end = len(items)
+		start = end - rows
+		if start < 0 {
+			start = 0
+		}
+	}
+	return append([]models.AsmLine(nil), items[start:end]...)
+}
+
+// BrowseAnchor picks the item index for centerAddr inside a fetchRows window
+// so a viewport of viewH rows can keep the caret on preserveRow.
+// dir < 0 biases content above (scroll up); dir > 0 biases content below.
+func BrowseAnchor(dir, preserveRow, viewH, fetchRows int) int {
+	if fetchRows < 1 {
+		fetchRows = DefaultAsmRows
+	}
+	if viewH < 1 {
+		viewH = DefaultAsmRows
+	}
+	if preserveRow < 0 {
+		preserveRow = viewH / 2
+	}
+	if preserveRow >= viewH {
+		preserveRow = viewH - 1
+	}
+	afterPad := viewH - preserveRow - 1
+	if afterPad < 0 {
+		afterPad = 0
+	}
+	if dir < 0 {
+		a := fetchRows - 1 - afterPad
+		if a < 0 {
+			a = 0
+		}
+		if a >= fetchRows {
+			a = fetchRows - 1
+		}
+		return a
+	}
+	if preserveRow >= fetchRows {
+		return fetchRows - 1
+	}
+	return preserveRow
+}
+
+func windowAround(items []models.AsmLine, centerAddr string, rows int, fromPC bool) []models.AsmLine {
 	if len(items) == 0 {
 		return nil
 	}
@@ -143,8 +250,17 @@ func WindowAround(items []models.AsmLine, centerAddr string, rows int) []models.
 	if idx < 0 {
 		idx = len(items) / 2
 	}
-	half := rows / 2
-	start := idx - half
+	var start int
+	if fromPC {
+		// CGDB x/Ni $pc: never pull lines from before $pc just to fill rows.
+		start = idx
+		end := start + rows
+		if end > len(items) {
+			end = len(items)
+		}
+		return append([]models.AsmLine(nil), items[start:end]...)
+	}
+	start = idx - rows/2
 	if start < 0 {
 		start = 0
 	}
@@ -157,6 +273,32 @@ func WindowAround(items []models.AsmLine, centerAddr string, rows int) []models.
 		}
 	}
 	return append([]models.AsmLine(nil), items[start:end]...)
+}
+
+// DisassembleRangeForward returns a byte range biased after centerAddr (CGDB
+// x/Ni style: a little before for Up, lots after for Down scrolling).
+func DisassembleRangeForward(centerAddr string, rows int) (start, end string, ok bool) {
+	center, ok := ParseAddrUint(centerAddr)
+	if !ok {
+		return "", "", false
+	}
+	if rows < 1 {
+		rows = DefaultAsmRows
+	}
+	before := uint64((rows / 4) * maxInsnBytes)
+	if before < uint64(4*maxInsnBytes) {
+		before = uint64(4 * maxInsnBytes)
+	}
+	after := uint64(rows * maxInsnBytes * 2)
+	var s uint64
+	if center > before {
+		s = center - before
+	}
+	e := center + after
+	if e < center { // overflow
+		e = ^uint64(0)
+	}
+	return fmt.Sprintf("0x%x", s), fmt.Sprintf("0x%x", e), true
 }
 
 func indexNearestAddr(items []models.AsmLine, addr string) int {

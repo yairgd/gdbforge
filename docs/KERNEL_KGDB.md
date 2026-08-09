@@ -78,7 +78,7 @@ sequenceDiagram
   Board-->>GDB: kgdb waiting
   Lua->>GDB: lx-symbols
   Note over User,GDB: STOPPED debug mode
-  User->>GDB: break irq; continue
+  User->>GDB: break irq then continue
   User->>Minicom: cat /dev/ttyS2
   Board-->>GDB: hit breakpoint
 ```
