@@ -62,37 +62,51 @@ body.pz-lightbox-open {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
-/* Toolbar above the diagram — not overlaid on it */
+/* Floating icon toolbar (top-right), like Mermaid fullscreen controls */
 .pz-lightbox__controls {
-  position: relative;
-  z-index: 2;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(22, 27, 34, 0.92);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .pz-lightbox__controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
   cursor: pointer;
-  padding: 8px 14px;
-  font: 600 14px/1.2 system-ui, sans-serif;
-  color: #e6edf3;
-  background: #243044;
-  border: 1px solid #58a6ff;
+  color: #c9d1d9;
+  background: transparent;
+  border: none;
   border-radius: 6px;
 }
 
 .pz-lightbox__controls button:hover {
-  background: #58a6ff;
-  color: #0f1419;
+  color: #f0f6fc;
+  background: rgba(88, 166, 255, 0.18);
 }
 
-.pz-lightbox__controls #pz-close {
-  margin-left: auto;
-  border-color: #8b949e;
+.pz-lightbox__controls button:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 1px;
+}
+
+.pz-lightbox__controls button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 /* Diagram area fills the rest of the framed panel */

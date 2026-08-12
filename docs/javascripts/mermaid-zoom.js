@@ -6,7 +6,7 @@
   // 2) mermaid.run() ate data-pz-* attrs and produced error SVGs (code-wrapper path).
   // 3) Page + lightbox both use mermaid.render(storedSource) instead.
 
-  console.info("[mermaid-zoom] pz-box-14");
+  console.info("[mermaid-zoom] pz-box-15");
 
   var session = null;
   var sourcesByIndex = [];
@@ -115,14 +115,31 @@
     root = document.createElement("div");
     root.id = "pz-lightbox";
     root.hidden = true;
+    var iconZoomIn =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/><path d="m20 20-3.5-3.5"/></svg>';
+    var iconZoomOut =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6"/><path d="m20 20-3.5-3.5"/></svg>';
+    var iconReset =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>';
+    var iconClose =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
     root.innerHTML =
       '<div class="pz-lightbox__backdrop" data-pz-close></div>' +
       '<div class="pz-lightbox__panel">' +
       '  <div class="pz-lightbox__controls">' +
-      '    <button type="button" id="pz-zoom-in">Zoom in</button>' +
-      '    <button type="button" id="pz-zoom-out">Zoom out</button>' +
-      '    <button type="button" id="pz-reset">Reset</button>' +
-      '    <button type="button" id="pz-close" data-pz-close>Close</button>' +
+      '    <button type="button" id="pz-zoom-in" title="Zoom in" aria-label="Zoom in">' +
+      iconZoomIn +
+      "</button>" +
+      '    <button type="button" id="pz-zoom-out" title="Zoom out" aria-label="Zoom out">' +
+      iconZoomOut +
+      "</button>" +
+      '    <button type="button" id="pz-reset" title="Reset" aria-label="Reset">' +
+      iconReset +
+      "</button>" +
+      '    <button type="button" id="pz-close" data-pz-close title="Close" aria-label="Close">' +
+      iconClose +
+      "</button>" +
       "  </div>" +
       '  <div class="panzoom-parent" id="pz-parent"></div>' +
       "</div>";
