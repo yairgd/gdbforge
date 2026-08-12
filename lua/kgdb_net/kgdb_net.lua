@@ -17,18 +17,45 @@
 --
 -- Board kgdb stub must listen (e.g. kgdboe) before / while attaching.
 
-local function load_common()
-  local path = gdbforge.lua_dir() .. "/../kgdb_common/kgdb_common.lua"
-  local ok, err = pcall(function()
-    dofile(path)
-  end)
-  if not ok then
-    gdbforge.print("ERROR: cannot load kgdb_common from " .. path)
-    gdbforge.print(tostring(err))
-    gdbforge.print("Install: cp -r lua/kgdb_common lua/kgdb_net .gdbforge/lua/")
-    return false
+-- kgdb_common lives in a sibling directory, which moves with the install layer
+-- (project, home, embedded cache). Search every layer so a partial install or a
+-- stale embedded cache still resolves.
+local function common_candidates()
+  local rel = "/kgdb_common/kgdb_common.lua"
+  local list = { gdbforge.lua_dir() .. "/.." .. rel, "./.gdbforge/lua" .. rel }
+  local home = os.getenv("HOME")
+  if home and home ~= "" then
+    list[#list + 1] = home .. "/.gdbforge/lua" .. rel
+    list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua" .. rel
   end
-  return true
+  return list
+end
+
+local function load_common()
+  local tried = {}
+  for _, path in ipairs(common_candidates()) do
+    local fh = io.open(path, "r")
+    if fh then
+      fh:close()
+      local ok, err = pcall(function()
+        dofile(path)
+      end)
+      if ok then
+        return true
+      end
+      gdbforge.print("ERROR: cannot load kgdb_common from " .. path)
+      gdbforge.print(tostring(err))
+      return false
+    end
+    tried[#tried + 1] = path
+  end
+
+  gdbforge.print("ERROR: kgdb_common.lua not found. Looked in:")
+  for _, path in ipairs(tried) do
+    gdbforge.print("  " .. path)
+  end
+  gdbforge.print("Install: cp -r lua/kgdb_common lua/kgdb_net .gdbforge/lua/")
+  return false
 end
 
 function help()
@@ -95,6 +122,8 @@ function main(module_name, host, port)
     ko_path = ko,
     ssh_user = user,
     ssh_host = host,
+    scripts = C.env("GDBFORGE_KGDB_SCRIPTS", ""),
+    vmlinux = vmlinux,
   })
 
   if module_name ~= "" then

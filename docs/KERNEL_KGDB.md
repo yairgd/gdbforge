@@ -97,9 +97,53 @@ sequenceDiagram
 | `GDBFORGE_KGDB_BAUD` | `115200` | Baud |
 | `GDBFORGE_KGDB_VMLINUX` | _(empty)_ | Path to `vmlinux` |
 | `GDBFORGE_KGDB_MODULES` | _(empty)_ | Extra search path for `lx-symbols` |
+| `GDBFORGE_KGDB_SCRIPTS` | _(empty)_ | Kernel tree with `scripts/gdb` (sourced so `lx-symbols` exists) |
 | `GDBFORGE_KGDB_KDMX` | `kdmx` | `kdmx` binary |
-| `GDBFORGE_KGDB_CONSOLE_CMD` | `minicom` | Console program (`minicom -D <pty>`, else `<cmd> <pty>`) |
+| `GDBFORGE_KGDB_CONSOLE_CMD` | `minicom` | Console program (`minicom -D <pty> -o`, else `<cmd> <pty>`) |
+| `GDBFORGE_KGDB_TAKEOVER` | `auto` | How to claim the UART: `auto` (kill known serial consoles), `force` (kill any holder), `never` (abort while held) |
+| `GDBFORGE_KGDB_FORCE` | `0` | Deprecated alias for `GDBFORGE_KGDB_TAKEOVER=force` |
+| `GDBFORGE_KGDB_RETRIES` | `3` | kdmx start attempts |
 | `GDBFORGE_TERMINAL` | auto | Emulator for `spawn_terminal` |
+
+### UART ownership
+
+kdmx must be the **only** reader of the serial device, so `kgdb_uart` claims it before
+starting kdmx. Holders are found with `fuser` (falling back to `lsof`), then handled
+according to `GDBFORGE_KGDB_TAKEOVER`:
+
+| Mode | Behavior |
+|------|----------|
+| `auto` (default) | Terminate known serial consoles — `minicom`, `picocom`, `screen`, `socat`, `tio`, `cu`, `agent-proxy`, stale `kdmx`. Any other holder aborts the run. |
+| `force` | Terminate whatever holds the device. |
+| `never` | Never kill; abort while the device is held. |
+
+Terminated processes get `SIGTERM`, then `SIGKILL` if they don't release within 5s.
+minicom is reopened on the **console PTY** instead of the raw device.
+
+If two programs read the same UART, kdmx dies with
+`serial port read() [1] unexpected errno 11` and GDB later reports
+**`Remote connection closed`**. The script now detects that and prints the kdmx log.
+
+### kdmx and `errno 11` (EAGAIN)
+
+Upstream kdmx treats **any** unexpected `errno` from a read as fatal, including
+`EAGAIN` (errno 11), which is not an error: the fds are opened non-blocking, and
+`select()` can report a fd readable while `read()` still returns `EAGAIN`. When that
+happens kdmx exits, both PTYs disappear, and GDB reports `Remote connection closed`.
+Pressing a key in the console window reproduces it reliably.
+
+gdbforge ships a patched build at `bin/kdmx` that retries the read and lets each
+caller recover, and identifies itself in `-v`:
+
+```bash
+$ ./bin/kdmx -v
+kdmx 141210a-gdbforge1     # patched
+$ kdmx -v
+kdmx 141210a               # upstream: exits on EAGAIN
+```
+
+`kgdb_uart` prefers `bin/kdmx`, prints which binary it chose, and warns when it is
+not the patched build. Override with `GDBFORGE_KGDB_KDMX=/path/to/kdmx`.
 
 ---
 
@@ -131,7 +175,47 @@ Optional: `GDBFORGE_KGDB_KO` + module name → SSH read of `/sys/module/.../sect
 
 `lx-symbols` **loads symbols into GDB on the host**. It does not upload files to the board. Modules must already be loaded on the target; local `.ko` / build tree must match.
 
-gdbforge does **not** copy Linux `scripts/gdb` into the repo. Enable them from your kernel build as usual, then the Lua scripts call `lx-symbols`.
+gdbforge does **not** copy Linux `scripts/gdb` into the repo. `lx-symbols` only exists
+once GDB sources the kernel's own `vmlinux-gdb.py`; otherwise you get:
+
+```text
+Undefined command: "lx-symbols".  Try "help".
+```
+
+The Lua scripts look for it next to `vmlinux`, in `GDBFORGE_KGDB_MODULES`, or under
+`GDBFORGE_KGDB_SCRIPTS` (`<tree>/scripts/gdb/vmlinux-gdb.py`), then `source` it after
+`add-auto-load-safe-path`. Equivalent manual form:
+
+```text
+source /path/to/kernel-source/vmlinux-gdb.py
+lx-symbols /path/to/kernel-source
+```
+
+A stale `list_for_each: Uninitialized list '<modules>' treated as empty` warning means
+`lx-symbols` ran with **no live target** — fix the connection first.
+
+### `Undefined command: "import"`
+
+This means GDB sourced the script as a **GDB command file** instead of Python, which
+is what `script-extension soft` (the default) does when Python is unavailable. The
+first Python line, `import os`, is then read as a GDB command.
+
+The Lua scripts now probe the session's GDB (`gdbforge.debugger_path()`) with
+`gdb -nx --batch -ex 'python print(...)'` before sourcing, and refuse to source with
+the real reason instead of that cascade. Common causes:
+
+| Cause | Fix |
+|-------|-----|
+| Bad `PYTHONHOME` / `PYTHONPATH` inherited from the shell | `unset PYTHONHOME PYTHONPATH` |
+| GDB built without Python (common for vendor cross-GDBs) | `gdbforge -g gdb -d /path/to/python-enabled-gdb` |
+
+Check by hand with:
+
+```bash
+gdb -nx --batch -ex 'python print("ok")'
+```
+
+A hostile `~/.gdbinit` can also interfere; start with `gdbforge -g gdb -- -nx` to skip it.
 
 Fallback: pass addresses / use SSH sysfs + `add-symbol-file` (see `kgdb_common`).
 

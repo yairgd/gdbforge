@@ -155,6 +155,10 @@ Both leave GDB **stopped** in debug mode (`target remote` + `lx-symbols`). Then 
 | `GDBFORGE_KGDB_BAUD` | uart | Baud (default `115200`) |
 | `GDBFORGE_KGDB_VMLINUX` | both | Path to `vmlinux` |
 | `GDBFORGE_KGDB_MODULES` | both | Extra path for `lx-symbols` |
+| `GDBFORGE_KGDB_SCRIPTS` | both | Kernel tree with `scripts/gdb` (sourced so `lx-symbols` exists) |
+| `GDBFORGE_KGDB_TAKEOVER` | uart | Claim the UART for kdmx: `auto` (default), `force`, `never` |
+| `GDBFORGE_KGDB_FORCE` | uart | Deprecated alias for `GDBFORGE_KGDB_TAKEOVER=force` |
+| `GDBFORGE_KGDB_RETRIES` | uart | kdmx start attempts (default `3`) |
 | `GDBFORGE_KGDB_PORT` | net | TCP port (default `6443`) |
 | `GDBFORGE_REMOTE_HOST` | net | Board IP |
 | `GDBFORGE_KGDB_SSH_CONSOLE` | net | `1` → open `ssh -t` window |

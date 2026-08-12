@@ -21,6 +21,7 @@ type Hooks struct {
 	StopFile         func() string
 	StopLine         func() int
 	GDB              func(cmd string)
+	DebuggerPath     func() string
 }
 
 // Install registers gdbforge.set_inferior_tty, dlv_connect, spawn_dlv_headless,
@@ -126,6 +127,14 @@ func Install(rt *luahost.Runtime, h Hooks) {
 			return 1
 		}
 		L.Push(lua.LNumber(h.StopLine()))
+		return 1
+	})
+	rt.SetGdbforgeFunc("debugger_path", func(L *lua.LState) int {
+		if h.DebuggerPath == nil {
+			L.Push(lua.LString(""))
+			return 1
+		}
+		L.Push(lua.LString(h.DebuggerPath()))
 		return 1
 	})
 	rt.SetGdbforgeFunc("gdb", func(L *lua.LState) int {

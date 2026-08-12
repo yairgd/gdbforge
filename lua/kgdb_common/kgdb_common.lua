@@ -48,6 +48,235 @@ function kgdb_common.wait_file(path, timeout_sec)
   return nil
 end
 
+function kgdb_common.file_exists(path)
+  local code = kgdb_common.run_cmd("test -e " .. kgdb_common.shell_quote(path))
+  return code == 0
+end
+
+function kgdb_common.dirname(path)
+  return tostring(path or ""):match("^(.*)/[^/]*$") or "."
+end
+
+function kgdb_common.pid_alive(pid)
+  pid = kgdb_common.trim(pid)
+  if pid == "" then
+    return false
+  end
+  local code = kgdb_common.run_cmd("kill -0 " .. pid .. " 2>/dev/null")
+  return code == 0
+end
+
+--- PIDs currently holding a device, as { {pid=, name=}, … }.
+function kgdb_common.device_holders(dev)
+  local q = kgdb_common.shell_quote(dev)
+  local _, out = kgdb_common.run_cmd("fuser " .. q .. " 2>/dev/null || lsof -t " .. q .. " 2>/dev/null")
+  local list, seen = {}, {}
+  for pid in tostring(out or ""):gmatch("%d+") do
+    if not seen[pid] then
+      seen[pid] = true
+      local _, comm = kgdb_common.run_cmd("ps -o comm= -p " .. pid .. " 2>/dev/null")
+      list[#list + 1] = { pid = pid, name = kgdb_common.trim(comm) }
+    end
+  end
+  return list
+end
+
+-- Serial console programs that must not share the UART with kdmx.
+local reclaimable = {
+  kdmx = true,
+  minicom = true,
+  picocom = true,
+  screen = true,
+  socat = true,
+  tio = true,
+  cu = true,
+  ["agent-proxy"] = true,
+}
+
+--- Make `dev` exclusively available for kdmx.
+-- mode comes from GDBFORGE_KGDB_TAKEOVER:
+--   auto  (default) — terminate known serial consoles (minicom, picocom, …);
+--                     any other holder aborts the run
+--   force           — terminate whatever holds the device
+--   never           — never kill; abort while the device is held
+function kgdb_common.free_device(dev, mode)
+  -- Earlier callers passed a boolean force flag.
+  if mode == true then
+    mode = "force"
+  elseif mode == false or mode == nil then
+    mode = "auto"
+  end
+  mode = tostring(mode):lower()
+
+  local holders = kgdb_common.device_holders(dev)
+  if #holders == 0 then
+    return true
+  end
+
+  local blocked, killed = {}, {}
+  for _, h in ipairs(holders) do
+    if mode ~= "never" and (mode == "force" or reclaimable[h.name]) then
+      gdbforge.print("releasing " .. dev .. ": terminating " .. h.name .. " (pid " .. h.pid .. ")")
+      kgdb_common.run_cmd("kill " .. h.pid .. " 2>/dev/null")
+      killed[#killed + 1] = h.pid
+    else
+      blocked[#blocked + 1] = h.name .. " (pid " .. h.pid .. ")"
+    end
+  end
+
+  if #blocked > 0 then
+    gdbforge.print("ERROR: " .. dev .. " is held by " .. table.concat(blocked, ", "))
+    gdbforge.print("kdmx needs the UART exclusively — close it, or set")
+    gdbforge.print("  export GDBFORGE_KGDB_TAKEOVER=force")
+    return false
+  end
+
+  for _ = 1, 20 do
+    gdbforge.sleep(0.25)
+    if #kgdb_common.device_holders(dev) == 0 then
+      return true
+    end
+  end
+
+  for _, pid in ipairs(killed) do
+    kgdb_common.run_cmd("kill -9 " .. pid .. " 2>/dev/null")
+  end
+  gdbforge.sleep(0.5)
+
+  if #kgdb_common.device_holders(dev) > 0 then
+    gdbforge.print("ERROR: " .. dev .. " still busy after kill")
+    return false
+  end
+  return true
+end
+
+-- Upstream kdmx exits when a read of the serial fd returns EAGAIN, which tears
+-- down both PTYs and surfaces in GDB as "Remote connection closed". The build
+-- shipped in gdbforge's bin/ retries instead, and marks itself in -v output.
+local kdmx_patch_marker = "gdbforge"
+
+--- Pick the kdmx binary: explicit override, then gdbforge's bin/, then PATH.
+function kgdb_common.resolve_kdmx(explicit, lua_dir)
+  explicit = kgdb_common.trim(explicit or "")
+  if explicit ~= "" then
+    return explicit
+  end
+
+  local candidates = {}
+  lua_dir = kgdb_common.trim(lua_dir or "")
+  if lua_dir ~= "" then
+    -- .gdbforge/lua/kgdb_uart/ and lua/kgdb_uart/ respectively.
+    candidates[#candidates + 1] = lua_dir .. "/../../../bin/kdmx"
+    candidates[#candidates + 1] = lua_dir .. "/../../bin/kdmx"
+  end
+  candidates[#candidates + 1] = "./bin/kdmx"
+
+  for _, path in ipairs(candidates) do
+    if kgdb_common.file_exists(path) then
+      return path
+    end
+  end
+  return "kdmx"
+end
+
+--- Report whether `path` is the patched kdmx. Returns ok, version.
+function kgdb_common.check_kdmx(path)
+  local code, out = kgdb_common.run_cmd(kgdb_common.shell_quote(path) .. " -v 2>&1")
+  local ver = kgdb_common.trim(out)
+  if code ~= 0 then
+    return false, (ver ~= "" and ver or "cannot execute " .. path)
+  end
+  return ver:find(kdmx_patch_marker, 1, true) ~= nil, ver
+end
+
+--- Report whether the session's GDB can run Python.
+-- Without Python, "source vmlinux-gdb.py" is silently parsed as a GDB command
+-- file (script-extension defaults to "soft"), whose first failure is the
+-- confusing `Undefined command: "import"`. Detect that up front instead.
+-- Returns ok, detail.
+function kgdb_common.gdb_python_ok()
+  local gdb_bin = ""
+  if gdbforge.debugger_path then
+    gdb_bin = kgdb_common.trim(gdbforge.debugger_path())
+  end
+  if gdb_bin == "" then
+    gdb_bin = "gdb"
+  end
+
+  local code, out = kgdb_common.run_cmd(string.format(
+    "%s -nx --batch -ex %s 2>&1",
+    kgdb_common.shell_quote(gdb_bin),
+    kgdb_common.shell_quote('python print("GDBFORGE_PY_OK")')
+  ))
+  out = tostring(out or "")
+  if code == 0 and out:find("GDBFORGE_PY_OK", 1, true) then
+    return true, gdb_bin
+  end
+
+  -- Prefer the line that names the cause over Python's path dump.
+  local detail
+  for _, pattern in ipairs({
+    "Python initialization failed[^\r\n]*",
+    "Python not initialized[^\r\n]*",
+    "[^\r\n]*not supported[^\r\n]*",
+    "Undefined command[^\r\n]*",
+  }) do
+    detail = out:match(pattern)
+    if detail then
+      break
+    end
+  end
+  detail = detail or out:match("[^\r\n]*[Pp]ython[^\r\n]*") or out
+  return false, gdb_bin .. ": " .. kgdb_common.trim(detail)
+end
+
+--- Source the kernel's own GDB helpers so lx-symbols exists.
+-- Not vendored: located next to vmlinux, in the build tree, or via
+-- GDBFORGE_KGDB_SCRIPTS. Returns true when a script was sourced.
+function kgdb_common.source_kernel_scripts(scripts, vmlinux, modules_dir)
+  local candidates = {}
+  scripts = kgdb_common.trim(scripts or "")
+  if scripts ~= "" then
+    candidates[#candidates + 1] = scripts
+    candidates[#candidates + 1] = scripts .. "/vmlinux-gdb.py"
+    candidates[#candidates + 1] = scripts .. "/scripts/gdb/vmlinux-gdb.py"
+  end
+  vmlinux = kgdb_common.trim(vmlinux or "")
+  if vmlinux ~= "" then
+    candidates[#candidates + 1] = kgdb_common.dirname(vmlinux) .. "/vmlinux-gdb.py"
+  end
+  modules_dir = kgdb_common.trim(modules_dir or "")
+  if modules_dir ~= "" then
+    candidates[#candidates + 1] = modules_dir .. "/vmlinux-gdb.py"
+    candidates[#candidates + 1] = modules_dir .. "/scripts/gdb/vmlinux-gdb.py"
+  end
+
+  for _, path in ipairs(candidates) do
+    if path:match("%.py$") and kgdb_common.file_exists(path) then
+      local py_ok, detail = kgdb_common.gdb_python_ok()
+      if not py_ok then
+        gdbforge.print("ERROR: this GDB cannot run Python — skipping " .. path)
+        gdbforge.print("  " .. tostring(detail))
+        gdbforge.print("lx-symbols needs a Python-enabled GDB. Without it, GDB would")
+        gdbforge.print("parse the script as commands and fail on: Undefined command: \"import\"")
+        gdbforge.print("Fixes:")
+        gdbforge.print("  unset PYTHONHOME PYTHONPATH   # a bad PYTHONHOME disables GDB python")
+        gdbforge.print("  gdbforge -g gdb -d /path/to/python-enabled-gdb")
+        return false
+      end
+      gdbforge.print("add-auto-load-safe-path " .. kgdb_common.dirname(path))
+      gdbforge.gdb("add-auto-load-safe-path " .. kgdb_common.dirname(path))
+      gdbforge.print("source " .. path)
+      gdbforge.gdb("source " .. path)
+      return true
+    end
+  end
+
+  gdbforge.print("WARN: vmlinux-gdb.py not found — lx-symbols will be undefined")
+  gdbforge.print("  set GDBFORGE_KGDB_SCRIPTS=/path/to/kernel-source (build tree with scripts/gdb)")
+  return false
+end
+
 local function ssh_sysfs_sections(user, host, module_name)
   local code, out = kgdb_common.run_cmd(string.format(
     "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
@@ -76,10 +305,12 @@ end
 --   ko_path      — local .ko for add-symbol-file
 --   text, data, bss — addresses (strings) for add-symbol-file
 --   ssh_user, ssh_host, module_name — optional sysfs fetch (path 2)
+--   scripts, vmlinux — locate kernel scripts/gdb for lx-symbols
 function kgdb_common.load_symbols(opts)
   opts = opts or {}
 
   if not opts.skip_lx then
+    kgdb_common.source_kernel_scripts(opts.scripts, opts.vmlinux, opts.modules_dir)
     local mods = kgdb_common.trim(opts.modules_dir or "")
     if mods ~= "" then
       gdbforge.print("lx-symbols " .. mods)

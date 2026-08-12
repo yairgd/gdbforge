@@ -484,6 +484,7 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 		},
 		SpawnDlvHeadless: a.SpawnDlvHeadless,
 		Program:          a.SessionProgram,
+		DebuggerPath:     func() string { return a.cfg.GDBPath },
 		CurrentFile: func() string {
 			var path string
 			c.callOnUI(func() {
