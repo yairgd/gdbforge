@@ -209,6 +209,18 @@ func (p *ConsolePane) AppendLines(lines []string) {
 	}
 }
 
+// AppendScrollbackLine appends a full output line without merging into the live
+// prompt host (REPL results, gdbforge.print, …).
+func (p *ConsolePane) AppendScrollbackLine(line string) {
+	if line == "" {
+		return
+	}
+	p.dropLivePromptHost()
+	if p.buf != nil {
+		p.buf.AppendLine(line)
+	}
+}
+
 func (p *ConsolePane) AppendText(text string) {
 	if p.Prompt != "" {
 		if n := p.buf.NumLines(); n > 0 && p.buf.Line(n-1) == p.Prompt {

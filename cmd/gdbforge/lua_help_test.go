@@ -86,8 +86,14 @@ func TestLuaCompletionsHelp(t *testing.T) {
 	}
 
 	got = a.lua.completions("re")
-	if len(got) != 1 || got[0] != "remotegdb" {
-		t.Fatalf("script prefix: %v", got)
+	wantRE := []string{"remotegdb", "repl"}
+	if !reflect.DeepEqual(got, wantRE) {
+		t.Fatalf("script prefix: %v want %v", got, wantRE)
+	}
+
+	got = a.lua.completions("help")
+	if len(got) != 1 || got[0] != "help" {
+		t.Fatalf(":lua help completion: %v", got)
 	}
 
 	got = a.lua.completions("remotegdb")

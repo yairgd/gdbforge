@@ -14,9 +14,10 @@ import (
 type GDBWidget struct {
 	console          *termui.ConsolePane
 	promptStyleToken string // "(gdb)" or "(dlv)" for yellow line styling
+	handlers         *ConsoleHandlers
 }
 
-// NewGDBWidget builds an empty GDB console view. Wire intents with SetOn*.
+// NewGDBWidget builds an empty GDB console view. Wire intents with WireConsole.
 func NewGDBWidget() *GDBWidget {
 	console := termui.NewConsolePane("GDB")
 	// No standing Prompt: Draw must not invent "(gdb)" while waiting.
@@ -66,36 +67,41 @@ func (m *GDBWidget) lineStyle(line string) tcell.Style {
 	return st
 }
 
-// SetOnSubmit registers the Enter handler (app controller).
-func (m *GDBWidget) SetOnSubmit(fn func(cmd string)) {
+// WireConsole attaches app handlers to this pane. nil clears handlers.
+func (m *GDBWidget) WireConsole(h *ConsoleHandlers) {
 	if m == nil || m.console == nil {
 		return
 	}
-	m.console.OnSubmit = fn
+	m.handlers = h
+	if h == nil {
+		clearConsoleIntents(m.console)
+		return
+	}
+	bindConsoleIntents(m.console, m.handleSubmit, m.handleInterrupt, m.handleEOF, m.handleSuspend)
 }
 
-// SetOnInterrupt registers the Ctrl-C handler (app controller).
-func (m *GDBWidget) SetOnInterrupt(fn func()) {
-	if m == nil || m.console == nil {
-		return
+func (m *GDBWidget) handleSubmit(cmd string) {
+	if m.handlers != nil && m.handlers.Submit != nil {
+		m.handlers.Submit(cmd)
 	}
-	m.console.OnInterrupt = fn
 }
 
-// SetOnSuspend registers the Ctrl-Z handler (app controller).
-func (m *GDBWidget) SetOnSuspend(fn func()) {
-	if m == nil || m.console == nil {
-		return
+func (m *GDBWidget) handleInterrupt() {
+	if m.handlers != nil && m.handlers.Interrupt != nil {
+		m.handlers.Interrupt()
 	}
-	m.console.OnSuspend = fn
 }
 
-// SetOnEOF registers the Ctrl-D handler (app controller).
-func (m *GDBWidget) SetOnEOF(fn func()) {
-	if m == nil || m.console == nil {
-		return
+func (m *GDBWidget) handleEOF() {
+	if m.handlers != nil && m.handlers.EOF != nil {
+		m.handlers.EOF()
 	}
-	m.console.OnEOF = fn
+}
+
+func (m *GDBWidget) handleSuspend() {
+	if m.handlers != nil && m.handlers.Suspend != nil {
+		m.handlers.Suspend()
+	}
 }
 
 func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {

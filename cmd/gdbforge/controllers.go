@@ -110,6 +110,12 @@ func (a *DebuggerApp) FileBuffers() map[string]*widgets.CodeWidget {
 func (a *DebuggerApp) PrimaryCode() *widgets.CodeWidget    { return a.bufs.Primary() }
 func (a *DebuggerApp) CodeBufferForB() *widgets.CodeWidget { return a.bufs.codeBufferForB() }
 func (a *DebuggerApp) GDBWidget() *widgets.GDBWidget       { return a.gdbWidget }
+func (a *DebuggerApp) LuaConsoleWidget() *widgets.LuaConsoleWidget {
+	return a.luaConsoleWidget
+}
+func (a *DebuggerApp) LuaGdbforgeComplete(text string) (string, []string) {
+	return a.lua.replGdbforgeComplete(text)
+}
 func (a *DebuggerApp) GdbMcp() *mcp.GdbMcpService          { return a.gdbMcp }
 func (a *DebuggerApp) CmdWidget() *termui.CmdWidget        { return a.cmdWidget }
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }

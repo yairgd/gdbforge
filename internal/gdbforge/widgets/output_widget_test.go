@@ -35,7 +35,7 @@ func TestOutputWidgetRawWhileRunning(t *testing.T) {
 
 func TestOutputWidgetSeparateTTYIgnoresGdbRaw(t *testing.T) {
 	w := NewOutputWidget()
-	w.EnableInput(true)
+	w.WireConsole(&ConsoleHandlers{})
 	w.AppendPty("^running\n")
 	w.AppendPty("should not appear from gdb pty\n")
 	w.AppendPty("@\"should not appear from mi\\n\"\n")
@@ -85,7 +85,7 @@ func TestOutputWidgetCRAndTab(t *testing.T) {
 
 func TestOutputWidgetSubmitClearsInputKeepsLivePrompt(t *testing.T) {
 	w := NewOutputWidget()
-	w.EnableInput(true)
+	w.WireConsole(&ConsoleHandlers{})
 	if !w.console.LivePrompt() {
 		t.Fatal("expected live prompt attach when IO stdin is enabled")
 	}

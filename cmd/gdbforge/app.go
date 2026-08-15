@@ -71,6 +71,7 @@ type DebuggerApp struct {
 
 	bpWidget       *widgets.BreakpointWidget
 	outputWidget   *widgets.OutputWidget
+	luaConsoleWidget *widgets.LuaConsoleWidget
 	fileListWidget *widgets.FileListWidget
 }
 

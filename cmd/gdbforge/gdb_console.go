@@ -63,7 +63,7 @@ type consoleHost interface {
 
 // consoleCtl owns the debugger console domain: the PTY bridge, submit /
 // interrupt / suspend / EOF intents, and MI / Delve update apply.
-// Wired as wireConsole(..., a.console.onGdbConsoleSubmit, ...).
+// Wired as gdbWidget.WireConsole(..., a.console.onGdbConsoleSubmit, ...).
 type consoleCtl struct {
 	host      consoleHost
 	cancelSub func()

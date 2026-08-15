@@ -7,6 +7,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -15,6 +16,8 @@ import (
 // root. DebuggerApp implements it; completionCtl must not depend on *DebuggerApp.
 type completionHost interface {
 	GDBWidget() *widgets.GDBWidget
+	LuaConsoleWidget() *widgets.LuaConsoleWidget
+	LuaGdbforgeComplete(text string) (newLine string, matches []string)
 	CmdWidget() *termui.CmdWidget
 	Backend() backend.Backend
 	Session() core.Session
@@ -37,6 +40,8 @@ type completionCtl struct {
 	// forGDB is true while ModeCompletion is driven by GDB Tab
 	// (apply/cancel return to insert mode instead of command mode).
 	forGDB bool
+	// forLua is true while ModeCompletion is driven by Lua REPL Tab.
+	forLua bool
 }
 
 // attach takes ownership of the wildmenu model and its chrome widget.
@@ -86,7 +91,11 @@ func (c *completionCtl) hasMenu() bool { return c != nil && c.menu != nil }
 // isForGDB reports whether the wildmenu is driven by GDB Tab.
 func (c *completionCtl) isForGDB() bool { return c != nil && c.forGDB }
 
+func (c *completionCtl) isForLua() bool { return c != nil && c.forLua }
+
 func (c *completionCtl) setForGDB(v bool) { c.forGDB = v }
+
+func (c *completionCtl) setForLua(v bool) { c.forLua = v }
 
 // useGDBInput reports whether wildmenu edits should drive the GDB input line.
 // Prefer cmdline when it is active so a stuck forGDB flag cannot route :b
@@ -94,6 +103,15 @@ func (c *completionCtl) setForGDB(v bool) { c.forGDB = v }
 func (c *completionCtl) useGDBInput() bool {
 	h := c.host
 	if h == nil || !c.forGDB || h.GDBWidget() == nil {
+		return false
+	}
+	cmd := h.CmdWidget()
+	return cmd == nil || !cmd.Active()
+}
+
+func (c *completionCtl) useLuaInput() bool {
+	h := c.host
+	if h == nil || !c.forLua || h.LuaConsoleWidget() == nil {
 		return false
 	}
 	cmd := h.CmdWidget()
@@ -124,6 +142,11 @@ func (c *completionCtl) applySelected() {
 		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
 		return
 	}
+	if c.useLuaInput() {
+		cur := h.LuaConsoleWidget().InputText()
+		h.LuaConsoleWidget().ApplyCompletion(gdb.WithCompletionSpace(luahost.ApplyGdbforgeChoice(cur, name)))
+		return
+	}
 	if cmd := h.CmdWidget(); cmd != nil {
 		cmd.ApplyCompletion(name)
 	}
@@ -135,15 +158,82 @@ func (c *completionCtl) leaveMode() {
 	c.clear()
 	if h == nil {
 		c.forGDB = false
+		c.forLua = false
 		return
 	}
-	if c.forGDB {
+	if c.forGDB || c.forLua {
 		c.forGDB = false
+		c.forLua = false
 		h.SetMode(platform.ModeInsert)
 		return
 	}
 	c.forGDB = false
+	c.forLua = false
 	h.SetMode(platform.ModeCommand)
+}
+
+// luaTabComplete runs gdbforge.* completion for the Lua REPL input line.
+func (c *completionCtl) luaTabComplete() {
+	h := c.host
+	if h == nil || h.LuaConsoleWidget() == nil {
+		return
+	}
+	text := h.LuaConsoleWidget().InputText()
+	newLine, names := h.LuaGdbforgeComplete(text)
+	if newLine != "" && newLine != text {
+		h.LuaConsoleWidget().ApplyCompletion(newLine)
+		text = newLine
+	}
+	c.publishLuaMenu(text, names)
+	switch len(names) {
+	case 0:
+		// nothing
+	case 1:
+		if names[0] == "." {
+			h.LuaConsoleWidget().ApplyCompletion(text)
+		} else {
+			h.LuaConsoleWidget().ApplyCompletion(gdb.WithCompletionSpace(luahost.ApplyGdbforgeChoice(text, names[0])))
+		}
+		c.clear()
+	default:
+		c.forLua = true
+		c.forGDB = false
+		h.SetMode(platform.ModeCompletion)
+	}
+	h.RequestFrame()
+}
+
+// refreshLuaMenu re-queries gdbforge.* completions for the Lua REPL line.
+func (c *completionCtl) refreshLuaMenu() {
+	h := c.host
+	if h == nil || h.LuaConsoleWidget() == nil {
+		c.leaveMode()
+		return
+	}
+	text := h.LuaConsoleWidget().InputText()
+	if strings.TrimSpace(text) == "" {
+		c.leaveMode()
+		return
+	}
+	_, names := h.LuaGdbforgeComplete(text)
+	c.publishLuaMenu(text, names)
+	c.forLua = true
+	c.forGDB = false
+	if h.Mode() != platform.ModeCompletion {
+		h.SetMode(platform.ModeCompletion)
+	}
+}
+
+func (c *completionCtl) publishLuaMenu(text string, names []string) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	h.PublishCompletion(termui.CompletionMsg{
+		Input: text,
+		Token: text,
+		Names: names,
+	})
 }
 
 // gdbTabComplete runs completion for the GDB/Delve input line and feeds the same
@@ -183,6 +273,7 @@ func (c *completionCtl) gdbTabComplete() {
 		c.clear()
 	default:
 		c.forGDB = true
+		c.forLua = false
 		h.SetMode(platform.ModeCompletion)
 	}
 	h.RequestFrame()
@@ -221,6 +312,7 @@ func (c *completionCtl) refreshGDBMenu() {
 	}
 	c.publishGDBMenu(text, names)
 	c.forGDB = true
+	c.forLua = false
 	if h.Mode() != platform.ModeCompletion {
 		h.SetMode(platform.ModeCompletion)
 	}

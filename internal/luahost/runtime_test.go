@@ -137,6 +137,26 @@ func TestTetrisScriptLoads(t *testing.T) {
 	rt.DispatchKey("h")
 }
 
+func TestEvalLinePrintsReturns(t *testing.T) {
+	var got []string
+	rt := New(nil, nil)
+	defer rt.Close()
+	rt.SetPrintSink(func(line string) { got = append(got, line) })
+	if err := rt.EvalLine(`return 1, "two"`); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "1\ttwo" {
+		t.Fatalf("returns=%v", got)
+	}
+	got = got[:0]
+	if err := rt.EvalLine(`gdbforge.print("hi"); return 3`); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "hi" || got[1] != "3" {
+		t.Fatalf("mixed=%v", got)
+	}
+}
+
 func TestPrintSinkPreferredOverPane(t *testing.T) {
 	p := &memPane{w: 8, h: 4}
 	rt := New(p, nil)

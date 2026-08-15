@@ -1,0 +1,103 @@
+gdbforge.print(...)
+  Append a line to :b io ([lua] prefix). In the Lua REPL, output stays in the lua pane.
+  Example: gdbforge.print("hello")
+
+gdbforge.help([topic])
+  Show gdbforge API reference (:b io or REPL). Optional topic filters entries.
+  Example: gdbforge.help("gdb")
+
+gdbforge.register(name, fn)
+  Expose fn as :lua name [args…].
+  Example: gdbforge.register("probe", function() gdbforge.print("ok") end)
+
+gdbforge.gdb(cmd)
+  Send one CLI line to the GDB/Delve console (same as typing in the gdb pane).
+  Example: gdbforge.gdb("break main")
+
+gdbforge.open_buffer(name)
+  Focus a pane: "code", "gdb", "io", "lua", or a ModeLua buffer (e.g. "snake").
+  Example: gdbforge.open_buffer("gdb")
+
+gdbforge.program()
+  Debuggee path from the gdbforge session ("" if none).
+  Example: gdbforge.print(gdbforge.program())
+
+gdbforge.debugger_path()
+  Path of the active debugger binary (gdb or dlv).
+  Example: gdbforge.print(gdbforge.debugger_path())
+
+gdbforge.current_file() / gdbforge.current_line()
+  Browse cursor file (absolute path) and 1-based line in Code.
+  Example: gdbforge.print(gdbforge.current_file() .. ":" .. gdbforge.current_line())
+
+gdbforge.stop_file() / gdbforge.stop_line()
+  Stop PC (━━▶) source path and 1-based line.
+  Example: gdbforge.print(gdbforge.stop_file() .. ":" .. gdbforge.stop_line())
+
+gdbforge.run(argv…)
+  Interactive shell / :! — replaces the focused pane with Exec.
+  Example: gdbforge.run("make", "clean")
+
+gdbforge.spawn(argv…)
+  Background PTY process; keeps Code focused (J-Link, helpers, etc.).
+  Example: gdbforge.spawn("JLinkGDBServer", "-port", "2331")
+
+gdbforge.foreground(argv…)
+  Suspend TUI, run on real tty, resume (vim, less, …).
+  Example: gdbforge.foreground("vim", "+42", "main.c")
+
+gdbforge.spawn_terminal(argv…)
+  Open a real terminal emulator running argv (gdbserver TUI, dlv, …).
+  Example: gdbforge.spawn_terminal("gdbserver", "localhost:2345")
+
+gdbforge.open_external_tty()
+  Hold a pts in kitty/xterm; returns path for inferior I/O.
+  Example: local p = gdbforge.open_external_tty()
+
+gdbforge.set_inferior_tty(path)
+  GDB: -inferior-tty-set. Delve: restart with --tty. Use "internal" for gdbforge IO.
+  Example: gdbforge.set_inferior_tty("internal")
+
+gdbforge.dlv_connect(addr)
+  Replace session with dlv connect (host:port or :port).
+  Example: gdbforge.dlv_connect("127.0.0.1:2345")
+
+gdbforge.spawn_dlv_headless(port [, args…])
+  Headless dlv in a terminal; then use dlv_connect.
+  Example: gdbforge.spawn_dlv_headless("2345")
+
+gdbforge.wait_port(host_port [, timeout_sec])
+  Block until TCP accepts (default ~10s, max 120s). Returns true/false.
+  Example: gdbforge.wait_port("2345", 30)
+
+gdbforge.sleep(seconds)
+  Block the Lua VM (respects Ctrl-C job cancel).
+  Example: gdbforge.sleep(0.5)
+
+gdbforge.system(cmd)
+  Run sh -c; returns exit status and combined stdout+stderr.
+  Example: local st, out = gdbforge.system("uname -a")
+
+gdbforge.lua_dir()
+  Directory of the current script file (sidecars, XML, configs).
+  Example: gdbforge.print(gdbforge.lua_dir())
+
+gdbforge.clear()
+  Clear the bound Lua pane cell grid (game panes).
+  Example: gdbforge.clear()
+
+pane.set_cell(x, y, ch [, color])
+  Draw one cell in a ModeLua pane (:lua snake, etc.).
+  Example: pane.set_cell(0, 0, "#", "red")
+
+pane.clear()
+  Clear pane cells only (not :b io scrollback).
+  Example: pane.clear()
+
+pane.size()
+  Returns width, height of the Lua pane.
+  Example: local w, h = pane.size()
+
+Script help
+  Per-workflow usage: :lua <name> help  (calls that script's help() if defined).
+  Example: :lua remotegdb help

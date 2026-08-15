@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -30,6 +31,7 @@ type luaCtl struct {
 	pending      map[string]luahost.ResolvedScript // indexed at boot; loaded on first :lua
 	user         *luahost.Runtime
 	userRuntimes []*luahost.Runtime
+	repl         *luahost.Runtime // shared :b lua / :lua console REPL VM
 	jobMu        sync.Mutex
 	jobCancel    context.CancelFunc
 	jobRT        *luahost.Runtime // runtime running the current job (for KillSystem)
@@ -120,14 +122,27 @@ func (c *luaCtl) registerCmd(name string, rt *luahost.Runtime) {
 func (c *luaCtl) OnCmd(args ...any) {
 	a := c.app
 	if len(args) == 0 {
-		if a.ctx.Log != nil {
-			a.ctx.Log.Named("lua").Error("usage: :lua <funcname> [args...]")
-		}
+		c.openConsole()
 		return
 	}
 	name, _ := args[0].(string)
 	name = strings.TrimSpace(name)
 	if name == "" {
+		c.openConsole()
+		return
+	}
+	if name == "console" || name == "repl" {
+		c.openConsole()
+		return
+	}
+	if name == "help" {
+		topic := ""
+		if len(args) > 1 {
+			if s, ok := args[1].(string); ok {
+				topic = strings.TrimSpace(s)
+			}
+		}
+		c.printAPIHelp(topic)
 		return
 	}
 	rt, err := c.ensureRuntime(name)
@@ -177,6 +192,162 @@ func (c *luaCtl) OnCmd(args ...any) {
 		return
 	}
 	c.startJob(rt, name, strArgs)
+}
+
+// openConsole focuses the line Lua REPL (:b lua, bare :lua, :lua console).
+func (c *luaCtl) openConsole() {
+	a := c.app
+	w := a.luaConsoleWidget
+	if w == nil {
+		return
+	}
+	c.leaveMode()
+	c.ensureRepl()
+	if a.Tab() != nil {
+		if !a.swapFocusedWidget(w) {
+			_ = a.Tab().FocusWidget(w)
+		}
+		a.Tab().SetInsertActive(true)
+	}
+	a.SetMode(platform.ModeInsert)
+	w.EnsureLivePrompt()
+	w.ForceFollowTailAndScroll()
+	a.RequestFrame()
+}
+
+func (c *luaCtl) onReplSubmit(raw string) {
+	a := c.app
+	w := a.luaConsoleWidget
+	if w == nil {
+		return
+	}
+	cmd := strings.TrimSpace(raw)
+	if cmd == "" {
+		cmd = w.LastHistory()
+		if cmd == "" {
+			return
+		}
+	}
+	w.PushHistory(cmd)
+	w.EchoSubmit(cmd)
+	w.ClearInput()
+	w.EnsureLivePrompt()
+	w.ForceFollowTailAndScroll()
+	c.startReplEval(c.ensureRepl(), cmd)
+}
+
+func (c *luaCtl) onReplInterrupt() {
+	a := c.app
+	if w := a.luaConsoleWidget; w != nil {
+		if w.Viewport() != nil && w.Viewport().HasSelection() {
+			w.Viewport().CopySelection()
+			return
+		}
+		w.ClearInput()
+	}
+	if !c.cancelJob() && a.ctx.Log != nil {
+		a.ctx.Log.Named("lua").Info("repl interrupt")
+	}
+	a.RequestFrame()
+}
+
+// replGdbforgeComplete returns Tab completions for gdbforge.* in the Lua REPL line.
+func (c *luaCtl) replGdbforgeComplete(text string) (string, []string) {
+	rt := c.ensureRepl()
+	return luahost.CompleteGdbforge(text, rt.GdbforgeMembers())
+}
+
+// printAPIHelp shows the built-in gdbforge API reference on :b io.
+func (c *luaCtl) printAPIHelp(topic string) {
+	a := c.app
+	for _, line := range luahost.APIHelp(topic) {
+		if a.outputWidget != nil {
+			a.outputWidget.AppendHostLine(line)
+		} else if a.ctx.Log != nil {
+			a.ctx.Log.Named("lua").Info(line)
+		}
+	}
+	a.RequestFrame()
+}
+
+func (c *luaCtl) ensureRepl() *luahost.Runtime {
+	if c.repl != nil {
+		return c.repl
+	}
+	a := c.app
+	rt := luahost.New(nil, nil)
+	c.wireAPI(rt)
+	rt.SetPrintSink(func(line string) {
+		c.replPrintLine(line)
+	})
+	if err := rt.LoadString(`print = function(...) gdbforge.print(...) end
+help = function(...) gdbforge.help(...) end`, "@repl"); err != nil && a.ctx.Log != nil {
+		a.ctx.Log.Named("lua").Error("repl print redirect: " + err.Error())
+	}
+	c.repl = rt
+	return rt
+}
+
+func (c *luaCtl) replPrintLine(line string) {
+	if line == "" {
+		return
+	}
+	a := c.app
+	c.callOnUI(func() {
+		if w := a.luaConsoleWidget; w != nil {
+			w.AppendOutput(line)
+			w.ForceFollowTailAndScroll()
+			a.RequestFrame()
+		}
+	})
+}
+
+func (c *luaCtl) startReplEval(rt *luahost.Runtime, line string) {
+	a := c.app
+	if rt == nil || line == "" {
+		return
+	}
+	if c.jobBusy.Load() {
+		if w := a.luaConsoleWidget; w != nil {
+			w.AppendOutput("lua job already running — Ctrl-C to cancel")
+		}
+		a.RequestFrame()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c.jobMu.Lock()
+	c.jobCancel = cancel
+	c.jobRT = rt
+	c.jobBusy.Store(true)
+	c.jobMu.Unlock()
+
+	rt.SetJobContext(ctx)
+	go func() {
+		c.onWorker.Store(true)
+		err := rt.EvalLine(line)
+		c.onWorker.Store(false)
+
+		c.jobMu.Lock()
+		c.jobCancel = nil
+		c.jobRT = nil
+		c.jobBusy.Store(false)
+		c.jobMu.Unlock()
+		rt.SetJobContext(nil)
+
+		c.callOnUI(func() {
+			if w := a.luaConsoleWidget; w != nil {
+				if err != nil && !errors.Is(err, luahost.ErrJobCancelled) {
+					w.AppendOutput(err.Error())
+				}
+				w.EnsureLivePrompt()
+				w.ForceFollowTailAndScroll()
+			}
+		})
+		if scr := a.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(luaJobDoneMsg{name: "repl", err: err}))
+		}
+	}()
+	a.RequestFrame()
 }
 
 // startJob runs CallNamed on a worker so the UI stays responsive.
@@ -321,7 +492,35 @@ func (c *luaCtl) completions(prefix string) []string {
 		}
 	}
 
-	return c.scriptNameCompletions(prefix)
+	return c.luaFirstTokenCompletions(prefix)
+}
+
+func (c *luaCtl) luaFirstTokenCompletions(prefix string) []string {
+	fields := strings.Fields(prefix)
+	token := prefix
+	if len(fields) == 1 {
+		token = fields[0]
+	}
+	names := c.scriptNameCompletions(prefix)
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if token != "" && !strings.HasPrefix(name, token) {
+			return
+		}
+		for _, existing := range names {
+			if existing == name {
+				return
+			}
+		}
+		names = append(names, name)
+	}
+	add("console")
+	add("repl")
+	add("help")
+	sort.Strings(names)
+	return names
 }
 
 func (c *luaCtl) scriptKnown(name string) bool {
@@ -584,6 +783,8 @@ func (c *luaCtl) openBuffer(name string, from *luahost.Runtime) {
 		}
 		a.SetMode(platform.ModeInsert)
 		a.RequestFrame()
+	case "lua":
+		c.openConsole()
 	default:
 		a.bufs.openOrCreate(name, from)
 	}
@@ -682,4 +883,8 @@ func (c *luaCtl) closeAll() {
 	c.userRuntimes = nil
 	c.user = nil
 	c.pending = nil
+	if c.repl != nil {
+		c.repl.Close()
+		c.repl = nil
+	}
 }

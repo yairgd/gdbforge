@@ -528,7 +528,7 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 	w := widgets.NewExecWidget()
 	w.SetClipboard(app.ClipboardIO())
 	w.SetSizeFunc(client.SetSize)
-	wireConsole(w, consoleHandlers{
+	w.WireConsole(&widgets.ConsoleHandlers{
 		Submit:    func(cmd string) { _ = client.Send(cmd) },
 		Interrupt: func() { _ = client.SendRaw("\x03") },
 		Suspend:   func() { _ = client.SendRaw("\x1a") },

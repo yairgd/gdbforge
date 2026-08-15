@@ -71,7 +71,7 @@ func (a *DebuggerApp) initBuiltins() error {
 		// Also paint program stdout in the Delve console (IO pane is primary).
 		a.Debug().SetGdbTargetPrint(true)
 	}
-	wireConsole(a.gdbWidget, consoleHandlers{
+	a.gdbWidget.WireConsole(&widgets.ConsoleHandlers{
 		Submit:    a.console.onGdbConsoleSubmit,
 		Interrupt: a.console.onGdbConsoleInterrupt,
 		Suspend:   a.console.onGdbConsoleSuspend,
@@ -133,6 +133,15 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.fileListWidget = widgets.NewFileListWidget(a)
 	a.fileListWidget.SetClipboard(a.ClipboardIO())
 	a.fileListWidget.SetAppState(a.Debug())
+
+	a.luaConsoleWidget = widgets.NewLuaConsoleWidget()
+	a.luaConsoleWidget.SetClipboard(a.ClipboardIO())
+	a.luaConsoleWidget.WireConsole(&widgets.ConsoleHandlers{
+		Submit:    a.lua.onReplSubmit,
+		Interrupt: a.lua.onReplInterrupt,
+	})
+	a.registerBuiltin("lua", a.luaConsoleWidget)
+
 	a.lua.cmds = make(map[string]*luahost.Runtime)
 	a.lua.loadScripts()
 

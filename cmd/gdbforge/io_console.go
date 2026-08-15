@@ -49,9 +49,7 @@ func (c *inferiorIOCtl) wire(tty *ptyx.TTY) {
 		return
 	}
 	out := h.OutputWidget()
-	out.EnableInput(true)
-	out.SetSizeFunc(tty.SetSize)
-	wireConsole(out, consoleHandlers{
+	out.WireConsole(&widgets.ConsoleHandlers{
 		Submit: func(line string) {
 			c.send(tty, func() { _ = tty.Send(line) })
 		},
@@ -64,6 +62,7 @@ func (c *inferiorIOCtl) wire(tty *ptyx.TTY) {
 		},
 	})
 	c.startBridge(tty)
+	out.SetSizeFunc(tty.SetSize)
 }
 
 func (c *inferiorIOCtl) send(tty *ptyx.TTY, send func()) {
@@ -136,8 +135,7 @@ func (c *inferiorIOCtl) unwire() {
 		return
 	}
 	out := h.OutputWidget()
-	out.EnableInput(false)
-	unwireConsole(out)
+	out.WireConsole(nil)
 	out.SetSizeFunc(nil)
 }
 

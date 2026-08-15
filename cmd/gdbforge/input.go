@@ -114,7 +114,7 @@ func isCtrlD(ev *tcell.EventKey) bool {
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	// GDB console insert: pass all keys through so typing is native (Space, n,
 	// etc.). Only Esc leaves insert mode; Tab runs completion + wildmenu
-	// (MI -complete for GDB, command-name list for Delve).
+	// (MI -complete for GDB, gdbforge.* for Lua REPL).
 	if a.focusedIsGdb() {
 		if key, ok := platform.KeyFromEvent(ev); ok {
 			if key.Key == tcell.KeyEscape {
@@ -123,6 +123,20 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 			}
 			if key.Key == tcell.KeyTAB {
 				a.comp.gdbTabComplete()
+				return true
+			}
+		}
+		a.Tab().HandleEvent(ev)
+		return true
+	}
+	if a.focusedIsLuaConsole() {
+		if key, ok := platform.KeyFromEvent(ev); ok {
+			if key.Key == tcell.KeyEscape {
+				a.onEscape()
+				return true
+			}
+			if key.Key == tcell.KeyTAB {
+				a.comp.luaTabComplete()
 				return true
 			}
 		}
@@ -240,6 +254,16 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 			a.RequestFrame()
 			return true
 		}
+		if a.comp.useLuaInput() {
+			if isType {
+				a.luaConsoleWidget.InsertInputRune(ev.Rune())
+			} else {
+				a.luaConsoleWidget.BackspaceInput()
+			}
+			a.comp.refreshLuaMenu()
+			a.RequestFrame()
+			return true
+		}
 		if a.cmdWidget != nil {
 			a.comp.setForGDB(false)
 			a.cmdWidget.HandleEvent(ev)
@@ -256,8 +280,9 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	}
 	// Other keys: leave wildmenu and continue editing.
 	a.comp.clear()
-	if a.comp.isForGDB() {
+	if a.comp.isForGDB() || a.comp.isForLua() {
 		a.comp.setForGDB(false)
+		a.comp.setForLua(false)
 		a.SetMode(platform.ModeInsert)
 		a.Tab().HandleEvent(ev)
 	} else {
