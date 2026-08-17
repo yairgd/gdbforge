@@ -6,7 +6,10 @@
 kgdb_common = kgdb_common or {}
 
 function kgdb_common.trim(s)
-  return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+  s = tostring(s or "")
+  s = s:gsub("^%s+", "")
+  s = s:gsub("%s+$", "")
+  return s
 end
 
 function kgdb_common.env(name, fallback)
@@ -81,7 +84,7 @@ function kgdb_common.device_holders(dev)
   return list
 end
 
--- Serial console programs that must not share the UART with kdmx.
+-- Serial console programs (and stale helpers) that must not share the UART.
 local reclaimable = {
   kdmx = true,
   minicom = true,
@@ -91,6 +94,18 @@ local reclaimable = {
   tio = true,
   cu = true,
   ["agent-proxy"] = true,
+  gdbforge = true,
+  xterm = true,
+  ["mate-terminal"] = true,
+  ["gnome-terminal"] = true,
+  kitty = true,
+  konsole = true,
+  alacritty = true,
+  sh = true,
+  bash = true,
+  cat = true,
+  tee = true,
+  xclip = true,
 }
 
 --- Make `dev` exclusively available for kdmx.
@@ -126,8 +141,9 @@ function kgdb_common.free_device(dev, mode)
 
   if #blocked > 0 then
     gdbforge.print("ERROR: " .. dev .. " is held by " .. table.concat(blocked, ", "))
-    gdbforge.print("kdmx needs the UART exclusively — close it, or set")
+    gdbforge.print("Close the program above, or reclaim the port:")
     gdbforge.print("  export GDBFORGE_KGDB_TAKEOVER=force")
+    gdbforge.print("  fuser -k " .. dev .. "   # last resort")
     return false
   end
 
@@ -277,6 +293,18 @@ function kgdb_common.source_kernel_scripts(scripts, vmlinux, modules_dir)
   return false
 end
 
+kgdb_common.kgdb_default_kernel_tree = "/home/yair/merlin/kernel-source"
+
+function kgdb_common.kgdb_vmlinux()
+  return kgdb_common.env("GDBFORGE_KGDB_VMLINUX",
+    kgdb_common.kgdb_default_kernel_tree .. "/vmlinux")
+end
+
+function kgdb_common.kgdb_kernel_tree()
+  return kgdb_common.env("GDBFORGE_KGDB_SCRIPTS",
+    kgdb_common.env("GDBFORGE_KGDB_MODULES", kgdb_common.kgdb_default_kernel_tree))
+end
+
 local function ssh_sysfs_sections(user, host, module_name)
   local code, out = kgdb_common.run_cmd(string.format(
     "ssh -o BatchMode=yes -o ConnectTimeout=8 %s@%s %s",
@@ -298,14 +326,6 @@ local function ssh_sysfs_sections(user, host, module_name)
   return lines[1], lines[2], lines[3], out
 end
 
---- Load module / kernel symbols after target remote.
--- opts:
---   modules_dir  — passed to lx-symbols (optional)
---   skip_lx      — if true, skip lx-symbols
---   ko_path      — local .ko for add-symbol-file
---   text, data, bss — addresses (strings) for add-symbol-file
---   ssh_user, ssh_host, module_name — optional sysfs fetch (path 2)
---   scripts, vmlinux — locate kernel scripts/gdb for lx-symbols
 function kgdb_common.load_symbols(opts)
   opts = opts or {}
 
@@ -353,6 +373,92 @@ function kgdb_common.load_symbols(opts)
     gdbforge.print(cmd)
     gdbforge.gdb(cmd)
   end
+end
+
+--- Send GDB CLI and wait for (gdb) prompt. Needs gdbforge.gdb_query (rebuild after update).
+function kgdb_common.gdb_query(cmd, timeout_sec)
+  cmd = kgdb_common.trim(cmd or "")
+  if cmd == "" then
+    return false, "empty gdb command"
+  end
+  if not gdbforge.gdb_query then
+    gdbforge.gdb(cmd)
+    gdbforge.sleep(1)
+    return true, ""
+  end
+  local out, err = gdbforge.gdb_query(cmd, timeout_sec or 120)
+  out = tostring(out or "")
+  err = err and tostring(err) or ""
+  if err ~= "" then
+    return false, err
+  end
+  local line = out:match("([^\r\n]+)")
+  if line and (line:find("No symbol", 1, true) or line:find("Undefined command", 1, true)) then
+    return false, line
+  end
+  return true, out
+end
+
+function kgdb_common.gdb_target_remote(gdb_pty, timeout_sec)
+  gdb_pty = kgdb_common.trim(gdb_pty or "")
+  if gdb_pty == "" then
+    return false, "empty gdb PTY path"
+  end
+  return kgdb_common.gdb_query("target remote " .. gdb_pty, timeout_sec or 120)
+end
+
+--- Enter kgdb on the target via SysRq-G on the shared UART (serial mux).
+function kgdb_common.kgdb_serial_sysrq()
+  if not gdbforge.serial_send then
+    return false, "serial_send not available — run :lua kgdb_serial first"
+  end
+  gdbforge.print("serial: echo g > /proc/sysrq-trigger")
+  local ok, err = pcall(gdbforge.serial_send, "echo g > /proc/sysrq-trigger")
+  if not ok then
+    return false, tostring(err)
+  end
+  gdbforge.print("sysrq-g sent — kernel should break in on serial")
+  return true, nil
+end
+
+--- First attach: target remote (blocks) with delayed sysrq-g on the UART.
+function kgdb_common.kgdb_serial_attach(gdb_pty, opts)
+  opts = opts or {}
+  gdb_pty = kgdb_common.trim(gdb_pty or "")
+  if gdb_pty == "" then
+    return false, "empty gdb PTY path"
+  end
+
+  local attach_wait = tonumber(opts.attach_wait) or 120
+  local sysrq_delay = tonumber(opts.sysrq_delay) or 1
+  local do_sysrq = opts.sysrq ~= false
+
+  if do_sysrq then
+    gdbforge.print("attach: target remote " .. gdb_pty .. " + sysrq-g in " ..
+      sysrq_delay .. "s (parallel)")
+    if gdbforge.serial_sysrq_delayed then
+      gdbforge.serial_sysrq_delayed(sysrq_delay)
+    else
+      gdbforge.sleep(sysrq_delay)
+      local ok, err = kgdb_common.kgdb_serial_sysrq()
+      if not ok then
+        return false, err
+      end
+    end
+  else
+    gdbforge.print("target remote " .. gdb_pty .. " (no sysrq — board must already be in kgdb)")
+  end
+
+  return kgdb_common.gdb_target_remote(gdb_pty, attach_wait)
+end
+
+function kgdb_common.kgdb_serial_state_path()
+  local home = os.getenv("HOME") or ""
+  return home .. "/.cache/gdbforge/kgdb_serial.state"
+end
+
+function kgdb_common.kgdb_serial_clear_state()
+  os.remove(kgdb_common.kgdb_serial_state_path())
 end
 
 function help()

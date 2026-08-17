@@ -70,6 +70,7 @@ func (a *DebuggerApp) initControllers() {
 	a.search.app = a
 	a.lua.app = a
 	a.dlv.app = a
+	a.serial.app = a
 }
 
 // --- Composition-root adapters (host interfaces) ---
@@ -200,6 +201,15 @@ func (a *DebuggerApp) ApplyPendingFrameSync(promptReady, isError bool) bool {
 
 func (a *DebuggerApp) MaybeEnableRemoteMode(cmd string) {
 	a.maybeEnableRemoteMode(cmd)
+}
+
+func (a *DebuggerApp) serialActive() bool {
+	return a.serial.Active()
+}
+
+func (a *DebuggerApp) serialOnState(stopped, promptReady, running bool) {
+	a.maybeSwitchSerialConsoleOnRunning(running)
+	a.serial.OnDebuggerState(stopped, promptReady, running)
 }
 
 // TriggerPendingDebugInfoIfReady runs a post-stop threads/stack refresh once the

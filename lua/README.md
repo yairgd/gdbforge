@@ -45,6 +45,8 @@ Per-script env vars are listed in each section below.
 |-----------|--------|---------|---------|
 | [`remotegdb/`](remotegdb/) | `remotegdb` | **GDB** | Embedded Linux: scp (if changed) + ssh gdbserver + `target remote` |
 | [`kgdb_uart/`](kgdb_uart/) | `kgdb_uart` | **GDB** | Kernel kgdb over UART via **kdmx** + minicom → stopped debug mode |
+| [`kgdb_serial/`](kgdb_serial/) | `kgdb_serial` | **GDB** | Kernel kgdb — **in-process mux** + minicom (semi-auto; see [KERNEL_KGDB.md](../docs/KERNEL_KGDB.md#path-1b--one-uart-in-process-mux-semi-automatic)) |
+| [`kgdb_trigger/`](kgdb_trigger/) | `kgdb_trigger` | **GDB** | Break-in helper after `kgdb_serial` (sysrq + switch gdb) |
 | [`kgdb_net/`](kgdb_net/) | `kgdb_net` | **GDB** | Kernel kgdb over Ethernet TCP (`target remote`) → stopped debug mode |
 | [`kgdb_common/`](kgdb_common/) | `kgdb_common` | — | Shared helpers for kgdb_* (not a workflow) |
 | [`dlv_ext_port/`](dlv_ext_port/) | `dlv_ext_port` | Delve | Go TUI: headless dlv in another window + connect |

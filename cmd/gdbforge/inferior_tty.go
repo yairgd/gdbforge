@@ -357,7 +357,7 @@ func terminalRunArgv(userArgv []string) ([]string, error) {
 		out := []string{bin, "--"}
 		return append(out, userArgv...), nil
 	case "mate-terminal":
-		return []string{bin, "-e", shellJoinArgs(userArgv)}, nil
+		return []string{bin, "-e", "sh -c " + shellSingleQuote(shellJoinArgs(userArgv))}, nil
 	case "xterm", "konsole":
 		out := []string{bin, "-e"}
 		return append(out, userArgv...), nil

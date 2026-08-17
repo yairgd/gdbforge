@@ -103,7 +103,9 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 
 	// Defer stack refresh until (gdb). kgdb: one -stack-list-frames only.
 	if a.Debug().KgdbMode() {
-		a.dlv.armStackRefresh()
+		if !a.Debug().TakeSkipKgdbAttachStackRefresh() {
+			a.dlv.armStackRefresh()
+		}
 	} else {
 		a.dlv.armDebugInfoRefresh()
 	}

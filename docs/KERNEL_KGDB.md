@@ -18,8 +18,146 @@ Scripts (catalog under [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua
 | `:lua` | Path | Mux? |
 |--------|------|------|
 | `kgdb_uart` | Shared UART + kgdboc | Yes — external `kdmx` |
+| `kgdb_serial` | Shared UART + kgdboc | Yes — **in-process** mux (semi-auto) |
+| `kgdb_trigger` | Break-in helper (after `kgdb_serial`) | Uses mux |
 | `kgdb_net` | Ethernet kgdb (e.g. kgdboe) | No |
 | `kgdb_common` | Shared helpers only | — |
+
+See **[Path 0 — Two UARTs (manual)](#path-0--two-uarts-manual-recommended)** for the workflow in the [kernel demo screencast](README.md#demos) — console on one cable, GDB on another, **no mux and no Lua bring-up script required**.
+
+See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic)** when only one USB serial cable is available (`:lua kgdb_serial` / `:lua kgdb_trigger`).
+
+---
+
+## Path 0 — Two UARTs (manual, recommended)
+
+**When to use this:** the board exposes **two independent serial links** — one for the Linux console and one wired to a second UART that kgdb can use. This is the **simplest and most reliable** kgdb setup: console and gdb never share a wire, so there is **no owner switch**, **no kdmx**, and **breakpoints triggered from the shell work** (the demo screencast uses exactly this flow).
+
+![Linux kernel kgdb demo — two UARTs](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
+
+[Full video](https://github.com/user-attachments/assets/57566005-8376-43ce-bffa-3f0ea160c00e)
+
+### Wiring (example — adjust names for your board)
+
+| Board UART | Role | Host side |
+|------------|------|-----------|
+| **PS0** / `ttyS0` | Linux **console** — login shell, minicom | `/dev/ttyUSB0` |
+| **PS1** / `ttyPS1` | **kgdb** stub line (gdb remote protocol) | `/dev/ttyUSB1` |
+
+Nothing on the host may open **both** devices as one session — they are separate cables. gdbforge talks to the **kgdb** port via GDB; you keep a normal terminal (minicom, screen, …) on the **console** port.
+
+```mermaid
+flowchart LR
+  PS0["Board PS0\n(console)"] --> USB0["/dev/ttyUSB0"]
+  PS1["Board PS1\n(kgdb)"] --> USB1["/dev/ttyUSB1"]
+  USB0 --> Minicom[minicom / shell]
+  USB1 --> GDB["GDB target remote"]
+  GDB --> MI[gdbforge :b gdb]
+```
+
+### Prerequisites
+
+- Kernel built with kgdb (`CONFIG_KGDB`, `CONFIG_KGDB_SERIAL`, …) and a matching **`vmlinux`** on the host.
+- Kernel GDB helpers so **`lx-symbols`** works — source the kernel tree's `vmlinux-gdb.py` (not shipped in gdbforge).
+- Two USB–serial adapters (or onboard dual-UART wiring) with known device nodes on the host.
+- **Do not** run `:lua kgdb_serial`, kdmx, or `:serial-switch` for this path — they are for **one** shared UART only.
+
+### Stage 1 — Console + kgdboc (board, once per boot)
+
+1. Start **minicom** (or your usual serial terminal) on the **console** device, e.g. `minicom -D /dev/ttyUSB0`.
+2. From that console shell, point kgdb at the **debug UART** (the second cable, not the console):
+
+```text
+echo ttyPS1,115200 > /sys/module/kgdboc/parameters/kgdboc
+```
+
+Use the tty name that matches **PS1** on your board (`ttyS1`, `ttyAMA1`, …). This tells the kernel which port speaks the gdb stub protocol when kgdb stops.
+
+Optional: boot with `kgdboc=ttyPS1,115200` on the kernel cmdline instead of the `echo` above.
+
+### Stage 2 — gdbforge + GDB attach (host)
+
+Start gdbforge with GDB (no special Lua script):
+
+```bash
+./gdbforge -g gdb
+```
+
+In **`:b gdb`**, load symbols and attach to the **kgdb UART only** (`/dev/ttyUSB1` in the example — **not** the console cable):
+
+```text
+(gdb) file /path/to/vmlinux
+(gdb) source /path/to/kernel-source/vmlinux-gdb.py
+(gdb) target remote /dev/ttyUSB1
+(gdb) lx-symbols /path/to/kernel-source
+```
+
+After `target remote`, gdbforge enters **kgdb mode** on the MI console (`n` / `s` / `c`, lighter post-stop refresh). The console minicom window stays independent on `/dev/ttyUSB0`.
+
+### Stage 3 — Break in while the kernel is running
+
+With the kernel running and GDB already attached on PS1, trigger a stop from the **console** (PS0):
+
+```text
+echo g > /proc/sysrq-trigger
+```
+
+GDB on PS1 receives the kgdb stop packet (`$T05…`). gdbforge shows the stop in `:b gdb` (Call Stack, source when symbols match). Step with `n` / `s`, then `(gdb) continue` to return the kernel to the shell on PS0.
+
+### Stage 4 — Module / driver breakpoint (what the screencast shows)
+
+This is the usual loop after the first attach:
+
+1. In **`:b gdb`**, set a breakpoint in the loadable module or driver (e.g. an IRQ handler or ioctl path):
+
+```text
+(gdb) break my_driver_irq
+```
+
+2. `(gdb) continue` — the kernel runs; **minicom on PS0 stays live** (no UART switch).
+3. On the **console**, exercise the driver so the breakpoint hits — in the demo, something like:
+
+```text
+cat /dev/my_device
+```
+
+4. GDB stops on PS1; debug in gdbforge (`n`, `s`, `bt`, …).
+5. `(gdb) continue` — execution returns to the shell prompt on the console UART.
+
+Because console and gdb use **different wires**, step 3 works reliably: the kgdb stop reply always reaches GDB even though you triggered the stop from minicom.
+
+### Typical session (quick reference)
+
+```text
+# Host terminal A — console (always)
+minicom -D /dev/ttyUSB0
+
+# Host terminal B — gdbforge
+./gdbforge -g gdb
+(gdb) file vmlinux
+(gdb) source …/vmlinux-gdb.py
+(gdb) target remote /dev/ttyUSB1
+(gdb) lx-symbols /path/to/kernel-source
+(gdb) break my_driver_fn
+(gdb) continue
+
+# In minicom (console):
+cat /dev/my_device          # → hits BP; debug in :b gdb
+# … n / s / bt …
+(gdb) continue              # → back to shell on PS0
+```
+
+### Compared to one UART / mux
+
+| | Two UARTs (this path) | One UART (`kgdb_serial` / kdmx) |
+|--|----------------------|----------------------------------|
+| Host setup | minicom + `target remote` on second device | mux + PTYs + owner switch |
+| Console while kernel runs | Always on PS0 | Only when mux owner = console |
+| `cat` / driver → breakpoint | **Works** | Fails unless gdb leg owns UART before trigger |
+| Lua scripts required | **No** | `kgdb_serial` / `kgdb_trigger` or kdmx |
+| Demo screencast | **Yes** | No (different workflow) |
+
+When you only have **one** cable, use [Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic) or [Path 1 — UART + kdmx](#path-1--uart--kdmx) instead.
 
 ---
 
@@ -144,6 +282,217 @@ kdmx 141210a               # upstream: exits on EAGAIN
 
 `kgdb_uart` prefers `bin/kdmx`, prints which binary it chose, and warns when it is
 not the patched build. Override with `GDBFORGE_KGDB_KDMX=/path/to/kdmx`.
+
+---
+
+## Path 1b — One UART, in-process mux (semi-automatic)
+
+**Status:** experimental. gdbforge holds the physical UART and publishes **two PTYs**
+(console + gdb). This replaces external `kdmx` for the same cable, but **one shared
+UART cannot be fully automated** the way two independent links can.
+
+| Setup | Console while kernel runs | GDB while stopped | Automation |
+|-------|---------------------------|-------------------|------------|
+| **One UART** (`kgdb_serial`) | minicom on console PTY | `target remote` on gdb PTY | Semi-auto — you switch owner or use `:lua kgdb_trigger` |
+| **Two UARTs** (console + debug) | Real second port or SSH | Dedicated kgdb line | Much easier — no mux race |
+| **Ethernet** (`kgdb_net`) | SSH | TCP `target remote` | Easiest — no serial mux |
+
+### Architecture
+
+```mermaid
+flowchart TB
+  USB["/dev/ttyUSB0\n(only gdbforge opens this)"]
+  MUX[SerialMux in gdbforge]
+  CON["console PTY\n→ minicom"]
+  GDB["gdb PTY\n→ target remote"]
+  USB --> MUX
+  MUX --> CON
+  MUX --> GDB
+```
+
+At any moment **one leg owns USB RX/TX**. gdbforge switches owner; it does **not**
+parse kgdb RSP packets to guess state.
+
+### Scripts
+
+| Command | When | What it does |
+|---------|------|--------------|
+| `:lua kgdb_serial` | Once per session | Open USB, create mux + 2 PTYs, spawn minicom, print PTY paths |
+| `:lua kgdb_trigger` | Each break-in | `echo g > /proc/sysrq-trigger` then `:serial-switch gdb` |
+| `:lua kgdb_trigger console` | Manual | `:serial-switch console` |
+| `:serial-switch gdb` | Manual | GDB leg owns USB |
+| `:serial-switch console` | Manual | minicom leg owns USB |
+| `:serial-switch status` | Anytime | Show current owner |
+
+Install (project overrides embedded catalog):
+
+```bash
+mkdir -p .gdbforge/lua
+cp -r lua/kgdb_serial lua/kgdb_trigger .gdbforge/lua/
+go build -o gdbforge ./cmd/gdbforge
+```
+
+### Env
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GDBFORGE_KGDB_UART` | `/dev/ttyUSB0` | Physical serial device |
+| `GDBFORGE_KGDB_BAUD` | `115200` | Baud |
+| `GDBFORGE_KGDB_TAKEOVER` | `auto` | Claim UART from other holders (`fuser`) |
+
+Board-side kgdboc (once per boot, in minicom or via `serial_send`):
+
+```text
+echo ttyPS1,115200 > /sys/module/kgdboc/parameters/kgdboc
+```
+
+(Adjust `ttyPS1` for your board.)
+
+### Happy path — semi-automatic loop
+
+After **`target remote` works once**, the usual repetitive cycle is:
+
+```text
+# ── once ──
+:lua kgdb_serial
+:serial-switch gdb
+(gdb) file /path/to/vmlinux
+(gdb) source /path/to/kernel-source/vmlinux-gdb.py
+(gdb) target remote /dev/pts/N          ← gdb PTY printed by kgdb_serial (NOT console PTY)
+(gdb) lx-symbols
+
+# ── each break-in (kernel was running, minicom had console) ──
+:lua kgdb_trigger                       ← sysrq + switch to gdb
+# … debug in :b gdb: n / s / c / bt …
+
+# ── back to console ──
+(gdb) continue                          ← UART returns to minicom on ^running
+# minicom live again
+
+# ── repeat ──
+:lua kgdb_trigger
+…
+```
+
+**`continue` behaviour:** gdbforge **does not** switch UART immediately on
+`continue` (that would block GDB from finishing the continue packet). It **arms**
+a switch and moves USB back to minicom when MI reports **`^running`** (kernel
+actually running). You should see:
+
+```text
+serial-switch: console (kernel running)
+  minicom -D /dev/pts/M
+```
+
+Or switch manually after the kernel is running:
+
+```text
+:serial-switch console
+```
+
+### Validated manual break-in (when scripts misbehave)
+
+Same order every time — **switch gdb before sysrq**, or the kgdb stop reply
+(`$T…`) goes to minicom and GDB never sees it:
+
+```text
+:serial-switch gdb
+(gdb) target remote /dev/pts/N          ← once per mux session (gdb PTY only)
+gdbforge.serial_send("echo g > /proc/sysrq-trigger")
+# … debug …
+(gdb) continue                          ← or :serial-switch console after ^running
+```
+
+**Do not** type `echo g` in minicom **after** `:serial-switch gdb` — minicom TX
+is frozen while GDB owns the wire. Use `gdbforge.serial_send(...)` or switch
+console first.
+
+`:lua kgdb_trigger` intentionally does **sysrq then switch** (minimal script).
+For the safest manual order, use the sequence above instead.
+
+### Why one UART is only semi-automatic
+
+| Problem | Why |
+|---------|-----|
+| Stop packet race | Kernel enters kgdb and sends `$T…` on serial **before** MI says stopped. Owner must already be gdb (or entering-debugger). |
+| SysRq on serial | `echo g` must reach the board on the active TX path — owner matters. |
+| `continue` vs console | Switching UART too early on `continue` corrupts the gdb stub session. |
+| Re-trigger | After first attach, kernel running + stale GDB state may need `^C` / `interrupt` before another sysrq. |
+
+Two UARTs (or Ethernet + SSH) avoid all of this: console and gdb never share a wire.
+
+### Known limitation: breakpoint from console
+
+If the kernel is **running** with the mux on the **console** leg (normal after
+`(gdb) continue`), triggering a **kernel breakpoint from minicom** — e.g.
+`cat /dev/…` on a driver you are debugging — fails the same way as a mistimed
+sysrq: kgdb sends `$T05…` on serial **immediately**, the packet lands in
+minicom, and GDB never sees it. Manual `:serial-switch gdb` afterward is too
+late; `:lua kgdb_trigger` does not help (it only sysrq-s, not BP-from-console).
+
+Owner-based switching cannot fix this without **RSP packet parsing** on the
+wire (kdmx-class demux). For console-driven breakpoints, use **two UARTs**,
+**`:lua kgdb_kdmx`**, or **`:lua kgdb_net`**, or stay on the gdb leg and do not
+return to minicom before the trigger.
+
+### When things go wrong — recovery
+
+Typical failure modes and what operators do in practice:
+
+| Symptom | Likely cause | Recovery |
+|---------|--------------|----------|
+| GDB hangs / no stop after sysrq | Stop packet went to minicom | `:serial-switch gdb`, re-send sysrq, or full re-attach |
+| `Remote connection closed` | mux/GDB wedged, wrong PTY, or continue switched too early | Start clean session (below) |
+| minicom dead after `continue` | Switch before `^running`, or kernel panic | `:serial-switch console` after kernel runs; else reset board |
+| GDB stuck, UI frozen | kgdb on slow serial + heavy MI | Use kgdb mode (`n`/`s`/`c` CLI); avoid piling MI queries |
+| Second break-in fails | GDB still thinks it's running | In `:b gdb`: **Ctrl-C** (`^C`), then `interrupt`, then trigger again |
+| Nothing helps | Session corrupted | **Kill and restart** (below) |
+
+**Clean restart (usual fix):**
+
+```text
+1. (gdb) kill                    # or detach if kill unsupported
+2. :serial-switch console        # optional — see minicom
+3. Reset board / fix kernel if needed
+4. :lua kgdb_serial              # or :terminal close then kgdb_serial again
+5. :serial-switch gdb
+6. (gdb) target remote /dev/pts/N   ← from scratch, new gdb PTY if mux reopened
+7. lx-symbols if needed
+8. break-in again (manual or :lua kgdb_trigger)
+```
+
+If gdbforge itself hangs on `:q!` with serial mux open, Ctrl-C may still be needed
+once; `:terminal close` releases the USB port before quit when possible.
+
+### kgdb mode in gdbforge
+
+After `target remote` or `:serial-switch gdb`, gdbforge enables **kgdb mode**:
+
+- CLI `next` / `step` / `continue` (not slow MI `-exec-*` on serial)
+- `n` / `s` / `c` keys in the gdb buffer
+- Lighter post-stop work (Call Stack may show frame 0 until `(gdb)` prompt; full
+  backtrace depends on `-stack-list-frames` after stop)
+
+### Quick reference
+
+```text
+:lua kgdb_serial              setup mux + minicom
+:lua kgdb_trigger               sysrq + switch gdb (semi-auto break-in)
+:serial-switch gdb|console      manual UART owner
+:terminal status                mux + PTY paths
+:terminal close                 release USB
+(gdb) target remote <gdb PTY>   attach once per mux session
+(gdb) continue                  running → minicom on ^running
+```
+
+### Relation to `kgdb_uart` (kdmx)
+
+| | `kgdb_uart` (kdmx) | `kgdb_serial` (in-process) |
+|--|-------------------|---------------------------|
+| Who opens USB | kdmx subprocess | gdbforge |
+| PTYs | kdmx creates | gdbforge `internal/serialmux` |
+| Maturity | Production-ish + patched kdmx | Experimental semi-auto |
+| When to prefer | Stable daily driver | Single binary, no kdmx, accept manual steps |
 
 ---
 

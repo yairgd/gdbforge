@@ -94,6 +94,20 @@ func IsBreakInsertCmd(cmd string) bool {
 	}
 }
 
+// IsContinueCmd reports GDB continue commands (c / continue only).
+func IsContinueCmd(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	switch strings.Fields(cmd)[0] {
+	case "c", "continue":
+		return true
+	default:
+		return false
+	}
+}
+
 // IsTargetRemoteCmd reports GDB attach commands (target remote / tar rem / …).
 func IsTargetRemoteCmd(cmd string) bool {
 	fields := strings.Fields(strings.TrimSpace(cmd))

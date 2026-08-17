@@ -61,6 +61,9 @@ type consoleHost interface {
 	SuppressStopUICount() int
 	ClearSuppressStopUI()
 	MaybeEnableRemoteMode(cmd string)
+	MaybeSwitchSerialConsoleOnContinue(cmd string)
+	serialActive() bool
+	serialOnState(stopped, promptReady, running bool)
 }
 
 // consoleCtl owns the debugger console domain: the PTY bridge, submit /
@@ -191,7 +194,10 @@ func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
 	}
 	h.MaybeEnableRemoteMode(cmd)
 	sendCmd, _ := h.Backend().MapExec(cmd)
-	send := func() { _ = cli.Send(sendCmd) }
+	send := func() {
+		_ = cli.Send(sendCmd)
+		h.MaybeSwitchSerialConsoleOnContinue(cmd)
+	}
 	if cmd != "" {
 		w.PushHistory(cmd)
 		w.EchoSubmit(cmd)
@@ -499,6 +505,11 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	}
 	if breakpointsChanged {
 		h.BreakpointsChanged()
+	}
+	if h.serialActive() {
+		running := state == gdb.Running
+		stoppedNow := stopped != nil
+		h.serialOnState(stoppedNow, promptReady, running)
 	}
 }
 

@@ -643,6 +643,18 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 		}
 	})
 	rt.SetOpenBuffer(func(name string) {
+		if c.onWorker.Load() {
+			scr := a.Screen()
+			if scr == nil {
+				c.openBuffer(name, rt)
+				return
+			}
+			n := name
+			_ = scr.PostEvent(tcell.NewEventInterrupt(luaUIMsg{
+				fn: func() { c.openBuffer(n, rt) },
+			}))
+			return
+		}
 		c.callOnUI(func() { c.openBuffer(name, rt) })
 	})
 	rt.SetRun(func(argv []string) {
@@ -755,6 +767,8 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 			})
 		},
 	})
+	c.installSerialAPI(rt)
+	c.installGdbAPI(rt)
 }
 
 // openBuffer focuses named panes without stealing the Code leaf via swap.

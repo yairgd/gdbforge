@@ -206,9 +206,8 @@ func (app *DebuggerApp) OnHelp(args ...any) {
 
 func (app *DebuggerApp) Quit(args ...any) {
 	// :q / :quit — confirm when inferior alive (same as Ctrl-D).
-	// :q! / :quit! — force exit, no Quit-anyway question.
+	// :q! / :quit! — force exit; teardown runs via defer app.Close() after Run().
 	if cmdArgsHasBang(args) {
-		app.Close()
 		app.Exit()
 		return
 	}
