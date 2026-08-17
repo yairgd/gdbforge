@@ -56,9 +56,11 @@ type consoleHost interface {
 	DeferDLVBPRefresh()
 	TakeDeferredBP() bool
 	TriggerPendingDebugInfoIfReady(promptReady bool)
+	TriggerPendingStackRefreshIfReady(promptReady bool)
 	ApplyPendingFrameSync(promptReady, isError bool) bool
 	SuppressStopUICount() int
 	ClearSuppressStopUI()
+	MaybeEnableRemoteMode(cmd string)
 }
 
 // consoleCtl owns the debugger console domain: the PTY bridge, submit /
@@ -187,9 +189,8 @@ func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
 	if gdb.IsStackNavCmd(cmd) {
 		h.NoteStackNavGDB()
 	}
-	// Run-control via MI so the GDB pane does not dump CLI source/line listings
-	// (Code widget already follows *stopped).
-	sendCmd := gdb.CLIExecToMI(cmd)
+	h.MaybeEnableRemoteMode(cmd)
+	sendCmd, _ := h.Backend().MapExec(cmd)
 	send := func() { _ = cli.Send(sendCmd) }
 	if cmd != "" {
 		w.PushHistory(cmd)
@@ -468,15 +469,16 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 		h.clearDebugInfoPanes()
 	}
 	h.TriggerPendingDebugInfoIfReady(promptReady)
-	if h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
-		// CLI frame/f/up/down include =thread-selected with the new frame in
-		// the same batch as (gdb). Present that immediately — a follow-up
-		// -stack-info-frame Query often left Code/Asm stale.
+	h.TriggerPendingStackRefreshIfReady(promptReady)
+	kgdb := h.Debug() != nil && h.Debug().KgdbMode()
+	if !kgdb && h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
 		if frameSelected != nil {
 			h.onGdbFrameSelected(*frameSelected)
 		} else {
 			h.onGdbFrameSync()
 		}
+	} else if kgdb && frameSelected != nil {
+		h.onGdbFrameSelected(*frameSelected)
 	}
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
 	if promptReady && h.isDLV() && h.SuppressStopUICount() > 0 && stopped == nil {

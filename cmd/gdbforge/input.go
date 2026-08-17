@@ -614,10 +614,14 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		}
 		a.RequestFrame()
 	case debugInfoUIMsg:
-		// Models were updated off-thread; push to views on the UI thread.
-		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
 		a.debugInfo.syncThreadViews()
 		a.debugInfo.syncCallStackViews()
+		if data.stackOnly {
+			a.debugInfo.selectLevel(0)
+			a.RequestFrame()
+			break
+		}
+		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
 		a.syncCodeFromCallstack()
 		// Asm stack preamble / dump can stay on the pre-Ctrl-C frame until the
 		// stack model lands — refresh against the highlighted (post-stop) level.

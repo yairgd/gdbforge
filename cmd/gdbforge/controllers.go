@@ -198,6 +198,10 @@ func (a *DebuggerApp) ApplyPendingFrameSync(promptReady, isError bool) bool {
 	return a.dlv.applyPendingFrameSync(promptReady, isError)
 }
 
+func (a *DebuggerApp) MaybeEnableRemoteMode(cmd string) {
+	a.maybeEnableRemoteMode(cmd)
+}
+
 // TriggerPendingDebugInfoIfReady runs a post-stop threads/stack refresh once the
 // debugger prompt is back (dlvCtl drops the request when nothing is armed).
 func (a *DebuggerApp) TriggerPendingDebugInfoIfReady(promptReady bool) {
@@ -205,6 +209,13 @@ func (a *DebuggerApp) TriggerPendingDebugInfoIfReady(promptReady bool) {
 		return
 	}
 	a.dlv.triggerPendingDebugInfo()
+}
+
+func (a *DebuggerApp) TriggerPendingStackRefreshIfReady(promptReady bool) {
+	if !promptReady {
+		return
+	}
+	a.dlv.triggerPendingStackRefresh()
 }
 
 // --- consoleCtl / inferiorIOCtl / luaCtl peers ---

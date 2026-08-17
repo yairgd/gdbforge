@@ -33,7 +33,9 @@ type codeRefreshMsg struct {
 
 type breakpointsUIMsg struct{}
 
-type debugInfoUIMsg struct{}
+type debugInfoUIMsg struct {
+	stackOnly bool // kgdb: Call Stack only — skip asm/code side effects
+}
 
 func (a *DebuggerApp) maybeClearOutput() {
 	if a.outputWidget == nil || !a.Debug().ClearOutput() {
@@ -85,18 +87,38 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		a.Debug().SetCurrentLocation(file, line)
 	}
 
-	// Defer -thread-info / -stack-list-frames until (gdb), with a short
-	// fallback timer if PromptReady is missed (Threads then only updated on click).
-	a.dlv.armDebugInfoRefresh()
+	if a.Debug().KgdbMode() {
+		if stop.Func != "" || stop.File != "" {
+			a.debugInfo.setStackFrames([]models.StackFrame{{
+				Level: 0,
+				Func:  stop.Func,
+				File:  stop.File,
+				Line:  stop.Line,
+			}})
+		} else {
+			a.debugInfo.setStackFrames(nil)
+		}
+		a.debugInfo.syncCallStackViews()
+	}
+
+	// Defer stack refresh until (gdb). kgdb: one -stack-list-frames only.
+	if a.Debug().KgdbMode() {
+		a.dlv.armStackRefresh()
+	} else {
+		a.dlv.armDebugInfoRefresh()
+	}
 
 	stopGen := a.dlv.codeNavGen
 	stopCopy := *stop
+	kgdb := a.Debug().KgdbMode()
 	go func() {
-		a.ensureSourceFiles()
-		// Re-query GDB/Delve breakpoints before painting Code. After file /
-		// target remote (e.g. :lua remotegdb) the shared model can be stale or
-		// path-mismatched; gutters must follow live -break-list / breakpoints.
-		a.breaks.refreshAfterStop()
+		if !kgdb {
+			a.ensureSourceFiles()
+			// Re-query GDB/Delve breakpoints before painting Code. After file /
+			// target remote (e.g. :lua remotegdb) the shared model can be stale or
+			// path-mismatched; gutters must follow live -break-list / breakpoints.
+			a.breaks.refreshAfterStop()
+		}
 		if scr := a.Screen(); scr != nil {
 			// Apply Code on the UI thread after gen check (see codeRefreshMsg).
 			_ = scr.PostEvent(tcell.NewEventInterrupt(codeRefreshMsg{
@@ -112,6 +134,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 // if that has no source file (common for SIGINT in libc), uses the first
 // call-stack frame that has a file after a stack query.
 func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
+	kgdb := a.Debug() != nil && a.Debug().KgdbMode()
 	var w *widgets.CodeWidget
 	if stop != nil && stop.File != "" {
 		w = a.bufs.showCodeAt(stop.File, stop.Line)
@@ -122,6 +145,12 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 		// stale FuncName from the previous browse, e.g. write → main).
 		fr := models.StackFrame{Level: 0, Func: stop.Func, File: stop.File, Line: stop.Line}
 		a.presentLocation(w, &fr)
+	} else if kgdb {
+		if stop != nil && stop.Func != "" {
+			w = a.bufs.showCodeUnavailable(stop.Func, formatUnavailableExtra("", stop.Line))
+			fr := models.StackFrame{Level: 0, Func: stop.Func, Line: stop.Line}
+			a.presentLocation(w, &fr)
+		}
 	} else {
 		// No fullname on *stopped — query stack (same path as frame sync).
 		a.syncCurrentFrameFromGDB()
@@ -148,6 +177,9 @@ func (a *DebuggerApp) onGdbFrameSelected(fr gdb.MiFrameMsg) {
 		Addr:  fr.Addr,
 	})
 	a.RequestFrame()
+	if a.Debug() != nil && a.Debug().KgdbMode() {
+		return
+	}
 	// Refresh call-stack list off-thread; re-present with the queried frame so
 	// Asm browse address stays aligned if the async record omitted addr.
 	go func() {
@@ -311,8 +343,12 @@ func (a *DebuggerApp) presentLocation(codeW *widgets.CodeWidget, fr *models.Stac
 		return
 	}
 	unavailable := sourceUnavailable(codeW)
+	kgdb := a.Debug() != nil && a.Debug().KgdbMode()
 
 	refreshAsm := func() {
+		if kgdb {
+			return
+		}
 		if fr != nil {
 			a.asm.syncToFrame(*fr)
 			return
