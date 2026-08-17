@@ -49,7 +49,10 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
-| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| ↳ [Delve backend (peer of GDB)](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb) | Backend contributors | `-g dlv`, same MVC as GDB; inferior I/O via `--tty` (spawn-only) — [dual PTY details](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) |
+| ↳ [Delve inferior I/O (dual PTY)](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) | Backend contributors | `dlv exec --tty` → `:b io` or external terminal; `:set inferior-tty` restarts Delve; Go TUIs → `:lua dlv_port` |
+| ↳ [Future OpenOCD integration](DEBUGGER_INTEGRATION.md#future-openocd-integration) | Backend contributors | Planned telnet/TCL adapter (`internal/openocd`); separate backend, not a GDB wrapper |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua architecture; API details in [LUA_API.md](LUA_API.md) |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |
