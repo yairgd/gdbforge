@@ -239,6 +239,14 @@ func (c *Client) SetSize(rows, cols uint16) error {
 	return pty.Setsize(c.ptmx, &pty.Winsize{Rows: rows, Cols: cols})
 }
 
+// Pid returns the child process ID, or 0 if not started.
+func (c *Client) Pid() int {
+	if c == nil || c.cmd == nil || c.cmd.Process == nil {
+		return 0
+	}
+	return c.cmd.Process.Pid
+}
+
 func (c *Client) Close() {
 	c.closeOnce.Do(func() {
 		c.writeMu.Lock()

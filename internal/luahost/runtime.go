@@ -45,6 +45,7 @@ type Runtime struct {
 	foreground      ForegroundFunc
 	openExternalTTY OpenExternalTTYFunc
 	spawnTerminal   SpawnTerminalFunc
+	trackChild      TrackChildFunc // host-only; not exposed to Lua scripts
 	scriptDir       string // directory of the loaded user script (lua_dir())
 	scriptPath      string // full path of the loaded user script (empty for embedded)
 	lastErr         string

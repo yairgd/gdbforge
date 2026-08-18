@@ -57,6 +57,7 @@ type DebuggerApp struct {
 	lua        luaCtl
 	dlv        dlvCtl
 	serial     serialCtl
+	children   childProcCtl
 
 	gdbWidget *widgets.GDBWidget
 	gdbMcp    *mcp.GdbMcpService
@@ -160,6 +161,7 @@ func (a *DebuggerApp) Close() {
 	a.inferiorIO.stop()
 	a.console.stopBridge()
 	a.serial.Close()
+	a.children.KillAll()
 	if a.backend != nil {
 		a.backend.Close()
 		a.backend = nil

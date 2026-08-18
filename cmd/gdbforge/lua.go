@@ -682,6 +682,7 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 	})
 	rt.SetOpenExternalTTY(a.OpenExternalTTY)
 	rt.SetSpawnTerminal(a.SpawnTerminal)
+	rt.SetTrackChild(func(pid int) { a.children.Track(pid, false) })
 	luadebug.Install(rt, luadebug.Hooks{
 		SetInferiorTTY: func(path string) error {
 			var err error

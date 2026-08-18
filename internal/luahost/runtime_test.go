@@ -483,6 +483,55 @@ end
 	}
 }
 
+func TestSystemTracksBackgroundWithoutDeadlock(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	var tracked int
+	rt.SetTrackChild(func(pid int) { tracked = pid })
+
+	src := `
+function main()
+  local code, out = gdbforge.system("nohup sleep 60 >/dev/null 2>&1 </dev/null & echo $!")
+  if code ~= 0 then
+    gdbforge.print("fail:" .. tostring(out))
+  end
+  gdbforge.print("done")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("bg"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("bg") }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("CallNamed: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("deadlock: system with background PID track did not return")
+	}
+	if tracked <= 0 {
+		t.Fatalf("expected tracked background pid, got %d", tracked)
+	}
+	foundDone := false
+	for _, line := range p.lines {
+		if line == "done" {
+			foundDone = true
+		}
+	}
+	if !foundDone {
+		t.Fatalf("script did not finish: %v", p.lines)
+	}
+}
+
 func TestCallNamedStopsAfterCancelEvenWithoutHostAPI(t *testing.T) {
 	p := &memPane{w: 40, h: 10}
 	rt := New(p, nil)

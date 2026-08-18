@@ -523,6 +523,7 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 		return nil
 	}
 	app.execClient = client
+	app.children.Track(client.Pid(), true)
 
 	w := widgets.NewExecWidget()
 	w.SetClipboard(app.ClipboardIO())
