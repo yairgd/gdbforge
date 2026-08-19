@@ -769,6 +769,7 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 		},
 	})
 	c.installSerialAPI(rt)
+	c.installUartAPI(rt)
 	c.installGdbAPI(rt)
 }
 
