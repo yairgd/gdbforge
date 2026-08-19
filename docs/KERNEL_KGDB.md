@@ -23,19 +23,23 @@ Scripts (catalog under [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua
 | `kgdb_net` | Ethernet kgdb (e.g. kgdboe) | No |
 | `kgdb_common` | Shared helpers only | — |
 
-See **[Path 0 — Two UARTs (manual)](#path-0--two-uarts-manual-recommended)** for the workflow in the [kernel demo screencast](README.md#demos) — console on one cable, GDB on another, **no mux and no Lua bring-up script required**.
+See **[Path 0 — Two UARTs (manual)](#path-0--two-uarts-manual-recommended)** when the board has separate console and kgdb cables (**no mux, no Lua script**) — includes a [two-UART screencast](#path-0--two-uarts-manual-recommended).
 
-See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic)** when only one USB serial cable is available (`:lua kgdb_serial` / `:lua kgdb_trigger`).
+See **[Path 1 — UART + kdmx (`kgdb_uart`)](#path-1--uart--kdmx)** for the [main kernel demo screencast](../README.md#demo) — one UART, kdmx split, **~2 s break-in**, `lx-symbols`, driver read breakpoint.
+
+See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic)** for the in-process alternative (`:lua kgdb_serial` / `:lua kgdb_trigger`).
 
 ---
 
 ## Path 0 — Two UARTs (manual, recommended)
 
-**When to use this:** the board exposes **two independent serial links** — one for the Linux console and one wired to a second UART that kgdb can use. This is the **simplest and most reliable** kgdb setup: console and gdb never share a wire, so there is **no owner switch**, **no kdmx**, and **breakpoints triggered from the shell work** (the demo screencast uses exactly this flow).
+**When to use this:** the board exposes **two independent serial links** — one for the Linux console and one wired to a second UART that kgdb can use. This is the **simplest and most reliable** kgdb setup: console and gdb never share a wire, so there is **no owner switch**, **no kdmx**, and **breakpoints triggered from the shell work**.
 
-![Linux kernel kgdb demo — two UARTs](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
+![Linux kernel kgdb demo — two UARTs](media/gdbforge-demo-kernel-kgdb-two-uart.gif){ loading=lazy }
 
-[Full video](https://github.com/user-attachments/assets/57566005-8376-43ce-bffa-3f0ea160c00e)
+[Full video — two UARTs](https://github.com/user-attachments/assets/57566005-8376-43ce-bffa-3f0ea160c00e)
+
+The screencast shows gdbforge + GDB on a **dedicated kgdb UART** (`/dev/ttyUSB1`) while a **separate console UART** stays in minicom (`/dev/ttyUSB0`): `lx-symbols`, a breakpoint in a loadable module, trigger from the console (`cat /dev/…`), stop in `:b gdb`, step, `continue` back to the shell — no serial mux and no Lua bring-up script.
 
 ### Wiring (example — adjust names for your board)
 
@@ -104,7 +108,7 @@ echo g > /proc/sysrq-trigger
 
 GDB on PS1 receives the kgdb stop packet (`$T05…`). gdbforge shows the stop in `:b gdb` (Call Stack, source when symbols match). Step with `n` / `s`, then `(gdb) continue` to return the kernel to the shell on PS0.
 
-### Stage 4 — Module / driver breakpoint (what the screencast shows)
+### Stage 4 — Module / driver breakpoint
 
 This is the usual loop after the first attach:
 
@@ -115,7 +119,7 @@ This is the usual loop after the first attach:
 ```
 
 2. `(gdb) continue` — the kernel runs; **minicom on PS0 stays live** (no UART switch).
-3. On the **console**, exercise the driver so the breakpoint hits — in the demo, something like:
+3. On the **console**, exercise the driver so the breakpoint hits — in the two-UART screencast, something like:
 
 ```text
 cat /dev/my_device
@@ -155,13 +159,21 @@ cat /dev/my_device          # → hits BP; debug in :b gdb
 | Console while kernel runs | Always on PS0 | Only when mux owner = console |
 | `cat` / driver → breakpoint | **Works** | Fails unless gdb leg owns UART before trigger |
 | Lua scripts required | **No** | `kgdb_serial` / `kgdb_trigger` or kdmx |
-| Demo screencast | **Yes** | No (different workflow) |
+| Demo screencast | **Yes** (above) | **Yes** ([Path 1](#path-1--uart--kdmx)) |
 
 When you only have **one** cable, use [Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic) or [Path 1 — UART + kdmx](#path-1--uart--kdmx) instead.
 
 ---
 
 ## Path 1 — UART + kdmx
+
+**When to use this:** one USB serial cable to the board; **kdmx** splits it into a console PTY (minicom) and a gdb PTY. The **`:lua kgdb_uart`** script automates kgdboc setup, kdmx, sysrq break-in, and `target remote` — stopped in debug mode in about **two seconds**.
+
+![Linux kernel kgdb demo — `:lua kgdb_uart`](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
+
+[Full video — `:lua kgdb_uart`](https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b)
+
+The screencast shows the full loop: `:lua kgdb_uart` → `lx-symbols` → breakpoint on a driver's **read** handler → `(gdb) continue` → `cat /dev/…` in minicom → stop in `:b gdb` → step → `continue` back to the shell.
 
 ```mermaid
 flowchart LR

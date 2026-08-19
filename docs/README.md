@@ -26,9 +26,9 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 
 ![gdbforge debugging its own running session](media/gdbforge-debug-itself.gif){ loading=lazy }
 
-**Linux kernel module (two UARTs)** — gdbforge + GDB on a **dedicated kgdb UART** while a **separate console UART** stays in minicom: module breakpoint from the console, step in `:b gdb`, `continue` back. See [KERNEL_KGDB.md](KERNEL_KGDB.md). [Full video](https://github.com/user-attachments/assets/57566005-8376-43ce-bffa-3f0ea160c00e).
+**Linux kernel (`:lua kgdb_uart`)** — one UART + kdmx: `:lua kgdb_uart` breaks into kgdb in ~2 s, `lx-symbols`, breakpoint on a driver's read path, trigger with `cat /dev/…` from minicom. See [KERNEL_KGDB.md](KERNEL_KGDB.md). [Full video](https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b).
 
-![Linux kernel kgdb demo (two UARTs)](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
+![Linux kernel kgdb demo (`kgdb_uart`)](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
 
 ---
 
@@ -38,7 +38,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
-| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **two UARTs (manual)**, one-UART mux, kdmx, Ethernet |
+| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_uart` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |
