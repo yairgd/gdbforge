@@ -1,0 +1,103 @@
+--- a/kdmx/kdmx.c
++++ b/kdmx/kdmx.c
+@@ -46,7 +46,11 @@
+  *   DD is day
+  *   X  is an incrementing value a..z, restarting at 'a' for each new YYMMDD
+  */
+-#define VUFX "141210a"
++#define VUFX "141210a-gdbforge1"
++
++/* Bound the wait for a spurious-readable fd (see do_read). */
++#define EAGAIN_RETRIES    20
++#define EAGAIN_RETRY_USEC 5000
+ 
+ #define pr_debug(fmt, ...) \
+ ({ \
+@@ -144,13 +148,43 @@ char do_read(int fd, int *ret_errno)
+ {
+ 	unsigned char buf;
+ 	int ret;
++	int retry;
++	fd_set readfds;
++	struct timeval tv;
+ 
+ 	*ret_errno = 0;
+ 
+-	/* Perform the read */
+-	ret = read(fd, &buf, sizeof(buf));
++	/*
++	 * The fds are non-blocking, and select() can report a fd readable
++	 * while read() still returns EAGAIN (seen with USB serial adapters).
++	 * That is not an error: wait briefly for the data instead of letting
++	 * the caller treat it as fatal.
++	 */
++	for (retry = 0; retry < EAGAIN_RETRIES; retry++) {
++
++		ret = read(fd, &buf, sizeof(buf));
++		if (ret != -1)
++			break;
++
++		if (errno != EAGAIN && errno != EINTR) {
++			*ret_errno = errno;
++			return -1;
++		}
++
++		FD_ZERO(&readfds);
++		FD_SET(fd, &readfds);
++		tv.tv_sec = 0;
++		tv.tv_usec = EAGAIN_RETRY_USEC;
++		if (select(fd + 1, &readfds, NULL, NULL, &tv) == -1 &&
++		    errno != EINTR) {
++			*ret_errno = errno;
++			return -1;
++		}
++	}
++
+ 	if (ret == -1) {
+-		*ret_errno = errno;
++		/* Still no data; callers recover from EAGAIN. */
++		*ret_errno = EAGAIN;
+ 		return -1;
+ 	}
+ 
+@@ -532,6 +566,9 @@ handle_gdb(void)
+ 		 *
+ 		 */
+ 
++		if (ret_errno == EAGAIN)
++			return;
++
+ 		if (ret_errno != EIO) {
+ 			pr_err("gdb pty read() unexpected errno %d\n",
+ 			       ret_errno);
+@@ -598,6 +635,9 @@ reset_term(int ret_errno)
+ 	 * the terminal emulator pty returning errno == EIO.
+ 	 */
+ 
++	if (ret_errno == EAGAIN)
++		return;
++
+ 	if (ret_errno != EIO) {
+ 		pr_err("terminal emulator pty read(), unexpected errno %d\n",
+ 		       ret_errno);
+@@ -658,6 +698,8 @@ handle_serial(void)
+ 
+ 	rcv = do_read(serial_fd, &ret_errno);
+ 	if (ret_errno) {
++		if (ret_errno == EAGAIN)
++			return;
+ 		pr_err("serial port read() [1] unexpected errno %d\n",
+ 		       ret_errno);
+ 		exit(EXIT_FAILURE);
+@@ -719,6 +761,11 @@ handle_serial(void)
+ 			/* read one char */
+ 			rcv = do_read(serial_fd, &ret_errno);
+ 			if (ret_errno) {
++				if (ret_errno == EAGAIN) {
++					/* Same recovery as the packet timeout. */
++					do_write(term_fd, buf, buf_pos, 0);
++					break;
++				}
+ 				pr_err("serial port read() [2] unexpected errno %d\n",
+ 				       ret_errno);
+ 				exit(EXIT_FAILURE);

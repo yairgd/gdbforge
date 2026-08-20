@@ -140,7 +140,9 @@ export GDBFORGE_KGDB_UART=/dev/ttyUSB0
 export GDBFORGE_KGDB_VMLINUX=/path/to/vmlinux
 export GDBFORGE_KGDB_MODULES=/path/to/kernel/build   # optional
 export GDBFORGE_TERMINAL=mate-terminal
-# board waiting: kgdboc=…,kgdbwait ; host: kdmx on PATH
+# board waiting: kgdboc=…,kgdbwait
+# host: patched kdmx — agent-proxy @ 468fe4c (not master) + tools/kdmx-gdbforge.patch — see KERNEL_KGDB.md
+# export GDBFORGE_KGDB_KDMX=$HOME/agent-proxy/kdmx/kdmx
 :lua kgdb_uart 8250
 
 # Path 2 — Ethernet kgdb (no mux)
@@ -161,6 +163,7 @@ Both leave GDB **stopped** in debug mode (`target remote` + `lx-symbols`). Then 
 | `GDBFORGE_KGDB_TAKEOVER` | uart | Claim the UART for kdmx: `auto` (default), `force`, `never` |
 | `GDBFORGE_KGDB_FORCE` | uart | Deprecated alias for `GDBFORGE_KGDB_TAKEOVER=force` |
 | `GDBFORGE_KGDB_RETRIES` | uart | kdmx start attempts (default `3`) |
+| `GDBFORGE_KGDB_KDMX` | uart | Patched `kdmx` binary (default: search `bin/kdmx`, then `PATH`) |
 | `GDBFORGE_KGDB_PORT` | net | TCP port (default `6443`) |
 | `GDBFORGE_REMOTE_HOST` | net | Board IP |
 | `GDBFORGE_KGDB_SSH_CONSOLE` | net | `1` → open `ssh -t` window |

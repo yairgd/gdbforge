@@ -235,7 +235,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- Host: `kdmx` from [agent-proxy](https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git) (`kdmx/` + `make`), nothing else holding the serial device.
+- Host: **kdmx** from [agent-proxy](https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git) — see [Building kdmx (tested setup)](#building-kdmx-tested-setup) below. Nothing else may hold the serial device.
 - Board: kgdb + kgdboc; typically boot with `kgdboc=<uart>,kgdbwait` (or break in before attach).
 - Matching `vmlinux` / module debug info; kernel GDB helpers available so `lx-symbols` works (kernel `scripts/gdb`, auto-load safe path — **not** shipped in gdbforge).
 
@@ -276,24 +276,124 @@ If two programs read the same UART, kdmx dies with
 
 ### kdmx and `errno 11` (EAGAIN)
 
-Upstream kdmx treats **any** unexpected `errno` from a read as fatal, including
-`EAGAIN` (errno 11), which is not an error: the fds are opened non-blocking, and
-`select()` can report a fd readable while `read()` still returns `EAGAIN`. When that
-happens kdmx exits, both PTYs disappear, and GDB reports `Remote connection closed`.
-Pressing a key in the console window reproduces it reliably.
+**Why patch? (simple)** One USB cable carries both the **Linux shell** (minicom) and **GDB** (kgdb). **kdmx** splits that single wire into two virtual ports. On USB serial, the host sometimes signals “maybe data” but `read()` still returns “not yet” — that is normal (`EAGAIN`, errno 11). **Original kdmx treats that as a crash and quits**, so GDB loses the connection (`Remote connection closed`). The **gdbforge patch** waits briefly and keeps running instead. You do **not** need this patch if you use **two UARTs**, **Ethernet** (`:lua kgdb_net`), or the **in-process mux** (`:lua kgdb_serial`) — only when you rely on **one UART + kdmx** (`:lua kgdb_uart`).
 
-gdbforge ships a patched build at `bin/kdmx` that retries the read and lets each
-caller recover, and identifies itself in `-v`:
+**Typical wiring (board UART + FTDI → host USB)** — this is the common case the patch targets:
 
-```bash
-$ ./bin/kdmx -v
-kdmx 141210a-gdbforge1     # patched
-$ kdmx -v
-kdmx 141210a               # upstream: exits on EAGAIN
+```text
+Board ttyPS0  ──wire──►  FTDI USB adapter  ──USB──►  Host /dev/ttyUSB0  ──►  kdmx
+   (console + kgdb)         (serial bridge)              (one open fd)
 ```
 
-`kgdb_uart` prefers `bin/kdmx`, prints which binary it chose, and warns when it is
-not the patched build. Override with `GDBFORGE_KGDB_KDMX=/path/to/kdmx`.
+The board UART is fine. The timing quirk happens on the **PC side**: kdmx reads **`/dev/ttyUSB0`** through the **USB serial driver** (FTDI, CP2102, …). That stack is asynchronous — `select()` can wake up before a byte is actually available to `read()`.
+
+```mermaid
+flowchart LR
+  subgraph board [Board]
+    PS0["ttyPS0\nconsole + kgdb"]
+  end
+  subgraph cable [Cable]
+    FTDI["FTDI / USB-UART"]
+  end
+  subgraph host [Host PC]
+    USB0["/dev/ttyUSB0"]
+    KDMX[kdmx]
+    CON["console PTY\nminicom"]
+    GDB["gdb PTY\nGDB target remote"]
+    USB0 --> KDMX
+    KDMX --> CON
+    KDMX --> GDB
+  end
+  PS0 --> FTDI --> USB0
+```
+
+```mermaid
+sequenceDiagram
+  participant Kdmx as kdmx on host
+  participant USB as USB serial driver
+  participant FTDI as FTDI ttyUSB0
+
+  Note over Kdmx,FTDI: Non-blocking read path — common with USB adapters
+
+  Kdmx->>USB: select — fd readable?
+  USB-->>Kdmx: yes maybe
+  Kdmx->>FTDI: read one byte
+  FTDI-->>Kdmx: EAGAIN errno 11 not yet
+
+  alt upstream kdmx unpatched
+    Kdmx->>Kdmx: treat as fatal — exit
+    Note over Kdmx: Remote connection closed
+  else gdbforge patched kdmx
+    Kdmx->>Kdmx: wait briefly retry
+    Kdmx->>FTDI: read again
+    FTDI-->>Kdmx: data byte
+    Note over Kdmx: session stays up
+  end
+```
+
+| Layer | Role in EAGAIN issue |
+|-------|----------------------|
+| Board `ttyPS0` | Normal UART; not the root cause |
+| FTDI / USB cable | Converts serial ↔ USB; buffering adds timing |
+| Host `/dev/ttyUSB0` | Where kdmx reads — **EAGAIN happens here** |
+| kdmx | Must tolerate “not yet”; upstream does not |
+
+**Technical detail:** upstream kdmx opens fds non-blocking; `select()` can report readable while `read()` still returns `EAGAIN`. Upstream exits on that; pressing a key in minicom often reproduces it on FTDI → `ttyUSB0` setups.
+
+gdbforge needs a **patched** kdmx that retries the read and lets each caller recover.
+The patch identifies itself in `-v`:
+
+```bash
+$ kdmx -v
+kdmx 141210a-gdbforge1     # patched — recommended for :lua kgdb_uart
+$ kdmx -v                  # upstream agent-proxy without patch
+kdmx 141210a               # exits on EAGAIN — avoid for one-UART + kdmx
+```
+
+`kgdb_uart` prints which binary it chose and warns when it is not the patched build.
+Override with `GDBFORGE_KGDB_KDMX=/path/to/kdmx`.
+
+### Building kdmx (tested setup)
+
+**Source:** [agent-proxy](https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git) (`kdmx/` subdirectory).
+
+**Use the tested commit — not `master`.** Clone agent-proxy and **checkout the SHA below**. We have **not** validated arbitrary newer upstream commits; stick to this known-good base, then apply the gdbforge patch.
+
+**Tested upstream commit** (used for the `:lua kgdb_uart` screencast and day-to-day kernel debug):
+
+```text
+468fe4c31e6c62c9bbb328b06ba71eaf7be0b76a
+```
+
+Short: `468fe4c` — *“Makefile: Bump version number for fixes”* (2018-04-30).
+
+Vanilla upstream **at that SHA** still exits on EAGAIN — the patch is always required for one-UART + kdmx. Apply the gdbforge patch from this repo, then build:
+
+```bash
+git clone https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git
+cd agent-proxy
+git checkout 468fe4c31e6c62c9bbb328b06ba71eaf7be0b76a   # not master — use this SHA
+patch -p1 < /path/to/gdbforge/tools/kdmx-gdbforge.patch
+cd kdmx && make
+./kdmx -v
+# → kdmx 141210a-gdbforge1
+```
+
+Point gdbforge at the built binary (or put it on `PATH` ahead of any upstream `kdmx`):
+
+```bash
+export GDBFORGE_KGDB_KDMX=$HOME/agent-proxy/kdmx/kdmx
+# example host path; adjust for your clone location
+```
+
+| Item | Value |
+|------|--------|
+| Upstream repo | `https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git` |
+| **Checkout** | **`468fe4c31e6c62c9bbb328b06ba71eaf7be0b76a`** (not `master`) |
+| gdbforge patch | [`tools/kdmx-gdbforge.patch`](../tools/kdmx-gdbforge.patch) (required after checkout) |
+| Expected `kdmx -v` | `kdmx 141210a-gdbforge1` |
+
+If you already have agent-proxy checked out elsewhere (e.g. `~/agent-proxy`), `git checkout 468fe4c`, apply the patch, and `make` in `kdmx/`. `kgdb_uart` also looks for `./bin/kdmx` next to the gdbforge binary when `GDBFORGE_KGDB_KDMX` is unset.
 
 ---
 
