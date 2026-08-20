@@ -23,9 +23,10 @@ gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbf
 - [MI2 parsing pipeline](#mi2-parsing-pipeline)
 - [GDB console bridge (MVC)](#gdb-console-bridge-mvc)
 - [Delve backend (peer of GDB)](#delve-backend-peer-of-gdb)
+  - [Delve inferior I/O (dual PTY)](#delve-inferior-io-dual-pty)
 - [Future OpenOCD integration](#future-openocd-integration)
 - [Future JTAG integration](#future-jtag-integration)
-- [Future kernel debugging](#future-kernel-debugging)
+- [Kernel debugging](#kernel-debugging)
 - [Design constraints](#design-constraints)
 
 ---
@@ -671,7 +672,18 @@ gdbforge -g dlv -d /usr/local/bin/dlv ./pkg
 
 Default entry breakpoint under Delve is `break main.main` (not `break main`).
 
-**Inferior I/O:** dual-PTY like GDB, but **`--tty` is spawn-only**. `dlv.Client` opens a `ptyx.TTY` (or uses `InferiorTTY`) and passes `dlv exec --tty <slave>` so program stdin/stdout go to `:b io` or an external terminal — not the Delve console. `:set inferior-tty` / Lua `set_inferior_tty` **restarts** Delve with a new `--tty`. For Go TUI programs prefer **`:lua dlv_port`** (headless Delve in another window + `dlv connect`) so stdio never leaves that window and you avoid a mid-session restart.
+### Delve inferior I/O (dual PTY)
+
+Dual-PTY like GDB, but **`--tty` is spawn-only**:
+
+| Piece | Role |
+|-------|------|
+| `dlv.Client` | Opens a `ptyx.TTY` (or uses `InferiorTTY`) |
+| `dlv exec --tty <slave>` | Program stdin/stdout go to `:b io` or an external terminal — **not** the Delve console |
+| `:set inferior-tty` / Lua `set_inferior_tty` | **Restarts** Delve with a new `--tty` (same program args) |
+
+For **Go TUI programs**, prefer **`:lua dlv_port`** (headless Delve in another window + `dlv connect`) so stdio never leaves that window and you avoid a mid-session restart. See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#mode-d--delve-headless--tcp-preferred-go-tui) and [External terminal (stdio / TUI targets)](#external-terminal-stdio-tui-targets).
+
 ---
 
 ## Future OpenOCD integration
@@ -722,9 +734,11 @@ These are **feature panes** ([PLUGINS.md](PLUGINS.md)), not core UI changes.
 
 ---
 
-## Future kernel debugging
+## Kernel debugging
 
-Kernel debugging introduces unique requirements:
+**Current (Lua):** kgdb bring-up without Go mux — `:lua kgdb_uart` (UART + external `kdmx`) and `:lua kgdb_net` (Ethernet / `target remote`). See **[KERNEL_KGDB.md](KERNEL_KGDB.md)**. Same design rule as `remotegdb`: GDB owns RSP; gdbforge is MI UI + orchestration.
+
+Kernel debugging still introduces longer-term UI requirements:
 
 | Requirement | UI response |
 |-------------|-------------|
@@ -733,9 +747,9 @@ Kernel debugging introduces unique requirements:
 | Remote targets | Backend connection manager (not UI) |
 | Module / symbol load | Async events → source pane refresh |
 
-Planned backend options:
+Further planned options:
 
-- GDB remote (`target remote :1234`)
+- Optional in-process UART mux (replace external `kdmx`; same `:lua kgdb_uart` UX)
 - `crash` utility integration for dump analysis
 - Custom `/proc/kcore` readers
 

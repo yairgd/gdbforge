@@ -70,6 +70,7 @@ func (a *DebuggerApp) initControllers() {
 	a.search.app = a
 	a.lua.app = a
 	a.dlv.app = a
+	a.serial.app = a
 }
 
 // --- Composition-root adapters (host interfaces) ---
@@ -110,6 +111,12 @@ func (a *DebuggerApp) FileBuffers() map[string]*widgets.CodeWidget {
 func (a *DebuggerApp) PrimaryCode() *widgets.CodeWidget    { return a.bufs.Primary() }
 func (a *DebuggerApp) CodeBufferForB() *widgets.CodeWidget { return a.bufs.codeBufferForB() }
 func (a *DebuggerApp) GDBWidget() *widgets.GDBWidget       { return a.gdbWidget }
+func (a *DebuggerApp) LuaConsoleWidget() *widgets.LuaConsoleWidget {
+	return a.luaConsoleWidget
+}
+func (a *DebuggerApp) LuaGdbforgeComplete(text string) (string, []string) {
+	return a.lua.replGdbforgeComplete(text)
+}
 func (a *DebuggerApp) GdbMcp() *mcp.GdbMcpService          { return a.gdbMcp }
 func (a *DebuggerApp) CmdWidget() *termui.CmdWidget        { return a.cmdWidget }
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }
@@ -192,6 +199,19 @@ func (a *DebuggerApp) ApplyPendingFrameSync(promptReady, isError bool) bool {
 	return a.dlv.applyPendingFrameSync(promptReady, isError)
 }
 
+func (a *DebuggerApp) MaybeEnableRemoteMode(cmd string) {
+	a.maybeEnableRemoteMode(cmd)
+}
+
+func (a *DebuggerApp) serialActive() bool {
+	return a.serial.Active()
+}
+
+func (a *DebuggerApp) serialOnState(stopped, promptReady, running bool) {
+	a.maybeSwitchSerialConsoleOnRunning(running)
+	a.serial.OnDebuggerState(stopped, promptReady, running)
+}
+
 // TriggerPendingDebugInfoIfReady runs a post-stop threads/stack refresh once the
 // debugger prompt is back (dlvCtl drops the request when nothing is armed).
 func (a *DebuggerApp) TriggerPendingDebugInfoIfReady(promptReady bool) {
@@ -199,6 +219,13 @@ func (a *DebuggerApp) TriggerPendingDebugInfoIfReady(promptReady bool) {
 		return
 	}
 	a.dlv.triggerPendingDebugInfo()
+}
+
+func (a *DebuggerApp) TriggerPendingStackRefreshIfReady(promptReady bool) {
+	if !promptReady {
+		return
+	}
+	a.dlv.triggerPendingStackRefresh()
 }
 
 // --- consoleCtl / inferiorIOCtl / luaCtl peers ---

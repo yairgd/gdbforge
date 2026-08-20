@@ -164,6 +164,51 @@ flowchart TB
 
 ---
 
+## Viewport: two paint paths (PTY ANSI vs native Canvas)
+
+Every scrollable pane uses **`termui.Viewport`** over a **`platform.Buffer`**. At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
+
+```mermaid
+flowchart TB
+    Buf["platform.Buffer line"]
+    VP["Viewport.Draw"]
+    Mux{"v.ANSI ?"}
+    PTY["DrawANSIText<br/>parse \\x1b SGR"]
+    Native["[]rune loop<br/>SetContent per cell"]
+    Hooks["RowStyle + CellStyle + search"]
+    Grid["Grid / tcell"]
+
+    Buf --> VP --> Mux
+    Mux -->|true| PTY --> Grid
+    Mux -->|false| Native --> Hooks --> Grid
+```
+
+| Path | `Viewport.ANSI` | Buffer contents | Paint API | gdbforge panes |
+|------|-----------------|-----------------|-------------|----------------|
+| **PTY / foreign** | `true` | May contain `\x1b[…m` from terminal tools | `Canvas.DrawANSIText` parses SGR → `SetContent` | GDB console, Output (`:b io`), Exec (`:!`) |
+| **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Call Stack, Breakpoints, Help, … |
+
+**Path 1 — data from TTY / PTY**
+
+- GDB, gcc, make, bash send **already-colored** bytes.
+- App keeps ESC in the buffer (`OutputWidget` preserves `\x1b`).
+- Pane calls `ConsolePane.SetANSI(true)` → `Viewport.ANSI = true`.
+- `DrawANSIText` walks the string: escapes update `tcell.Style`; printable runes become cells.
+- `RowStyle` / `CellStyle` still apply (search highlights, line chrome) via the `decorate` callback.
+
+**Path 2 — data gdbforge builds (no ANSI in buffer)**
+
+- Widget `rebuild()` writes plain text, e.g. `"━━▶ 0x… add %rsp"` — no `\x1b`.
+- Color comes from **`RowStyle`** (whole line: PC green, browse blue) and **`CellStyle`** (per column: yellow `━━▶`, break gutter bg, syntax spans).
+- `Viewport.ANSI = false` → rune loop in `viewport.go` calls `SetContent` directly.
+- This is the normal **tcell** path for UI you own.
+
+**Rule:** do not embed `\x1b` in buffers you paint with path 2. Do not set `ANSI=true` on panes whose buffer is plain text.
+
+Implementation: `internal/termui/viewport.go` (`Draw`, `ANSI` field), `internal/termui/utf.go` (`DrawANSIText`), `internal/gdbforge/widgets/assembly_widget.go` / `code_widget.go` (native example).
+
+---
+
 ## Unicode and text drawing
 
 ### UTF-8 text
@@ -176,7 +221,7 @@ func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.St
 
 - Uses `utf8.DecodeRuneInString` for correct wide-character iteration.
 - Clips at canvas width.
-- ANSI/SGR escape parsing is **enabled** for console scrollback (`ConsolePane.SetANSI` / `GDBWidget.SetANSI`) so `make`/gcc colors and Delve listings render correctly. Copy selection strips ANSI to plain text.
+- **PTY path only:** ANSI/SGR parsing when `Viewport.ANSI` is true (`ConsolePane.SetANSI` / `GDBWidget.SetANSI`) so `make`/gcc colors and Delve listings render correctly. Native panes (`ANSI=false`) use plain UTF-8 + `CellStyle` instead — see [Viewport: two paint paths](#viewport-two-paint-paths-pty-ansi-vs-native-canvas). Copy selection strips ANSI to plain text.
 
 **Gap:** no grapheme cluster / East Asian width handling yet. For debugger source code (mostly ASCII), this is acceptable short-term. Source view will need `runewidth` or equivalent before internationalized code display.
 

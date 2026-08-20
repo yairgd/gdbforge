@@ -22,7 +22,7 @@
 
 ## Demo
 
-Screencasts (GitHub-hosted). Order: embedded MCU → everyday Linux → dogfooding.
+Screencasts (GitHub-hosted). Order: embedded MCU → everyday Linux → dogfooding → **Linux kernel (`kgdb_uart`)**.
 
 **Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`lua/r5_debug`](lua/r5_debug) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c).
 
@@ -36,13 +36,73 @@ Screencasts (GitHub-hosted). Order: embedded MCU → everyday Linux → dogfoodi
 
 <video src="https://github.com/user-attachments/assets/6d2466c4-f455-4c7e-a919-62ba330d025b" autoplay loop muted playsinline width="100%"></video>
 
+**Linux kernel (`:lua kgdb_uart`)** — one shared UART + **kdmx**: `:lua kgdb_uart` configures kgdboc, starts kdmx, opens minicom on the console PTY, and breaks into kgdb in about **two seconds** (`target remote` on the gdb PTY). Then `lx-symbols`, a breakpoint on a driver's **read** path, `continue`, and `cat /dev/…` from minicom to hit it — step in `:b gdb`, `continue` back to the shell.
+
+<video src="https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b" autoplay loop muted playsinline width="100%"></video>
+
+<details>
+<summary><strong>Kernel demo — setup stages (`kgdb_uart`)</strong></summary>
+
+**Stage 1 — env + one-shot script (host)**
+
+```bash
+export GDBFORGE_KGDB_UART=/dev/ttyUSB0
+export GDBFORGE_KGDB_VMLINUX=/path/to/vmlinux
+export GDBFORGE_KGDB_MODULES=/path/to/kernel-source   # for lx-symbols
+./bin/gdbforge -g gdb
+# then:
+:lua kgdb_uart
+```
+
+The script claims the UART, sets `kgdboc`, starts **kdmx** (console PTY + gdb PTY), spawns minicom, loads `vmlinux`, sysrq-breaks in, and runs `target remote` — stopped in kgdb in ~2 s.
+
+**Stage 2 — module symbols + breakpoint**
+
+In **`:b gdb`** (after the script returns):
+
+```text
+(gdb) lx-symbols /path/to/kernel-source
+(gdb) break my_driver_read
+(gdb) continue
+```
+
+**Stage 3 — trigger from minicom (what the screencast shows)**
+
+In the minicom window on the console PTY:
+
+```text
+cat /dev/my_device
+```
+
+GDB stops on the driver's read path; debug with `n` / `s` / `c` in gdbforge, then `(gdb) continue` returns to the shell.
+
+Also available: `:lua kgdb_net` (Ethernet), `:lua kgdb_serial` (in-process mux, one UART). Two independent UARTs need no mux — see [docs/KERNEL_KGDB.md](docs/KERNEL_KGDB.md). Catalog: [`lua/README.md`](lua/README.md).
+
+</details>
+
+<details>
+<summary><strong>One UART vs two — <code>:serial-switch</code> semi mux</strong></summary>
+
+When only **one** USB serial cable is available, gdbforge can hold `/dev/ttyUSB0` and expose **two PTYs** (console + gdb) via an in-process mux (`:lua kgdb_serial`, `:serial-switch gdb|console`, `:lua kgdb_trigger`). That workflow is **semi-automatic**: you must switch who owns the wire before kgdb stop packets arrive, and **breakpoints triggered from the console while the mux is on the console leg will not reach GDB** (see known limitation in the doc below).
+
+| | Two UARTs (manual) | One UART + kdmx (`kgdb_uart`, **this demo**) | One UART (`kgdb_serial` mux) |
+|--|-------------------|---------------------------------------------|------------------------------|
+| Console while running | Always on PS0 | minicom on console PTY (kdmx) | minicom on console PTY when mux owner = console |
+| GDB while stopped | Always on PS1 | `target remote` on gdb PTY (kdmx) | `target remote` on gdb PTY when owner = gdb |
+| `cat` / driver trigger → BP | Works | **Works** (kdmx demux) | Fails unless gdb leg owns UART before trigger |
+| Automation | Manual setup | **`:lua kgdb_uart`** (~2 s break-in) | Sysrq-oriented; manual order matters |
+
+Full write-up: **[docs/KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** (Path 1 kdmx, Path 1b in-process mux, Ethernet, recovery, env vars).
+
+</details>
+
 ```bash
 mkdir -p .gdbforge/lua
 cp -r lua/r5_debug .gdbforge/lua/
 # then inside gdbforge:  :lua r5_debug
 ```
 
-More installable workflows (Go/`dlv_ext_port`, embedded/`remotegdb`, GDB tty, R5, games): [`lua/README.md`](lua/README.md) — install, env vars (`GDBFORGE_TERMINAL=mate-terminal`, …), and how to use each script.
+More installable workflows (Go/`dlv_ext_port`, embedded/`remotegdb`, **kernel kgdb**, GDB tty, R5, games): [`lua/README.md`](lua/README.md) — install, env vars (`GDBFORGE_TERMINAL=mate-terminal`, `GDBFORGE_KGDB_UART`, …), and how to use each script.
 
 ## Host skeleton (`cmd/demo`)
 
@@ -123,6 +183,7 @@ More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./
 | **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
 | **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | FRAMEWORK vs APP split; `cmd/demo` as host skeleton |
 | **[lua/README.md](lua/README.md)** | Installable Lua workflow catalog |
+| **[docs/KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** | Kernel kgdb: two UARTs, kdmx, one-UART mux (`:serial-switch`), Ethernet |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 
 View docs locally: `./docs/serve.sh` → <http://127.0.0.1:8765/>.

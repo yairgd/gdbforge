@@ -94,6 +94,39 @@ func IsBreakInsertCmd(cmd string) bool {
 	}
 }
 
+// IsContinueCmd reports GDB continue commands (c / continue only).
+func IsContinueCmd(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return false
+	}
+	switch strings.Fields(cmd)[0] {
+	case "c", "continue":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsTargetRemoteCmd reports GDB attach commands (target remote / tar rem / …).
+func IsTargetRemoteCmd(cmd string) bool {
+	fields := strings.Fields(strings.TrimSpace(cmd))
+	if len(fields) < 2 {
+		return false
+	}
+	switch strings.ToLower(fields[0]) {
+	case "target", "tar":
+	default:
+		return false
+	}
+	switch strings.ToLower(fields[1]) {
+	case "remote", "r", "rem", "extended-remote", "extended", "e":
+		return true
+	default:
+		return false
+	}
+}
+
 // CLIExecToMI maps common CLI run-control commands to MI -exec-* so the
 // console does not print source/line listings (Code widget follows *stopped).
 func CLIExecToMI(cmd string) string {

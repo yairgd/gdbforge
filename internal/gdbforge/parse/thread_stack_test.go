@@ -33,6 +33,28 @@ func TestParseStackListFrames(t *testing.T) {
 	}
 }
 
+func TestParseStackListFramesIgnoresAsyncStopped(t *testing.T) {
+	raw := `*stopped,frame={level="0",func="old",file="x.c",line="99"}
+^done,stack=[frame={level="0",func="as6221_read",file="as6221.c",line="120"},frame={level="1",func="hwmon_attr_show",file="hwmon.c",line="321"}]`
+	got := ParseStackListFrames(raw)
+	if len(got) != 2 || got[0].Func != "as6221_read" {
+		t.Fatalf("got=%+v", got)
+	}
+}
+
+func TestStackListLooksTruncated(t *testing.T) {
+	full := `^done,stack=[frame={level="0",func="a"},frame={level="1",func="b"}]`
+	frames := ParseStackListFrames(full)
+	if StackListLooksTruncated(full, frames) {
+		t.Fatal("full stack should not look truncated")
+	}
+	partial := `^done,stack=[frame={level="0",func="a"},frame={level="1",func="b"`
+	got := ParseStackListFrames(partial)
+	if !StackListLooksTruncated(partial, got) {
+		t.Fatal("partial stack should look truncated")
+	}
+}
+
 func TestParseStackInfoFrame(t *testing.T) {
 	raw := `^done,frame={level="2",addr="0x4010",func="foo",file="a.c",fullname="/src/a.c",line="42"}`
 	fr, ok := ParseStackInfoFrame(raw)

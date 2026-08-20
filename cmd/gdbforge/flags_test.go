@@ -121,10 +121,23 @@ func TestParseFlagsPassThroughGDBOptions(t *testing.T) {
 	}
 }
 
-func TestParseFlagsMissingProg(t *testing.T) {
-	_, err := parseFlags(nil)
+func TestParseFlagsGDBWithoutProg(t *testing.T) {
+	cfg, err := parseFlags([]string{"-g", "gdb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Kind != BackendGDB || cfg.GDBPath != "gdb" {
+		t.Fatalf("unexpected config: %+v", cfg)
+	}
+	if cfg.Prog != "" || len(cfg.GDBArgs) != 0 {
+		t.Fatalf("programless GDB config has program: %+v", cfg)
+	}
+}
+
+func TestParseFlagsDLVRequiresProg(t *testing.T) {
+	_, err := parseFlags([]string{"-g", "dlv"})
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected missing program error")
 	}
 }
 

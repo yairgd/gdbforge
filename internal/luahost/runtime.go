@@ -45,6 +45,7 @@ type Runtime struct {
 	foreground      ForegroundFunc
 	openExternalTTY OpenExternalTTYFunc
 	spawnTerminal   SpawnTerminalFunc
+	trackChild      TrackChildFunc // host-only; not exposed to Lua scripts
 	scriptDir       string // directory of the loaded user script (lua_dir())
 	scriptPath      string // full path of the loaded user script (empty for embedded)
 	lastErr         string
@@ -215,6 +216,62 @@ func (rt *Runtime) setErr(err error) {
 func (rt *Runtime) LoadString(src, name string) error {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
+	return rt.loadStringLocked(src, name, false)
+}
+
+// EvalLine runs one REPL line (expression or statement). gdbforge.print uses the
+// print sink; non-nil return values are emitted like the Lua interactive prompt.
+func (rt *Runtime) EvalLine(src string) error {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	src = normalizeReplLine(src)
+	return rt.loadStringLocked(src, "=<lua>", true)
+}
+
+// normalizeReplLine applies REPL conveniences gopher-lua rejects as bare chunks
+// (e.g. "help" must be "help()" — a lone identifier is a parse error).
+func normalizeReplLine(src string) string {
+	trimmed := strings.TrimSpace(src)
+	if trimmed == "" {
+		return src
+	}
+	if strings.EqualFold(trimmed, "help") {
+		return "help()"
+	}
+	if len(trimmed) > 5 && strings.EqualFold(trimmed[:4], "help") && (trimmed[4] == ' ' || trimmed[4] == '\t') {
+		topic := strings.TrimSpace(trimmed[4:])
+		if topic != "" {
+			return fmt.Sprintf("help(%q)", topic)
+		}
+		return "help()"
+	}
+	if isBareIdent(trimmed) {
+		return trimmed + "()"
+	}
+	return src
+}
+
+func isBareIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '_':
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func (rt *Runtime) loadStringLocked(src, name string, emitReturns bool) error {
 	if rt.L == nil {
 		return fmt.Errorf("lua runtime closed")
 	}
@@ -223,10 +280,36 @@ func (rt *Runtime) LoadString(src, name string) error {
 		rt.setErr(err)
 		return err
 	}
+	if ctx := rt.jobCtx; ctx != nil {
+		rt.L.SetContext(ctx)
+		defer rt.L.RemoveContext()
+	}
 	rt.L.Push(fn)
 	err = rt.L.PCall(0, lua.MultRet, nil)
-	rt.setErr(err)
-	return err
+	if err != nil && rt.jobCtx != nil && rt.jobCtx.Err() != nil {
+		err = ErrJobCancelled
+	}
+	if err != nil {
+		rt.setErr(err)
+		return err
+	}
+	if emitReturns {
+		n := rt.L.GetTop()
+		if n > 0 {
+			parts := make([]string, 0, n)
+			for i := 1; i <= n; i++ {
+				if rt.L.Get(i) != lua.LNil {
+					parts = append(parts, rt.L.ToString(i))
+				}
+			}
+			rt.L.Pop(n)
+			if len(parts) > 0 {
+				rt.emitPrint(strings.Join(parts, "\t"))
+			}
+		}
+	}
+	rt.setErr(nil)
+	return nil
 }
 
 // RegisteredNames returns sorted-ish names for :lua Tab completion.
@@ -355,6 +438,7 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "lua_dir", L.NewFunction(rt.luaLuaDir))
 	L.SetField(gf, "sleep", L.NewFunction(rt.luaSleep))
 	L.SetField(gf, "system", L.NewFunction(rt.luaSystem))
+	L.SetField(gf, "help", L.NewFunction(rt.luaHelp))
 
 	pane := L.NewTable()
 	L.SetGlobal("pane", pane)

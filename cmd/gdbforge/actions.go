@@ -206,9 +206,8 @@ func (app *DebuggerApp) OnHelp(args ...any) {
 
 func (app *DebuggerApp) Quit(args ...any) {
 	// :q / :quit — confirm when inferior alive (same as Ctrl-D).
-	// :q! / :quit! — force exit, no Quit-anyway question.
+	// :q! / :quit! — force exit; teardown runs via defer app.Close() after Run().
 	if cmdArgsHasBang(args) {
-		app.Close()
 		app.Exit()
 		return
 	}
@@ -524,11 +523,12 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 		return nil
 	}
 	app.execClient = client
+	app.children.Track(client.Pid(), true)
 
 	w := widgets.NewExecWidget()
 	w.SetClipboard(app.ClipboardIO())
 	w.SetSizeFunc(client.SetSize)
-	wireConsole(w, consoleHandlers{
+	w.WireConsole(&widgets.ConsoleHandlers{
 		Submit:    func(cmd string) { _ = client.Send(cmd) },
 		Interrupt: func() { _ = client.SendRaw("\x03") },
 		Suspend:   func() { _ = client.SendRaw("\x1a") },

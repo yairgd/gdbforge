@@ -94,6 +94,55 @@ func threadsAndStackGDB(ctx context.Context, q Querier, log LogFn) (threads []mo
 	return threads, frames, threadsOK, stackOK
 }
 
+// StackList queries only the backtrace. longCapture uses QueryLong on kgdb serial.
+func StackList(ctx context.Context, kind Kind, q Querier, longCapture bool, log LogFn) ([]models.StackFrame, bool) {
+	if q == nil {
+		return nil, false
+	}
+	if kind == DLV {
+		raw, err := q.Query(ctx, "stack")
+		if err != nil {
+			if log != nil {
+				log("callstack", err.Error())
+			}
+			return nil, false
+		}
+		frames := dlv.ParseStack(raw)
+		return frames, len(frames) > 0
+	}
+	query := func(cmd string) (string, error) {
+		if longCapture {
+			if lq, ok := q.(interface {
+				QueryLong(context.Context, string) (string, error)
+			}); ok {
+				return lq.QueryLong(ctx, cmd)
+			}
+		}
+		return q.Query(ctx, cmd)
+	}
+	for _, cmd := range []string{"-stack-list-frames 0 50", "-stack-list-frames"} {
+		raw, err := query(cmd)
+		if err != nil {
+			if log != nil {
+				log("callstack", err.Error())
+			}
+			continue
+		}
+		if !strings.Contains(raw, "stack=") {
+			continue
+		}
+		frames := parse.ParseStackListFrames(raw)
+		if len(frames) == 0 {
+			continue
+		}
+		if parse.StackListLooksTruncated(raw, frames) {
+			continue
+		}
+		return frames, true
+	}
+	return nil, false
+}
+
 // MapBreakCmd rewrites break/clear for Delve; GDB cmds pass through.
 func MapBreakCmd(kind Kind, cmd string) string {
 	if kind == DLV {

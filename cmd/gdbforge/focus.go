@@ -60,3 +60,8 @@ func (a *DebuggerApp) focusedIsCallstack() bool {
 func (a *DebuggerApp) focusedIsGdb() bool {
 	return a.gdbWidget != nil && a.focusedWidget() == a.gdbWidget
 }
+
+// focusedIsLuaConsole reports whether the Lua REPL pane has focus.
+func (a *DebuggerApp) focusedIsLuaConsole() bool {
+	return a.luaConsoleWidget != nil && a.focusedWidget() == a.luaConsoleWidget
+}

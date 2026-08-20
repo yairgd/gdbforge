@@ -81,6 +81,9 @@ func (a *DebuggerApp) ExapData() {
 		LeafRestComplete("b", a.OnBuffer, a.bufs.completions).
 		LeafRestComplete("edit", a.OnEdit, a.bufs.editCompletions).
 		LeafRestComplete("lua", a.lua.OnCmd, a.lua.completions).
+		LeafRest("terminal", a.OnTerminalCmd).
+		LeafRest("serial-switch", a.OnSerialSwitchCmd).
+		Leaf("debug-enter", a.OnDebugEnter).
 		Leaf("help", a.OnHelp).
 		LeafRestComplete("vs", a.SplitVertical, a.splitAsmCompletions).
 		LeafRestComplete("vsplit", a.SplitVertical, a.splitAsmCompletions).

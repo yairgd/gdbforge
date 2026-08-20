@@ -55,6 +55,7 @@ nav:
       - UI Architecture: UI_ARCHITECTURE.md
       - PTY Architecture: PTY_ARCHITECTURE.md
       - Debugger Integration: DEBUGGER_INTEGRATION.md
+      - Kernel / kgdb: KERNEL_KGDB.md
       - Rendering: RENDERING.md
       - Dependencies: DEPENDENCIES.md
       - Directory Structure: DIRECTORY_STRUCTURE.md
@@ -86,19 +87,20 @@ markdown_extensions:
       alternate_style: true
 
 extra_css:
-  - stylesheets/extra.css
+  - stylesheets/extra.css?v=pz-box-15
 
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js
-  - javascripts/mermaid.js
+  - javascripts/vendor/panzoom.min.js
+  - javascripts/mermaid-zoom.js?v=pz-box-15
 
 plugins:
   - search
 
 extra:
   seo:
-    image: https://yairgd.github.io/gdbforge/media/gdbforge-demo.gif
-    image_alt: gdbforge terminal debugger interface
+    image: https://yairgd.github.io/gdbforge/media/gdbforge-demo-r5.gif
+    image_alt: gdbforge Cortex-R5 / J-Link debugging demo
     author: gdbforge contributors
 
 copyright: Copyright &copy; 2026 gdbforge contributors

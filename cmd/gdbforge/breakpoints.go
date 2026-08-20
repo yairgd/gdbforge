@@ -534,7 +534,7 @@ func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 		if leaf := a.asm.findLeaf(); leaf != nil && a.asm.hasSplit() {
 			_ = a.Tab().FocusLeaf(leaf)
 		}
-		go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
+		go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false, aw.FuncName(), 0, -1)
 		a.RequestFrame()
 		return
 	}
@@ -548,7 +548,7 @@ func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {
 	a.presentLocation(w, nil)
 	if sourceUnavailable(w) && bp.Addr != "" && a.asm.AutoAsm() {
 		if aw := a.asm.Widget(); aw != nil {
-			go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false)
+			go a.asm.runRefresh(bp.Addr, aw.VisibleRows(), false, aw.FuncName(), 0, -1)
 		}
 	}
 	a.RequestFrame()

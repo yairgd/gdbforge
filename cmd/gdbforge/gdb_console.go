@@ -56,14 +56,19 @@ type consoleHost interface {
 	DeferDLVBPRefresh()
 	TakeDeferredBP() bool
 	TriggerPendingDebugInfoIfReady(promptReady bool)
+	TriggerPendingStackRefreshIfReady(promptReady bool)
 	ApplyPendingFrameSync(promptReady, isError bool) bool
 	SuppressStopUICount() int
 	ClearSuppressStopUI()
+	MaybeEnableRemoteMode(cmd string)
+	MaybeSwitchSerialConsoleOnContinue(cmd string)
+	serialActive() bool
+	serialOnState(stopped, promptReady, running bool)
 }
 
 // consoleCtl owns the debugger console domain: the PTY bridge, submit /
 // interrupt / suspend / EOF intents, and MI / Delve update apply.
-// Wired as wireConsole(..., a.console.onGdbConsoleSubmit, ...).
+// Wired as gdbWidget.WireConsole(..., a.console.onGdbConsoleSubmit, ...).
 type consoleCtl struct {
 	host      consoleHost
 	cancelSub func()
@@ -187,10 +192,12 @@ func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
 	if gdb.IsStackNavCmd(cmd) {
 		h.NoteStackNavGDB()
 	}
-	// Run-control via MI so the GDB pane does not dump CLI source/line listings
-	// (Code widget already follows *stopped).
-	sendCmd := gdb.CLIExecToMI(cmd)
-	send := func() { _ = cli.Send(sendCmd) }
+	h.MaybeEnableRemoteMode(cmd)
+	sendCmd, _ := h.Backend().MapExec(cmd)
+	send := func() {
+		_ = cli.Send(sendCmd)
+		h.MaybeSwitchSerialConsoleOnContinue(cmd)
+	}
 	if cmd != "" {
 		w.PushHistory(cmd)
 		w.EchoSubmit(cmd)
@@ -261,9 +268,26 @@ func (c *consoleCtl) onGdbConsoleInterrupt() {
 	}
 	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
 	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
+	// Confirming-interrupt policy lives on Confirm (onConfirmingInterrupt).
 	running := h.State() != nil && h.Debug().InferiorRunning()
-	confirming := h.DlvConfirming()
-	if confirming && h.isDLV() {
+	_ = h.Backend().Interrupt(running, false)
+	h.RequestFrame()
+}
+
+// onConfirmingInterrupt is Ctrl-C while a quit/y-n gate is open (Confirm machine).
+func (c *consoleCtl) onConfirmingInterrupt() {
+	h := c.host
+	if h == nil {
+		return
+	}
+	if w := h.GDBWidget(); w != nil {
+		w.ClearInput()
+	}
+	if h.Backend() == nil {
+		return
+	}
+	running := h.State() != nil && h.Debug().InferiorRunning()
+	if h.isDLV() && h.DlvConfirming() {
 		c.withGdbUIOwner(func() { _ = h.Backend().Interrupt(running, true) })
 		h.RequestFrame()
 		return
@@ -451,15 +475,16 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 		h.clearDebugInfoPanes()
 	}
 	h.TriggerPendingDebugInfoIfReady(promptReady)
-	if h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
-		// CLI frame/f/up/down include =thread-selected with the new frame in
-		// the same batch as (gdb). Present that immediately — a follow-up
-		// -stack-info-frame Query often left Code/Asm stale.
+	h.TriggerPendingStackRefreshIfReady(promptReady)
+	kgdb := h.Debug() != nil && h.Debug().KgdbMode()
+	if !kgdb && h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
 		if frameSelected != nil {
 			h.onGdbFrameSelected(*frameSelected)
 		} else {
 			h.onGdbFrameSync()
 		}
+	} else if kgdb && frameSelected != nil {
+		h.onGdbFrameSelected(*frameSelected)
 	}
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
 	if promptReady && h.isDLV() && h.SuppressStopUICount() > 0 && stopped == nil {
@@ -480,6 +505,11 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	}
 	if breakpointsChanged {
 		h.BreakpointsChanged()
+	}
+	if h.serialActive() {
+		running := state == gdb.Running
+		stoppedNow := stopped != nil
+		h.serialOnState(stoppedNow, promptReady, running)
 	}
 }
 

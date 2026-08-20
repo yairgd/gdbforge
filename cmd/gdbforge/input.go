@@ -17,7 +17,9 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D) before a mode handler.
+// withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D)
+// before a mode handler. Policy lives on Activity (C/Z) and Confirm (D) —
+// Mode only owns keymaps.
 func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	return func(ev *tcell.EventKey) bool {
 		if a.tryGlobalSuspend(ev) {
@@ -33,59 +35,30 @@ func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
 	}
 }
 
-// tryGlobalSuspend handles Ctrl-Z in any mode/focus.
-// Prefer suspending a running inferior. If a :lua worker job is the foreground
-// work (inferior not running), cancel that job — suspending gdbforge while a
-// stuck system()/wait_port job is active looks like "Ctrl-Z does nothing" and
-// blocks further job control until the job clears.
+// tryGlobalSuspend handles Ctrl-Z in any mode/focus via the Activity table.
 func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 	if !isCtrlZ(ev) {
 		return false
 	}
-	running := false
-	if a != nil && a.TermApp != nil && a.State() != nil && a.Debug() != nil {
-		running = a.Debug().InferiorRunning()
-	}
-	if !running && a.lua.cancelJob() {
-		if a.outputWidget != nil {
-			a.outputWidget.AppendHostLine("cancelled (Ctrl-Z)")
-		}
-		if a.TermApp != nil {
-			a.RequestFrame()
-		}
-		return true
-	}
-	a.console.onGdbConsoleSuspend()
+	a.onActivityCtrlZ()
 	return true
 }
 
-// tryGlobalInterrupt handles Ctrl-C in any mode/focus.
-// If a :lua worker job is running, cancel it (unblocks sleep/wait_port).
-// Otherwise interrupt the debugger session (GDB/dlv PTY ^C).
+// tryGlobalInterrupt handles Ctrl-C in any mode/focus via Activity (+ Confirm).
 func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	if !isCtrlC(ev) {
 		return false
 	}
-	if a.lua.cancelJob() {
-		if a.outputWidget != nil {
-			a.outputWidget.AppendHostLine("cancelled (Ctrl-C)")
-		}
-		a.RequestFrame()
-		return true
-	}
-	a.console.onGdbConsoleInterrupt()
-	a.RequestFrame()
+	a.onActivityCtrlC()
 	return true
 }
 
-// tryGlobalEOF handles Ctrl-D in any mode/focus: same as GDB-console EOF
-// (send q / quit; confirm if inferior alive).
+// tryGlobalEOF handles Ctrl-D in any mode/focus via the Confirm facade.
 func (a *DebuggerApp) tryGlobalEOF(ev *tcell.EventKey) bool {
 	if !isCtrlD(ev) {
 		return false
 	}
-	a.console.onGdbConsoleEOF()
-	a.RequestFrame()
+	a.onConfirmCtrlD()
 	return true
 }
 
@@ -141,7 +114,7 @@ func isCtrlD(ev *tcell.EventKey) bool {
 func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 	// GDB console insert: pass all keys through so typing is native (Space, n,
 	// etc.). Only Esc leaves insert mode; Tab runs completion + wildmenu
-	// (MI -complete for GDB, command-name list for Delve).
+	// (MI -complete for GDB, gdbforge.* for Lua REPL).
 	if a.focusedIsGdb() {
 		if key, ok := platform.KeyFromEvent(ev); ok {
 			if key.Key == tcell.KeyEscape {
@@ -150,6 +123,20 @@ func (a *DebuggerApp) handleInsertKey(ev *tcell.EventKey) bool {
 			}
 			if key.Key == tcell.KeyTAB {
 				a.comp.gdbTabComplete()
+				return true
+			}
+		}
+		a.Tab().HandleEvent(ev)
+		return true
+	}
+	if a.focusedIsLuaConsole() {
+		if key, ok := platform.KeyFromEvent(ev); ok {
+			if key.Key == tcell.KeyEscape {
+				a.onEscape()
+				return true
+			}
+			if key.Key == tcell.KeyTAB {
+				a.comp.luaTabComplete()
 				return true
 			}
 		}
@@ -267,6 +254,16 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 			a.RequestFrame()
 			return true
 		}
+		if a.comp.useLuaInput() {
+			if isType {
+				a.luaConsoleWidget.InsertInputRune(ev.Rune())
+			} else {
+				a.luaConsoleWidget.BackspaceInput()
+			}
+			a.comp.refreshLuaMenu()
+			a.RequestFrame()
+			return true
+		}
 		if a.cmdWidget != nil {
 			a.comp.setForGDB(false)
 			a.cmdWidget.HandleEvent(ev)
@@ -283,8 +280,9 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	}
 	// Other keys: leave wildmenu and continue editing.
 	a.comp.clear()
-	if a.comp.isForGDB() {
+	if a.comp.isForGDB() || a.comp.isForLua() {
 		a.comp.setForGDB(false)
+		a.comp.setForLua(false)
 		a.SetMode(platform.ModeInsert)
 		a.Tab().HandleEvent(ev)
 	} else {
@@ -616,11 +614,21 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 		}
 		a.RequestFrame()
 	case debugInfoUIMsg:
-		// Models were updated off-thread; push to views on the UI thread.
-		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
 		a.debugInfo.syncThreadViews()
 		a.debugInfo.syncCallStackViews()
+		if data.stackOnly {
+			a.debugInfo.selectLevel(0)
+			a.RequestFrame()
+			break
+		}
+		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
 		a.syncCodeFromCallstack()
+		// Asm stack preamble / dump can stay on the pre-Ctrl-C frame until the
+		// stack model lands — refresh against the highlighted (post-stop) level.
+		if stack := a.debugInfo.Stack(); stack != nil {
+			fr, ok := stack.ByLevel(a.debugInfo.selectedLevel())
+			a.asm.refreshAfterStackReload(fr, ok)
+		}
 		a.RequestFrame()
 	case luaUIMsg:
 		func() {
@@ -690,8 +698,6 @@ func isExpectedPtyClose(err error) bool {
 	return strings.Contains(msg, "input/output error") ||
 		strings.Contains(msg, "file already closed")
 }
-
-
 
 
 

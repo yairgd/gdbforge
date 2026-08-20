@@ -56,6 +56,8 @@ type DebuggerApp struct {
 	search     searchCtl
 	lua        luaCtl
 	dlv        dlvCtl
+	serial     serialCtl
+	children   childProcCtl
 
 	gdbWidget *widgets.GDBWidget
 	gdbMcp    *mcp.GdbMcpService
@@ -71,6 +73,7 @@ type DebuggerApp struct {
 
 	bpWidget       *widgets.BreakpointWidget
 	outputWidget   *widgets.OutputWidget
+	luaConsoleWidget *widgets.LuaConsoleWidget
 	fileListWidget *widgets.FileListWidget
 }
 
@@ -157,6 +160,8 @@ func (a *DebuggerApp) Close() {
 	}
 	a.inferiorIO.stop()
 	a.console.stopBridge()
+	a.serial.Close()
+	a.children.KillAll()
 	if a.backend != nil {
 		a.backend.Close()
 		a.backend = nil

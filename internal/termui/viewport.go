@@ -49,6 +49,10 @@ type Viewport struct {
 	lastClickPos  bufferPos
 	clickCount    int
 	suppressDrag  bool // ignore drag after word/line multi-click until release
+	// dragAutoScroll enables edge auto-scroll while dragging a selection
+	// outside the pane (default on). Assembly disables this so mouse moves
+	// do not scroll the dump while selecting text.
+	dragAutoScroll bool
 
 	clipboard ClipboardIO
 	readOnly  bool // true → Cut copies only; Paste ignored
@@ -73,7 +77,7 @@ type Viewport struct {
 	searchContentOffset int
 	onSearchJump        func(lineIdx int)
 
-	// ANSI enables per-cell ANSI/SGR rendering (OSC/CSI sequences are not drawn).
+	// ANSI enables DrawANSIText for PTY scrollback only; default false for widget panes.
 	ANSI bool
 
 	// OmitTail skips this many trailing buffer lines when drawing/scrolling
@@ -86,10 +90,19 @@ type Viewport struct {
 
 func NewViewport(buf *platform.Buffer) *Viewport {
 	return &Viewport{
-		Buffer:        buf,
-		cursor:        NewNativeCursor(),
-		cursorVisible: true,
-		readOnly:      true,
+		Buffer:         buf,
+		cursor:         NewNativeCursor(),
+		cursorVisible:  true,
+		readOnly:       true,
+		dragAutoScroll: true,
+	}
+}
+
+// SetDragAutoScroll toggles edge auto-scroll while dragging a selection out of
+// the pane. Default is on; Assembly turns it off.
+func (v *Viewport) SetDragAutoScroll(on bool) {
+	if v != nil {
+		v.dragAutoScroll = on
 	}
 }
 
@@ -107,7 +120,7 @@ func (v *Viewport) SetCursorVisible(visible bool) {
 }
 
 // cursorDrawPos maps CursorCol/CursorLine to pane-local paint coordinates.
-// In ANSI mode CursorCol is a byte index; localX uses the visible cell column.
+// CursorCol is always a byte index; localX uses the visible cell column.
 func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
 	if v == nil || v.Buffer == nil {
 		return 0, 0, ' ', false
@@ -117,15 +130,18 @@ func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
 		return 0, 0, ' ', false
 	}
 	line := v.Buffer.Line(v.CursorLine)
-	visCol := v.CursorCol
 	under = ' '
+	var visCol int
 	if v.ANSI {
 		visCol = VisibleANSIColAtByte(line, v.CursorCol)
 		under = ANSIRuneAtVisible(line, visCol)
-	} else if v.CursorCol >= 0 && v.CursorCol < len(line) {
-		r, _ := utf8.DecodeRuneInString(line[v.CursorCol:])
-		if r != utf8.RuneError {
-			under = r
+	} else {
+		visCol = VisibleANSIColAtByte(line, v.CursorCol)
+		if v.CursorCol >= 0 && v.CursorCol < len(line) {
+			r, _ := utf8.DecodeRuneInString(line[v.CursorCol:])
+			if r != utf8.RuneError {
+				under = r
+			}
 		}
 	}
 	localX = visCol - v.Left
@@ -209,17 +225,19 @@ func (v *Viewport) Draw(c Canvas) {
 		}
 
 		c.ClearLineRange(row, len(visible), width, lineStyle)
+		byteIdx := ANSIByteIndexAtVisible(full, start)
 		for col, ch := range visible {
-			bufCol := start + col
+			absVisCol := start + col
 			st := lineStyle
 			if v.CellStyle != nil {
-				st = v.CellStyle(line, bufCol, st)
+				st = v.CellStyle(line, absVisCol, st)
 			}
-			st = v.applySearchStyle(line, bufCol, st)
-			if v.containsSel(line, bufCol) {
+			st = v.applySearchStyle(line, absVisCol, st)
+			if v.containsSel(line, byteIdx) {
 				st = selStyle
 			}
 			c.SetContent(col, row, ch, st)
+			byteIdx += utf8.RuneLen(ch)
 		}
 	}
 
@@ -500,22 +518,24 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 		return
 	}
 
-	// Drag beyond the pane edges: scroll to reveal the missing area and pin
-	// the selection endpoint to that edge (lines not visible on first click).
-	for ly < 0 {
-		before := v.Top
-		v.ViewScrollLineUp()
-		ly = 0
-		if v.Top == before {
-			break
+	// Drag beyond the pane edges: optionally scroll to reveal more text and
+	// pin the selection endpoint to that edge.
+	if v.dragAutoScroll {
+		for ly < 0 {
+			before := v.Top
+			v.ViewScrollLineUp()
+			ly = 0
+			if v.Top == before {
+				break
+			}
 		}
-	}
-	for ly >= v.height {
-		before := v.Top
-		v.ViewScrollLineDown()
-		ly = v.height - 1
-		if v.Top == before {
-			break
+		for ly >= v.height {
+			before := v.Top
+			v.ViewScrollLineDown()
+			ly = v.height - 1
+			if v.Top == before {
+				break
+			}
 		}
 	}
 	if lx < 0 {
@@ -537,7 +557,9 @@ func (v *Viewport) handleMouse(e *tcell.EventMouse) {
 	v.CursorLine = pos.line
 	v.CursorCol = pos.col
 	v.clampCursorCol()
-	v.EnsureVisible(v.width, v.height)
+	if v.dragAutoScroll {
+		v.EnsureVisible(v.width, v.height)
+	}
 }
 
 func (v *Viewport) noteClick(pos bufferPos, when time.Time) {
@@ -710,12 +732,9 @@ func (v *Viewport) posFromLocal(lx, ly int) bufferPos {
 	lineLen := 0
 	if v.Buffer != nil && line >= 0 && line < v.Buffer.NumLines() {
 		raw := v.Buffer.Line(line)
-		if v.ANSI {
-			col = ANSIByteIndexAtVisible(raw, v.Left+lx)
-			lineLen = len(raw)
-		} else {
-			lineLen = len(raw)
-		}
+		lineLen = len(raw)
+		// CursorCol is a byte index; Left+lx is a visible/rune column.
+		col = ANSIByteIndexAtVisible(raw, v.Left+lx)
 	}
 	if col > lineLen {
 		col = lineLen
@@ -857,49 +876,35 @@ func (v *Viewport) Down() {
 }
 
 func (v *Viewport) LeftChar() {
-	if v.ANSI && v.Buffer != nil {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIColAtByte(line, v.CursorCol)
-		if vis > 0 {
-			vis--
-			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
-		}
-		if vis < v.Left {
-			v.Left = vis
+	if v.Buffer == nil {
+		if v.CursorCol > 0 {
+			v.CursorCol--
 		}
 		return
 	}
-
-	if v.CursorCol > 0 {
-		v.CursorCol--
+	line := v.Buffer.Line(v.CursorLine)
+	vis := VisibleANSIColAtByte(line, v.CursorCol)
+	if vis > 0 {
+		vis--
+		v.CursorCol = ANSIByteIndexAtVisible(line, vis)
 	}
-
-	if v.CursorCol < v.Left {
-		v.Left = v.CursorCol
+	if vis < v.Left {
+		v.Left = vis
 	}
 }
 
 func (v *Viewport) RightChar() {
-	if v.ANSI && v.Buffer != nil {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIColAtByte(line, v.CursorCol)
-		maxVis := VisibleANSIWidth(line)
-		if vis < maxVis {
-			vis++
-			v.CursorCol = ANSIByteIndexAtVisible(line, vis)
-		}
+	if v.Buffer == nil {
+		v.CursorCol++
 		return
 	}
-
-	if v.Buffer != nil {
-		lineLen := len(v.Buffer.Line(v.CursorLine))
-		if v.CursorCol < lineLen {
-			v.CursorCol++
-		}
-		return
+	line := v.Buffer.Line(v.CursorLine)
+	vis := VisibleANSIColAtByte(line, v.CursorCol)
+	maxVis := VisibleANSIWidth(line)
+	if vis < maxVis {
+		vis++
+		v.CursorCol = ANSIByteIndexAtVisible(line, vis)
 	}
-
-	v.CursorCol++
 }
 
 func (v *Viewport) PageDown(pageSize int) {
@@ -1000,6 +1005,29 @@ func (v *Viewport) Height() int { return v.height }
 // Width returns the last canvas width seen in Draw (0 before first paint).
 func (v *Viewport) Width() int { return v.width }
 
+// HitContentLine reports the buffer line under screen coordinates, or false
+// when the pointer is outside the pane or on empty padding below the last line.
+// List panes use this so clicks in the blank area do not clamp to the last row.
+func (v *Viewport) HitContentLine(screenX, screenY int) (line int, ok bool) {
+	if v == nil || v.Buffer == nil || v.width <= 0 || v.height <= 0 {
+		return 0, false
+	}
+	lx := screenX - v.screenX
+	ly := screenY - v.screenY
+	if lx < 0 || ly < 0 || lx >= v.width || ly >= v.height {
+		return 0, false
+	}
+	if ly < v.padTop {
+		return 0, false
+	}
+	line = v.Top + (ly - v.padTop)
+	last := v.lineLimit() - 1
+	if line < 0 || line > last {
+		return 0, false
+	}
+	return line, true
+}
+
 // EnsureCursorVisible scrolls so CursorLine is on-screen using the last Draw size.
 func (v *Viewport) EnsureCursorVisible() {
 	w, h := v.width, v.height
@@ -1088,37 +1116,22 @@ func (v *Viewport) EnsureVisible(width, height int) {
 		v.Top = 0
 	}
 
-	// Horizontal scroll. In ANSI mode CursorCol is a byte offset into the
-	// escape-laden string, while Left is a visible-cell skip count — mix them
-	// carefully so the caret stays in view.
-	if v.ANSI {
-		line := v.Buffer.Line(v.CursorLine)
-		vis := VisibleANSIWidth(line)
-		curVis := VisibleANSIColAtByte(line, v.CursorCol)
-		if curVis < v.Left {
-			v.Left = curVis
-		}
-		if curVis >= v.Left+width {
-			v.Left = curVis - width + 1
-		}
-		if v.Left < 0 {
-			v.Left = 0
-		}
-		if vis <= width {
-			v.Left = 0
-		} else if v.Left > vis-width {
-			v.Left = vis - width
-		}
-		return
+	// CursorCol is a byte offset; Left is a visible-cell skip count.
+	line := v.Buffer.Line(v.CursorLine)
+	vis := v.lineContentWidth(line)
+	curVis := VisibleANSIColAtByte(line, v.CursorCol)
+	if curVis < v.Left {
+		v.Left = curVis
 	}
-
-	if v.CursorCol < v.Left {
-		v.Left = v.CursorCol
-	}
-	if v.CursorCol >= v.Left+width {
-		v.Left = v.CursorCol - width + 1
+	if curVis >= v.Left+width {
+		v.Left = curVis - width + 1
 	}
 	if v.Left < 0 {
 		v.Left = 0
+	}
+	if vis <= width {
+		v.Left = 0
+	} else if v.Left > vis-width {
+		v.Left = vis - width
 	}
 }

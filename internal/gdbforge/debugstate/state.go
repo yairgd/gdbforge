@@ -39,6 +39,11 @@ type State struct {
 	gdbListenPrint   bool
 	gdbTargetPrint   bool
 	gdbConsoleSilent bool
+	// kgdbMode: kernel kgdb over slow serial — CLI stepping, lighter post-stop MI.
+	kgdbMode bool
+	// skipKgdbAttachStackRefresh: skip one -stack-list-frames after target remote
+	// on slow serial (frame 0 from *stopped is enough; full stack on next stop).
+	skipKgdbAttachStackRefresh bool
 }
 
 // New returns DebugState with Vim-like debugger defaults.
@@ -131,6 +136,47 @@ func (s *State) SetGdbTargetPrint(v bool) {
 	s.mu.Lock()
 	s.gdbTargetPrint = v
 	s.mu.Unlock()
+}
+
+func (s *State) KgdbMode() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.kgdbMode
+}
+
+func (s *State) SetKgdbMode(v bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.kgdbMode = v
+	s.mu.Unlock()
+}
+
+// ArmSkipKgdbAttachStackRefresh skips the next kgdb post-stop stack MI query
+// (used after target remote on slow serial mux).
+func (s *State) ArmSkipKgdbAttachStackRefresh() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.skipKgdbAttachStackRefresh = true
+	s.mu.Unlock()
+}
+
+// TakeSkipKgdbAttachStackRefresh reports and clears the attach skip flag.
+func (s *State) TakeSkipKgdbAttachStackRefresh() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	v := s.skipKgdbAttachStackRefresh
+	s.skipKgdbAttachStackRefresh = false
+	s.mu.Unlock()
+	return v
 }
 
 // SuppressGdbConsole is true when the GDB widget should not paint DisplayLines.

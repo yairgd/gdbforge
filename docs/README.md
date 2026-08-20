@@ -26,6 +26,10 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 
 ![gdbforge debugging its own running session](media/gdbforge-debug-itself.gif){ loading=lazy }
 
+**Linux kernel (`:lua kgdb_uart`)** — one UART + kdmx: `:lua kgdb_uart` breaks into kgdb in ~2 s, `lx-symbols`, breakpoint on a driver's read path, trigger with `cat /dev/…` from minicom. See [KERNEL_KGDB.md](KERNEL_KGDB.md). [Full video](https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b).
+
+![Linux kernel kgdb demo (`kgdb_uart`)](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
+
 ---
 
 ## Documentation map
@@ -34,6 +38,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
+| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_uart` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |
@@ -44,7 +49,10 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
-| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (GDB MI + dual PTY / IO console)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService, OpenOCD plans — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, `ptyx` mux, `:AI` / GdbMcpService — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| ↳ [Delve backend (peer of GDB)](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb) | Backend contributors | `-g dlv`, same MVC as GDB; inferior I/O via `--tty` (spawn-only) — [dual PTY details](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) |
+| ↳ [Delve inferior I/O (dual PTY)](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) | Backend contributors | `dlv exec --tty` → `:b io` or external terminal; `:set inferior-tty` restarts Delve; Go TUIs → `:lua dlv_port` |
+| ↳ [Future OpenOCD integration](DEBUGGER_INTEGRATION.md#future-openocd-integration) | Backend contributors | Planned telnet/TCL adapter (`internal/openocd`); separate backend, not a GDB wrapper |
 | **[PLUGINS.md](PLUGINS.md)** | Extensibility | Lua architecture; API details in [LUA_API.md](LUA_API.md) |
 | **[DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)** | New developers | Package layout and responsibilities |
 | **[DEPENDENCIES.md](DEPENDENCIES.md)** | Architects, reviewers | Go modules and internal import rules |

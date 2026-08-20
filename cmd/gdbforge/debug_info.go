@@ -133,6 +133,38 @@ func (c *debugInfoCtl) scheduleRefresh() {
 	c.coalesce.Schedule(c.runRefresh)
 }
 
+func (c *debugInfoCtl) scheduleStackRefresh() {
+	c.coalesce.Schedule(c.runStackRefresh)
+}
+
+func (c *debugInfoCtl) runStackRefresh() {
+	h := c.host
+	if h == nil || h.GdbMcp() == nil || h.Backend() == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Second)
+	defer cancel()
+	logFn := backend.LogFn(func(area, msg string) { h.LogError(area, msg) })
+	longCap := h.Debug() != nil && h.Debug().KgdbMode()
+	var frames []models.StackFrame
+	var ok bool
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			time.Sleep(80 * time.Millisecond)
+		}
+		frames, ok = backend.StackList(ctx, h.Backend().Kind(), h.GdbMcp(), longCap, logFn)
+		if ok && len(frames) > 0 {
+			break
+		}
+	}
+	if ok && len(frames) > 0 {
+		c.setStackFrames(frames)
+	}
+	if scr := h.Screen(); scr != nil {
+		_ = scr.PostEvent(tcell.NewEventInterrupt(debugInfoUIMsg{stackOnly: true}))
+	}
+}
+
 func (c *debugInfoCtl) runRefresh() {
 	// Retries: right after *stopped the first -thread-info capture can still
 	// be empty/stale; a click later works because GDB is idle. Retry briefly

@@ -11,12 +11,135 @@
   --md-typeset-a-color: #58a6ff;
 }
 
-.md-typeset .mermaid {
+.md-typeset .mermaid,
+.md-typeset .mermaid-diagram {
   background: var(--md-code-bg-color);
   border: 1px solid var(--md-default-fg-color--lightest);
   border-radius: 0.4rem;
   padding: 1rem;
   text-align: center;
+}
+
+.md-typeset .mermaid--zoomable {
+  cursor: zoom-in;
+}
+
+.md-typeset .mermaid--zoomable:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0 1px var(--md-accent-fg-color);
+}
+
+body.pz-lightbox-open {
+  overflow: hidden;
+}
+
+#pz-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+}
+
+#pz-lightbox[hidden] {
+  display: none !important;
+}
+
+.pz-lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+/* Framed panel inside the dimmed page (not edge-to-edge) */
+.pz-lightbox__panel {
+  position: absolute;
+  inset: 3vh 3vw;
+  display: flex;
+  flex-direction: column;
+  background: #0f1419;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* Floating icon toolbar (top-right), like Mermaid fullscreen controls */
+.pz-lightbox__controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(22, 27, 34, 0.92);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.pz-lightbox__controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  color: #c9d1d9;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+}
+
+.pz-lightbox__controls button:hover {
+  color: #f0f6fc;
+  background: rgba(88, 166, 255, 0.18);
+}
+
+.pz-lightbox__controls button:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 1px;
+}
+
+.pz-lightbox__controls button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* Diagram area fills the rest of the framed panel */
+.panzoom-parent {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0f1419;
+  cursor: grab;
+}
+
+.panzoom-parent:active {
+  cursor: grabbing;
+}
+
+.panzoom-parent > .pz-stage {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  transform-origin: center center;
+}
+
+.panzoom-parent > .pz-stage > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .md-typeset video {

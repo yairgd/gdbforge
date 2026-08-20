@@ -75,6 +75,12 @@ Run a shell command (`sh -c`). Returns exit status (number) and combined stdout+
 
 Absolute directory of the **current** script file (for sidecars: XML, configs next to the `.lua`). Safe to call from registered functions without deadlocking the runtime.
 
+### `gdbforge.debugger_path()` → `path`
+
+Path of the debugger binary backing this session (from `-d`, else `gdb` / `dlv`).
+Lets scripts probe the real binary's capabilities, e.g. whether GDB has Python
+before sourcing the kernel's `vmlinux-gdb.py`.
+
 ### `gdbforge.program()`
 
 Debuggee path from the current gdbforge session (may be `""` if none). Prefer this over hard-coding binaries in scripts that attach to the session program.

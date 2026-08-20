@@ -132,4 +132,5 @@ type StackFrame struct {
 	File  string
 	Line  int
 	Addr  string
+	From  string // shared library path when File is empty (MI "from=")
 }

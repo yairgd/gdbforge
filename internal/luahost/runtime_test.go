@@ -137,6 +137,26 @@ func TestTetrisScriptLoads(t *testing.T) {
 	rt.DispatchKey("h")
 }
 
+func TestEvalLinePrintsReturns(t *testing.T) {
+	var got []string
+	rt := New(nil, nil)
+	defer rt.Close()
+	rt.SetPrintSink(func(line string) { got = append(got, line) })
+	if err := rt.EvalLine(`return 1, "two"`); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "1\ttwo" {
+		t.Fatalf("returns=%v", got)
+	}
+	got = got[:0]
+	if err := rt.EvalLine(`gdbforge.print("hi"); return 3`); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "hi" || got[1] != "3" {
+		t.Fatalf("mixed=%v", got)
+	}
+}
+
 func TestPrintSinkPreferredOverPane(t *testing.T) {
 	p := &memPane{w: 8, h: 4}
 	rt := New(p, nil)
@@ -460,6 +480,55 @@ end
 		if line == "finished" {
 			t.Fatal("main continued after cancel")
 		}
+	}
+}
+
+func TestSystemTracksBackgroundWithoutDeadlock(t *testing.T) {
+	p := &memPane{w: 40, h: 10}
+	rt := New(p, nil)
+	defer rt.Close()
+
+	var tracked int
+	rt.SetTrackChild(func(pid int) { tracked = pid })
+
+	src := `
+function main()
+  local code, out = gdbforge.system("nohup sleep 60 >/dev/null 2>&1 </dev/null & echo $!")
+  if code ~= 0 then
+    gdbforge.print("fail:" .. tostring(out))
+  end
+  gdbforge.print("done")
+end
+`
+	if err := rt.LoadString(src, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.EnsureCommand("bg"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- rt.CallNamed("bg") }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("CallNamed: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("deadlock: system with background PID track did not return")
+	}
+	if tracked <= 0 {
+		t.Fatalf("expected tracked background pid, got %d", tracked)
+	}
+	foundDone := false
+	for _, line := range p.lines {
+		if line == "done" {
+			foundDone = true
+		}
+	}
+	if !foundDone {
+		t.Fatalf("script did not finish: %v", p.lines)
 	}
 }
 

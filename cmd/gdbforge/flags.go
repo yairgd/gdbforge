@@ -23,6 +23,7 @@ const (
 //
 // Examples:
 //
+//	gdbforge -g gdb
 //	gdbforge ./hello
 //	gdbforge -g dlv ./hello
 //	gdbforge -d /usr/bin/gdb ./hello a b
@@ -117,6 +118,7 @@ func parseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  -h, --help        Print help and exit\n")
 		fmt.Fprintf(os.Stderr, "  --                End of gdbforge options; rest passed to the debugger\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g gdb              # start without a program (attach/kernel debug)\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb ./hello a b\n")
@@ -164,8 +166,13 @@ func parseFlags(args []string) (SessionConfig, error) {
 
 	rest := fs.Args()
 	if len(rest) == 0 {
+		if backend == BackendGDB {
+			// A program is optional for attach workflows: kgdb, gdbserver,
+			// core files, and targets configured from the GDB console/Lua.
+			return cfg, nil
+		}
 		fs.Usage()
-		return SessionConfig{}, errors.New("missing prog")
+		return SessionConfig{}, errors.New("missing prog (required for dlv)")
 	}
 	cfg.Prog = rest[0]
 	if len(rest) > 1 {

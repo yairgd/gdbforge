@@ -12,7 +12,6 @@ func TestCodeWidgetSearchJump(t *testing.T) {
 		"omega",
 	}
 	// Rebuild buffer so Viewport search sees gutter+text lines.
-	w.hiLines = append([]string(nil), w.rawLines...)
 	w.rebuildBuffer()
 	w.selLine = 1
 	w.viewport.CursorLine = 0
@@ -48,7 +47,6 @@ func TestCodeWidgetWordAtCursor(t *testing.T) {
 		"int hello_world = 1;",
 		"  return hello_world;",
 	}
-	w.hiLines = append([]string(nil), w.rawLines...)
 	w.rebuildBuffer()
 	w.selLine = 1
 	w.viewport.CursorLine = 0

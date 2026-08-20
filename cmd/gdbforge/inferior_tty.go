@@ -8,6 +8,7 @@ import (
 
 	"os/exec"
 	"path/filepath"
+	"syscall"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
@@ -263,11 +264,13 @@ func (a *DebuggerApp) OpenExternalTTY() (string, error) {
 		return "", err
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start terminal %v: %w", argv, err)
 	}
+	a.trackStartedCmd(cmd, true)
 	// Detach: do not wait; the hold process keeps the pts open.
 	go func() { _ = cmd.Wait() }()
 
@@ -298,9 +301,11 @@ func (a *DebuggerApp) SpawnTerminal(argv []string) error {
 		return err
 	}
 	cmd := exec.Command(termArgv[0], termArgv[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn_terminal %v: %w", termArgv, err)
 	}
+	a.trackStartedCmd(cmd, true)
 	go func() { _ = cmd.Wait() }()
 	return nil
 }
@@ -357,7 +362,7 @@ func terminalRunArgv(userArgv []string) ([]string, error) {
 		out := []string{bin, "--"}
 		return append(out, userArgv...), nil
 	case "mate-terminal":
-		return []string{bin, "-e", shellJoinArgs(userArgv)}, nil
+		return []string{bin, "-e", "sh -c " + shellSingleQuote(shellJoinArgs(userArgv))}, nil
 	case "xterm", "konsole":
 		out := []string{bin, "-e"}
 		return append(out, userArgv...), nil

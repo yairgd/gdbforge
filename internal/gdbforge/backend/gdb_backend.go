@@ -17,6 +17,7 @@ import (
 type GDBBackend struct {
 	Client *gdb.GDBClient
 	Input  *gdb.GdbInputState
+	cliExec bool // CLI next/step/continue instead of MI -exec-* (kgdb serial)
 }
 
 func NewGDB(client *gdb.GDBClient) *GDBBackend {
@@ -66,7 +67,17 @@ func (b *GDBBackend) SupportsSourceFileList() bool  { return true }
 func (b *GDBBackend) SupportsLiveInferiorTTY() bool { return true }
 func (b *GDBBackend) BreakRefreshImmediate() bool   { return true }
 
+func (b *GDBBackend) SetCLIExec(v bool) {
+	if b == nil {
+		return
+	}
+	b.cliExec = v
+}
+
 func (b *GDBBackend) MapExec(cmd string) (string, bool) {
+	if b != nil && b.cliExec {
+		return cmd, IsRunCmd(cmd)
+	}
 	send := gdb.CLIExecToMI(cmd)
 	return send, IsRunCmd(cmd)
 }

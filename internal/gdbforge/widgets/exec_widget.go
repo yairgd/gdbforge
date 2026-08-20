@@ -10,16 +10,13 @@ import (
 // The app owns ExecClient and send policy; it paints via Append/HandleEvent
 // and handles OnSubmit / OnInterrupt / OnEOF intents.
 type ExecWidget struct {
-	console     *termui.ConsolePane
-	lineBuf     string
-	pending     bool // last buffer line is an incomplete PTY line
-	ended       bool // PTY/process exited; next key dismisses
-	onClose     func()
-	onDismiss   func()
-	onSubmit    func(cmd string)
-	onInterrupt func()
-	onEOF       func()
-	onSuspend   func()
+	console   *termui.ConsolePane
+	lineBuf   string
+	pending   bool // last buffer line is an incomplete PTY line
+	ended     bool // PTY/process exited; next key dismisses
+	onClose   func()
+	onDismiss func()
+	handlers  *ConsoleHandlers
 
 	lastRows, lastCols int
 	setSize            func(rows, cols uint16) error
@@ -32,10 +29,7 @@ func NewExecWidget() *ExecWidget {
 	console.SetANSI(true)
 
 	w := &ExecWidget{console: console}
-	console.OnSubmit = w.handleSubmit
-	console.OnInterrupt = w.handleInterrupt
-	console.OnEOF = w.handleEOF
-	console.OnSuspend = w.handleSuspend
+	bindConsoleIntents(console, w.handleSubmit, w.handleInterrupt, w.handleEOF, w.handleSuspend)
 	return w
 }
 
@@ -48,24 +42,9 @@ func (m *ExecWidget) SetSizeFunc(fn func(rows, cols uint16) error) {
 	m.setSize = fn
 }
 
-// SetOnSubmit registers the Enter handler (app controller).
-func (m *ExecWidget) SetOnSubmit(fn func(cmd string)) {
-	m.onSubmit = fn
-}
-
-// SetOnInterrupt registers the Ctrl-C handler (app controller).
-func (m *ExecWidget) SetOnInterrupt(fn func()) {
-	m.onInterrupt = fn
-}
-
-// SetOnEOF registers the Ctrl-D handler (app controller).
-func (m *ExecWidget) SetOnEOF(fn func()) {
-	m.onEOF = fn
-}
-
-// SetOnSuspend registers the Ctrl-Z handler (app controller).
-func (m *ExecWidget) SetOnSuspend(fn func()) {
-	m.onSuspend = fn
+// WireConsole attaches app handlers to this pane. nil clears handlers.
+func (m *ExecWidget) WireConsole(h *ConsoleHandlers) {
+	m.handlers = h
 }
 
 // SetOnClose registers a callback invoked on Ctrl-D / EOF while the session is live
@@ -134,16 +113,16 @@ func (m *ExecWidget) handleSubmit(raw string) {
 	if cmd != "" {
 		m.console.Input().PushHistory(cmd)
 	}
-	if m.onSubmit != nil {
-		m.onSubmit(cmd)
+	if m.handlers != nil && m.handlers.Submit != nil {
+		m.handlers.Submit(cmd)
 	}
 	m.console.Input().Clear()
 	m.console.ForceFollowTailAndScroll()
 }
 
 func (m *ExecWidget) handleInterrupt() {
-	if m.onInterrupt != nil {
-		m.onInterrupt()
+	if m.handlers != nil && m.handlers.Interrupt != nil {
+		m.handlers.Interrupt()
 	}
 }
 
@@ -156,14 +135,14 @@ func (m *ExecWidget) handleEOF() {
 		m.onClose()
 		return
 	}
-	if m.onEOF != nil {
-		m.onEOF()
+	if m.handlers != nil && m.handlers.EOF != nil {
+		m.handlers.EOF()
 	}
 }
 
 func (m *ExecWidget) handleSuspend() {
-	if m.onSuspend != nil {
-		m.onSuspend()
+	if m.handlers != nil && m.handlers.Suspend != nil {
+		m.handlers.Suspend()
 	}
 }
 

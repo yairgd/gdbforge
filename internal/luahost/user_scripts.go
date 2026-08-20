@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,6 +38,9 @@ type OpenExternalTTYFunc func() (string, error)
 // SpawnTerminalFunc opens a real terminal emulator running argv.
 type SpawnTerminalFunc func(argv []string) error
 
+// TrackChildFunc registers a PID for cleanup when gdbforge exits (Go-internal).
+type TrackChildFunc func(pid int)
+
 // SetOpenBuffer installs gdbforge.open_buffer(name) for user scripts.
 func (rt *Runtime) SetOpenBuffer(fn OpenBufferFunc) {
 	rt.setHostAPI(func() { rt.openBuffer = fn }, "open_buffer", rt.luaOpenBuffer)
@@ -65,6 +69,13 @@ func (rt *Runtime) SetOpenExternalTTY(fn OpenExternalTTYFunc) {
 // SetSpawnTerminal installs gdbforge.spawn_terminal(...) — real terminal + argv.
 func (rt *Runtime) SetSpawnTerminal(fn SpawnTerminalFunc) {
 	rt.setHostAPI(func() { rt.spawnTerminal = fn }, "spawn_terminal", rt.luaSpawnTerminal)
+}
+
+// SetTrackChild registers a host callback for background PIDs (not exposed to Lua).
+func (rt *Runtime) SetTrackChild(fn TrackChildFunc) {
+	rt.mu.Lock()
+	rt.trackChild = fn
+	rt.mu.Unlock()
 }
 
 // setHostAPI stores a host callback and publishes it on gdbforge.<name> when L is live.
@@ -467,8 +478,26 @@ func (rt *Runtime) luaSystem(L *lua.LState) int {
 			}
 		}
 		L.Push(lua.LNumber(code))
-		L.Push(lua.LString(buf.String()))
+		outStr := buf.String()
+		rt.maybeTrackSystemBackground(cmdLine, code, outStr)
+		L.Push(lua.LString(outStr))
 		return 2
+	}
+}
+
+// maybeTrackSystemBackground records a PID when Lua used the common
+// `… & echo $!` pattern via gdbforge.system (e.g. nohup kdmx).
+// Must not lock rt.mu: CallNamed holds it while Lua runs.
+func (rt *Runtime) maybeTrackSystemBackground(cmdLine string, code int, out string) {
+	if code != 0 || !strings.Contains(cmdLine, "&") {
+		return
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil || pid <= 0 {
+		return
+	}
+	if rt.trackChild != nil {
+		rt.trackChild(pid)
 	}
 }
 

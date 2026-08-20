@@ -22,8 +22,9 @@ func (c Canvas) ClearLineRange(localY, x1, x2 int, style tcell.Style) {
 	}
 }
 
-// DrawANSIText draws text interpreting ANSI SGR colors and skipping OSC/CSI
-// control sequences. skipCols skips leading visible cells (horizontal scroll).
+// DrawANSIText parses SGR in PTY/MI strings (GDB console, Output, Exec).
+// Widget-built UI must use plain buffer + CellStyle/SetContent instead.
+// skipCols skips leading visible cells (horizontal scroll).
 // If selected is non-nil, it is called with the byte offset of each printable
 // rune; a true result draws that cell in reverse.
 // If decorate is non-nil, it may adjust the style for each absolute visible
@@ -115,6 +116,16 @@ func VisibleANSIColAtByte(text string, byteIdx int) int {
 		byteIdx = len(text)
 	}
 	return VisibleANSIWidth(text[:byteIdx])
+}
+
+// VisibleColAtByte maps a byte offset to a visible column (plain UTF-8 or ANSI).
+func VisibleColAtByte(text string, byteIdx int) int {
+	return VisibleANSIColAtByte(text, byteIdx)
+}
+
+// ByteIndexAtVisibleCol maps a visible column to a byte offset (plain UTF-8 or ANSI).
+func ByteIndexAtVisibleCol(text string, visCol int) int {
+	return ANSIByteIndexAtVisible(text, visCol)
 }
 
 // ANSIRuneAtVisible returns the printable rune at visible cell visCol, or ' '.

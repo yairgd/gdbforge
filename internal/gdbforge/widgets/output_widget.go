@@ -34,11 +34,8 @@ type OutputWidget struct {
 	cur             []rune
 	col             int
 
-	onSubmit    func(line string)
-	onInterrupt func()
-	onEOF       func()
-	onSuspend   func()
-	setSize     func(rows, cols uint16) error
+	handlers *ConsoleHandlers
+	setSize   func(rows, cols uint16) error
 
 	lastRows, lastCols int
 }
@@ -70,46 +67,25 @@ func (w *OutputWidget) initKeyBindings() {
 	w.BindKeyFunc("clear", func(args ...any) { w.Clear() }, "<C-l>")
 }
 
-// EnableInput turns on the stdin line and wires console intents to SetOn* callbacks.
-func (w *OutputWidget) EnableInput(on bool) {
-	w.separateTTY = on
-	w.console.SetInputEnabled(on)
-	if on {
-		// Attach typing to the incomplete stdout line (e.g. a live "> "
-		// prompt with no trailing newline) so Enter does not look like it
-		// deleted the text before PTY echo arrives. Do not local-echo on
-		// submit — the inferior TTY usually echoes and that would double.
-		w.console.SetLivePrompt(true)
-		w.console.OnSubmit = w.handleSubmit
-		w.console.OnInterrupt = w.handleInterrupt
-		w.console.OnEOF = w.handleEOF
-		w.console.OnSuspend = w.handleSuspend
-	} else {
-		w.console.OnSubmit = nil
-		w.console.OnInterrupt = nil
-		w.console.OnEOF = nil
-		w.console.OnSuspend = nil
+// WireConsole attaches app handlers and enables stdin on the IO pane.
+// nil disables input and clears handlers (external tty / detach).
+func (w *OutputWidget) WireConsole(h *ConsoleHandlers) {
+	w.handlers = h
+	if h == nil {
+		w.separateTTY = false
+		w.console.SetInputEnabled(false)
+		w.console.SetLivePrompt(false)
+		clearConsoleIntents(w.console)
+		return
 	}
-}
-
-// SetOnSubmit registers the Enter handler (app controller).
-func (w *OutputWidget) SetOnSubmit(fn func(line string)) {
-	w.onSubmit = fn
-}
-
-// SetOnInterrupt registers the Ctrl-C handler (app controller).
-func (w *OutputWidget) SetOnInterrupt(fn func()) {
-	w.onInterrupt = fn
-}
-
-// SetOnEOF registers the Ctrl-D handler (app controller).
-func (w *OutputWidget) SetOnEOF(fn func()) {
-	w.onEOF = fn
-}
-
-// SetOnSuspend registers the Ctrl-Z handler (app controller).
-func (w *OutputWidget) SetOnSuspend(fn func()) {
-	w.onSuspend = fn
+	w.separateTTY = true
+	w.console.SetInputEnabled(true)
+	// Attach typing to the incomplete stdout line (e.g. a live "> "
+	// prompt with no trailing newline) so Enter does not look like it
+	// deleted the text before PTY echo arrives. Do not local-echo on
+	// submit — the inferior TTY usually echoes and that would double.
+	w.console.SetLivePrompt(true)
+	bindConsoleIntents(w.console, w.handleSubmit, w.handleInterrupt, w.handleEOF, w.handleSuspend)
 }
 
 // SetSizeFunc registers a callback used when the pane size changes (PTY winsize).
@@ -323,8 +299,8 @@ func (w *OutputWidget) handleSubmit(raw string) {
 	if line != "" {
 		w.console.Input().PushHistory(line)
 	}
-	if w.onSubmit != nil {
-		w.onSubmit(line)
+	if w.handlers != nil && w.handlers.Submit != nil {
+		w.handlers.Submit(line)
 	}
 	w.console.Input().Clear()
 	// Keep attach-to-tail so the next line types after the program prompt.
@@ -335,20 +311,20 @@ func (w *OutputWidget) handleSubmit(raw string) {
 }
 
 func (w *OutputWidget) handleInterrupt() {
-	if w.onInterrupt != nil {
-		w.onInterrupt()
+	if w.handlers != nil && w.handlers.Interrupt != nil {
+		w.handlers.Interrupt()
 	}
 }
 
 func (w *OutputWidget) handleEOF() {
-	if w.onEOF != nil {
-		w.onEOF()
+	if w.handlers != nil && w.handlers.EOF != nil {
+		w.handlers.EOF()
 	}
 }
 
 func (w *OutputWidget) handleSuspend() {
-	if w.onSuspend != nil {
-		w.onSuspend()
+	if w.handlers != nil && w.handlers.Suspend != nil {
+		w.handlers.Suspend()
 	}
 }
 

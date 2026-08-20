@@ -15,6 +15,9 @@ const (
 	defaultCaptureIdle = 80 * time.Millisecond
 	defaultCaptureMax  = 2 * time.Second
 	defaultDrainWait   = 20 * time.Millisecond
+	// kgdb serial: deep -stack-list-frames can arrive with long gaps between chunks.
+	stackCaptureIdle = 500 * time.Millisecond
+	stackCaptureMax  = 15 * time.Second
 )
 
 // GdbMcpService exposes GDB tools over a shared core.Session (same process
@@ -82,10 +85,19 @@ func (s *GdbMcpService) GdbCommand(ctx context.Context, command string) (string,
 // GDB console paint for App/MCP replies is controlled by AppState.GdbListenPrint
 // (default on; :set nogdblistenprint to silence listener traffic).
 func (s *GdbMcpService) Query(ctx context.Context, command string) (string, error) {
-	return s.query(ctx, command, platform.PTYOwnerApp)
+	return s.queryCapture(ctx, command, platform.PTYOwnerApp, s.captureIdle, s.captureMax)
+}
+
+// QueryLong uses relaxed PTY capture timing for large MI replies (kgdb stack list).
+func (s *GdbMcpService) QueryLong(ctx context.Context, command string) (string, error) {
+	return s.queryCapture(ctx, command, platform.PTYOwnerApp, stackCaptureIdle, stackCaptureMax)
 }
 
 func (s *GdbMcpService) query(ctx context.Context, command string, owner platform.PTYOwner) (string, error) {
+	return s.queryCapture(ctx, command, owner, s.captureIdle, s.captureMax)
+}
+
+func (s *GdbMcpService) queryCapture(ctx context.Context, command string, owner platform.PTYOwner, idle, max time.Duration) (string, error) {
 	if s == nil || s.sess == nil {
 		return "", context.Canceled
 	}
@@ -108,7 +120,7 @@ func (s *GdbMcpService) query(ctx context.Context, command string, owner platfor
 			if err := w.Send(command); err != nil {
 				return err
 			}
-			capture(ctx, ch, &out, s.captureIdle, s.captureMax, tok)
+			capture(ctx, ch, &out, idle, max, tok)
 			return nil
 		})
 	}

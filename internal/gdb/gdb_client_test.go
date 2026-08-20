@@ -39,10 +39,15 @@ func TestNewGDBClientStartsAndCloses(t *testing.T) {
 	}
 }
 
-func TestNewGDBClientRequiresArgs(t *testing.T) {
-	_, err := NewGDBClient("gdb", nil)
-	if err == nil {
-		t.Fatal("expected error for empty gdb args")
+func TestNewGDBClientStartsWithoutProgram(t *testing.T) {
+	client, err := NewGDBClient("gdb", nil)
+	if err != nil {
+		t.Skipf("gdb/pty unavailable: %v", err)
+	}
+	defer client.Close()
+
+	if boot := client.TakeStartupOutput(); !strings.Contains(boot, "(gdb)") {
+		t.Fatalf("startup missing prompt: %q", boot)
 	}
 }
 

@@ -21,6 +21,7 @@ type dlvCtl struct {
 	pendingFrameLevel    int // Delve: level to show after frame/up/down
 	pendingFrameLevelSet bool
 	pendingDebugInfo     bool // refresh threads/stack after *stopped once prompt is ready
+	pendingStackRefresh  bool // kgdb: -stack-list-frames only after *stopped
 
 	// codeNavGen increments when the user browses away from the stop frame
 	// (call stack / frame cmd). Late stop refreshes with an older gen are ignored.
@@ -75,6 +76,22 @@ func (c *dlvCtl) noteFrameSyncLevel(level int) {
 	c.pendingFrameLevelSet = true
 }
 
+// armStackRefresh marks a post-stop call-stack refresh (kgdb: one stack query).
+// Runs from TriggerPendingStackRefreshIfReady when (gdb) is ready — not on a
+// short timer (kgdb serial prompt can take >120ms; early query left only frame 0).
+func (c *dlvCtl) armStackRefresh() {
+	c.pendingStackRefresh = true
+}
+
+func (c *dlvCtl) triggerPendingStackRefresh() {
+	a := c.app
+	if a == nil || !c.pendingStackRefresh {
+		return
+	}
+	c.pendingStackRefresh = false
+	a.debugInfo.scheduleStackRefresh()
+}
+
 // armDebugInfoRefresh marks a post-stop threads/stack refresh and starts a
 // fallback timer so we still refresh if PromptReady is missed.
 func (c *dlvCtl) armDebugInfoRefresh() {
@@ -98,6 +115,7 @@ func (c *dlvCtl) triggerPendingDebugInfo() {
 // clearPendingOnTeardown drops in-flight sync flags when the Delve session ends.
 func (c *dlvCtl) clearPendingOnTeardown() {
 	c.pendingDebugInfo = false
+	c.pendingStackRefresh = false
 	c.pendingFrameSync = false
 }
 

@@ -44,9 +44,6 @@ func NewGDBClientOpts(gdbPath string, gdbArgs []string, opts ClientOptions) (*GD
 	if gdbPath == "" {
 		gdbPath = "gdb"
 	}
-	if len(gdbArgs) == 0 {
-		return nil, fmt.Errorf("gdb arguments required (program and/or -x script)")
-	}
 
 	// Always MI2; disable pagination before -x / load so long "Loading section…"
 	// output is not stuck on "--Type <RET> for more…" (no UI yet to answer).
