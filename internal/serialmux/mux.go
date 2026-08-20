@@ -83,7 +83,7 @@ func openLeg() (*leg, error) {
 }
 
 func configurePTYRaw(f *os.File) error {
-	t, err := unix.IoctlGetTermios(int(f.Fd()), unix.TCGETS)
+	t, err := unix.IoctlGetTermios(int(f.Fd()), ioctlReadTermios)
 	if err != nil {
 		return fmt.Errorf("pty termios get: %w", err)
 	}
@@ -97,7 +97,7 @@ func configurePTYRaw(f *os.File) error {
 	t.Cflag |= unix.CS8 | unix.CREAD | unix.CLOCAL
 	t.Cc[unix.VMIN] = 1
 	t.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(int(f.Fd()), unix.TCSETS, t); err != nil {
+	if err := unix.IoctlSetTermios(int(f.Fd()), ioctlWriteTermios, t); err != nil {
 		return fmt.Errorf("pty termios set: %w", err)
 	}
 	return nil
