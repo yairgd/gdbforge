@@ -1,5 +1,6 @@
 -- remotegdb — kill remote gdbserver if needed, scp (if md5 differs), start
 -- gdbserver on board, then GDB target remote.
+-- Install: cp -r lua/embedded/remotegdb .gdbforge/lua/
 --
 -- Usage (GDB backend):
 --   :lua remotegdb

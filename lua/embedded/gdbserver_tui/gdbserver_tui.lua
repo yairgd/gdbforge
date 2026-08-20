@@ -1,5 +1,5 @@
 -- gdbserver in an external terminal — best for local host TUI apps (GDB).
--- Install: cp -r lua/gdbserver_tui .gdbforge/lua/
+-- Install: cp -r lua/embedded/gdbserver_tui .gdbforge/lua/
 -- Env:     GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|…
 -- Usage:   :lua gdbserver_tui [prog] [port]
 --

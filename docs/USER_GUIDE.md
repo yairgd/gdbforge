@@ -236,7 +236,7 @@ export GDBFORGE_TERMINAL=mate-terminal
 # Embedded Linux board — scp (if changed) + ssh gdbserver + target remote
 export GDBFORGE_REMOTE_HOST=192.168.20.50
 ./bin/gdbforge ./hello
-# install:  cp -r lua/remotegdb .gdbforge/lua/
+# install:  cp -r lua/embedded/remotegdb .gdbforge/lua/
 # then:     :lua remotegdb
 #           :lua remotegdb ./hello 192.168.20.50 1234
 

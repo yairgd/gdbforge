@@ -1,6 +1,6 @@
 -- Debug a program with stdio in another real terminal (GDB).
 --
--- Install: mkdir -p .gdbforge/lua && cp -r lua/terminal_debug .gdbforge/lua/
+-- Install: cp -r lua/embedded/terminal_debug .gdbforge/lua/
 --
 -- Env:
 --   GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|gnome-terminal|…

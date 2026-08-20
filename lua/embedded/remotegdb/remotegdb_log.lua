@@ -1,6 +1,6 @@
 -- remote_log — open a terminal and tail the board gdbserver log.
 --
--- Install:  mkdir -p .gdbforge/lua && cp -r …/lua/remote_log .gdbforge/lua/
+-- Install: cp -r lua/embedded/remotegdb .gdbforge/lua/
 -- Usage:    :lua remote_log
 --           :lua remote_log 192.168.20.50
 --           :lua remote_log 192.168.20.50 root /tmp/gdbserver.log

@@ -1,5 +1,5 @@
 -- External tty for TUI / full-VT inferiors (GDB).
--- Install: cp -r lua/external_tty .gdbforge/lua/
+-- Install: cp -r lua/embedded/external_tty .gdbforge/lua/
 -- Env:     GDBFORGE_TERMINAL=mate-terminal|kitty|xterm|…
 -- Usage:   :lua external_tty
 --

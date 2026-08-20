@@ -43,6 +43,7 @@ nav:
   - Home: README.md
   - User guide:
       - User Guide: USER_GUIDE.md
+      - Embedded Linux debug: EMBEDDED_LINUX_DEBUG.md
       - MPSoC debug: MPSOC_DEBUG.md
       - STM32 debug: STM32_DEBUG.md
       - Lua API: LUA_API.md

@@ -38,6 +38,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
+| **[EMBEDDED_LINUX_DEBUG.md](EMBEDDED_LINUX_DEBUG.md)** | Users / embedded | User-space apps — `:lua remotegdb`, internal `:b io` vs external terminal |
 | **[MPSOC_DEBUG.md](MPSOC_DEBUG.md)** | Users / embedded | Zynq MPSoC — Cortex-A53/R5 J-Link and OpenOCD Lua workflows |
 | **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32F405 bare-metal — J-Link SWD and ST-Link OpenOCD |
 | **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_kdmx` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
