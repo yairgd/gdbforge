@@ -80,6 +80,11 @@ type DebuggerApp struct {
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 	dbg := &DebuggerApp{cfg: cfg}
 	dbg.initControllers()
+	// Start the debugger before tcell Init() so a missing gdb/dlv binary
+	// exits on the normal terminal (cgdb-style) instead of leaving alt-screen on.
+	if err := dbg.initBackend(); err != nil {
+		return nil, err
+	}
 	dbg.TermApp = termui.NewTermApp()
 	dbg.TermApp.Api = dbg
 	dbg.commandReg = commands.NewCommandRegistry()
@@ -176,6 +181,9 @@ func (a *DebuggerApp) Close() {
 		}
 		_ = a.fileLog.Close()
 		a.fileLog = nil
+	}
+	if a.TermApp != nil {
+		a.TermApp.Close()
 	}
 }
 

@@ -56,7 +56,7 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 	}
 
 	if _, err := exec.LookPath(dlvPath); err != nil {
-		return nil, fmt.Errorf("find %s: %w", dlvPath, err)
+		return nil, fmt.Errorf("cannot find debugger %q: %w", dlvPath, err)
 	}
 
 	c := &Client{}
@@ -120,7 +120,7 @@ func NewConnectClient(dlvPath, addr string) (*Client, error) {
 		return nil, fmt.Errorf("dlv connect: address required")
 	}
 	if _, err := exec.LookPath(dlvPath); err != nil {
-		return nil, fmt.Errorf("find %s: %w", dlvPath, err)
+		return nil, fmt.Errorf("cannot find debugger %q: %w", dlvPath, err)
 	}
 
 	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")

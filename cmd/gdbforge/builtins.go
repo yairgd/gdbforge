@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
@@ -15,10 +17,32 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
+// initBackend starts gdb or dlv before the TUI initializes the terminal.
+func (a *DebuggerApp) initBackend() error {
+	extTTY := inferiorTTYFromEnvOrCfg(a.cfg)
+	if a.cfg.IsDLV() {
+		client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
+		if err != nil {
+			return err
+		}
+		a.backend = backend.NewDLV(client)
+		return nil
+	}
+	client, err := gdb.NewGDBClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, gdb.ClientOptions{InferiorTTY: extTTY})
+	if err != nil {
+		return err
+	}
+	a.backend = backend.NewGDB(client)
+	return nil
+}
+
 // initBuiltins creates singleton built-in views once at startup.
 // Adding a new page: construct it here, registerBuiltin(name, w).
 // Show with :b name (OnBuffer). Source files use :edit filename (per-file CodeWidget).
 func (a *DebuggerApp) initBuiltins() error {
+	if a.backend == nil {
+		return fmt.Errorf("debugger backend not initialized")
+	}
 	a.builtins = make(map[string]termui.Widget)
 	a.bufs.initMaps()
 
@@ -43,23 +67,12 @@ func (a *DebuggerApp) initBuiltins() error {
 		skipBreakMain bool
 		extTTY        = inferiorTTYFromEnvOrCfg(a.cfg)
 	)
-	if a.cfg.IsDLV() {
-		client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
-		if err != nil {
-			return err
-		}
-		a.backend = backend.NewDLV(client)
-	} else {
-		client, err := gdb.NewGDBClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, gdb.ClientOptions{InferiorTTY: extTTY})
-		if err != nil {
-			return err
-		}
-		a.backend = backend.NewGDB(client)
-		skipBreakMain = gdb.HasInitScript(a.cfg.GDBArgs)
-	}
 	boot = a.backend.TakeStartupOutput()
 	inferior = a.backend.InferiorTTY()
 	promptTok = a.backend.PromptToken()
+	if !a.cfg.IsDLV() {
+		skipBreakMain = gdb.HasInitScript(a.cfg.GDBArgs)
+	}
 	_ = a.backend.ConfigureInferiorTTY()
 
 	a.gdbWidget = widgets.NewGDBWidget()

@@ -31,7 +31,7 @@ func main() {
 
 	app, err := NewDebuggerApp(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start debugger: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gdbforge: %v\n", err)
 		os.Exit(1)
 	}
 	defer app.Close()

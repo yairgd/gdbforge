@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -51,6 +52,7 @@ type TermApp struct {
 	appState        *platform.AppState
 	modeHandlers    ModeKeyHandlers
 	commandHandlers CommandHandlers
+	closeOnce       sync.Once
 }
 
 func NewTermApp() *TermApp {
@@ -120,7 +122,20 @@ func (app *TermApp) HandleKey(ev *tcell.EventKey) {
 }
 
 func (app *TermApp) Close() {
-	app.screen.Fini()
+	if app == nil {
+		return
+	}
+	app.closeOnce.Do(func() {
+		if app.screen == nil {
+			return
+		}
+		// Give terminal enough time to disable mouse reporting.
+		// Without this delay, pending mouse escape sequences may
+		// leak to the shell after Fini().
+		time.Sleep(100 * time.Millisecond)
+		app.screen.DisableMouse()
+		app.screen.Fini()
+	})
 }
 
 // Suspend restores the terminal and stops this process with SIGTSTP (job
@@ -200,14 +215,7 @@ func (app *TermApp) AddWidget(w Widget) {
 }
 
 func (app *TermApp) Run() {
-	defer func() {
-		// Give terminal enough time to disable mouse reporting.
-		// Without this delay, pending mouse escape sequences may
-		// leak to the shell after Fini().
-		time.Sleep(100 * time.Millisecond)
-		app.screen.DisableMouse()
-		app.screen.Fini()
-	}()
+	defer app.Close()
 	// UI event source — PollEvent blocks; run off the main loop goroutine.
 	go func() {
 		for {

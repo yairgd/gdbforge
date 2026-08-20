@@ -54,7 +54,7 @@ func NewGDBClientOpts(gdbPath string, gdbArgs []string, opts ClientOptions) (*GD
 	argv = append(argv, gdbArgs...)
 
 	if _, err := exec.LookPath(gdbPath); err != nil {
-		return nil, fmt.Errorf("find %s: %w", gdbPath, err)
+		return nil, fmt.Errorf("cannot find debugger %q: %w", gdbPath, err)
 	}
 
 	gdbPty, err := ptyx.New(argv, ptyx.Options{})

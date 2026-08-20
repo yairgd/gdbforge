@@ -32,6 +32,7 @@ func NewDemoApp() (*DemoApp, error) {
 	}
 	a.TermApp.Api = a
 	if err := a.Init(); err != nil {
+		a.Close()
 		return nil, err
 	}
 	a.HandleResize()
@@ -40,7 +41,7 @@ func NewDemoApp() (*DemoApp, error) {
 
 // Close releases app resources.
 func (a *DemoApp) Close() {
-	if a.ctx.Log != nil {
-		// sinks closed with process; nothing required
+	if a.TermApp != nil {
+		a.TermApp.Close()
 	}
 }
