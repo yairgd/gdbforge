@@ -1,5 +1,5 @@
 -- Step 1 only — prefer :lua kgdb_kdmx (all steps in one script).
--- Install: cp -r lua/kgdb_setup lua/kgdb_common .gdbforge/lua/
+-- Install: cp -r lua/kernel/kgdb_setup lua/kgdb_common .gdbforge/lua/
 
 local function load_common()
   local path = gdbforge.lua_dir() .. "/../kgdb_common/kgdb_common.lua"

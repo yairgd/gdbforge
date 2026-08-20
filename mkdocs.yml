@@ -43,6 +43,8 @@ nav:
   - Home: README.md
   - User guide:
       - User Guide: USER_GUIDE.md
+      - MPSoC debug: MPSOC_DEBUG.md
+      - STM32 debug: STM32_DEBUG.md
       - Lua API: LUA_API.md
       - Plugins: PLUGINS.md
       - Command System: COMMAND_SYSTEM.md

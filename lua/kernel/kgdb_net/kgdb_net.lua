@@ -1,6 +1,6 @@
 -- kgdb over Ethernet / separate console — one-shot → stopped debug mode.
 -- No kdmx (console is SSH or another UART; GDB uses TCP).
--- Install: cp -r lua/kgdb_net lua/kgdb_common .gdbforge/lua/
+-- Install: cp -r lua/kernel/kgdb_net lua/kgdb_common .gdbforge/lua/
 -- Docs:    docs/KERNEL_KGDB.md
 --
 -- Usage:   :lua kgdb_net [module] [host] [port]
@@ -27,6 +27,7 @@ local function common_candidates()
   if home and home ~= "" then
     list[#list + 1] = home .. "/.gdbforge/lua" .. rel
     list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua" .. rel
+    list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua/kernel" .. rel
   end
   return list
 end
@@ -54,7 +55,7 @@ local function load_common()
   for _, path in ipairs(tried) do
     gdbforge.print("  " .. path)
   end
-  gdbforge.print("Install: cp -r lua/kgdb_common lua/kgdb_net .gdbforge/lua/")
+  gdbforge.print("Install: cp -r lua/kernel/kgdb_common lua/kgdb_net .gdbforge/lua/")
   return false
 end
 

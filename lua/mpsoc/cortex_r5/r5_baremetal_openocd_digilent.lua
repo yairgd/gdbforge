@@ -1,5 +1,5 @@
 -- Cortex-R5 / Digilent HS2 OpenOCD bring-up.
--- Install: copy lua/cortex_r5 into .gdbforge/lua/ (keeps cfg + r5_target.xml)
+-- Install: copy lua/mpsoc/cortex_r5 into .gdbforge/lua/ (keeps cfg + r5_target.xml)
 -- Usage:   :lua r5_baremetal_openocd_digilent
 --
 -- Env:

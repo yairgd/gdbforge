@@ -1,5 +1,8 @@
 ---
 description: Kernel and module debugging with gdbforge via kgdb (UART+kdmx or Ethernet) using Lua workflows.
+meta:
+  - name: keywords
+    content: Linux kernel debugger, kgdb GDB, kgdb UART, kdmx kernel debug, kgdboe Ethernet, kernel module debug, lx-symbols, gdbforge
 ---
 
 # Kernel / module debugging (kgdb)
@@ -440,7 +443,7 @@ Install (project overrides embedded catalog):
 
 ```bash
 mkdir -p .gdbforge/lua
-cp -r lua/kgdb_serial lua/kgdb_trigger .gdbforge/lua/
+cp -r lua/kernel/kgdb_serial lua/kernel/kgdb_trigger .gdbforge/lua/
 go build -o gdbforge ./cmd/gdbforge
 ```
 

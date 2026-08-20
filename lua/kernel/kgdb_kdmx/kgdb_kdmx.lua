@@ -1,5 +1,5 @@
 -- One-shot kernel kgdb over UART: kgdboc + kdmx + minicom + SysRq-G + target remote.
--- Install: cp -r lua/kgdb_kdmx lua/kgdb_common .gdbforge/lua/
+-- Install: cp -r lua/kernel/kgdb_kdmx lua/kgdb_common .gdbforge/lua/
 -- Docs:    docs/KERNEL_KGDB.md
 --
 -- Usage:   :lua kgdb_kdmx
@@ -57,6 +57,7 @@ local function common_candidates()
   if home and home ~= "" then
     list[#list + 1] = home .. "/.gdbforge/lua" .. rel
     list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua" .. rel
+    list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua/kernel" .. rel
   end
   return list
 end
@@ -72,7 +73,7 @@ local function load_common()
       return false
     end
   end
-  gdbforge.print("ERROR: kgdb_common.lua not found — cp -r lua/kgdb_common lua/kgdb_kdmx .gdbforge/lua/")
+  gdbforge.print("ERROR: kgdb_common.lua not found — cp -r lua/kernel/kgdb_common lua/kgdb_kdmx .gdbforge/lua/")
   return false
 end
 

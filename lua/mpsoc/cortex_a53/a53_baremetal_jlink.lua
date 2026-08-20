@@ -1,5 +1,5 @@
 -- Cortex-A53 / J-Link bare-metal bring-up.
--- Install: cp -r lua/cortex_a53 .gdbforge/lua/
+-- Install: cp -r lua/mpsoc/cortex_a53 .gdbforge/lua/
 -- Usage:   :lua a53_baremetal_jlink
 --
 -- Env:

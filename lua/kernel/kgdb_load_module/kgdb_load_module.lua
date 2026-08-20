@@ -1,5 +1,5 @@
 -- Load one kernel module into GDB: SSH modprobe + sysfs sections + add-symbol-file.
--- Install: cp -r lua/kgdb_load_module lua/kgdb_common .gdbforge/lua/
+-- Install: cp -r lua/kernel/kgdb_load_module lua/kgdb_common .gdbforge/lua/
 --
 -- Manual driver symbols (already attached via target remote):
 --   :lua kgdb_load_module as6221
@@ -30,6 +30,7 @@ local function load_common()
   if home and home ~= "" then
     paths[#paths + 1] = home .. "/.gdbforge/lua/kgdb_common/kgdb_common.lua"
     paths[#paths + 1] = home .. "/.cache/gdbforge/embedded-lua/kgdb_common/kgdb_common.lua"
+    paths[#paths + 1] = home .. "/.cache/gdbforge/embedded-lua/kernel/kgdb_common/kgdb_common.lua"
   end
   for _, path in ipairs(paths) do
     local fh = io.open(path, "r")
@@ -41,7 +42,7 @@ local function load_common()
       return false
     end
   end
-  gdbforge.print("ERROR: kgdb_common not found — cp -r lua/kgdb_common lua/kgdb_load_module .gdbforge/lua/")
+  gdbforge.print("ERROR: kgdb_common not found — cp -r lua/kernel/kgdb_common lua/kgdb_load_module .gdbforge/lua/")
   return false
 end
 

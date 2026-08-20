@@ -1,5 +1,5 @@
 -- Cleanup stale kgdb: GDB disconnect + kill kdmx + clear kgdboc (SSH).
--- Install: cp -r lua/kgdb_detach lua/kgdb_common .gdbforge/lua/
+-- Install: cp -r lua/kernel/kgdb_detach lua/kgdb_common .gdbforge/lua/
 --
 -- Usage:   :lua kgdb_detach
 -- (also runs automatically at start of :lua kgdb_kdmx unless GDBFORGE_KGDB_CLEANUP=0)

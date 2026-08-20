@@ -1,5 +1,5 @@
 -- Cortex-R5 / J-Link bring-up.
--- Install: copy lua/cortex_r5 into .gdbforge/lua/ (keeps r5_target.xml beside the script)
+-- Install: copy lua/mpsoc/cortex_r5 into .gdbforge/lua/ (keeps r5_target.xml beside the script)
 -- Usage:   :lua r5_baremetal_jlink
 --
 -- Env:

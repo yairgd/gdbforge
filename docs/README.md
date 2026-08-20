@@ -38,7 +38,9 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
-| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_uart` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
+| **[MPSOC_DEBUG.md](MPSOC_DEBUG.md)** | Users / embedded | Zynq MPSoC — Cortex-A53/R5 J-Link and OpenOCD Lua workflows |
+| **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32F405 bare-metal — J-Link SWD and ST-Link OpenOCD |
+| **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_kdmx` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |

@@ -108,6 +108,7 @@ local function kgdb_common_candidates()
   if home and home ~= "" then
     list[#list + 1] = home .. "/.gdbforge/lua" .. rel
     list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua" .. rel
+    list[#list + 1] = home .. "/.cache/gdbforge/embedded-lua/kernel" .. rel
   end
   return list
 end
@@ -123,7 +124,7 @@ function M.load_kgdb_common()
       return nil
     end
   end
-  gdbforge.print("ERROR: kgdb_common.lua not found — cp -r lua/kgdb_common .gdbforge/lua/")
+  gdbforge.print("ERROR: kgdb_common.lua not found — cp -r lua/kernel/kgdb_common .gdbforge/lua/")
   return nil
 end
 
