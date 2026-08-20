@@ -14,17 +14,19 @@
 
 ## Typical use cases
 
-- Debugging **Linux applications** without leaving the terminal
-- **Embedded Linux** and board bring-up (source + GDB + process panes together)
-- **MCU / cross** workflows where layout and keyboard speed matter
-- Teams who want a **Vim-like** flow: normal / insert / command modes, panes, buffers
+- Debugging **Linux applications** — internal `:b io` or external terminal ([embedded guide](docs/EMBEDDED_LINUX_DEBUG.md))
+- **Embedded Linux** boards — `:lua remotegdb` (scp + gdbserver) ([embedded guide](docs/EMBEDDED_LINUX_DEBUG.md))
+- **Zynq MPSoC** Cortex-A53/R5 — J-Link / OpenOCD ([MPSoC guide](docs/MPSOC_DEBUG.md))
+- **STM32** bare-metal — J-Link SWD / ST-Link ([STM32 guide](docs/STM32_DEBUG.md))
+- **Linux kernel** kgdb — UART, Ethernet, modules ([kernel guide](docs/KERNEL_KGDB.md))
 - **Go** programs via Delve (`-g dlv`), including TUI targets in an external terminal
+- Teams who want a **Vim-like** flow: normal / insert / command modes, panes, buffers
 
 ## Demo
 
 Screencasts (GitHub-hosted). Order: embedded MCU → everyday Linux → dogfooding → **Linux kernel (`kgdb_uart`)**.
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`lua/r5_debug`](lua/r5_debug) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`:lua r5_baremetal_jlink`](lua/mpsoc/cortex_r5/) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c). Guide: [docs/MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md).
 
 <video src="https://github.com/user-attachments/assets/a5612bb4-c617-401d-b57b-3b8c5543277c" autoplay loop muted playsinline width="100%"></video>
 
@@ -98,11 +100,11 @@ Full write-up: **[docs/KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** (Path 1 kdmx, Path
 
 ```bash
 mkdir -p .gdbforge/lua
-cp -r lua/r5_debug .gdbforge/lua/
-# then inside gdbforge:  :lua r5_debug
+cp -r lua/mpsoc/cortex_r5 .gdbforge/lua/
+# then inside gdbforge:  :lua r5_baremetal_jlink
 ```
 
-More installable workflows (Go/`dlv_ext_port`, embedded/`remotegdb`, **kernel kgdb**, GDB tty, R5, games): [`lua/README.md`](lua/README.md) — install, env vars (`GDBFORGE_TERMINAL=mate-terminal`, `GDBFORGE_KGDB_UART`, …), and how to use each script.
+More installable workflows: [`lua/README.md`](lua/README.md) — **platform sections** (`mpsoc/`, `stm32/`, `kernel/`, `embedded/`), env vars, and `:lua` recipes.
 
 ## Host skeleton (`cmd/demo`)
 
@@ -180,13 +182,26 @@ More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./
 |-----|----------|
 | **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** | Full user manual (same material as `:help`) |
 | **[docs/LUA_API.md](docs/LUA_API.md)** | `gdbforge.*` Lua reference for script authors |
+| **[lua/README.md](lua/README.md)** | Installable Lua workflow catalog (mpsoc / stm32 / kernel / embedded) |
+
+### Platform debug guides (GDB workflows)
+
+Published on [gdbforge docs](https://yairgd.github.io/gdbforge/) with search-friendly meta tags:
+
+| Guide | `:lua` examples | Topic |
+|-------|-----------------|-------|
+| **[EMBEDDED_LINUX_DEBUG.md](docs/EMBEDDED_LINUX_DEBUG.md)** | `remotegdb`, `terminal_debug`, `external_tty`, `gdbserver_tui` | Board apps, `:b io` vs external terminal |
+| **[MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md)** | `r5_baremetal_jlink`, `a53_baremetal_jlink`, OpenOCD variants | Zynq UltraScale+ MPSoC A53/R5 |
+| **[STM32_DEBUG.md](docs/STM32_DEBUG.md)** | `stm32f405_jlink`, `stm32f405_stlink` | STM32F405 J-Link / ST-Link bare metal |
+| **[KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** | `kgdb_kdmx`, `kgdb_net`, `kgdb_serial` | Linux kernel & module debug |
+
+| Doc | Contents |
+|-----|----------|
 | **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
 | **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | FRAMEWORK vs APP split; `cmd/demo` as host skeleton |
-| **[lua/README.md](lua/README.md)** | Installable Lua workflow catalog |
-| **[docs/KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** | Kernel kgdb: two UARTs, kdmx, one-UART mux (`:serial-switch`), Ethernet |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 
-View docs locally: `./docs/serve.sh` → <http://127.0.0.1:8765/>.
+View docs locally: `./docs/serve.sh` → <http://127.0.0.1:8765/>. Deployed site: <https://yairgd.github.io/gdbforge/>.
 
 ## License
 
