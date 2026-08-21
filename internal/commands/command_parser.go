@@ -17,7 +17,8 @@ type CommandParser struct {
 	token   string
 	args    []string
 
-	path []*CommandNode
+	path            []*CommandNode
+	restTrailSpace  bool
 }
 
 func NewCommandParser(reg *CommandRegistry) *CommandParser {
@@ -33,6 +34,7 @@ func (p *CommandParser) Reset() {
 	p.token = ""
 	p.args = p.args[:0]
 	p.path = p.path[:0]
+	p.restTrailSpace = false
 }
 
 func (p *CommandParser) AddRune(r rune) {
@@ -72,6 +74,9 @@ func (p *CommandParser) Suggestions() []*CommandNode {
 	return list
 }
 
+// RestTrailingSpace reports whether Tab completion is after a trailing space in rest-args mode.
+func (p *CommandParser) RestTrailingSpace() bool { return p != nil && p.restTrailSpace }
+
 // SuggestionNames returns tab-completion names for the current token.
 // Rest-args leaves use CompleteArgs when set; otherwise tree children.
 func (p *CommandParser) SuggestionNames() []string {
@@ -82,7 +87,7 @@ func (p *CommandParser) SuggestionNames() []string {
 		if p.current.CompleteArgs == nil {
 			return nil
 		}
-		return p.current.CompleteArgs(p.token)
+		return p.current.CompleteArgs(p.token, p.restTrailSpace)
 	}
 	list, _ := p.current.Complete(p.token)
 	names := make([]string, len(list))
@@ -214,6 +219,7 @@ func (p *CommandParser) Sync(line string, cursor int) {
 			} else {
 				p.token = ""
 			}
+			p.restTrailSpace = cursor < len(runes) && (runes[cursor] == ' ' || runes[cursor] == '\t')
 			return
 		}
 		p.Reset()
@@ -224,12 +230,14 @@ func (p *CommandParser) Sync(line string, cursor int) {
 		if runes[i] == ' ' || runes[i] == '\t' {
 			if p.current != nil && p.current.RestArgs {
 				p.token = string(runes[tokenStart:cursor])
+				p.restTrailSpace = cursor < len(runes) && (runes[cursor] == ' ' || runes[cursor] == '\t')
 				return
 			}
 			p.token = stripCmdBang(string(runes[tokenStart:i]))
 			_ = p.Accept()
 			if p.current != nil && p.current.RestArgs {
 				p.token = string(runes[i+1 : cursor])
+				p.restTrailSpace = cursor < len(runes) && (runes[cursor] == ' ' || runes[cursor] == '\t')
 				return
 			}
 			tokenStart = i + 1

@@ -467,28 +467,59 @@ func luaPaneInstanceName(rt *luahost.Runtime, strArgs []string) string {
 	return strings.TrimSpace(strArgs[0])
 }
 
-func (c *luaCtl) completions(prefix string) []string {
-	fields := strings.Fields(prefix)
-	trailingSpace := len(prefix) > 0 && (prefix[len(prefix)-1] == ' ' || prefix[len(prefix)-1] == '\t')
+func filterPrefix(token string, opts []string) []string {
+	return luahost.FilterPrefix(token, opts)
+}
 
-	// After a known script name, complete the next arg with help / -h / --help.
-	// Sync() passes the whole rest string as prefix (e.g. "remotegdb he");
-	// CmdWidget.replaceToken only replaces the last whitespace-separated token.
+var luaHelpArgs = []string{"help", "-h", "--help"}
+
+func luaDefaultArgCompletions(fields []string, trailingSpace bool) []string {
+	switch {
+	case len(fields) == 1 && trailingSpace:
+		return []string{"help"}
+	case len(fields) >= 2 && !trailingSpace:
+		return filterPrefix(fields[len(fields)-1], luaHelpArgs)
+	default:
+		return nil
+	}
+}
+
+// scriptArgCompletions asks the loaded Lua script (gdbforge.complete_args) for candidates.
+// handled is true when the script registered a completion handler (even if the list is empty).
+func (c *luaCtl) scriptArgCompletions(script string, fields []string, trailingSpace bool) ([]string, bool) {
+	if len(fields) == 0 {
+		return nil, false
+	}
+	args := fields[1:]
+	req := luahost.ParseArgCompletion(args, trailingSpace)
+	rt, err := c.ensureRuntime(script)
+	if err != nil || rt == nil {
+		if err != nil && c.app != nil && c.app.outputWidget != nil {
+			c.app.outputWidget.AppendHostLine("[lua tab] load " + script + ": " + err.Error())
+		}
+		return luaDefaultArgCompletions(fields, trailingSpace), false
+	}
+	out, ok := rt.CompleteScriptArgs(req.ArgIndex, req.Token, req.Prior)
+	if ok {
+		return out, true
+	}
+	return luaDefaultArgCompletions(fields, trailingSpace), false
+}
+
+func (c *luaCtl) completions(prefix string, trailingSpace bool) []string {
+	fields := strings.Fields(prefix)
+	if !trailingSpace {
+		trailingSpace = len(prefix) > 0 && (prefix[len(prefix)-1] == ' ' || prefix[len(prefix)-1] == '\t')
+	}
+
+	// After a known script name, complete the next arg.
 	if len(fields) >= 1 && c.scriptKnown(fields[0]) {
-		switch {
-		case len(fields) == 1 && trailingSpace:
-			return []string{"help"}
-		case len(fields) >= 2 && !trailingSpace:
-			last := fields[len(fields)-1]
-			var out []string
-			for _, h := range []string{"help", "-h", "--help"} {
-				if strings.HasPrefix(h, last) {
-					out = append(out, h)
-				}
-			}
+		out, handled := c.scriptArgCompletions(fields[0], fields, trailingSpace)
+		if handled {
 			return out
-		case len(fields) >= 2 && trailingSpace:
-			return nil
+		}
+		if out := luaDefaultArgCompletions(fields, trailingSpace); len(out) > 0 {
+			return out
 		}
 	}
 
@@ -624,10 +655,9 @@ func (c *luaCtl) ensureRuntime(cmd string) (*luahost.Runtime, error) {
 	}
 	// Load may register extra names (e.g. snake_score); primary cmd is in cmds.
 	if c.cmds[cmd] == nil {
-		// EnsureCommand should have registered; recover if script only has main.
 		_ = rt.EnsureCommand(cmd)
 	}
-	return c.cmds[cmd], nil
+	return rt, nil
 }
 
 // wireAPI installs host callbacks shared by every user script Runtime.

@@ -25,7 +25,7 @@ func (a *DemoApp) ExapData() {
 		Leaf("quit", a.Quit)
 }
 
-func (a *DemoApp) bufferCompletions(prefix string) []string {
+func (a *DemoApp) bufferCompletions(prefix string, _ bool) []string {
 	names := []string{"main", "side", "log", "help"}
 	prefix = strings.ToLower(strings.TrimSpace(prefix))
 	var out []string

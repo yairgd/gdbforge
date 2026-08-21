@@ -54,7 +54,7 @@ func (a *DebuggerApp) layoutPrefersAsmRight(name string) bool {
 	return layout.AsmSplitRight(name)
 }
 
-func (a *DebuggerApp) layoutCompletions(prefix string) []string {
+func (a *DebuggerApp) layoutCompletions(prefix string, _ bool) []string {
 	fields := strings.Fields(prefix)
 	trailingSpace := len(prefix) > 0 && (prefix[len(prefix)-1] == ' ' || prefix[len(prefix)-1] == '\t')
 

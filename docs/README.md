@@ -40,7 +40,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
 | **[EMBEDDED_LINUX_DEBUG.md](EMBEDDED_LINUX_DEBUG.md)** | Users / embedded | User-space apps — `:lua remotegdb`, internal `:b io` vs external terminal |
 | **[MPSOC_DEBUG.md](MPSOC_DEBUG.md)** | Users / embedded | Zynq MPSoC — Cortex-A53/R5 J-Link and OpenOCD Lua workflows |
-| **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32F405 bare-metal — J-Link SWD and ST-Link OpenOCD |
+| **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32 board catalog (**#1 Nucleo F429ZI**, **#2 STM32F405**; extensible) — ST-Link, J-Link, Zephyr |
 | **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_kdmx` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |

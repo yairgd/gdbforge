@@ -10,6 +10,11 @@ gdbforge.register(name, fn)
   Expose fn as :lua name [args…].
   Example: gdbforge.register("probe", function() gdbforge.print("ok") end)
 
+gdbforge.complete_args(fn)
+  Tab-complete :lua <this-script> arguments. fn(token, index, prior…) → list of strings.
+  index is 1-based; prior… are earlier args on the command line.
+  Example: gdbforge.complete_args(function(t, i) return {"baremetal", "zephyr"} end)
+
 gdbforge.gdb(cmd)
   Send one CLI line to the GDB/Delve console (same as typing in the gdb pane).
   Example: gdbforge.gdb("break main")

@@ -34,6 +34,7 @@ Built-in workflows (`remotegdb`, `r5_debug`, …) work with no copy; override on
 |------|------|
 | Top-level script body | Runs once when the script is loaded / `:lua name` first needs it |
 | `gdbforge.register("name", fn)` | Exposes `fn` as `:lua name [args…]` |
+| `gdbforge.complete_args(fn)` | Tab-complete `:lua <this-script>` args via `fn(token, index, prior…)` |
 | `main(...)` (optional convention) | Many catalog scripts define `main` and register it |
 | `help()` (optional convention) | `:lua name help` (also `-h` / `--help`) — prints usage to `:b io`; skips `main` |
 | ModeLua pane (`:lua snake` / games) | `on_key`, draw via `pane.*`, optional tick — see games under `lua/games/` |
@@ -57,6 +58,30 @@ Clear the bound Lua pane cell grid (game panes). Does not clear `:b io`.
 ### `gdbforge.register(name, fn)`
 
 Register `fn` so `:lua name` invokes it. `name` must be a non-empty string; `fn` a Lua function.
+
+### `gdbforge.complete_args(fn)`
+
+Register Tab completion for `:lua <this-script> …`. Called when the user presses Tab after the script name.
+
+- `token` — partial word being typed (may be `""` after a trailing space)
+- `index` — 1-based argument index (`1` = first arg after script name)
+- `prior…` — earlier completed args (e.g. board name before profile)
+
+Return a list of strings (Lua table). No Go changes needed per script.
+
+```lua
+gdbforge.complete_args(function(token, index, board)
+  if index == 1 then
+    return {"nucleo_f429zi", "nucleo_f411re", "baremetal", "zephyr"}
+  end
+  if index == 2 then
+    return {"baremetal", "zephyr", "freertos"}
+  end
+  return {}
+end)
+```
+
+Legacy: a global `complete_arg(token, index, …)` still works if `complete_args` was not called.
 
 ### `gdbforge.sleep(seconds)`
 

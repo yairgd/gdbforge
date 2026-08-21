@@ -113,7 +113,7 @@ func TestCommandParserSyncSuggestions(t *testing.T) {
 
 func TestSuggestionNamesRestArgsComplete(t *testing.T) {
 	reg := NewCommandRegistry()
-	reg.Root.LeafRestComplete("b", func(args ...any) {}, func(prefix string) []string {
+	reg.Root.LeafRestComplete("b", func(args ...any) {}, func(prefix string, _ bool) []string {
 		var out []string
 		for _, n := range []string{"about", "logger", "gdb", "main.c"} {
 			if prefix == "" || (len(n) >= len(prefix) && n[:len(prefix)] == prefix) {

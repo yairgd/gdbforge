@@ -17,7 +17,7 @@
 - Debugging **Linux applications** — internal `:b io` or external terminal ([embedded guide](docs/EMBEDDED_LINUX_DEBUG.md))
 - **Embedded Linux** boards — `:lua remotegdb` (scp + gdbserver) ([embedded guide](docs/EMBEDDED_LINUX_DEBUG.md))
 - **Zynq MPSoC** Cortex-A53/R5 — J-Link / OpenOCD ([MPSoC guide](docs/MPSOC_DEBUG.md))
-- **STM32** bare-metal — J-Link SWD / ST-Link ([STM32 guide](docs/STM32_DEBUG.md))
+- **STM32** bare-metal — **Nucleo F429ZI**, **STM32F405** (ST-Link OpenOCD / J-Link; [STM32 guide](docs/STM32_DEBUG.md))
 - **Linux kernel** kgdb — UART, Ethernet, modules ([kernel guide](docs/KERNEL_KGDB.md))
 - **Go** programs via Delve (`-g dlv`), including TUI targets in an external terminal
 - Teams who want a **Vim-like** flow: normal / insert / command modes, panes, buffers
@@ -192,7 +192,7 @@ Published on [gdbforge docs](https://yairgd.github.io/gdbforge/) with search-fri
 |-------|-----------------|-------|
 | **[EMBEDDED_LINUX_DEBUG.md](docs/EMBEDDED_LINUX_DEBUG.md)** | `remotegdb`, `terminal_debug`, `external_tty`, `gdbserver_tui` | Board apps, `:b io` vs external terminal |
 | **[MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md)** | `r5_baremetal_jlink`, `a53_baremetal_jlink`, OpenOCD variants | Zynq UltraScale+ MPSoC A53/R5 |
-| **[STM32_DEBUG.md](docs/STM32_DEBUG.md)** | `stm32f405_jlink`, `stm32f405_stlink` | STM32F405 J-Link / ST-Link bare metal |
+| **[STM32_DEBUG.md](docs/STM32_DEBUG.md)** | `nucleo_f429zi`, `stm32f405_stlink`, `stm32f405_jlink` | STM32 board catalog **#1–#2** (extensible); ST-Link / J-Link / Zephyr |
 | **[KERNEL_KGDB.md](docs/KERNEL_KGDB.md)** | `kgdb_kdmx`, `kgdb_net`, `kgdb_serial` | Linux kernel & module debug |
 
 | Doc | Contents |

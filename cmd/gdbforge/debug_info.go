@@ -29,6 +29,7 @@ type debugInfoHost interface {
 	Screen() tcell.Screen
 	RequestFrame()
 	BumpCodeNav()
+	NoteStackNavGDB()
 	SuppressDlvStopUI()
 	isDLV() bool
 	showFrameSource(fr models.StackFrame)
@@ -250,9 +251,8 @@ func (c *debugInfoCtl) activateCallStack(fr models.StackFrame) {
 	gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
 }
 
-// activateThread switches GDB to the selected thread, refreshes stack/threads,
-// and shows the current frame source.
-// Uses MI for GDB so the console does not print "[Switching to thread …]".
+// activateThread switches GDB to the selected thread and refreshes stack/threads
+// after the MI prompt (=thread-selected), not before the switch completes.
 func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 	h := c.host
 	if h == nil || h.GDBWidget() == nil || th.ID == "" {
@@ -266,29 +266,54 @@ func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 	if h.Backend() != nil {
 		cmd = h.Backend().SelectThreadCmd(th.ID)
 	}
-	gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
-	c.refreshThreadsAndStack()
-	c.syncThreadViews()
-	c.syncCallStackViews()
 
-	file, line := th.File, th.Line
-	if c.stack != nil {
-		if frames := c.stack.Items(); len(frames) > 0 {
-			if frames[0].File != "" {
-				file, line = frames[0].File, frames[0].Line
+	if h.isDLV() {
+		h.BumpCodeNav()
+		h.SuppressDlvStopUI()
+		go gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+		c.scheduleRefresh()
+	} else if h.Debug() != nil && h.Debug().KgdbMode() {
+		// kgdb: legacy path unchanged — no frame-sync deferral (slow serial constraints).
+		gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+		c.refreshThreadsAndStack()
+		c.syncThreadViews()
+		c.syncCallStackViews()
+
+		file, line := th.File, th.Line
+		if c.stack != nil {
+			if frames := c.stack.Items(); len(frames) > 0 {
+				if frames[0].File != "" {
+					file, line = frames[0].File, frames[0].Line
+				}
 			}
 		}
+		if file != "" {
+			w := h.ShowCodeAt(file, line)
+			if w != nil && w.Unavailable() {
+				fn := th.Func
+				if c.stack != nil {
+					if frames := c.stack.Items(); len(frames) > 0 && frames[0].Func != "" {
+						fn = frames[0].Func
+					}
+				}
+				w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
+			}
+		}
+		h.RequestFrame()
+		return
+	} else {
+		// Zephyr / OpenOCD / local GDB: wait for =thread-selected + prompt.
+		h.BumpCodeNav()
+		h.NoteStackNavGDB()
+		gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
 	}
+
+	// Optimistic Code from the thread row until GDB confirms the frame.
+	file, line := th.File, th.Line
 	if file != "" {
 		w := h.ShowCodeAt(file, line)
 		if w != nil && w.Unavailable() {
-			fn := th.Func
-			if c.stack != nil {
-				if frames := c.stack.Items(); len(frames) > 0 && frames[0].Func != "" {
-					fn = frames[0].Func
-				}
-			}
-			w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
+			w.ShowUnavailable(file, formatUnavailableExtra(th.Func, line))
 		}
 	}
 	h.RequestFrame()

@@ -1,6 +1,6 @@
 package commands
 
 // Completer returns name suggestions for a prefix.
-// This is the completion interface used by trie rest-arg Tab (:b, :e, :layout)
-// via CommandNode.CompleteArgs, and by GDB console Tab (-complete).
-type Completer func(prefix string) []string
+// trailingSpace is true when the cmdline cursor sits on a space after the rest token
+// (CommandParser Sync uses cursor-1, so prefix never ends with space).
+type Completer func(prefix string, trailingSpace bool) []string

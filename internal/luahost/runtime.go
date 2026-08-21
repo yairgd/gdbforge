@@ -38,6 +38,7 @@ type Runtime struct {
 	pane            Pane
 	printSink       PrintSinkFunc
 	registered      map[string]*lua.LFunction
+	completeArgFn   *lua.LFunction // gdbforge.complete_args(fn) for :lua Tab
 	onRegister      OnRegister
 	openBuffer      OpenBufferFunc
 	run             RunFunc
@@ -428,6 +429,7 @@ func (rt *Runtime) installAPI() {
 	L.SetField(gf, "print", L.NewFunction(rt.luaPrint))
 	L.SetField(gf, "clear", L.NewFunction(rt.luaClear))
 	L.SetField(gf, "register", L.NewFunction(rt.luaRegister))
+	L.SetField(gf, "complete_args", L.NewFunction(rt.luaCompleteArgs))
 	L.SetField(gf, "open_buffer", L.NewFunction(rt.luaOpenBuffer))
 	L.SetField(gf, "run", L.NewFunction(rt.luaRun))
 	L.SetField(gf, "spawn", L.NewFunction(rt.luaSpawn))
@@ -472,6 +474,13 @@ func (rt *Runtime) luaRegister(L *lua.LState) int {
 	if rt.onRegister != nil {
 		rt.onRegister(name, rt)
 	}
+	return 0
+}
+
+// luaCompleteArgs registers fn(token, index, prior…) for :lua <script> Tab completion.
+func (rt *Runtime) luaCompleteArgs(L *lua.LState) int {
+	fn := L.CheckFunction(1)
+	rt.completeArgFn = fn
 	return 0
 }
 

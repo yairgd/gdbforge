@@ -1,7 +1,7 @@
--- STM32F405 / ST-Link (OpenOCD) — thin wrapper around stm32_common.run_stlink.
+-- Nucleo F429ZI / ST-Link (OpenOCD) — thin wrapper around stm32_common.run_stlink.
 -- Install: cp lua/stm32/stm32_common.lua .gdbforge/lua/
---          cp -r lua/stm32/stm32f405 .gdbforge/lua/
--- Usage:   :lua stm32f405_stlink [baremetal|zephyr|freertos]
+--          cp -r lua/stm32/nucleo_f429zi .gdbforge/lua/
+-- Usage:   :lua nucleo_f429zi [baremetal|zephyr|freertos]
 
 local common
 
@@ -59,12 +59,14 @@ function help()
     gdbforge.print("ERROR: stm32_common.lua not found — cp lua/stm32/stm32_common.lua .gdbforge/lua/")
     return
   end
-  gdbforge.print("stm32f405_stlink — STM32F405 ST-Link + OpenOCD")
-  gdbforge.print("Usage: :lua stm32f405_stlink [baremetal|zephyr|freertos]")
+  gdbforge.print("nucleo_f429zi — Nucleo F429ZI ST-Link + OpenOCD")
+  gdbforge.print("Usage: :lua nucleo_f429zi [baremetal|zephyr|freertos]")
   gdbforge.print("")
-  c.profile_help_lines("stm32f405_stlink")
+  c.profile_help_lines("nucleo_f429zi")
   gdbforge.print("")
-  gdbforge.print("Same as: :lua stm32_stlink stm32f405 [profile]")
+  c.zephyr_help_lines()
+  gdbforge.print("")
+  gdbforge.print("Same as: :lua stm32-stlink nucleo_f429zi [profile]")
 end
 
 function main(profile)
@@ -80,18 +82,9 @@ function main(profile)
     return
   end
   c.run_stlink({
-    board = "stm32f405",
+    board = "nucleo_f429zi",
     profile = p,
-    script_name = "stm32f405_stlink",
+    script_name = "nucleo_f429zi",
     script_dir = gdbforge.lua_dir(),
-    gdb_attach = function(prof, port)
-      gdbforge.open_buffer("gdb")
-      gdbforge.gdb("set architecture arm")
-      c.gdb_setup(prof)
-      gdbforge.gdb("target remote localhost:" .. port)
-      gdbforge.gdb("monitor reset halt")
-      gdbforge.gdb("stepi")
-      gdbforge.gdb("c")
-    end,
   })
 end

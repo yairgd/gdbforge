@@ -19,7 +19,7 @@ Installable workflows under `lua/`. Copy what you need into `.gdbforge/lua/`, th
 |---------|------|---------|
 | **[Embedded Linux](embedded/README.md)** | `lua/embedded/` | Board apps (`remotegdb`), I/O (`external_tty`, `terminal_debug`), local `gdbserver_tui` |
 | **[MPSoC](mpsoc/README.md)** | `lua/mpsoc/` | Zynq UltraScale+ — Cortex-A53 + Cortex-R5 (J-Link / OpenOCD) |
-| **[STM32](stm32/README.md)** | `lua/stm32/` | STM32F405 bare-metal (J-Link SWD / ST-Link OpenOCD) |
+| **[STM32](stm32/README.md)** | `lua/stm32/` | Board catalog: **#1 Nucleo F429ZI**, **#2 STM32F405** — more under `lua/stm32/<board>/` |
 | **[Kernel](kernel/README.md)** | `lua/kernel/` | Linux kgdb — UART, Ethernet, module symbols |
 
 Each section README has install steps, script catalog, and env vars. Published docs (meta tags, Open Graph): [EMBEDDED_LINUX_DEBUG.md](../docs/EMBEDDED_LINUX_DEBUG.md), [MPSOC_DEBUG.md](../docs/MPSOC_DEBUG.md), [STM32_DEBUG.md](../docs/STM32_DEBUG.md), [KERNEL_KGDB.md](../docs/KERNEL_KGDB.md).
@@ -34,7 +34,8 @@ mkdir -p .gdbforge/lua
 # MPSoC (pick one or both CPU folders)
 cp -r lua/mpsoc/cortex_r5 .gdbforge/lua/
 
-# STM32F405
+# STM32 — board 1: Nucleo F429ZI, board 2: STM32F405 (more under lua/stm32/<board>/)
+cp -r lua/stm32/nucleo_f429zi .gdbforge/lua/
 cp -r lua/stm32/stm32f405 .gdbforge/lua/
 
 # Kernel kgdb
@@ -94,7 +95,9 @@ lua/
 │   └── cortex_r5/         # R5 J-Link + OpenOCD + OpenAMP
 ├── stm32/
 │   ├── README.md
-│   └── stm32f405/         # J-Link + ST-Link
+│   ├── nucleo_f429zi/     # board 1 — ST-Link OpenOCD
+│   ├── stm32f405/         # board 2 — ST-Link + J-Link
+│   └── <board>/           # future boards
 ├── kernel/
 │   ├── README.md
 │   └── kgdb_*/            # kgdb workflows

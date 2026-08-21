@@ -152,7 +152,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 }
 
 // splitAsmCompletions is Tab after :vs / :sp (:vs asm).
-func (a *DebuggerApp) splitAsmCompletions(prefix string) []string {
+func (a *DebuggerApp) splitAsmCompletions(prefix string, _ bool) []string {
 	var out []string
 	for _, name := range []string{"asm", "assembly"} {
 		if prefix == "" || strings.HasPrefix(name, prefix) {
@@ -340,7 +340,7 @@ func (app *DebuggerApp) SetInferiorTTYCmd(args ...any) {
 }
 
 // inferiorTTYCompletions is Tab after :set inferior-tty.
-func (app *DebuggerApp) inferiorTTYCompletions(prefix string) []string {
+func (app *DebuggerApp) inferiorTTYCompletions(prefix string, _ bool) []string {
 	cands := []string{"internal"}
 	var out []string
 	for _, c := range cands {
@@ -352,7 +352,7 @@ func (app *DebuggerApp) inferiorTTYCompletions(prefix string) []string {
 }
 
 // colorCompletions is Tab after :set breakcolor / markcolor / ….
-func (app *DebuggerApp) colorCompletions(prefix string) []string {
+func (app *DebuggerApp) colorCompletions(prefix string, _ bool) []string {
 	return platform.CompleteColorName(prefix)
 }
 

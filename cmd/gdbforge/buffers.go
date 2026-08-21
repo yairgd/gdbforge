@@ -146,7 +146,7 @@ func (c *bufferCtl) find(name string) *widgets.CodeWidget {
 // completions returns :b Tab candidates: builtins + buffers the user
 // opened with :edit / file-list. Auto-opened code from stop/stack/BP is kept
 // out of the wildmenu (GDB SourceFiles includes deps like ldo.c / lapi.c).
-func (c *bufferCtl) completions(prefix string) []string {
+func (c *bufferCtl) completions(prefix string, _ bool) []string {
 	seen := make(map[string]struct{})
 	var names []string
 	add := func(name string) {
@@ -362,7 +362,7 @@ func (c *bufferCtl) openSourcePath(path string) {
 }
 
 // editCompletions returns dynamic :edit Tab candidates (SourceFiles full paths).
-func (c *bufferCtl) editCompletions(prefix string) []string {
+func (c *bufferCtl) editCompletions(prefix string, _ bool) []string {
 	h := c.host
 	if h == nil {
 		return nil

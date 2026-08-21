@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -69,35 +71,75 @@ func TestLuaCompletionsHelp(t *testing.T) {
 		"snake":     {Cmd: "snake"},
 	}
 
-	got := a.lua.completions("remotegdb ")
+	got := a.lua.completions("remotegdb ", false)
 	if !reflect.DeepEqual(got, []string{"help"}) {
 		t.Fatalf("after script+space: %v want [help]", got)
 	}
 
-	got = a.lua.completions("remotegdb he")
+	got = a.lua.completions("remotegdb he", false)
 	if !reflect.DeepEqual(got, []string{"help"}) {
 		t.Fatalf("partial help: %v want [help]", got)
 	}
 
-	got = a.lua.completions("remotegdb -")
+	got = a.lua.completions("remotegdb -", false)
 	wantDash := []string{"-h", "--help"}
 	if !reflect.DeepEqual(got, wantDash) {
 		t.Fatalf("dash help: %v want %v", got, wantDash)
 	}
 
-	got = a.lua.completions("re")
+	got = a.lua.completions("re", false)
 	wantRE := []string{"remotegdb", "repl"}
 	if !reflect.DeepEqual(got, wantRE) {
 		t.Fatalf("script prefix: %v want %v", got, wantRE)
 	}
 
-	got = a.lua.completions("help")
+	got = a.lua.completions("help", false)
 	if len(got) != 1 || got[0] != "help" {
 		t.Fatalf(":lua help completion: %v", got)
 	}
 
-	got = a.lua.completions("remotegdb")
+	got = a.lua.completions("remotegdb", false)
 	if len(got) != 1 || got[0] != "remotegdb" {
 		t.Fatalf("full script name still completes as script: %v", got)
+	}
+}
+
+func TestLuaCompletionsFromScript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo_complete.lua")
+	const src = `
+function main() end
+gdbforge.complete_args(function(token, index)
+  if index == 1 then
+    local all = {"alpha", "beta", "help"}
+    if token == "" then return all end
+    local out = {}
+    for _, v in ipairs(all) do
+      if v:sub(1, #token) == token then out[#out+1] = v end
+    end
+    return out
+  end
+  return {}
+end)
+`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &DebuggerApp{}
+	a.lua.app = a
+	a.lua.pending = map[string]luahost.ResolvedScript{
+		"demo_complete": {Cmd: "demo_complete", Path: path},
+	}
+
+	got := a.lua.completions("demo_complete ", false)
+	want := []string{"alpha", "beta", "help"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("complete_args all: %v want %v", got, want)
+	}
+
+	got = a.lua.completions("demo_complete a", false)
+	if !reflect.DeepEqual(got, []string{"alpha"}) {
+		t.Fatalf("complete_args prefix: %v", got)
 	}
 }
