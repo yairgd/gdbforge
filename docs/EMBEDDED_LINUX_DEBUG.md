@@ -9,6 +9,12 @@ meta:
 
 **gdbforge** is a Vim-inspired **GDB terminal UI** for **user-space** programs — on an **embedded Linux board** or **on the host**. This guide covers **remote deploy + gdbserver** (`:lua remotegdb`) and **where program stdin/stdout goes**.
 
+## Demo — Linux app I/O
+
+**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Full video](https://github.com/user-attachments/assets/7393b858-e661-44b1-af7e-dbc5d4beef3b).
+
+![Linux application debugging demo](media/gdbforge-demo-linux-app.gif){ loading=lazy }
+
 ## Program I/O — internal vs external
 
 Every debug session has an **inferior** (your app). Its stdin/stdout can go to three places:

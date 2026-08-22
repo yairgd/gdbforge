@@ -9,6 +9,12 @@ meta:
 
 **gdbforge** is a Vim-inspired **GDB terminal UI** for **STM32 bare-metal** (and Zephyr) development. Lua scripts under [`lua/stm32/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32) spawn **ST-Link + OpenOCD** or **J-Link GDB Server**, attach GDB, flash your ELF, and stop at `main`.
 
+## Demo — Nucleo F429ZI (Zephyr)
+
+**Nucleo-F429ZI / ST-Link + OpenOCD** — first, bare-metal debug of a Zephyr app on the Nucleo board (`:lua nucleo_f429zi baremetal`); then switch to **Zephyr-aware** debug (`:lua nucleo_f429zi zephyr`) with `info threads` and on-board displays. [Full video](https://github.com/user-attachments/assets/592fcb76-1c12-4a78-a38c-e81b28473a53).
+
+![STM32 Nucleo F429ZI debug demo — bare metal then Zephyr-aware](media/gdbforge-demo-stm32-nucleo-f429zi.gif){ loading=lazy }
+
 ## Getting started (order of operations)
 
 Follow these steps once, then repeat from step 5 for each debug session.

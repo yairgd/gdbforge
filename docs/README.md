@@ -30,6 +30,10 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 
 ![Linux kernel kgdb demo (`kgdb_uart`)](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
 
+**STM32 Nucleo F429ZI (`:lua nucleo_f429zi`)** — bare-metal Zephyr app debug, then Zephyr-aware debug with `info threads` and on-board displays. See [STM32_DEBUG.md](STM32_DEBUG.md). [Full video](https://github.com/user-attachments/assets/592fcb76-1c12-4a78-a38c-e81b28473a53).
+
+![STM32 Nucleo F429ZI debug demo](media/gdbforge-demo-stm32-nucleo-f429zi.gif){ loading=lazy }
+
 ---
 
 ## Documentation map
