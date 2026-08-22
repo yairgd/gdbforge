@@ -11,7 +11,7 @@ meta:
 
 ## Demo — Nucleo F429ZI (Zephyr)
 
-**Nucleo-F429ZI / ST-Link + OpenOCD** — first, bare-metal debug of a Zephyr app on the Nucleo board (`:lua nucleo_f429zi baremetal`); then switch to **Zephyr-aware** debug (`:lua nucleo_f429zi zephyr`) with `info threads` and on-board displays. [Full video](https://github.com/user-attachments/assets/592fcb76-1c12-4a78-a38c-e81b28473a53).
+**Nucleo-F429ZI / ST-Link + OpenOCD** — first, bare-metal debug of a Zephyr app on the Nucleo board (`:lua nucleo_f429zi baremetal`); then switch to **Zephyr-aware** debug (`:lua nucleo_f429zi zephyr`) with `info threads` and on-board displays. [Watch on YouTube](https://www.youtube.com/watch?v=_RAPSW77HcQ).
 
 ![STM32 Nucleo F429ZI debug demo — bare metal then Zephyr-aware](media/gdbforge-demo-stm32-nucleo-f429zi.gif){ loading=lazy }
 

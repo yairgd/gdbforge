@@ -11,7 +11,7 @@ meta:
 
 ## Demo — Linux app I/O
 
-**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Full video](https://github.com/user-attachments/assets/7393b858-e661-44b1-af7e-dbc5d4beef3b).
+**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Watch on YouTube](https://www.youtube.com/watch?v=Eya_zs4M1Cg).
 
 ![Linux application debugging demo](media/gdbforge-demo-linux-app.gif){ loading=lazy }
 

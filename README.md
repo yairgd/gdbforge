@@ -24,23 +24,27 @@
 
 ## Demo
 
-Screencasts (GitHub-hosted). Order: embedded MCU → everyday Linux → dogfooding → **Linux kernel (`kgdb_uart`)**.
+Screencasts ([YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g)). Order: embedded MCU → everyday Linux → dogfooding → **Linux kernel (`kgdb_uart`)**.
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`:lua r5_baremetal_jlink`](lua/mpsoc/cortex_r5/) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c). Guide: [docs/MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`:lua r5_baremetal_jlink`](lua/mpsoc/cortex_r5/) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c). Guide: [docs/MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
-<video src="https://github.com/user-attachments/assets/a5612bb4-c617-401d-b57b-3b8c5543277c" autoplay loop muted playsinline width="100%"></video>
+[![Cortex-R5 / J-Link demo](https://img.youtube.com/vi/jbS5SE7Xu3g/hqdefault.jpg)](https://www.youtube.com/watch?v=jbS5SE7Xu3g)
 
-**Linux app** — external terminal print vs the internal IO pane (`:b io`).
+**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Watch on YouTube](https://www.youtube.com/watch?v=Eya_zs4M1Cg).
 
-<video src="https://github.com/user-attachments/assets/7393b858-e661-44b1-af7e-dbc5d4beef3b" autoplay loop muted playsinline width="100%"></video>
+[![Linux app demo](https://img.youtube.com/vi/Eya_zs4M1Cg/hqdefault.jpg)](https://www.youtube.com/watch?v=Eya_zs4M1Cg)
 
-**Debug itself** — gdbforge attached to a live gdbforge session (Go / Delve), stepping its own code.
+**Debug itself** — gdbforge attached to a live gdbforge session (Go / Delve), stepping its own code. [Watch on YouTube](https://www.youtube.com/watch?v=tDNT1MQSQoE).
 
-<video src="https://github.com/user-attachments/assets/6d2466c4-f455-4c7e-a919-62ba330d025b" autoplay loop muted playsinline width="100%"></video>
+[![Debug itself demo](https://img.youtube.com/vi/tDNT1MQSQoE/hqdefault.jpg)](https://www.youtube.com/watch?v=tDNT1MQSQoE)
 
-**Linux kernel (`:lua kgdb_uart`)** — one shared UART + **kdmx**: `:lua kgdb_uart` configures kgdboc, starts kdmx, opens minicom on the console PTY, and breaks into kgdb in about **two seconds** (`target remote` on the gdb PTY). Then `lx-symbols`, a breakpoint on a driver's **read** path, `continue`, and `cat /dev/…` from minicom to hit it — step in `:b gdb`, `continue` back to the shell.
+**Linux kernel (`:lua kgdb_uart`)** — one shared UART + **kdmx**: `:lua kgdb_uart` configures kgdboc, starts kdmx, opens minicom on the console PTY, and breaks into kgdb in about **two seconds** (`target remote` on the gdb PTY). Then `lx-symbols`, a breakpoint on a driver's **read** path, `continue`, and `cat /dev/…` from minicom to hit it — step in `:b gdb`, `continue` back to the shell. [Watch on YouTube](https://www.youtube.com/watch?v=6eEIxdKQTWY).
 
-<video src="https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b" autoplay loop muted playsinline width="100%"></video>
+[![Linux kernel kgdb demo](https://img.youtube.com/vi/6eEIxdKQTWY/hqdefault.jpg)](https://www.youtube.com/watch?v=6eEIxdKQTWY)
+
+**STM32 Nucleo F429ZI (`:lua nucleo_f429zi`)** — bare-metal Zephyr app debug, then Zephyr-aware debug with `info threads` and on-board displays. Guide: [docs/STM32_DEBUG.md](docs/STM32_DEBUG.md). [Watch on YouTube](https://www.youtube.com/watch?v=_RAPSW77HcQ).
+
+[![STM32 Nucleo F429ZI demo](https://img.youtube.com/vi/_RAPSW77HcQ/hqdefault.jpg)](https://www.youtube.com/watch?v=_RAPSW77HcQ)
 
 <details>
 <summary><strong>Kernel demo — setup stages (`kgdb_uart`)</strong></summary>

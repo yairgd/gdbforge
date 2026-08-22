@@ -263,42 +263,7 @@ func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 		return
 	}
 	cmd := "-thread-select " + th.ID
-	if h.Backend() != nil {
-		cmd = h.Backend().SelectThreadCmd(th.ID)
-	}
-
-	if h.isDLV() {
-		h.BumpCodeNav()
-		h.SuppressDlvStopUI()
-		go gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
-		c.scheduleRefresh()
-	} else if h.Debug() != nil && h.Debug().KgdbMode() {
-		// kgdb: legacy path unchanged — no frame-sync deferral (slow serial constraints).
-		gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
-		c.refreshThreadsAndStack()
-		c.syncThreadViews()
-		c.syncCallStackViews()
-
-		file, line := th.File, th.Line
-		if c.stack != nil {
-			if frames := c.stack.Items(); len(frames) > 0 {
-				if frames[0].File != "" {
-					file, line = frames[0].File, frames[0].Line
-				}
-			}
-		}
-		if file != "" {
-			w := h.ShowCodeAt(file, line)
-			if w != nil && w.Unavailable() {
-				fn := th.Func
-				if c.stack != nil {
-					if frames := c.stack.Items(); len(frames) > 0 && frames[0].Func != "" {
-						fn = frames[0].Func
-					}
-				}
-				w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
-			}
-		}
+:
 		h.RequestFrame()
 		return
 	} else {

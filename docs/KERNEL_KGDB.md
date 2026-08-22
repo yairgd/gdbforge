@@ -40,7 +40,7 @@ See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-s
 
 ![Linux kernel kgdb demo — two UARTs](media/gdbforge-demo-kernel-kgdb-two-uart.gif){ loading=lazy }
 
-[Full video — two UARTs](https://github.com/user-attachments/assets/57566005-8376-43ce-bffa-3f0ea160c00e)
+[Watch on YouTube — two UARTs](https://www.youtube.com/watch?v=yhOO8CEh1LA)
 
 The screencast shows gdbforge + GDB on a **dedicated kgdb UART** (`/dev/ttyUSB1`) while a **separate console UART** stays in minicom (`/dev/ttyUSB0`): `lx-symbols`, a breakpoint in a loadable module, trigger from the console (`cat /dev/…`), stop in `:b gdb`, step, `continue` back to the shell — no serial mux and no Lua bring-up script.
 
@@ -174,7 +174,7 @@ When you only have **one** cable, use [Path 1b — One UART, in-process mux](#pa
 
 ![Linux kernel kgdb demo — `:lua kgdb_uart`](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
 
-[Full video — `:lua kgdb_uart`](https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b)
+[Watch on YouTube — `:lua kgdb_uart`](https://www.youtube.com/watch?v=6eEIxdKQTWY)
 
 The screencast shows the full loop: `:lua kgdb_uart` → `lx-symbols` → breakpoint on a driver's **read** handler → `(gdb) continue` → `cat /dev/…` in minicom → stop in `:b gdb` → step → `continue` back to the shell.
 

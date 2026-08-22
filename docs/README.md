@@ -14,23 +14,23 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 
 ## Demos
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c). [Full video](https://github.com/user-attachments/assets/a5612bb4-c617-401d-b57b-3b8c5543277c).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
 ![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
 
-**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Full video](https://github.com/user-attachments/assets/7393b858-e661-44b1-af7e-dbc5d4beef3b).
+**Linux app** — external terminal print vs the internal IO pane (`:b io`). [Watch on YouTube](https://www.youtube.com/watch?v=Eya_zs4M1Cg).
 
 ![Linux application debugging demo](media/gdbforge-demo-linux-app.gif){ loading=lazy }
 
-**Debug itself** — gdbforge attached to a live gdbforge session (Go / Delve), stepping its own code. [Full video](https://github.com/user-attachments/assets/6d2466c4-f455-4c7e-a919-62ba330d025b).
+**Debug itself** — gdbforge attached to a live gdbforge session (Go / Delve), stepping its own code. [Watch on YouTube](https://www.youtube.com/watch?v=tDNT1MQSQoE).
 
 ![gdbforge debugging its own running session](media/gdbforge-debug-itself.gif){ loading=lazy }
 
-**Linux kernel (`:lua kgdb_uart`)** — one UART + kdmx: `:lua kgdb_uart` breaks into kgdb in ~2 s, `lx-symbols`, breakpoint on a driver's read path, trigger with `cat /dev/…` from minicom. See [KERNEL_KGDB.md](KERNEL_KGDB.md). [Full video](https://github.com/user-attachments/assets/f3de823b-8cd3-4797-ad83-035ce545926b).
+**Linux kernel (`:lua kgdb_uart`)** — one UART + kdmx: `:lua kgdb_uart` breaks into kgdb in ~2 s, `lx-symbols`, breakpoint on a driver's read path, trigger with `cat /dev/…` from minicom. See [KERNEL_KGDB.md](KERNEL_KGDB.md). [Watch on YouTube](https://www.youtube.com/watch?v=6eEIxdKQTWY).
 
 ![Linux kernel kgdb demo (`kgdb_uart`)](media/gdbforge-demo-kernel-kgdb.gif){ loading=lazy }
 
-**STM32 Nucleo F429ZI (`:lua nucleo_f429zi`)** — bare-metal Zephyr app debug, then Zephyr-aware debug with `info threads` and on-board displays. See [STM32_DEBUG.md](STM32_DEBUG.md). [Full video](https://github.com/user-attachments/assets/592fcb76-1c12-4a78-a38c-e81b28473a53).
+**STM32 Nucleo F429ZI (`:lua nucleo_f429zi`)** — bare-metal Zephyr app debug, then Zephyr-aware debug with `info threads` and on-board displays. See [STM32_DEBUG.md](STM32_DEBUG.md). [Watch on YouTube](https://www.youtube.com/watch?v=_RAPSW77HcQ).
 
 ![STM32 Nucleo F429ZI debug demo](media/gdbforge-demo-stm32-nucleo-f429zi.gif){ loading=lazy }
 

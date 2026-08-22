@@ -18,7 +18,7 @@ Scripts live in two folders (copy what you need into `.gdbforge/lua/`):
 
 ## Demo — Cortex-R5 / J-Link
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](../examples/stack_demo.c). [Full video](https://github.com/user-attachments/assets/a5612bb4-c617-401d-b57b-3b8c5543277c).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](../examples/stack_demo.c). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
 ![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
 
