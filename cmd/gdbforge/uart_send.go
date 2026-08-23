@@ -2,14 +2,21 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"io"
 	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/yairgd/gdbforge/internal/devport"
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/serial"
 )
+
+func writePayload(w io.WriteCloser, device string, payload []byte) error {
+	if _, err := w.Write(payload); err != nil {
+		return fmt.Errorf("uart_send %s: %w", device, err)
+	}
+	return nil
+}
 
 func sendUartLine(device string, baud int, line string) error {
 	device = strings.TrimSpace(device)
@@ -22,27 +29,12 @@ func sendUartLine(device string, baud int, line string) error {
 	}
 	payload := []byte(line + "\r\n")
 
-	if strings.HasPrefix(device, "/dev/pts/") {
-		f, err := os.OpenFile(device, os.O_RDWR, 0)
-		if err != nil {
-			return fmt.Errorf("uart_send %s: %w", device, err)
-		}
-		defer f.Close()
-		if _, err := f.Write(payload); err != nil {
-			return fmt.Errorf("uart_send %s: %w", device, err)
-		}
-		return nil
-	}
-
-	p, err := serial.Open(device, baud)
+	port, err := devport.Open(device, baud)
 	if err != nil {
 		return err
 	}
-	defer p.Close()
-	if _, err := p.Write(payload); err != nil {
-		return fmt.Errorf("uart_send %s: %w", device, err)
-	}
-	return nil
+	defer port.Close()
+	return writePayload(port, device, payload)
 }
 
 func (c *luaCtl) installUartAPI(rt *luahost.Runtime) {

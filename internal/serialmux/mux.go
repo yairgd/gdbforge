@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/yairgd/gdbforge/internal/serial"
+	"github.com/yairgd/gdbforge/internal/devport"
 	"golang.org/x/sys/unix"
 )
 
@@ -146,7 +146,7 @@ func Open(device string, baud int) (*Mux, error) {
 	if err := claim(device); err != nil {
 		return nil, err
 	}
-	port, err := serial.Open(device, baud)
+	port, err := devport.Open(device, baud)
 	if err != nil {
 		release(device)
 		return nil, err
@@ -335,7 +335,7 @@ func (m *Mux) pumpUSBToConsole() {
 			m.routeSerialRx(buf[:n])
 		}
 		if err != nil {
-			if errors.Is(err, serial.ErrClosed) || errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) {
 				return
 			}
 		}
