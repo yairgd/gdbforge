@@ -12,7 +12,7 @@ import (
 
 func TestCancelLuaJob(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	if a.lua.cancelJob() {
 		t.Fatal("no job")
 	}
@@ -33,7 +33,7 @@ func TestCancelLuaJob(t *testing.T) {
 
 func TestCallOnUIPassthrough(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	called := false
 	a.lua.callOnUI(func() { called = true })
 	if !called {
@@ -65,7 +65,7 @@ func TestIsLuaHelpRequest(t *testing.T) {
 
 func TestLuaCompletionsHelp(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	a.lua.pending = map[string]luahost.ResolvedScript{
 		"remotegdb": {Cmd: "remotegdb"},
 		"snake":     {Cmd: "snake"},

@@ -13,8 +13,8 @@ import (
 )
 
 // echoGdbWidget shows cmd in :b gdb (async from Lua worker — no deadlock).
-func (c *luaCtl) echoGdbWidget(a *DebuggerApp, cmd string) {
-	if a == nil || a.gdbWidget == nil {
+func (c *luaCtl) echoGdbWidget(h luaHost, cmd string) {
+	if h == nil || h.GDBWidget() == nil {
 		return
 	}
 	cmd = strings.TrimSpace(cmd)
@@ -22,16 +22,16 @@ func (c *luaCtl) echoGdbWidget(a *DebuggerApp, cmd string) {
 		return
 	}
 	fn := func() {
-		a.gdbWidget.EchoSubmit(cmd)
-		a.gdbWidget.ForceFollowTailAndScroll()
-		a.maybeEnableRemoteMode(cmd)
-		a.RequestFrame()
+		h.GDBWidget().EchoSubmit(cmd)
+		h.GDBWidget().ForceFollowTailAndScroll()
+		h.MaybeEnableRemoteMode(cmd)
+		h.RequestFrame()
 	}
 	if !c.onWorker.Load() {
 		fn()
 		return
 	}
-	scr := a.Screen()
+	scr := h.Screen()
 	if scr == nil {
 		fn()
 		return
@@ -43,22 +43,22 @@ func (c *luaCtl) installGdbAPI(rt *luahost.Runtime) {
 	if rt == nil {
 		return
 	}
-	a := c.app
+	h := c.host
 	rt.SetGdbforgeFunc("set_kgdb_mode", func(L *lua.LState) int {
 		on := true
 		if L.GetTop() >= 1 {
 			on = lua.LVAsBool(L.Get(1))
 		}
-		a.setKgdbMode(on)
+		h.SetKgdbMode(on)
 		return 0
 	})
 	rt.SetGdbforgeFunc("gdb_ctrl_c", func(L *lua.LState) int {
-		c.echoGdbWidget(a, "^C")
-		if a.backend != nil {
-			running := a.Debug() != nil && a.Debug().InferiorRunning()
-			_ = a.backend.Interrupt(running, false)
+		c.echoGdbWidget(h, "^C")
+		if b := h.Backend(); b != nil {
+			running := h.Debug() != nil && h.Debug().InferiorRunning()
+			_ = b.Interrupt(running, false)
 		}
-		a.RequestFrame()
+		h.RequestFrame()
 		return 0
 	})
 	rt.SetGdbforgeFunc("gdb_query", func(L *lua.LState) int {
@@ -68,12 +68,13 @@ func (c *luaCtl) installGdbAPI(rt *luahost.Runtime) {
 			L.Push(lua.LString("empty gdb command"))
 			return 2
 		}
-		if a.gdbMcp == nil {
+		mcp := h.GdbMcp()
+		if mcp == nil {
 			L.Push(lua.LString(""))
 			L.Push(lua.LString("gdb_query: no gdb session"))
 			return 2
 		}
-		c.echoGdbWidget(a, cmd)
+		c.echoGdbWidget(h, cmd)
 		timeout := 120.0
 		if L.GetTop() >= 2 {
 			timeout = float64(L.CheckNumber(2))
@@ -86,9 +87,9 @@ func (c *luaCtl) installGdbAPI(rt *luahost.Runtime) {
 		var out string
 		var err error
 		if gdb.IsTargetRemoteCmd(cmd) {
-			out, err = a.gdbMcp.QueryLong(ctx, cmd)
+			out, err = mcp.QueryLong(ctx, cmd)
 		} else {
-			out, err = a.gdbMcp.Query(ctx, cmd)
+			out, err = mcp.Query(ctx, cmd)
 		}
 		if err != nil {
 			L.Push(lua.LString(""))

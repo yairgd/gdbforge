@@ -463,7 +463,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 	if rt == nil {
 		return
 	}
-	a := c.app
+	h := c.host
 	// Serial ops use serialCtl mutex; do not callOnUI (worker would block while UI
 	// processes GDB MI, wedging :lua kgdb_serial after minicom closes).
 	rt.SetGdbforgeFunc("open_serial_terminal", func(L *lua.LState) int {
@@ -472,7 +472,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		if L.GetTop() >= 2 {
 			baud = int(L.CheckNumber(2))
 		}
-		if err := a.serial.OpenShared(device, baud); err != nil {
+		if err := h.Serial().OpenShared(device, baud); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
@@ -480,7 +480,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		return 0
 	})
 	rt.SetGdbforgeFunc("serial_debugger_pty", func(L *lua.LState) int {
-		path, err := a.serial.DebuggerPTY()
+		path, err := h.Serial().DebuggerPTY()
 		if err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
@@ -489,7 +489,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		return 1
 	})
 	rt.SetGdbforgeFunc("serial_terminal_pty", func(L *lua.LState) int {
-		path, err := a.serial.TerminalPTY()
+		path, err := h.Serial().TerminalPTY()
 		if err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
@@ -499,7 +499,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 	})
 	rt.SetGdbforgeFunc("serial_send", func(L *lua.LState) int {
 		line := L.CheckString(1)
-		if err := a.serial.Send(line); err != nil {
+		if err := h.Serial().Send(line); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
@@ -507,14 +507,14 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 	})
 	rt.SetGdbforgeFunc("serial_switch_owner", func(L *lua.LState) int {
 		mode := strings.TrimSpace(L.CheckString(1))
-		if err := a.serial.SwitchOwner(mode); err != nil {
+		if err := h.Serial().SwitchOwner(mode); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
 		return 0
 	})
 	rt.SetGdbforgeFunc("serial_owner", func(L *lua.LState) int {
-		owner, err := a.serial.Owner()
+		owner, err := h.Serial().Owner()
 		if err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
@@ -523,22 +523,22 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		return 1
 	})
 	rt.SetGdbforgeFunc("begin_debug_entry", func(L *lua.LState) int {
-		if err := a.serial.BeginDebugEntry(); err != nil {
+		if err := h.Serial().BeginDebugEntry(); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
 		return 0
 	})
 	rt.SetGdbforgeFunc("serial_switch_gdb", func(L *lua.LState) int {
-		if err := a.serial.SwitchToGDB(); err != nil {
+		if err := h.Serial().SwitchToGDB(); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
-		a.setKgdbMode(true)
+		h.SetKgdbMode(true)
 		return 0
 	})
 	rt.SetGdbforgeFunc("serial_switch_console", func(L *lua.LState) int {
-		if err := a.serial.SwitchToConsole(); err != nil {
+		if err := h.Serial().SwitchToConsole(); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
@@ -549,14 +549,14 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		if L.GetTop() >= 1 {
 			delay = float64(L.CheckNumber(1))
 		}
-		if err := a.serial.SysrqDelayed(delay); err != nil {
+		if err := h.Serial().SysrqDelayed(delay); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}
 		return 0
 	})
 	rt.SetGdbforgeFunc("close_serial_terminal", func(L *lua.LState) int {
-		a.serial.Close()
+		h.Serial().Close()
 		return 0
 	})
 	rt.SetGdbforgeFunc("spawn_serial_console", func(L *lua.LState) int {
@@ -565,7 +565,7 @@ func (c *luaCtl) installSerialAPI(rt *luahost.Runtime) {
 		if L.GetTop() >= 2 {
 			baud = int(L.CheckNumber(2))
 		}
-		if err := spawnConsoleTerminal(a, pty, baud); err != nil {
+		if err := h.Serial().SpawnConsole(pty, baud); err != nil {
 			L.RaiseError("%s", err.Error())
 			return 0
 		}

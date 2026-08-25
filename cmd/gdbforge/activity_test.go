@@ -52,7 +52,7 @@ func TestActivitySnapForCtrlZ(t *testing.T) {
 
 func TestCtrlCCancelsLuaJob(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	ctx, cancel := context.WithCancel(context.Background())
 	a.lua.jobMu.Lock()
 	a.lua.jobCancel = cancel
@@ -72,7 +72,7 @@ func TestCtrlCCancelsLuaJob(t *testing.T) {
 
 func TestCtrlZCancelsLuaWhenInferiorIdle(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	ctx, cancel := context.WithCancel(context.Background())
 	a.lua.jobMu.Lock()
 	a.lua.jobCancel = cancel
@@ -92,7 +92,7 @@ func TestCtrlZCancelsLuaWhenInferiorIdle(t *testing.T) {
 
 func TestCtrlZPrefersInferiorOverLua(t *testing.T) {
 	a := &DebuggerApp{TermApp: &termui.TermApp{}}
-	a.lua.app = a
+	a.lua.host = a
 	a.debug = debugstate.New(nil)
 	a.debug.SetInferiorRunning(true)
 	a.console.host = a
@@ -120,7 +120,7 @@ func TestCtrlZPrefersInferiorOverLua(t *testing.T) {
 
 func TestActivitySnapshotReadsJobBusy(t *testing.T) {
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	a.lua.jobBusy.Store(true)
 	snap := a.activitySnapshot()
 	if !snap.LuaJob || snap.forCtrlC() != ActivityLuaJob {

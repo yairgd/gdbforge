@@ -83,7 +83,7 @@ func (a *DebuggerApp) initControllers() {
 	a.cmd.host = a
 	a.execIO.host = a
 	a.search.host = a
-	a.lua.app = a
+	a.lua.host = a
 	a.dlv.app = a
 	a.serial.app = a
 }
