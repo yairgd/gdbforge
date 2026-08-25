@@ -51,6 +51,45 @@ type luaUIMsg struct {
 	done chan struct{}
 }
 
+func (c *luaCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onUIMsg)
+	platform.Subscribe(bus, c.onJobDone)
+}
+
+func (c *luaCtl) onUIMsg(msg luaUIMsg) {
+	func() {
+		defer func() {
+			if msg.done != nil {
+				close(msg.done)
+			}
+		}()
+		if msg.fn != nil {
+			msg.fn()
+		}
+	}()
+}
+
+func (c *luaCtl) onJobDone(msg luaJobDoneMsg) {
+	a := c.app
+	if a == nil {
+		return
+	}
+	if msg.err != nil {
+		errMsg := msg.err.Error()
+		if !errors.Is(msg.err, luahost.ErrJobCancelled) &&
+			!strings.Contains(errMsg, "cancelled") &&
+			!strings.Contains(errMsg, "context canceled") {
+			if a.outputWidget != nil {
+				a.outputWidget.AppendHostLine(msg.name + ": " + errMsg)
+			}
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("lua").Error(msg.name + ": " + errMsg)
+			}
+		}
+	}
+	a.RequestFrame()
+}
+
 // enterMode focuses a Lua pane and routes all keys to it (ModeLua).
 func (c *luaCtl) enterMode(w *widgets.LuaWidget) {
 	a := c.app

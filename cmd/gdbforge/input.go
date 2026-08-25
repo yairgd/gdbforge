@@ -1,18 +1,12 @@
 package main
 
 import (
-	"errors"
-	"io"
 	"strconv"
 	"strings"
-	"syscall"
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -474,16 +468,24 @@ func (a *DebuggerApp) HandleResize() {
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
-func (a *DebuggerApp) dispatchBusEvent(data any) bool {
-	if a == nil || a.ctx.Bus == nil {
-		return false
+func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
+	data := ev.Data()
+	if s, ok := data.(string); ok {
+		if s == "gdb-exit" {
+			a.Exit()
+			return
+		}
+		if a.gdbWidget != nil {
+			a.gdbWidget.HandleEvent(ev)
+		}
+		if a.execWidget != nil {
+			a.execWidget.HandleEvent(ev)
+		}
+		return
 	}
-	switch data.(type) {
-	case termui.SubmitMsg, termui.CompletionMsg, BreakpointsChangedMsg:
+	if a.ctx.Bus != nil {
 		a.ctx.Bus.Dispatch(data)
-		return true
 	}
-	return false
 }
 
 // tryGotoLineCmd handles Vim-style :N / :0 — jump browse cursor to line N
@@ -528,179 +530,6 @@ func parseGotoLineCmd(text string) (line int, ok bool) {
 	}
 	return n, true
 }
-
-func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
-	if a.dispatchBusEvent(ev.Data()) {
-		return
-	}
-	switch data := ev.Data().(type) {
-	case events.GdbOutputMsg:
-		// Avoid per-line file logging during free-run floods (major TUI lag).
-		if a.miLog != nil && !a.Debug().InferiorRunning() {
-			for _, line := range strings.Split(data.Data, "\n") {
-				a.miLog.Info(line)
-			}
-			if data.Err != nil && !isExpectedPtyClose(data.Err) {
-				a.miLog.Error(data.Err.Error())
-			}
-		} else if a.miLog != nil && data.Err != nil && !isExpectedPtyClose(data.Err) {
-			a.miLog.Error(data.Err.Error())
-		}
-		if a.gdbWidget != nil {
-			a.console.handleDebuggerOutputMsg(data)
-		}
-		if a.outputWidget != nil && data.Data != "" {
-			a.outputWidget.AppendPty(data.Data)
-		}
-		// No RequestFrame: Run() already redraws after this interrupt.
-	case events.InferiorOutputMsg:
-		if data.Data == "" {
-			break
-		}
-		if a.outputWidget != nil {
-			a.outputWidget.AppendInferior(data.Data)
-		}
-		// Mirror into the debugger console when enabled (default on for Delve).
-		if a.gdbWidget != nil && a.Debug().GdbTargetPrint() {
-			a.gdbWidget.AppendTargetText(data.Data)
-		}
-		a.RequestFrame()
-	case core.ExecOutputMsg:
-		if a.execWidget != nil {
-			a.execWidget.HandleEvent(ev)
-		}
-	case aiReplyMsg:
-		if a.gdbWidget != nil {
-			a.gdbWidget.AppendLines(data.lines)
-			a.RequestFrame()
-		}
-	case codeRefreshMsg:
-		if data.fromStop {
-			// Late stop paint lost the race with call-stack / frame browse.
-			if data.stopGen != a.dlv.codeNavGen {
-				a.RequestFrame()
-				break
-			}
-			a.debugInfo.selectLevel(0)
-			if data.stop != nil {
-				_ = a.updateCodeAfterStop(data.stop)
-				// Repaint all Code gutters from the model (fresh from the
-				// pre-stop -break-list query, or whatever Merge already holds).
-				if a.breaks.List() != nil {
-					a.breaks.paintCodeMarks(a.breaks.Items())
-				}
-				a.RequestFrame()
-				break
-			}
-		}
-		// Console frame/f/up/down: present with the fetched frame (not nil).
-		if data.frame != nil {
-			a.debugInfo.syncCallStackViews()
-			a.debugInfo.selectLevel(data.frame.Level)
-			a.showFrameSource(*data.frame)
-			a.RequestFrame()
-			break
-		}
-		if data.widget != nil {
-			a.presentLocation(data.widget, nil)
-		}
-		a.RequestFrame()
-	case asmRefreshMsg:
-		a.asm.applyRefresh(data)
-		a.RequestFrame()
-	case breakpointsUIMsg:
-		// refreshBreakpoints may have applied off-thread; push gutters again
-		// on the UI thread so a late Code buffer still gets marks.
-		if a.breaks.List() != nil {
-			a.breaks.syncBreakpointViews()
-		}
-		a.RequestFrame()
-	case debugInfoUIMsg:
-		a.debugInfo.syncThreadViews()
-		a.debugInfo.syncCallStackViews()
-		if data.stackOnly {
-			a.debugInfo.selectLevel(0)
-			a.RequestFrame()
-			break
-		}
-		// Do not force frame 0 or re-drive Code here — that races with call-stack browse.
-		a.syncCodeFromCallstack()
-		// Asm stack preamble / dump can stay on the pre-Ctrl-C frame until the
-		// stack model lands — refresh against the highlighted (post-stop) level.
-		if stack := a.debugInfo.Stack(); stack != nil {
-			fr, ok := stack.ByLevel(a.debugInfo.selectedLevel())
-			a.asm.refreshAfterStackReload(fr, ok)
-		}
-		a.RequestFrame()
-	case luaUIMsg:
-		func() {
-			defer func() {
-				if data.done != nil {
-					close(data.done)
-				}
-			}()
-			if data.fn != nil {
-				data.fn()
-			}
-		}()
-	case luaJobDoneMsg:
-		if data.err != nil {
-			msg := data.err.Error()
-			// Ctrl-C already printed "cancelled (Ctrl-C)"; skip duplicate.
-			if !errors.Is(data.err, luahost.ErrJobCancelled) &&
-				!strings.Contains(msg, "cancelled") &&
-				!strings.Contains(msg, "context canceled") {
-				if a.outputWidget != nil {
-					a.outputWidget.AppendHostLine(data.name + ": " + msg)
-				}
-				if a.ctx.Log != nil {
-					a.ctx.Log.Named("lua").Error(data.name + ": " + msg)
-				}
-			}
-		}
-		a.RequestFrame()
-	case string:
-		// GDB PTY closed (q / quit / -gdb-exit) — leave the app.
-		if data == "gdb-exit" {
-			a.Exit()
-			return
-		}
-		if a.gdbWidget != nil {
-			a.gdbWidget.HandleEvent(ev)
-		}
-		if a.execWidget != nil {
-			a.execWidget.HandleEvent(ev)
-		}
-	default:
-		if a.gdbWidget != nil {
-			a.gdbWidget.HandleEvent(ev)
-		}
-		if a.execWidget != nil {
-			a.execWidget.HandleEvent(ev)
-		}
-	}
-}
-
-// isExpectedPtyClose reports PTY reader errors that mean the debugger exited
-// (q / quit / process death). Linux often returns EIO ("input/output error")
-// on /dev/ptmx once the slave closes — not a startup or session-setup failure.
-func isExpectedPtyClose(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
-		return true
-	}
-	var errno syscall.Errno
-	if errors.As(err, &errno) && errno == syscall.EIO {
-		return true
-	}
-	// Wrapped "read /dev/ptmx: input/output error" from older readers.
-	msg := err.Error()
-	return strings.Contains(msg, "input/output error") ||
-		strings.Contains(msg, "file already closed")
-}
-
 
 
 

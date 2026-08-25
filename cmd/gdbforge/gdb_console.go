@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -64,6 +67,8 @@ type consoleHost interface {
 	MaybeSwitchSerialConsoleOnContinue(cmd string)
 	serialActive() bool
 	serialOnState(stopped, promptReady, running bool)
+	OutputWidget() *widgets.OutputWidget
+	LogGdbMILines(msg events.GdbOutputMsg)
 }
 
 // consoleCtl owns the debugger console domain: the PTY bridge, submit /
@@ -78,6 +83,35 @@ type consoleCtl struct {
 }
 
 // startGdbConsoleBridge coalesces debugger PTY chunks onto the UI event loop.
+func (c *consoleCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onGdbOutput)
+	platform.Subscribe(bus, c.onAIReply)
+}
+
+func (c *consoleCtl) onGdbOutput(msg events.GdbOutputMsg) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	h.LogGdbMILines(msg)
+	if h.GDBWidget() != nil {
+		c.handleDebuggerOutputMsg(msg)
+	}
+	if out := h.OutputWidget(); out != nil && msg.Data != "" {
+		out.AppendPty(msg.Data)
+	}
+	// No RequestFrame: Run() already redraws after this interrupt.
+}
+
+func (c *consoleCtl) onAIReply(msg aiReplyMsg) {
+	h := c.host
+	if h == nil || h.GDBWidget() == nil {
+		return
+	}
+	h.GDBWidget().AppendLines(msg.lines)
+	h.RequestFrame()
+}
+
 func (c *consoleCtl) startGdbConsoleBridge() {
 	h := c.host
 	if h == nil {
@@ -543,4 +577,23 @@ func isDlvRunCmd(cmd string) bool {
 	default:
 		return false
 	}
+}
+
+// isExpectedPtyClose reports PTY reader errors that mean the debugger exited
+// (q / quit / process death). Linux often returns EIO ("input/output error")
+// on /dev/ptmx once the slave closes — not a startup or session-setup failure.
+func isExpectedPtyClose(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) && errno == syscall.EIO {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "input/output error") ||
+		strings.Contains(msg, "file already closed")
 }

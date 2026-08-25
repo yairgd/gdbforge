@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 // dlvCtl owns Delve confirm-gate state and stop/frame-sync bookkeeping used by
@@ -168,4 +169,41 @@ func (c *dlvCtl) applyPendingFrameSync(promptReady, isError bool) bool {
 		return true
 	}
 	return false
+}
+
+func (c *dlvCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onCodeRefresh)
+}
+
+func (c *dlvCtl) onCodeRefresh(msg codeRefreshMsg) {
+	a := c.app
+	if a == nil {
+		return
+	}
+	if msg.fromStop {
+		if msg.stopGen != c.codeNavGen {
+			a.RequestFrame()
+			return
+		}
+		a.debugInfo.selectLevel(0)
+		if msg.stop != nil {
+			_ = a.updateCodeAfterStop(msg.stop)
+			if a.breaks.List() != nil {
+				a.breaks.paintCodeMarks(a.breaks.Items())
+			}
+			a.RequestFrame()
+			return
+		}
+	}
+	if msg.frame != nil {
+		a.debugInfo.syncCallStackViews()
+		a.debugInfo.selectLevel(msg.frame.Level)
+		a.showFrameSource(*msg.frame)
+		a.RequestFrame()
+		return
+	}
+	if msg.widget != nil {
+		a.presentLocation(msg.widget, nil)
+	}
+	a.RequestFrame()
 }

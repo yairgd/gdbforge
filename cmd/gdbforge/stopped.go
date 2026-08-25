@@ -319,6 +319,23 @@ func (a *DebuggerApp) syncCodeFromCallstack() {
 	}
 }
 
+// ApplyDebugInfoUI syncs Threads / Call Stack views after a background refresh.
+func (a *DebuggerApp) ApplyDebugInfoUI(stackOnly bool) {
+	a.debugInfo.syncThreadViews()
+	a.debugInfo.syncCallStackViews()
+	if stackOnly {
+		a.debugInfo.selectLevel(0)
+		a.RequestFrame()
+		return
+	}
+	a.syncCodeFromCallstack()
+	if stack := a.debugInfo.Stack(); stack != nil {
+		fr, ok := stack.ByLevel(a.debugInfo.selectedLevel())
+		a.asm.refreshAfterStackReload(fr, ok)
+	}
+	a.RequestFrame()
+}
+
 // formatUnavailableExtra builds the optional detail line under the path in
 // CodeWidget's centered "not available" placeholder.
 func formatUnavailableExtra(fn string, line int) string {

@@ -16,6 +16,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -65,6 +66,17 @@ type asmCtl struct {
 	// preamble may show "at file:line" (cleared when viewing ?? / no-file).
 	ctxFrame models.StackFrame
 	hasCtx   bool
+}
+
+func (c *asmCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onRefresh)
+}
+
+func (c *asmCtl) onRefresh(msg asmRefreshMsg) {
+	c.applyRefresh(msg)
+	if h := c.host; h != nil {
+		h.RequestFrame()
+	}
 }
 
 // Widget returns the shared AssemblyWidget (may be nil before InitB).

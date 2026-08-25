@@ -8,6 +8,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
@@ -31,6 +32,9 @@ type inferiorHost interface {
 	State() *platform.AppState
 	ConsoleSuspend()
 	LogError(area, msg string)
+	GDBWidget() *widgets.GDBWidget
+	Debug() *debugstate.State
+	RequestFrame()
 }
 
 // inferiorIOCtl owns the program stdio domain: the inferior PTY subscription,
@@ -39,6 +43,24 @@ type inferiorHost interface {
 type inferiorIOCtl struct {
 	host      inferiorHost
 	cancelSub func()
+}
+
+func (c *inferiorIOCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onOutput)
+}
+
+func (c *inferiorIOCtl) onOutput(msg events.InferiorOutputMsg) {
+	h := c.host
+	if h == nil || msg.Data == "" {
+		return
+	}
+	if out := h.OutputWidget(); out != nil {
+		out.AppendInferior(msg.Data)
+	}
+	if gw := h.GDBWidget(); gw != nil && h.Debug().GdbTargetPrint() {
+		gw.AppendTargetText(msg.Data)
+	}
+	h.RequestFrame()
 }
 
 // wire attaches the dedicated program PTY to the IO view and bridges stdout

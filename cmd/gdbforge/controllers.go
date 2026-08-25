@@ -1,10 +1,13 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
@@ -33,6 +36,7 @@ type breakHost interface {
 	DeferDLVBPRefresh()
 	IsDLVConfirming() bool
 	GdbMcp() *mcp.GdbMcpService
+	RequestFrame()
 }
 
 // breakCtl owns breakpoint domain logic and BP model state.
@@ -68,6 +72,7 @@ func (a *DebuggerApp) initControllers() {
 	a.inferiorIO.host = a
 	a.comp.host = a
 	a.cmd.host = a
+	a.execIO.app = a
 	a.search.app = a
 	a.lua.app = a
 	a.dlv.app = a
@@ -78,7 +83,18 @@ func (a *DebuggerApp) registerUIComponents() {
 	if a == nil || a.ctx.Bus == nil {
 		return
 	}
-	for _, c := range []platform.UIComponent{&a.comp, &a.breaks, &a.cmd} {
+	for _, c := range []platform.UIComponent{
+		&a.comp,
+		&a.breaks,
+		&a.cmd,
+		&a.console,
+		&a.inferiorIO,
+		&a.asm,
+		&a.debugInfo,
+		&a.dlv,
+		&a.lua,
+		&a.execIO,
+	} {
 		c.Register(a.ctx.Bus)
 	}
 }
@@ -142,6 +158,22 @@ func (a *DebuggerApp) LogError(area, msg string) {
 		return
 	}
 	a.ctx.Log.Named(area).Error(msg)
+}
+
+func (a *DebuggerApp) LogGdbMILines(msg events.GdbOutputMsg) {
+	if a == nil || a.miLog == nil {
+		return
+	}
+	if !a.Debug().InferiorRunning() {
+		for _, line := range strings.Split(msg.Data, "\n") {
+			a.miLog.Info(line)
+		}
+		if msg.Err != nil && !isExpectedPtyClose(msg.Err) {
+			a.miLog.Error(msg.Err.Error())
+		}
+	} else if msg.Err != nil && !isExpectedPtyClose(msg.Err) {
+		a.miLog.Error(msg.Err.Error())
+	}
 }
 
 func (a *DebuggerApp) PublishBreakpointsChanged() {

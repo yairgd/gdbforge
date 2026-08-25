@@ -48,6 +48,7 @@ type DebuggerApp struct {
 	dlv        dlvCtl
 	serial     serialCtl
 	children   childProcCtl
+	execIO     execIOCtl
 
 	gdbWidget *widgets.GDBWidget
 	gdbMcp    *mcp.GdbMcpService

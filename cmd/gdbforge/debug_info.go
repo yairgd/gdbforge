@@ -35,6 +35,7 @@ type debugInfoHost interface {
 	showFrameSource(fr models.StackFrame)
 	ShowCodeAt(file string, line int) *widgets.CodeWidget
 	LogError(area, msg string)
+	ApplyDebugInfoUI(stackOnly bool)
 }
 
 // debugInfoCtl owns the Threads / Call Stack domain: shared models, their
@@ -47,6 +48,18 @@ type debugInfoCtl struct {
 	threadW  *widgets.ThreadWidget
 	stackW   *widgets.CallStackWidget
 	coalesce coalesceRunner
+}
+
+func (c *debugInfoCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onUIMsg)
+}
+
+func (c *debugInfoCtl) onUIMsg(msg debugInfoUIMsg) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	h.ApplyDebugInfoUI(msg.stackOnly)
 }
 
 // Threads returns the shared ThreadList (may be nil before InitB).

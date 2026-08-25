@@ -459,6 +459,16 @@ func (c *breakCtl) onChangedMsg(_ BreakpointsChangedMsg) {
 
 func (c *breakCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onChangedMsg)
+	platform.Subscribe(bus, c.onBreakpointsUI)
+}
+
+func (c *breakCtl) onBreakpointsUI(_ breakpointsUIMsg) {
+	if c.list != nil {
+		c.syncBreakpointViews()
+	}
+	if h := c.host; h != nil {
+		h.RequestFrame()
+	}
 }
 
 // maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
