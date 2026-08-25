@@ -36,7 +36,7 @@ func TestMaybeEnableRemoteModeArmsAttachStackSkip(t *testing.T) {
 	}
 	defer m.Close()
 
-	a := &DebuggerApp{debug: debugstate.New(nil)}
+	a := &DebuggerApp{DebugSession: DebugSession{debug: debugstate.New(nil)}}
 	a.serial = serialCtl{app: a, mux: m}
 
 	a.maybeEnableRemoteMode("target remote " + m.DebuggerPTY())

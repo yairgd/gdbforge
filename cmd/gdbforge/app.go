@@ -10,62 +10,45 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 const defaultLogFile = "gdbforge.log"
 
+// DebuggerApp is the composition root: TermApp loop, LayoutShell, DebugSession,
+// and cross-cutting controllers (lua, search, serial, exec). Domain logic lives
+// on embedded DebugSession controllers and LayoutShell policy.
 type DebuggerApp struct {
 	*termui.TermApp
+	LayoutShell
+	DebugSession
+
 	commandReg     *commands.CommandRegistry
 	keyBindings    *commands.KeyBindingRegistry
 	insertKeys     *commands.KeyBindingRegistry
 	completionKeys *commands.KeyBindingRegistry
 
-	ws        *Workspace
 	cmdWidget *termui.CmdWidget
 	ctx       platform.AppContext
-	debug     *debugstate.State
-	miLog     *platform.NamedLogger
-	fileLog   *platform.FileSink // optional; -log / --log or :set log
+	cfg       SessionConfig
+	fileLog   *platform.FileSink
 
-	// Controllers own their domain state and behavior; DebuggerApp wires them
-	// (initControllers) and keeps orchestration.
-	cfg        SessionConfig
-	backend    backend.Backend
-	breaks     breakCtl
-	asm        asmCtl
-	bufs       bufferCtl
-	debugInfo  debugInfoCtl
-	console    consoleCtl
-	inferiorIO inferiorIOCtl
-	comp       completionCtl
-	cmd        cmdCtl
-	search     searchCtl
-	lua        luaCtl
-	dlv        dlvCtl
-	serial     serialCtl
-	children   childProcCtl
-	execIO     execIOCtl
-
-	gdbWidget *widgets.GDBWidget
-	gdbMcp    *mcp.GdbMcpService
+	comp     completionCtl
+	cmd      cmdCtl
+	search   searchCtl
+	lua      luaCtl
+	serial   serialCtl
+	children childProcCtl
+	execIO   execIOCtl
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
 
-	// builtins are singleton views created once at startup (:b about, :b gdb, …).
 	builtins    map[string]termui.Widget
 	aboutWidget *widgets.AboutWidget
 	helpWidget  *widgets.HelpWidget
 	logoWidget  *widgets.LogoWidget
-
-	bpWidget       *widgets.BreakpointWidget
-	outputWidget   *widgets.OutputWidget
-	luaConsoleWidget *widgets.LuaConsoleWidget
-	fileListWidget *widgets.FileListWidget
 }
 
 func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
@@ -88,7 +71,6 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 }
 
 // GDB returns the owned debugger session for external APIs (e.g. MCP).
-// Despite the name, this is whichever backend was selected with -g (gdb or dlv).
 func (a *DebuggerApp) GDB() core.Session {
 	if a == nil || a.backend == nil {
 		return nil
@@ -116,8 +98,6 @@ func (a *DebuggerApp) dlvBackend() *backend.DLVBackend {
 	return b
 }
 
-// enableFileLog starts (or switches) append logging to path.
-// Empty path means defaultLogFile ("gdbforge.log").
 func (a *DebuggerApp) enableFileLog(path string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -145,23 +125,12 @@ func (a *DebuggerApp) enableFileLog(path string) error {
 	return nil
 }
 
-// Close tears down owned debugger/exec sessions.
 func (a *DebuggerApp) Close() {
 	a.lua.closeAll()
-	a.breaks.saveOnQuit()
+	a.DebugSession.close(a)
 	a.saveCmdlineHistoryOnQuit()
-	if a.gdbMcp != nil {
-		a.gdbMcp.Close()
-		a.gdbMcp = nil
-	}
-	a.inferiorIO.stop()
-	a.console.stopBridge()
 	a.serial.Close()
 	a.children.KillAll()
-	if a.backend != nil {
-		a.backend.Close()
-		a.backend = nil
-	}
 	if a.execClient != nil {
 		a.execClient.Close()
 		a.execClient = nil
@@ -178,7 +147,6 @@ func (a *DebuggerApp) Close() {
 	}
 }
 
-// restoreCmdlineHistory loads ./.gdbforge/cmdline_history.yaml into the CmdWidget.
 func (a *DebuggerApp) restoreCmdlineHistory() {
 	if a == nil || a.cmdWidget == nil {
 		return
@@ -194,7 +162,6 @@ func (a *DebuggerApp) restoreCmdlineHistory() {
 	a.cmdWidget.LoadSearchHistory(search)
 }
 
-// saveCmdlineHistoryOnQuit writes CmdWidget history to ./.gdbforge/cmdline_history.yaml.
 func (a *DebuggerApp) saveCmdlineHistoryOnQuit() {
 	if a == nil || a.cmdWidget == nil {
 		return
@@ -202,7 +169,6 @@ func (a *DebuggerApp) saveCmdlineHistoryOnQuit() {
 	_ = persist.SaveCmdlineHistory(".", a.cmdWidget.CommandHistoryItems(), a.cmdWidget.SearchHistoryItems())
 }
 
-// Debug returns gdbforge-private debugger session state.
 func (a *DebuggerApp) Debug() *debugstate.State {
 	if a == nil {
 		return nil

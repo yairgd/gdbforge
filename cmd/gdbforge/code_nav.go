@@ -7,7 +7,6 @@ import (
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 // activeCodeWidget returns the CodeWidget buffer Esc / global keys should drive.
@@ -31,67 +30,6 @@ func (a *DebuggerApp) activeCodeWidget() *widgets.CodeWidget {
 	return a.layoutCodeWidget()
 }
 
-// --- Workspace policy delegates (hosts / keybindings call these) ---
-
-func (a *DebuggerApp) findCodeLeaf() *termui.Node {
-	if a.ws == nil {
-		return nil
-	}
-	return a.ws.findCodeLeaf()
-}
-
-func (a *DebuggerApp) rememberCodeLeafFromFocus() {
-	if a.ws != nil {
-		a.ws.rememberCodeLeafFromFocus()
-	}
-}
-
-func (a *DebuggerApp) focusedLeaf() *termui.Node {
-	if a.ws == nil {
-		return nil
-	}
-	return a.ws.focusedLeaf()
-}
-
-func (a *DebuggerApp) isGdbLeaf(leaf *termui.Node) bool {
-	if a.ws == nil {
-		return false
-	}
-	return a.ws.isGdbLeaf(leaf)
-}
-
-func (a *DebuggerApp) focusIsCodeOrGdb() bool {
-	if a.ws == nil {
-		return true
-	}
-	return a.ws.focusIsCodeOrGdb()
-}
-
-func (a *DebuggerApp) activateLastOrCodePane() {
-	if a.ws != nil {
-		a.ws.activateLastOrCodePane()
-	}
-}
-
-func (a *DebuggerApp) findGdbLeaf() *termui.Node {
-	if a.ws == nil {
-		return nil
-	}
-	return a.ws.findGdbLeaf()
-}
-
-func (a *DebuggerApp) activateGdbPane() {
-	if a.ws != nil {
-		a.ws.activateGdbPane()
-	}
-}
-
-func (a *DebuggerApp) activateGdbInsertMode() {
-	if a.ws != nil {
-		a.ws.activateGdbInsertMode()
-	}
-}
-
 // onEscape leaves insert/normal Esc handling. When AppState.EscToCode is set
 // (default), focuses the last non-code/non-gdb pane if one was active, else
 // the CodeWidget leaf; otherwise only leaves insert → normal.
@@ -105,13 +43,6 @@ func (a *DebuggerApp) onEscape() {
 	}
 	a.SetMode(platform.ModeNormal)
 	a.RequestRedraw()
-}
-
-// FocusCode leaves insert mode and focuses the code slot (Logo/Code/Asm).
-func (a *DebuggerApp) FocusCode() {
-	if a.ws != nil {
-		a.ws.FocusCode()
-	}
 }
 
 // sendGdbExec sends an execution command on the shared debugger PTY.

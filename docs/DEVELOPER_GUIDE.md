@@ -54,61 +54,43 @@ Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `in
 
 ```text
 Application startup
-  ├── Backend           (backend.NewGDB / NewDLV) — GDB vs Delve policy
-  ├── Services          (ptyx / Session / GdbMcpService, …) — talk to external systems
-  ├── Event bus         (termui.Event channel)
-  ├── Controllers (*Ctl) — own models (BreakpointList, ThreadList, …)
-  ├── Logger
-  └── Runtime           (TermApp, Workspace → TabWidget)
+  ├── DebugSession.init     backend, gdbWidget, debug *Ctl models
+  ├── LayoutShell           TabWidget, pane marks, focus policy
+  ├── TermApp               PollEvent / PostInterrupt / draw
+  ├── EventBus              *Ctl Register handlers (UI thread)
+  └── Cross-cutting         lua, search, serial, exec, cmdline
 
-User displays a model (:buffer, :split)
-  └── Window manager creates Widget → binds to existing Model (via host / SetItems)
+DebuggerApp (composition root)
+  ├── embeds TermApp + LayoutShell + DebugSession
+  ├── initControllers()     each *Ctl.host = a
+  ├── HandleInterrupt       thin: string exits + Bus.Dispatch
+  ├── HandleKey             modes, trie, widget dispatch
+  └── host adapters         one-liner forwards for *Host interfaces
 
-TermApp
-  ├── AppApi (implemented by DebuggerApp)
-  │     ├── HandleKey(*tcell.EventKey)     — mode router, trie, widget dispatch
-  │     ├── HandleResize()               — top-level widget rects
-  │     └── HandleCoreEvents(termui.Event) — ALL domain events land here
-  ├── screen tcell.Screen                — poll, lifecycle, Show (owned by TermApp)
-  ├── events chan termui.Event           — bus; services and widgets may publish
-  ├── DebuggerApp fields
-  │     ├── backend Backend                — GDB / Delve
-  │     ├── breaks / asm / bufs / …        — *Ctl domain owners
-  │     ├── ws *Workspace                  — pane policy over TabWidget
-  │     └── cmdWidget *CmdWidget
-  ├── top-level widgets (tab + cmd line)
-  │     └── CmdWidget.Events → events channel
-  ├── frontBuffer (*Grid)                 — shared draw target + BackCells diff
-  └── select loop: drain bus OR PollEvent → draw → flush
+Controller (*Ctl)
+  ├── owns model (BreakpointList, …)
+  ├── Register(EventBus)    Subscribe typed handlers
+  └── calls host.Backend() / host.RequestFrame() — not *DebuggerApp internals
+
+LayoutShell
+  ├── TabWidget, leaf marks (code/gdb/asm/last)
+  └── layoutHost            decoupled from full app
 
 Widget (view)
-  ├── displays Model state
-  ├── HandleEvent(tcell.Event)   — local keys / mouse
-  ├── Draw(Canvas)
-  └── host intents / SetOn*      — when app-level action needed (not service calls)
+  ├── Draw / HandleEvent
+  └── host intents / SetOn*  → app → *Ctl
 
-Data flow (target):
-  Service → Event Bus → Model → Widget
-
-GDB/Delve path (MVC):
-  Backend PTY reader → Subscribe → EventInterrupt → *Ctl (consoleCtl / …) → GDBWidget paint
-  Inferior TTY → Subscribe → InferiorOutputMsg → inferiorIOCtl → OutputWidget.AppendInferior
-  Domain lists → *Ctl models → SetItems on Thread / CallStack / Breakpoint / Asm views
-  GdbMcpService / :AI → same Session (WithWrite exclusive, Subscribe shared)
+Async path:
+  PTY reader → PostInterrupt(msg) → uiEvents → HandleInterrupt → EventBus → *Ctl → paint
 ```
 
 **Rules:**
 
-- Models are created at startup on controllers; widgets are views (often singleton builtins).
-- Widgets never call services directly — controllers own `Send` / Query; models hold domain state.
-- High-rate service output → controller → paint APIs on the view.
-- Domain actions → host interface methods or `SetOn*` — not widget business logic.
-- App command IDs are **private** to the application package; only `termui.CmdUnknown` lives in infra.
-- Mode and key-sequence routing belong in **`DebuggerApp`**, not in `TermApp` or individual widgets.
-- Pane policy (marks, sticky GDB, layout apply) belongs in **`Workspace`**, not `TabWidget`.
-- Console editing/layout is shared (`InputLine` / `ConsolePane`); debugger backends only supply protocol glue.
-- PTY writes are exclusive (`WithWrite`); all subscribers see output. Do not spawn a second GDB for AI.
-- Prefer `Backend` methods over new `isDLV()` branches.
+- Models live on **`DebugSession`** controllers; widgets are views.
+- Controllers use **`host` interfaces** — never embed `*DebuggerApp`.
+- High-rate PTY output → **`PostInterrupt`** → controller handler → paint API.
+- Pane policy belongs in **`LayoutShell`**, not `TabWidget`.
+- **`HandleCoreEvents`** is legacy — use **`PostInterrupt`** + **`EventBus`**.
 
 ---
 
@@ -116,9 +98,12 @@ GDB/Delve path (MVC):
 
 | Term | Meaning |
 |------|---------|
-| **Composition root** | `DebuggerApp` — wires `Backend`, `*Ctl`, `Workspace`, chrome; orchestration only |
-| **Controller (`*Ctl`)** | Domain owner (`breakCtl`, `consoleCtl`, …) — intents, refresh, `SetItems` |
-| **Host interface** | Narrow iface widgets/ctls call (`BreakpointHost`, `breakHost`, …); app implements |
+| **Composition root** | `DebuggerApp` — embeds `LayoutShell` + `DebugSession`; wires hosts and modes |
+| **LayoutShell** | Pane policy over `TabWidget` (marks, focus, `:layout`); was `Workspace` |
+| **DebugSession** | Backend, GDB widgets, debug `*Ctl` group (`debug_session.go`) |
+| **Controller (`*Ctl`)** | Domain owner — `host XxxHost`, `Register` on EventBus |
+| **Controller host** | Narrow iface (`breakHost`, `luaHost`, …) — ctl dependency surface |
+| **Widget host** | List widget intents (`BreakpointHost`, …); app forwards to `*Ctl` |
 | **Model** | Domain state on `*Ctl` / `internal/gdbforge/models` (e.g. `BreakpointList`) |
 | **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; host intents / callbacks only; no `Send` |
 | **Backend** | `gdbforge/backend.Backend` — GDB vs Delve policy surface |
@@ -130,9 +115,9 @@ GDB/Delve path (MVC):
 | **Grid** | Off-screen `[][]Cell` framebuffer |
 | **Node** | Split tree node (leaf or split) |
 | **WidgetTree** | Split tree + focus + geometry (`BuildLayout`) |
-| **Workspace** | (1) Middle chrome band; (2) `cmd/gdbforge.Workspace` pane-policy layer over Tab |
+| **Workspace / LayoutShell** | Middle chrome band; `LayoutShell` = pane-policy layer (`workspace*.go`) |
 | **CmdLine** | Top-level `:` command input band |
-| **Event bus** | `TermApp.events` channel; all events → `HandleCoreEvents` |
+| **Event bus** | `PostInterrupt` → `HandleInterrupt` → `platform.EventBus` → `*Ctl` |
 | **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
 | **AppState** | `platform.AppState` — Mode, PTYOwner (ui/mcp/app), EqualAlways |
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |

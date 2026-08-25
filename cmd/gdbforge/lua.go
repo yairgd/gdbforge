@@ -533,8 +533,8 @@ func (c *luaCtl) scriptArgCompletions(script string, fields []string, trailingSp
 	req := luahost.ParseArgCompletion(args, trailingSpace)
 	rt, err := c.ensureRuntime(script)
 	if err != nil || rt == nil {
-		if err != nil && c.app != nil && c.app.outputWidget != nil {
-			c.app.outputWidget.AppendHostLine("[lua tab] load " + script + ": " + err.Error())
+		if err != nil && c.host != nil && c.host.OutputWidget() != nil {
+			c.host.OutputWidget().AppendHostLine("[lua tab] load " + script + ": " + err.Error())
 		}
 		return luaDefaultArgCompletions(fields, trailingSpace), false
 	}

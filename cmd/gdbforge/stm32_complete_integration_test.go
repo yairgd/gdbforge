@@ -21,7 +21,7 @@ func TestSTM32StlinkScriptCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	a.lua.pending = map[string]luahost.ResolvedScript{
 		"stm32-stlink": {Cmd: "stm32-stlink", Path: path},
 	}

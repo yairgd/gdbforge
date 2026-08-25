@@ -11,7 +11,7 @@ import (
 )
 
 func testAppWithBreaks() *DebuggerApp {
-	a := &DebuggerApp{debug: debugstate.New(nil)}
+	a := &DebuggerApp{DebugSession: DebugSession{debug: debugstate.New(nil)}}
 	a.breaks.host = a
 	a.bufs.host = a
 	a.bufs.initMaps()

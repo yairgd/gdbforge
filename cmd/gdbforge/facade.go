@@ -4,8 +4,10 @@ package main
 // (GDB vs Delve). List widgets take *DebuggerApp as host (ActivateBreakpoint,
 // FocusCode, …). Prefer Backend methods over new isDLV() branches.
 //
-// Controllers that own domain logic (not thin forwarders): breakCtl, asmCtl,
-// bufferCtl, debugInfoCtl, consoleCtl, inferiorIOCtl, completionCtl, searchCtl,
-// luaCtl, dlvCtl. Each talks to the app through its own host interface
-// (initControllers wires host = a). Orchestration (stop pipeline, layouts,
-// mode dispatch) stays on DebuggerApp.
+// Composition:
+//   - LayoutShell — tab tree, pane marks, focus/swap policy
+//   - DebugSession — backend, GDB widgets, debug controllers
+//   - Cross-cutting — lua, search, serial, exec, keybindings, modes
+//
+// Controllers talk to the app through host interfaces (initControllers wires
+// host = a). Orchestration (stop pipeline, mode dispatch) stays on DebuggerApp.

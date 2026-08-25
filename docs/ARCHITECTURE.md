@@ -22,51 +22,60 @@ The debugger app is organized as **Model–View–Controller** with a **composit
 ```mermaid
 flowchart TB
     subgraph root ["Composition root"]
-        App["DebuggerApp<br/>cmd/gdbforge"]
-        WS["Workspace<br/>pane policy"]
+        App["DebuggerApp<br/>TermApp wiring + host adapters"]
+        Shell["LayoutShell<br/>tab tree · pane marks · focus"]
+        Sess["DebugSession<br/>backend · GDB widgets · debug ctls"]
         BE["backend.Backend<br/>GDB · Delve"]
     end
 
-    subgraph controllers ["Controllers"]
-        GUI["GUI · *Ctl<br/>break · asm · console · …"]
+    subgraph controllers ["Controllers · GUI"]
+        GUI["*Ctl<br/>break · asm · console · lua · dlv · …"]
         MCP["MCP / AI · GdbMcpService<br/>peer on same Session"]
     end
 
+    subgraph events ["UI thread events"]
+        UI["uiEvents loop"]
+        HI["HandleInterrupt"]
+        Bus["platform.EventBus"]
+    end
+
     subgraph model ["Shared model"]
-        Sess["Session · core.Session"]
-        Dom["Domain snapshots<br/>BreakpointList · ThreadList · CallStack · AssemblyList · AppState · …"]
+        Dom["Domain snapshots<br/>BreakpointList · ThreadList · …"]
         Surf["gdbforge/domain.DebugDomain"]
     end
 
     subgraph views ["Views · humans only"]
-        W["Widgets<br/>Code · Asm · GDB · Threads · Call Stack · Breakpoints · IO · …"]
+        W["Widgets<br/>Code · GDB · Threads · …"]
     end
 
-    App --> WS
-    App --> BE
-    App -->|"wires host = a"| GUI
-    BE --> Sess
-    GUI -->|"Send / Query / Merge"| Sess
-    GUI -->|"update"| Dom
-    App -->|"implements"| Surf
-    MCP -->|"domain tools + gdb_command"| Surf
-    MCP -->|"Send / Query / WithWrite"| Sess
-    Surf -->|"reads/writes"| Dom
+    App --> Shell
+    App --> Sess
+    Sess --> BE
+    App -->|"initControllers host = a"| GUI
+    BE --> Dom
+    GUI --> Dom
+    App --> Surf
+    MCP --> Surf
 
-    Dom -->|"SetItems / Paint"| W
-    W -->|"Host intents / OnSubmit"| App
-    App -->|"forwards"| GUI
+    GUI -->|"Register Subscribe"| Bus
+    UI --> HI
+    HI -->|"typed payload"| Bus
+    Bus --> GUI
+    Dom --> W
+    W -->|"host intents"| App
+    App --> GUI
 ```
 
 | Layer | Owns | Lives in |
 |-------|------|----------|
-| **Composition root** | Wire hosts, chrome, stop pipeline, layouts | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
-| **Workspace** | Pane marks, Code/GDB placement, layout apply | `cmd/gdbforge/workspace*.go` above `termui.TabWidget` |
+| **Composition root** | Wire TermApp, hosts, modes, stop orchestration | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
+| **LayoutShell** | Pane marks, Code/GDB placement, layout apply, focus/jump-back | `cmd/gdbforge/workspace*.go`, `layout_host.go` (embedded on app) |
+| **DebugSession** | Backend, debug state, GDB/DLV widgets, debug `*Ctl` group | `debug_session.go` (embedded on app) |
 | **Backend** | GDB vs Delve policy; owns concrete client | `internal/gdbforge/backend` |
 | **Model** | Session + domain snapshots (on `*Ctl`, not app fields) | `breakCtl.list`, `debugInfoCtl`, `asmCtl`, `internal/gdbforge/models` |
-| **Domain surface** | Peer ops (list/set BP, threads, frames) for AI / future Lua | `internal/gdbforge/domain` · `cmd/gdbforge/debug_domain.go` |
-| **Controller** | Intents → mutate model → push paint / `Send` | GUI: `*Ctl` · MCP/AI: `internal/mcp` (peer on `app.GDB()`) |
-| **View** | Paint + host intents / callbacks (`SetItems`, `BreakpointHost`, `SetOnSubmit`, …) | `internal/gdbforge/widgets`, `internal/termui` |
+| **Domain surface** | Peer ops for AI / future Lua | `internal/gdbforge/domain` · `cmd/gdbforge/debug_domain.go` |
+| **Controller** | Intents → mutate model → paint / `Send`; `Register` on EventBus | GUI: `*Ctl` · MCP: `internal/mcp` |
+| **View** | Paint + host intents / callbacks | `internal/gdbforge/widgets`, `internal/termui` |
 
 ```text
 View (widget)  --Host / OnSubmit-->  DebuggerApp (forwards)
@@ -77,7 +86,45 @@ MCP / AI       --Send / Query-->     same Model  (no widget ownership)
 
 GUI and MCP/AI share the same models (e.g. `breaks.list` → `BreakpointList`); widgets never own `Backend` / `Session`, `ptyx.TTY`, or domain merge logic. MCP does not paint — views exist for the human TUI only.
 
-### Controllers and hosts
+### Controllers and host interfaces
+
+Controllers (`*Ctl`) own domain logic and models. They must **not** hold `*DebuggerApp` directly — each talks to the composition root through a **narrow host interface** wired in `initControllers()`:
+
+```go
+a.breaks.host = a   // DebuggerApp implements breakHost
+a.lua.host = a      // DebuggerApp implements luaHost
+// …
+```
+
+**Qt analogy:** `Register` + `EventBus.Subscribe` ≈ **connect(signal, slot)**. A typed message (e.g. `GdbOutputMsg`) is the signal; the controller handler is the slot. Host interfaces ≈ the minimal **parent API** a child object is allowed to call.
+
+```text
+breakCtl  ──uses──▶  breakHost  ◀──implements──  DebuggerApp
+luaCtl    ──uses──▶  luaHost    ◀──implements──  DebuggerApp
+dlvCtl    ──uses──▶  dlvHost    ◀──implements──  DebuggerApp
+LayoutShell ──uses──▶ layoutHost ◀──implements──  DebuggerApp
+```
+
+| Controller | Host interface | Typical host surface |
+|------------|----------------|----------------------|
+| `breakCtl` | `breakHost` | `Backend()`, `BPWidget()`, `RequestFrame()`, `PublishBreakpointsChanged()` |
+| `consoleCtl` | `consoleHost` | `GDBWidget()`, stop pipeline hooks, `SendGdbExec` peers |
+| `debugInfoCtl` | `debugInfoHost` | `GdbMcp()`, `showFrameSource`, `ApplyDebugInfoUI` |
+| `bufferCtl` | `bufferHost` | `Shell()` (layout), `placeCodeInSlot`, buffer widgets |
+| `asmCtl` | `asmHost` | `Shell()`, assembly widget, `Workspace` tab ops |
+| `inferiorIOCtl` | `inferiorHost` | `OutputWidget()`, inferior PTY routing |
+| `execIOCtl` | `execHost` | `ExecWidget()` only |
+| `searchCtl` | `searchHost` | `CmdWidget()`, `ActiveCodeWidget()`, `State()` |
+| `luaCtl` | `luaHost` | UI + debug + serial surface for scripts (~40 methods) |
+| `dlvCtl` | `dlvHost` | Code refresh, frame sync, debug-info peers |
+| `completionCtl` | `completionHost` | Wildmenu, `PublishCompletion` |
+| `cmdCtl` | `cmdHost` | Cmdline submit routing |
+
+Compile-time checks in `controllers.go` (`var _ breakHost = (*DebuggerApp)(nil)`) catch drift when the app stops implementing a host.
+
+**List widgets** (threads, breakpoints, call stack) still take `*DebuggerApp` as a **widget host** (`BreakpointHost`, `ThreadHost`, …) for activation intents — separate from controller hosts, same idea: narrow surface, app forwards into `*Ctl`.
+
+Consoles use `WireConsole` + `SetOn*` callbacks into `consoleCtl` / `luaCtl`.
 
 | Controller | Domain | Notes |
 |------------|--------|-------|
@@ -87,9 +134,57 @@ GUI and MCP/AI share the same models (e.g. `breaks.list` → `BreakpointList`); 
 | `debugInfoCtl` | Threads / call stack | Stop refresh |
 | `consoleCtl` | GDB **or** Delve console | Submit / paint / interrupt |
 | `inferiorIOCtl` | Inferior PTY → IO pane | |
-| `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` | Completion, `/` search, Lua, Delve confirm/frame sync | |
+| `execIOCtl` | `ExecOutputMsg` → ExecWidget | |
+| `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` / `cmdCtl` | Completion, `/` search, Lua, Delve sync, cmdline | All use host interfaces |
 
-List widgets take `*DebuggerApp` as a **host interface** (`BreakpointHost`, `ThreadHost`, `CallStackHost`, `AssemblyHost`, …). Consoles still use `SetOn*` via `wireConsole`. Controllers talk to the app through private `*Host` interfaces (`breakHost`, `consoleHost`, …) set in `initControllers()`.
+### Composition layers (`LayoutShell` · `DebugSession`)
+
+`DebuggerApp` embeds two structural layers so the app struct stays wiring, not domain:
+
+```text
+DebuggerApp
+├── *TermApp              UI loop (PollEvent, draw)
+├── LayoutShell (embed)   tab tree, pane marks, focus, :layout apply
+├── DebugSession (embed)  backend, gdbWidget, debug *Ctl group
+└── cross-cutting         lua, search, serial, exec, keybindings, modes
+```
+
+| Layer | Owns | Does **not** own |
+|-------|------|------------------|
+| **LayoutShell** | `TabWidget`, leaf marks (`code`/`gdb`/`asm`/`last`), `placeCodeInSlot`, `swapFocusedWidget`, `ApplyLayout` | Breakpoints, GDB MI, session lifecycle |
+| **DebugSession** | `backend`, `debug` state, `gdbWidget`, `gdbMcp`, `breaks`/`asm`/`bufs`/`debugInfo`/`console`/`inferiorIO`/`dlv` | Tab geometry, focus marks, cmdline |
+| **DebuggerApp** | `initControllers`, host adapter methods, global keys, stop orchestration glue | Per-domain merge logic (lives on `*Ctl`) |
+
+`LayoutShell` uses `layoutHost` (not `*DebuggerApp`) for pane policy — same decoupling pattern as controller hosts.
+
+See `cmd/gdbforge/facade.go` for the in-code summary.
+
+### UI event path (why refactoring was possible)
+
+Background work (GDB PTY, Lua jobs, exec) must not call widgets directly. Everything wakes the UI thread, then controllers react:
+
+```mermaid
+flowchart LR
+    Worker["Worker goroutine"]
+    Post["TermApp.PostInterrupt"]
+    UI["uiEvents loop"]
+    HI["HandleInterrupt"]
+    Str["string · gdb-exit / widget forward"]
+    Bus["platform.EventBus.Dispatch"]
+    Ctl["*Ctl Register handlers"]
+
+    Worker --> Post --> UI --> HI
+    HI --> Str
+    HI --> Bus --> Ctl
+```
+
+1. **`PostInterrupt(payload)`** — thread-safe enqueue (replaces the old `events chan` + `HandleCoreEvents` switch).
+2. **`HandleInterrupt`** — thin app shell: string session exits + `Bus.Dispatch(data)`.
+3. **`Register` on each `*Ctl`** — typed handler per message (`GdbOutputMsg`, `codeRefreshMsg`, `SubmitMsg`, …).
+
+This separation is what made steps 1–6 safe: controllers could move behind host interfaces without fighting a monolithic interrupt switch. The bus handles **events**; host interfaces handle **dependencies**.
+
+Legacy note: older docs refer to `HandleCoreEvents` and `TermApp.events` — removed in favor of `PostInterrupt` + `EventBus`.
 
 ### Orthogonal input mini-machines
 
@@ -127,7 +222,9 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 
 - [MVC (current)](#mvc-current)
 - [What `DebugDomain` means (naming)](#what-debugdomain-means-naming)
-- [Controllers and hosts](#controllers-and-hosts)
+- [Controllers and host interfaces](#controllers-and-host-interfaces)
+- [Composition layers (LayoutShell · DebugSession)](#composition-layers-layoutshell--debugsession)
+- [UI event path (why refactoring was possible)](#ui-event-path-why-refactoring-was-possible)
 - [Orthogonal input mini-machines](#orthogonal-input-mini-machines)
 - [System context](#system-context)
 - [Application framework](#application-framework)
@@ -275,7 +372,7 @@ GdbMcpService     →  same Session (WithWrite + Subscribe)
 | **Controller** | `*Ctl` (+ app orchestration) — intents, refresh, sync views |
 | **Widget** | Display a model / console chrome; host intents / callbacks only; no `Send` |
 
-The sections below on terminal input, domain events, and GDB output describe how this flow is wired in the current Go implementation (`termui.Event`, `HandleCoreEvents`, `ptyx`, etc.).
+The sections below on terminal input, domain events, and GDB output describe how this flow is wired in the current Go implementation (`PostInterrupt`, `EventBus`, `ptyx`, etc.).
 
 
 ---
@@ -615,8 +712,9 @@ sequenceDiagram
     GDB-->>PTY: MI output chunk
     PTY->>Fan: PtyOutputMsg
     Fan->>Screen: PostEvent GdbOutputMsg
-    Screen->>Ctrl: HandleInterrupt
-    Ctrl->>Ctrl: GdbInputState.PushRaw → MiUpdate
+    Screen->>HI: HandleInterrupt
+    HI->>Bus: Dispatch(GdbOutputMsg)
+    Bus->>Ctrl: consoleCtl.onOutput
     Ctrl->>Widget: PaintMiDisplay / AppendLines
     Widget->>Cons: Draw on next frame
 ```
@@ -714,57 +812,51 @@ The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections
 
 ### Event bus
 
-- Distributes events from services and UI producers.
-- Models and application dispatch subscribe here.
-- Implementation: `termui.Event` channel on `TermApp`; all events also routed through **`HandleCoreEvents`**.
+Two mechanisms, both UI-thread only for widget mutation:
+
+| Mechanism | Use | API |
+|-----------|-----|-----|
+| **PostInterrupt** | Cross-thread wakeups (GDB PTY, Lua, exec) | `TermApp.PostInterrupt` → `HandleInterrupt` → `EventBus.Dispatch` |
+| **EventBus** | Typed pub/sub between controllers | `platform.Subscribe`, `UIComponent.Register` |
+
+Controllers subscribe in `registerUIComponents()`; the app shell no longer switches on every message type.
 
 ### Models
 
 - Own application state for a domain concern (breakpoints, source, console output, …).
-- Application-specific types (`BreakpointList`, `AssemblyList`, …) held by `*Ctl` controllers.
-- Subscribe to events; update internal data continuously.
+- Application-specific types (`BreakpointList`, `AssemblyList`, …) held by `*Ctl` controllers on **`DebugSession`**.
 - Exist for the application lifetime; independent of widget lifetime.
-- **Current:** `breakCtl.list`, `debugInfoCtl` threads/stack, `asmCtl` assembly, `bufferCtl.files`, plus `AppState` (source files, location, colors). Controllers sync views via `SetItems` / paint APIs.
-- **Still aspirational:** generic `TextModel` / `TableModel` interfaces for reusable widgets across apps.
+- Controllers sync views via `SetItems` / paint APIs after `EventBus` handlers run.
 
 ### Widgets
 
-- Display models; list panes use **host interfaces** (`BreakpointHost`, …); consoles use `SetOn*`.
-- Never own business logic; never communicate directly with services / `Backend`.
-- Created on demand when the user displays a model (`:buffer`, splits); destroyed when a pane closes.
-- Multiple widgets may bind to the same model.
-- Rendering style (line graph vs histogram, table columns, etc.) is decided by the widget, not the model.
+- Display models; list panes use **widget host** interfaces (`BreakpointHost`, …); consoles use `SetOn*`.
+- Never own business logic; never communicate directly with `Backend`.
+- Rendering style is decided by the widget, not the model.
 
 ### Window manager
 
 - Manages layout (split tree, tabs).
-- Creates and destroys widget instances.
-- Binds widgets to existing models.
-- Implementation: `termui.WidgetTree`, `TabWidget`; gdbforge **`Workspace`** for pane marks / sticky GDB / layout apply.
+- **`termui.WidgetTree`**, **`TabWidget`** — generic geometry and focus.
+- **`LayoutShell`** — gdbforge pane marks, sticky GDB, `:layout` apply (`workspace*.go`).
 
 ### Presentation (`internal/termui`)
 
-See [TermUI layer](#termui-layer). Owns:
-
-- `tcell.Screen` lifecycle.
-- Canvas, Grid, WidgetTree, Viewport (target).
-- Top-level widget registration (today: flat list; target: structured Root).
-- Poll/draw loop.
-- Must **not** parse GDB MI records directly — delegates to app widgets that use `internal/gdb`.
+- `tcell.Screen` lifecycle, Canvas, Grid, WidgetTree, poll/draw loop.
+- Must **not** parse GDB MI — delegates to app/controllers + `internal/gdb`.
 
 ### Application (`cmd/gdbforge` + `internal/gdbforge`)
 
 - Declares available models and services at startup.
-- `DebuggerApp` embeds `termui.TermApp`, implements `AppApi`, and is the **composition root**:
-  - **`HandleCoreEvents`** — single dispatch hub for domain events.
-  - **`AppState`** (`platform.AppState` via `TermApp.State()`) — interaction mode, PTY write owner (`ui`/`mcp`), layout policy (`equalalways`).
-  - **`keyBindings`** — multi-key chords (`InitKeyBindings`, `SearchPartial` in normal mode).
-  - **`ws *Workspace`** — pane policy; owns `TabWidget`; `CmdWidget` for command-line routing.
-  - **`backend`** — `backend.Backend` (GDB or Delve); `app.GDB()` exposes `core.Session`; widgets never hold it.
-  - **`*Ctl` controllers** — own domain models (`breaks.list`, `debugInfo`, `asm`, `bufs.files`, …).
-  - **`gdbMcp`** — `GdbMcpService` peer on `app.GDB()` (does not own Close of the session).
-- Defines app-specific `CommandID` values (break, continue, quit, …).
-- **`ModeNormal` / `ModeCommand`** are wired; focus and search modes are reserved.
+- `DebuggerApp` embeds `termui.TermApp`, **`LayoutShell`**, and **`DebugSession`**, implements `AppApi` and all **host interfaces**:
+  - **`HandleInterrupt`** — thin dispatch: string session exits + `EventBus.Dispatch`.
+  - **`AppState`** — mode, PTY owner, layout policy.
+  - **`keyBindings`** — multi-key chords.
+  - **`LayoutShell`** — pane policy over `TabWidget`; **`layoutHost`** for decoupling.
+  - **`DebugSession`** — `backend`, debug widgets, debug `*Ctl` group; `init`/`close` lifecycle.
+  - **Cross-cutting** — `lua`, `search`, `serial`, `exec`, `cmdWidget`, completion bar.
+  - **`gdbMcp`** — MCP peer on `app.GDB()`.
+- Defines app-specific command tree (colon commands via `CommandParser`).
 
 ### Domain (`internal/core` + `termui` event types)
 
@@ -791,42 +883,74 @@ See [Platform layer](#platform-layer). Today `internal/core` holds platform prim
 
 ## Core events layer
 
-The **event bus** decouples UI widgets from application logic. Any subsystem may publish a `termui.Event`; the main loop delivers every event to **`HandleCoreEvents`** on the application object. Widgets stay thin — they parse local input and emit domain events; the app owns side effects.
+The UI thread owns all widget mutation. Async producers post **`EventInterrupt`** payloads; the app dispatches typed data on **`platform.EventBus`** to controllers that registered via **`Register`**.
 
 ```mermaid
 flowchart TB
-    subgraph Producers["Event producers (any subsystem)"]
-        CmdW["CmdWidget"]
-        GDB["GDB backend / goroutines"]
-        Widgets["Other widgets"]
-        Future["Plugins · planned"]
+    subgraph Producers["Producers (any goroutine)"]
+        PTY["GDB / inferior PTY readers"]
+        CmdW["CmdWidget · PostInterrupt"]
+        Lua["Lua worker · PostInterrupt"]
+        Exec["Exec PTY"]
     end
 
-    subgraph Bus["termui event bus"]
-        Chan["TermApp.events chan termui.Event"]
+    subgraph Loop["TermApp.Run · UI thread"]
+        UI["uiEvents channel"]
+        HI["DebuggerApp.HandleInterrupt"]
+        Bus["platform.EventBus.Dispatch"]
     end
 
-    subgraph Loop["TermApp.Run main loop"]
-        Select["select: channel vs PollEvent"]
-        CoreDispatch["AppApi.HandleCoreEvents(ev)"]
+    subgraph Controllers["*Ctl handlers"]
+        Console["consoleCtl.onOutput"]
+        Breaks["breakCtl …"]
+        LuaCtl["luaCtl.onUIMsg"]
+        Other["asm · debugInfo · dlv · execIO · cmd …"]
     end
 
-    subgraph App["Application · DebuggerApp"]
-        Handler["HandleCoreEvents — single dispatch hub"]
-        CmdSwitch["switch CommandID / event type"]
-        Modes["AppState · mode router"]
-        TrieNode["Trie · key sequences"]
-    end
-
-    CmdW -->|"Events <- SubmitMsg"| Chan
-    GDB -.->|"planned"| Chan
-    Widgets -.-> Chan
-    Chan --> Select --> CoreDispatch --> Handler --> CmdSwitch
+    PTY -->|"PostInterrupt(GdbOutputMsg)"| UI
+    CmdW --> UI
+    Lua --> UI
+    Exec --> UI
+    UI --> HI
+    HI -->|"string exits"| HI
+    HI --> Bus
+    Bus --> Console
+    Bus --> Breaks
+    Bus --> LuaCtl
+    Bus --> Other
 ```
 
-*Source: [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
+**Design decisions:**
+
+- Domain reactions live on **controllers**, not in a giant `switch` on `DebuggerApp`.
+- **`EventBus`** is for typed app notifications that can also be published synchronously (e.g. `BreakpointsChangedMsg`, `CompletionMsg`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#tab-completion-via-eventbus).
+- **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output).
+
+GDB output sequence (unchanged intent, updated dispatch):
+
+```mermaid
+sequenceDiagram
+    participant GDB as GDB process
+    participant PTY as ptyx reader
+    participant Screen as tcell.Screen
+    participant HI as HandleInterrupt
+    participant Bus as EventBus
+    participant Ctrl as consoleCtl
+    participant Widget as GDBWidget
+
+    GDB-->>PTY: MI output chunk
+    PTY->>Screen: PostInterrupt GdbOutputMsg
+    Screen->>HI: uiEvents
+    HI->>Bus: Dispatch(GdbOutputMsg)
+    Bus->>Ctrl: onOutput
+    Ctrl->>Widget: PaintMiDisplay / AppendLines
+```
 
 Mode and key-sequence routing happen in **`DebuggerApp.HandleKey`** before widgets see terminal keys — see [INPUT.md](INPUT.md#interaction-modes).
+
+### Legacy: `HandleCoreEvents`
+
+Older revisions routed all domain events through **`HandleCoreEvents`** on a `termui.Event` channel. That hub is **removed**. New code should use **`PostInterrupt`** (async → UI thread) and **`EventBus.Register` / `Subscribe`** (controller handlers).
 
 ### Interfaces and types
 
@@ -919,19 +1043,19 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Generic model interfaces | Widgets bind via `TextModel`, `GraphModel`, `TableModel`, … | Not yet — widgets use concrete DTOs / host ifaces |
 | Model → widget binding | `:buffer` activates widget for existing model | **Partial** — builtins + `:b` / `:e`; models on controllers |
 | Backend → controller → model → view | Debugger events update models; widgets paint snapshots | **Done** — `backend.Backend` + `*Ctl`; views are hosts / `Set*` |
-| Composition root | Thin app wires controllers | **Done** — `DebuggerApp` + host-backed `*Ctl` + `Workspace` |
-| Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — primitives in `internal/core` / `platform` |
+| Composition root | Thin app + embedded layers | **Done** — `LayoutShell` + `DebugSession` + host adapters |
+| Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
 | Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both migrating |
 | Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
-| Workspace | Split tree + app pane policy | `WidgetTree` / `TabWidget` + gdbforge `Workspace` |
+| LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |
 | CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |
-| Event bus | `termui.Event` → `HandleCoreEvents` | Channel on `TermApp`; `CmdWidget` wired |
+| Event bus | PostInterrupt → EventBus → *Ctl | **Done** — `HandleCoreEvents` removed |
 | Key chords | Configurable multi-key sequences | `Trie` on `DebuggerApp`; `Ctrl+W` focus chords |
 | Interaction modes | Mode + Activity + Confirm mini-machines | **Done** — Mode via `AppState`; Activity `activity.go`; Confirm `confirm_router.go` |
 | Rendering | Diff-based grid flush | **Partial** — `BackCells` diff in `Grid.Draw` |
 | Focus | Mode-aware routing | `WidgetTree.focus` + trie focus movement |
-| Split commands | `:vs`, `:split` | **Partial** — wired in `HandleCoreEvents` |
+| Split commands | `:vs`, `:split` | **Partial** — colon tree + `LayoutShell` |
 | Debugger | App-owned `Session` via Backend; MCP peer; view-only consoles | **Working** — GDB + Delve (`-g`); [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 
 Entry point: `cmd/gdbforge/` (`main.go` + `app.go`, `setup.go`, …).

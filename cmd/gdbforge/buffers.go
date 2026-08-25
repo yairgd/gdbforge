@@ -17,7 +17,7 @@ import (
 // DebuggerApp implements it; bufferCtl must not depend on *DebuggerApp.
 type bufferHost interface {
 	Debug() *debugstate.State
-	Workspace() *Workspace
+	Shell() *LayoutShell
 	ClipboardIO() termui.ClipboardIO
 	Builtins() map[string]termui.Widget
 	FileListWidget() *widgets.FileListWidget
@@ -276,7 +276,7 @@ func (c *bufferCtl) codeBufferForB() *widgets.CodeWidget {
 // Pane scripts (snake, tetris, …) are created lazily on first :b.
 func (c *bufferCtl) onBuffer(name string) {
 	h := c.host
-	if name == "" || h == nil || h.Workspace().Tab() == nil {
+	if name == "" || h == nil || h.Shell().Tab() == nil {
 		return
 	}
 	// :b code → restore CodeWidget into the code leaf (not swap onto focused pane).
@@ -307,7 +307,7 @@ func (c *bufferCtl) onBuffer(name string) {
 // Unique prefix :e also resolves here (no separate :e leaf).
 func (c *bufferCtl) onEdit(name string) {
 	h := c.host
-	if h == nil || h.Workspace().Tab() == nil {
+	if h == nil || h.Shell().Tab() == nil {
 		return
 	}
 	if name == "" {
@@ -335,7 +335,7 @@ func (c *bufferCtl) onEdit(name string) {
 // (used by :edit <name> and FileListWidget selection).
 func (c *bufferCtl) openSourcePath(path string) {
 	h := c.host
-	if path == "" || h == nil || h.Workspace().Tab() == nil {
+	if path == "" || h == nil || h.Shell().Tab() == nil {
 		return
 	}
 	w, _ := c.ensure(path)
@@ -354,8 +354,8 @@ func (c *bufferCtl) openSourcePath(path string) {
 	h.BreakpointsChanged()
 	c.primary = w
 	if h.swapFocusedWidget(w) {
-		if leaf := h.Workspace().Tab().FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
-			h.Workspace().Tab().SetLeafMark(leafMarkCode, leaf)
+		if leaf := h.Shell().Tab().FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
+			h.Shell().Tab().SetLeafMark(leafMarkCode, leaf)
 		}
 		h.RequestFrame()
 	}
@@ -388,7 +388,7 @@ func (c *bufferCtl) editCompletions(prefix string, _ bool) []string {
 
 func (c *bufferCtl) focusBufferWidget(w termui.Widget) {
 	h := c.host
-	if w == nil || h == nil || h.Workspace().Tab() == nil {
+	if w == nil || h == nil || h.Shell().Tab() == nil {
 		return
 	}
 	if h.swapFocusedWidget(w) {
@@ -406,7 +406,7 @@ func (c *bufferCtl) focusBufferWidget(w termui.Widget) {
 // allowed: from a pane script's open_buffer, or lazy :b for known pane scripts.
 func (c *bufferCtl) openOrCreate(name string, from *luahost.Runtime) {
 	h := c.host
-	if name == "" || h == nil || h.Workspace().Tab() == nil {
+	if name == "" || h == nil || h.Shell().Tab() == nil {
 		return
 	}
 	if w := h.Builtins()[name]; w != nil {

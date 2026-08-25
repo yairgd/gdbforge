@@ -15,9 +15,9 @@ func newLocationLeafApp() *DebuggerApp {
 	gdb := widgets.NewGDBWidget()
 	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
-		gdbWidget: gdb,
+		DebugSession: DebugSession{gdbWidget: gdb},
 	}
-	a.ws = newWorkspace(a, tab)
+	initLayoutShell(a, tab)
 	a.asm.host = a
 	a.asm.widget = asm
 	a.bufs.host = a

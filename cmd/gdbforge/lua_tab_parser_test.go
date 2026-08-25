@@ -17,7 +17,7 @@ func TestLuaTabCompletionViaCommandParser(t *testing.T) {
 	a := &DebuggerApp{}
 	a.commandReg = commands.NewCommandRegistry()
 	a.ExapData()
-	a.lua.app = a
+	a.lua.host = a
 	a.lua.loadScripts()
 
 	if !a.lua.scriptKnown("stm32-stlink") {

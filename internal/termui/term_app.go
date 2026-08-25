@@ -47,11 +47,10 @@ type TermApp struct {
 	mouseX      int
 	mouseY      int
 
-	layoutDirty     bool
-	appState        *platform.AppState
-	modeHandlers    ModeKeyHandlers
-	commandHandlers CommandHandlers
-	closeOnce       sync.Once
+	layoutDirty  bool
+	appState     *platform.AppState
+	modeHandlers ModeKeyHandlers
+	closeOnce    sync.Once
 }
 
 func NewTermApp() *TermApp {

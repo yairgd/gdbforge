@@ -117,21 +117,12 @@ func (a *DebuggerApp) registerUIComponents() {
 func (a *DebuggerApp) Backend() backend.Backend { return a.backend }
 func (a *DebuggerApp) Session() core.Session    { return a.GDB() }
 
-// Tab returns the generic TabWidget owned by Workspace (tree ops only).
-// Workspace policy lives on Workspace / DebuggerApp delegates, not here.
-func (a *DebuggerApp) Tab() *termui.TabWidget {
-	if a == nil || a.ws == nil {
-		return nil
-	}
-	return a.ws.Tab()
-}
-
-// Workspace returns the gdbforge workspace policy layer above TabWidget.
-func (a *DebuggerApp) Workspace() *Workspace {
+// LayoutShell returns the embedded workspace policy layer above TabWidget.
+func (a *DebuggerApp) Shell() *LayoutShell {
 	if a == nil {
 		return nil
 	}
-	return a.ws
+	return &a.LayoutShell
 }
 
 func (a *DebuggerApp) BPWidget() *widgets.BreakpointWidget {
@@ -304,5 +295,5 @@ var (
 	_ inferiorHost   = (*DebuggerApp)(nil)
 	_ completionHost = (*DebuggerApp)(nil)
 	_ dlvHost        = (*DebuggerApp)(nil)
-	_ luaHost        = (*DebuggerApp)(nil)
+	_ layoutHost        = (*DebuggerApp)(nil)
 )

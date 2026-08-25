@@ -5,26 +5,21 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// placeCodeInSlot puts w into the location leaf, replacing Logo or Code.
-// Never places onto the fixed GDB leaf or a dedicated asm split leaf.
-// Sticky :b asm blocks reclaim; autoAsm does not (source can reclaim the leaf).
-func (w *Workspace) placeCodeInSlot(cw *widgets.CodeWidget) {
+func (w *LayoutShell) placeCodeInSlot(cw *widgets.CodeWidget) {
 	tab := w.Tab()
-	if cw == nil || tab == nil || w.app == nil {
+	h := w.host
+	if cw == nil || tab == nil || h == nil {
 		return
 	}
-	a := w.app
-	a.bufs.setPrimary(cw)
-	// :b asm owns the location leaf until :b code — do not swap Assembly out.
-	if a.asm.PreferAsm() && !a.asm.hasSplit() {
+	h.BufsSetPrimary(cw)
+	if h.AsmPreferAsm() && !h.AsmHasSplit() {
 		return
 	}
-	if a.asm.hasSplit() {
+	if h.AsmHasSplit() {
 		asm := tab.LeafMark(leafMarkAsm)
 		if asm != nil && w.focusedLeaf() == asm {
-			// Focus is on dedicated asm — update the code leaf in place.
 			if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) && leaf != asm {
-				if isAssemblyWidget(leaf.GetWidget()) && a.asm.PreferAsm() {
+				if isAssemblyWidget(leaf.GetWidget()) && h.AsmPreferAsm() {
 					return
 				}
 				leaf.SetWidget(cw)
@@ -32,7 +27,7 @@ func (w *Workspace) placeCodeInSlot(cw *widgets.CodeWidget) {
 			}
 			return
 		}
-		if isAssemblyWidget(a.focusedWidget()) {
+		if isAssemblyWidget(h.FocusedWidget()) {
 			if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) && !isAssemblyWidget(leaf.GetWidget()) {
 				leaf.SetWidget(cw)
 				tab.SetLeafMark(leafMarkCode, leaf)
@@ -41,32 +36,31 @@ func (w *Workspace) placeCodeInSlot(cw *widgets.CodeWidget) {
 		}
 	}
 	if !w.isGdbLeaf(w.focusedLeaf()) {
-		if isAssemblyWidget(a.focusedWidget()) {
-			// Shared leaf showing Asm (autoAsm) — reclaim with Code.
-			if a.focusedWidget() != cw {
+		if isAssemblyWidget(h.FocusedWidget()) {
+			if h.FocusedWidget() != cw {
 				_ = tab.ReplaceFocusedWidget(cw)
 			}
 			w.rememberCodeLeafFromFocus()
 			return
 		}
-		if focused := a.focusedCode(); focused != nil {
+		if focused := h.focusedCode(); focused != nil {
 			if focused != cw {
 				_ = tab.ReplaceFocusedWidget(cw)
 			}
 			w.rememberCodeLeafFromFocus()
 			return
 		}
-		if _, ok := a.focusedWidget().(*widgets.LogoWidget); ok {
+		if _, ok := h.FocusedWidget().(*widgets.LogoWidget); ok {
 			_ = tab.ReplaceFocusedWidget(cw)
 			w.rememberCodeLeafFromFocus()
 			return
 		}
 	}
 	if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) {
-		if a.asm.hasSplit() && tab.LeafMark(leafMarkAsm) == leaf {
+		if h.AsmHasSplit() && tab.LeafMark(leafMarkAsm) == leaf {
 			return
 		}
-		if isAssemblyWidget(leaf.GetWidget()) && a.asm.PreferAsm() {
+		if isAssemblyWidget(leaf.GetWidget()) && h.AsmPreferAsm() {
 			return
 		}
 		leaf.SetWidget(cw)
@@ -81,19 +75,18 @@ func (w *Workspace) placeCodeInSlot(cw *widgets.CodeWidget) {
 	}
 }
 
-// placeLogoInCodeSlot puts the startup logo back in the code leaf (after kill).
-func (w *Workspace) placeLogoInCodeSlot() {
+func (w *LayoutShell) placeLogoInCodeSlot() {
 	tab := w.Tab()
-	if tab == nil || w.app == nil {
+	h := w.host
+	if tab == nil || h == nil {
 		return
 	}
-	a := w.app
-	logo := a.logoWidget
+	logo := h.LogoWidget()
 	if logo == nil {
 		logo = widgets.NewLogoWidget()
-		a.logoWidget = logo
+		h.SetLogoWidget(logo)
 	}
-	if _, ok := a.focusedWidget().(*widgets.CodeWidget); ok && !w.isGdbLeaf(w.focusedLeaf()) {
+	if _, ok := h.FocusedWidget().(*widgets.CodeWidget); ok && !w.isGdbLeaf(w.focusedLeaf()) {
 		_ = tab.ReplaceFocusedWidget(logo)
 		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
 		return
@@ -103,18 +96,16 @@ func (w *Workspace) placeLogoInCodeSlot() {
 	}
 }
 
-// swapFocusedWidget replaces the focused pane's widget and pushes the previous
-// one onto the jump list (for Ctrl-O). Refuses when the focused leaf is the
-// fixed GDB layout slot and wid is not gdbWidget.
-func (w *Workspace) swapFocusedWidget(wid termui.Widget) bool {
+func (w *LayoutShell) swapFocusedWidget(wid termui.Widget) bool {
 	tab := w.Tab()
-	if tab == nil || wid == nil || w.app == nil {
+	h := w.host
+	if tab == nil || wid == nil || h == nil {
 		return false
 	}
-	if w.isGdbLeaf(w.focusedLeaf()) && wid != w.app.gdbWidget {
+	if w.isGdbLeaf(w.focusedLeaf()) && wid != h.GDBWidget() {
 		return false
 	}
-	prev := w.app.focusedWidget()
+	prev := h.FocusedWidget()
 	if prev == wid {
 		return false
 	}
@@ -128,11 +119,10 @@ func (w *Workspace) swapFocusedWidget(wid termui.Widget) bool {
 	return true
 }
 
-func (w *Workspace) pushWidgetJump(wid termui.Widget) {
+func (w *LayoutShell) pushWidgetJump(wid termui.Widget) {
 	if wid == nil {
 		return
 	}
-	// Avoid consecutive duplicates.
 	if n := len(w.widgetJump); n > 0 && w.widgetJump[n-1] == wid {
 		return
 	}
@@ -142,20 +132,18 @@ func (w *Workspace) pushWidgetJump(wid termui.Widget) {
 	}
 }
 
-// JumpBack restores the previous widget in the focused pane (Vim Ctrl-O).
-// Leaves the jump stack untouched when the focused leaf is the GDB slot and
-// the restore target is not gdbWidget.
-func (w *Workspace) JumpBack(args ...any) {
+func (w *LayoutShell) JumpBack(args ...any) {
 	tab := w.Tab()
-	if tab == nil || w.app == nil || len(w.widgetJump) == 0 {
+	h := w.host
+	if tab == nil || h == nil || len(w.widgetJump) == 0 {
 		return
 	}
 	prev := w.widgetJump[len(w.widgetJump)-1]
-	if w.isGdbLeaf(w.focusedLeaf()) && prev != w.app.gdbWidget {
+	if w.isGdbLeaf(w.focusedLeaf()) && prev != h.GDBWidget() {
 		return
 	}
 	w.widgetJump = w.widgetJump[:len(w.widgetJump)-1]
 	if tab.ReplaceFocusedWidget(prev) {
-		w.app.RequestFrame()
+		h.RequestFrame()
 	}
 }

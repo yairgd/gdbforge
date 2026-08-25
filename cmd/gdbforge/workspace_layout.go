@@ -6,17 +6,20 @@ import (
 )
 
 // ApplyLayout rebuilds the active tab tree for a registered layout name.
-func (w *Workspace) ApplyLayout(name string) {
-	if w == nil || w.app == nil || w.Tab() == nil || !w.app.State().HasLayout(name) {
-		if w != nil && w.app != nil && w.app.ctx.Log != nil {
-			w.app.ctx.Log.Named("layout").Error("unknown layout: " + name)
+func (w *LayoutShell) ApplyLayout(name string) {
+	h := w.host
+	if w == nil || h == nil || w.Tab() == nil || !h.State().HasLayout(name) {
+		if w != nil && h != nil {
+			if log := h.LogNamed("layout"); log != nil {
+				log.Error("unknown layout: " + name)
+			}
 		}
 		return
 	}
 	tree := w.buildLayoutTree(name)
 	if tree == nil {
-		if w.app.ctx.Log != nil {
-			w.app.ctx.Log.Named("layout").Error("layout not implemented: " + name)
+		if log := h.LogNamed("layout"); log != nil {
+			log.Error("layout not implemented: " + name)
 		}
 		return
 	}
@@ -24,13 +27,13 @@ func (w *Workspace) ApplyLayout(name string) {
 	w.finishLayoutApply(name)
 }
 
-func (w *Workspace) buildLayoutTree(name string) *termui.WidgetTree {
-	a := w.app
-	code := a.layoutCodePane()
-	panes := a.debugPanes(code)
+func (w *LayoutShell) buildLayoutTree(name string) *termui.WidgetTree {
+	h := w.host
+	code := h.LayoutCodePane()
+	panes := h.DebugPanes(code)
 	switch name {
 	case layout.Default:
-		return layout.BuildDefault(panes, a.State().DefaultLayoutRatios())
+		return layout.BuildDefault(panes, h.State().DefaultLayoutRatios())
 	case layout.Panels:
 		return layout.BuildPanels(panes)
 	case layout.Classic:
@@ -42,15 +45,15 @@ func (w *Workspace) buildLayoutTree(name string) *termui.WidgetTree {
 	}
 }
 
-func (w *Workspace) finishLayoutApply(name string) {
-	a := w.app
+func (w *LayoutShell) finishLayoutApply(name string) {
+	h := w.host
 	tab := w.Tab()
-	a.State().SetCurrentLayout(name)
-	a.State().SetEqualAlways(true)
+	h.State().SetCurrentLayout(name)
+	h.State().SetEqualAlways(true)
 	tab.SetEqualAlways(true)
-	tab.FocusWidget(a.gdbWidget)
+	tab.FocusWidget(h.GDBWidget())
 	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
-	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(wid termui.Widget) bool { return wid == a.gdbWidget }))
-	a.EnterInsertMode()
-	a.RequestFrame()
+	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(wid termui.Widget) bool { return wid == h.GDBWidget() }))
+	h.EnterInsertMode()
+	h.RequestFrame()
 }

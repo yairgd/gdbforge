@@ -86,25 +86,6 @@ func (a *DebuggerApp) layoutCompletions(prefix string, _ bool) []string {
 	return out
 }
 
-func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
-	return layout.Panes{
-		Code:        code,
-		GDB:         a.gdbWidget,
-		Output:      a.outputWidget,
-		Breakpoints: a.bpWidget,
-		Threads:     a.debugInfo.ThreadWidget(),
-		Callstack:   a.debugInfo.CallStackWidget(),
-	}
-}
-
-// ApplyLayout rebuilds the active tab tree for a registered layout name.
-func (a *DebuggerApp) ApplyLayout(name string) {
-	if a.ws != nil {
-		a.ws.ApplyLayout(name)
-	}
-}
-
-// layoutCodePane returns the widget for the code leaf (source buffer or logo splash).
 func (a *DebuggerApp) layoutCodePane() termui.Widget {
 	if w := a.layoutCodeWidget(); w != nil {
 		return w
@@ -125,8 +106,6 @@ func (a *DebuggerApp) layoutCodeWidget() *widgets.CodeWidget {
 	return a.bufs.Primary()
 }
 
-// registerLayouts registers named workspace layouts on AppState.
-// Startup / current layout is wide.
 func (a *DebuggerApp) registerLayouts() {
 	for _, name := range []string{layout.Wide, layout.Panels, layout.Default, layout.Classic} {
 		a.State().RegisterLayout(name)
@@ -134,13 +113,18 @@ func (a *DebuggerApp) registerLayouts() {
 	a.State().SetCurrentLayout(layout.Wide)
 }
 
+func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
+	return layout.Panes{
+		Code:        code,
+		GDB:         a.gdbWidget,
+		Output:      a.outputWidget,
+		Breakpoints: a.bpWidget,
+		Threads:     a.debugInfo.ThreadWidget(),
+		Callstack:   a.debugInfo.CallStackWidget(),
+	}
+}
+
 // newStartupTab builds the initial wide workspace tab.
 func (a *DebuggerApp) newStartupTab(code termui.Widget) *termui.TabWidget {
 	return termui.NewTabWidget("wide", layout.BuildWide(a.debugPanes(code)))
-}
-
-func (a *DebuggerApp) placeCodeInSlot(w *widgets.CodeWidget) {
-	if a.ws != nil {
-		a.ws.placeCodeInSlot(w)
-	}
 }

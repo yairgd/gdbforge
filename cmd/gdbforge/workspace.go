@@ -18,7 +18,7 @@ const (
 
 const widgetJumpMax = 32
 
-// Workspace owns gdbforge workspace policy above a termui.TabWidget:
+// LayoutShell owns gdbforge workspace policy above a termui.TabWidget:
 // pane marks, placement, focus activation (Code/GDB/last), layout apply, and
 // focused-pane widget swap / jump-back.
 //
@@ -26,21 +26,25 @@ const widgetJumpMax = 32
 // Generic tree operations stay on TabWidget — callers use Tab().
 //
 // Assumption (current): the Tab hosts a WidgetTree. If Tab later hosts other
-// content types, gdbforge Workspace stays the split-tree policy layer; other
+// content types, gdbforge LayoutShell stays the split-tree policy layer; other
 // tab contents would use different app policy, not these mark/slot APIs.
-type Workspace struct {
+type LayoutShell struct {
 	tab        *termui.TabWidget
-	app        *DebuggerApp
+	host       layoutHost
 	widgetJump []termui.Widget
 }
 
-func newWorkspace(app *DebuggerApp, tab *termui.TabWidget) *Workspace {
-	return &Workspace{app: app, tab: tab}
+func initLayoutShell(app *DebuggerApp, tab *termui.TabWidget) {
+	if app == nil {
+		return
+	}
+	app.tab = tab
+	app.host = app
 }
 
 // Tab returns the underlying generic TabWidget for tree operations
 // (focus navigation, splits, HandleEvent, …).
-func (w *Workspace) Tab() *termui.TabWidget {
+func (w *LayoutShell) Tab() *termui.TabWidget {
 	if w == nil {
 		return nil
 	}
@@ -48,14 +52,14 @@ func (w *Workspace) Tab() *termui.TabWidget {
 }
 
 // Widget returns the TabWidget as a termui.Widget for TermApp.AddWidget.
-func (w *Workspace) Widget() termui.Widget {
+func (w *LayoutShell) Widget() termui.Widget {
 	if w == nil {
 		return nil
 	}
 	return w.tab
 }
 
-func (w *Workspace) setTab(tab *termui.TabWidget) {
+func (w *LayoutShell) setTab(tab *termui.TabWidget) {
 	if w == nil {
 		return
 	}

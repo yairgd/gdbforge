@@ -27,10 +27,10 @@ func (a *DebuggerApp) InitB() error {
 		logo = widgets.NewLogoWidget()
 		a.logoWidget = logo
 	}
-	a.ws = newWorkspace(a, a.newStartupTab(logo))
+	initLayoutShell(a, a.newStartupTab(logo))
+
 	tab := a.Tab()
 	tab.SetStatusClipboard(a.ClipboardIO())
-	// FocusDown needs layout geometry; set GDB focus by widget before first paint.
 	tab.FocusWidget(a.gdbWidget)
 	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
 	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
@@ -38,9 +38,8 @@ func (a *DebuggerApp) InitB() error {
 	tab.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
 	tab.SetEqualAlways(true)
-	a.AddWidget(a.ws.Widget())
+	a.AddWidget(a.Widget())
 
-	// DebuggerApp wires the wildmenu into the layout; completionCtl owns it.
 	bar := termui.NewCompletionBarWidget(a.ctx)
 	a.comp.attach(&termui.CompletionMenu{}, bar)
 	a.AddWidget(bar)
@@ -66,7 +65,6 @@ func (a *DebuggerApp) InitB() error {
 	a.InitKeyBindings()
 	a.ExapData()
 
-	// Ctrl-Z (suspend) is global — wrap every mode so it works in any app state.
 	a.RegisterModeHandler(platform.ModeNormal, a.withGlobalKeys(a.handleNormalKey))
 	a.RegisterModeHandler(platform.ModeInsert, a.withGlobalKeys(a.handleInsertKey))
 	a.RegisterModeHandler(platform.ModeCommand, a.withGlobalKeys(a.handleCommandKey))

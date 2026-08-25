@@ -97,11 +97,14 @@ gdbforge/
 |------|----------------|
 | `main.go` | `main()` entry |
 | `flags.go` | `SessionConfig`, `-g gdb\|dlv` |
-| `app.go` | `DebuggerApp` fields (`backend`, `*Ctl`, `ws`), `NewDebuggerApp`, `GDB()`, `Close` |
-| `facade.go` | Package comment — composition-root / controller ownership |
-| `controllers.go` | `initControllers`, host iface compile checks, peer forwards (`Backend()`, `Tab()`, `Workspace()`) |
-| `setup.go` | `InitB` — chrome, `newWorkspace`, mode handlers (`withGlobalKeys` for Ctrl-Z), Cmd `SetOnExecute` |
-| `builtins.go` | Create Backend + models + views; `New*Widget(a)` host wiring; MCP; bridges |
+| `app.go` | `DebuggerApp` — embeds `LayoutShell` + `DebugSession`; `NewDebuggerApp`, `Close` |
+| `facade.go` | Composition-root comment (layers + hosts) |
+| `debug_session.go` | `DebugSession` — backend init, GDB widgets, debug `*Ctl` lifecycle |
+| `layout_host.go` | `layoutHost` + adapters for `LayoutShell` |
+| `lua_host.go` / `dlv_host.go` | `luaHost` / `dlvHost` + adapters |
+| `controllers.go` | `initControllers`, host compile checks, adapter forwards |
+| `setup.go` | `InitB` — `initLayoutShell`, mode handlers, cmdline |
+| `builtins.go` | Shell builtins + `DebugSession.init` |
 | `gdb_console.go` | `consoleCtl` — GDB/Delve submit / paint / quit / suspend |
 | `io_console.go` | `inferiorIOCtl` — Inferior PTY bridge + OutputWidget intents |
 | `console_wire.go` | Shared `wireConsole` / `SetOn*` for GDB / IO / Exec |
@@ -116,12 +119,12 @@ gdbforge/
 | `command_tree.go` | `ExapData` colon-command DSL |
 | `keybindings.go` | `InitKeyBindings` (n/s/c, Space, …) |
 | `actions.go` | Command actions (focus, split, quit, `:!` Exec, …) |
-| `input.go` | Mode key handlers, global Ctrl-Z, mouse, resize, completion refresh |
-| `layout.go` | `:layout` (+ optional `asm`); wires `internal/gdbforge/layout` builders |
-| `layout_behavior.go` | Per-layout normal-mode key policy (`HandleNormalKey`) |
-| `focus.go` | App-private focus introspection (`focusedCode`, …); Tab stays generic |
-| `workspace.go` | `Workspace` — pane marks, slot predicates; owns `TabWidget` |
-| `workspace_policy.go` | Code/GDB/last activation, `FocusCode`, mark healing |
+| `input.go` | `HandleInterrupt` (thin dispatch), mode keys, global Ctrl-Z |
+| `layout.go` | `:layout` (+ optional `asm`); layout builders |
+| `layout_behavior.go` | Per-layout normal-mode key policy |
+| `focus.go` | Focus introspection (`focusedCode`, …) |
+| `workspace.go` | `LayoutShell` — pane marks; embedded on app |
+| `workspace_policy.go` | Code/GDB/last activation, `FocusCode` |
 | `workspace_place.go` | `placeCodeInSlot`, logo slot, sticky-GDB swap / JumpBack |
 | `workspace_layout.go` | `ApplyLayout` mounts layout `WidgetTree` onto Tab |
 | `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` via `Backend.MapExec` |

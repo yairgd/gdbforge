@@ -371,9 +371,3 @@ func (a *DebuggerApp) clearCodePane() {
 	a.placeLogoInCodeSlot()
 }
 
-// placeLogoInCodeSlot puts the startup logo back in the code leaf (after kill).
-func (a *DebuggerApp) placeLogoInCodeSlot() {
-	if a.ws != nil {
-		a.ws.placeLogoInCodeSlot()
-	}
-}

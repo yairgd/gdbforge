@@ -127,7 +127,7 @@ end)
 	}
 
 	a := &DebuggerApp{}
-	a.lua.app = a
+	a.lua.host = a
 	a.lua.pending = map[string]luahost.ResolvedScript{
 		"demo_complete": {Cmd: "demo_complete", Path: path},
 	}

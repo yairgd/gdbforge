@@ -65,6 +65,7 @@ func (s *stubDebugInfoHost) ShowCodeAt(string, int) *widgets.CodeWidget {
 	return nil
 }
 func (s *stubDebugInfoHost) LogError(string, string) {}
+func (s *stubDebugInfoHost) ApplyDebugInfoUI(bool)   {}
 
 func TestActivateThreadArmsFrameSyncNotSyncRefresh(t *testing.T) {
 	host := &stubDebugInfoHost{}

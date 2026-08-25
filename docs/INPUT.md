@@ -29,8 +29,8 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 Keyboard / Mouse
         ↓
 TermApp (select loop)
-        ├── termui.Event  → AppApi.HandleCoreEvents
-        └── tcell.Event   → TermApp.HandleEvent
+        ├── PostInterrupt / uiEvents  → HandleInterrupt → EventBus → *Ctl
+        └── tcell.Event               → TermApp.HandleEvent
                                 ├── EventResize → UpdateCanvas, AppApi.HandleResize
                                 └── EventKey    → AppApi.HandleKey
                                       ├── mode router (AppState)
@@ -43,30 +43,28 @@ sequenceDiagram
     participant Input as Keyboard / Mouse
     participant App as TermApp
     participant Dbg as DebuggerApp
-    participant Widget as Widget · Tab / CmdWidget
-    participant Bus as termui.Event channel
-    participant Core as HandleCoreEvents
-    participant Render as Redraw
+    participant Widget as Widget
+    participant UI as uiEvents
+    participant HI as HandleInterrupt
+    participant Bus as EventBus
+    participant Ctl as *Ctl handler
 
     Input ->> App: PollEvent · tcell.Event
-    App ->> App: HandleEvent(ev)
-    App ->> Dbg: HandleKey(ev) · on EventKey
-    Dbg ->> Dbg: mode + trie routing
+    App ->> Dbg: HandleKey(ev)
     Dbg ->> Widget: HandleEvent(ev)
-    Widget ->> Bus: Events <- SubmitMsg
-    App ->> Bus: drain channel
-    Bus ->> Core: HandleCoreEvents(ev)
-    App ->> Render: Draw → Grid → Screen
+    Note over App,UI: Async: PostInterrupt(payload)
+    UI ->> HI: HandleInterrupt
+    HI ->> Bus: Dispatch(typed msg)
+    Bus ->> Ctl: Register handler
+    App ->> App: Draw → Grid → Screen
 ```
-
-*Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/input_routing.mermaid`](diagrams/input_routing.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
 
 **Design principles:**
 
 1. One thread owns input and rendering.
-2. Async sources (GDB PTY) inject **tcell** events via `PostEvent`, never by calling widget methods directly.
-3. Domain actions (commands, quit, debugger routing) publish **`termui.Event`** to the bus; the application handles them in **`HandleCoreEvents`**, not in individual widgets.
-4. **Mode-aware routing** lives in the application layer (`DebuggerApp`), not in `TermApp` — the framework stays generic.
+2. Async sources post **`PostInterrupt`** — never call widget methods from reader goroutines.
+3. Typed reactions live on **`*Ctl` handlers** registered on **`EventBus`**, not in a giant app `switch`.
+4. **Mode-aware routing** lives in `DebuggerApp`, not `TermApp`.
 
 ---
 
@@ -285,7 +283,7 @@ const (
 )
 ```
 
-`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Activity Ctrl-C/Z + Confirm Ctrl-D). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide` (+ optional `asm`). IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on `Workspace` (`workspace_policy.go` / `code_nav.go` delegates).
+`DebuggerApp` registers mode handlers in `InitB` wrapped with `withGlobalKeys` (Activity Ctrl-C/Z + Confirm Ctrl-D). Layout policy: `:set equalalways` / `:set noequalalways`; `:layout default|panels|classic|wide` (+ optional `asm`). IO pane: `:set clearoutput` / `:set noclearoutput`. PTY owner is set while the console, `:AI`/MCP, or App writers hold the write mux. Focus roles (Code / GDB / last pane) live on **`LayoutShell`** (`workspace_policy.go`; methods promoted on `DebuggerApp`).
 
 **Design decision:** modes mirror Vim's normal / insert / command separation, adapted for debugger UX:
 

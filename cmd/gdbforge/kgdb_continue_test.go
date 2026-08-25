@@ -22,7 +22,7 @@ func TestMaybeSwitchSerialConsoleOnContinue(t *testing.T) {
 	}
 	defer m.Close()
 
-	a := &DebuggerApp{debug: debugstate.New(nil)}
+	a := &DebuggerApp{DebugSession: DebugSession{debug: debugstate.New(nil)}}
 	a.serial = serialCtl{app: a, mux: m}
 
 	a.Debug().SetKgdbMode(true)
@@ -59,7 +59,7 @@ func TestMaybeSwitchSerialConsoleOnContinue(t *testing.T) {
 }
 
 func TestMaybeSwitchSerialConsoleOnContinueNoSerial(t *testing.T) {
-	a := &DebuggerApp{debug: debugstate.New(nil)}
+	a := &DebuggerApp{DebugSession: DebugSession{debug: debugstate.New(nil)}}
 	a.Debug().SetKgdbMode(true)
 	a.MaybeSwitchSerialConsoleOnContinue("continue") // must not panic
 }
