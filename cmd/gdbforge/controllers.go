@@ -84,7 +84,7 @@ func (a *DebuggerApp) initControllers() {
 	a.execIO.host = a
 	a.search.host = a
 	a.lua.host = a
-	a.dlv.app = a
+	a.dlv.host = a
 	a.serial.app = a
 }
 
@@ -303,4 +303,6 @@ var (
 	_ consoleHost    = (*DebuggerApp)(nil)
 	_ inferiorHost   = (*DebuggerApp)(nil)
 	_ completionHost = (*DebuggerApp)(nil)
+	_ dlvHost        = (*DebuggerApp)(nil)
+	_ luaHost        = (*DebuggerApp)(nil)
 )

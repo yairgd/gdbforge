@@ -11,7 +11,7 @@ import (
 // the console bridge and stop pipeline (not only Delve — GDB frame-nav shares
 // pendingFrameSync / codeNavGen).
 type dlvCtl struct {
-	app *DebuggerApp
+	host dlvHost
 
 	// confirm tracks Delve [Y/n]? prompts (suspended BP after exit, etc.).
 	confirm dlv.ConfirmGate
@@ -52,7 +52,7 @@ func (c *dlvCtl) noteStackNavDLV(cmd string, curLevel int) {
 // consumeFrameSyncLevel returns the Delve frame level to show after frame/up/down
 // (or call-stack activate), then clears the pending flag.
 func (c *dlvCtl) consumeFrameSyncLevel() int {
-	a := c.app
+	h := c.host
 	if c.pendingFrameLevelSet {
 		level := c.pendingFrameLevel
 		c.pendingFrameLevelSet = false
@@ -62,8 +62,8 @@ func (c *dlvCtl) consumeFrameSyncLevel() int {
 		}
 		return level
 	}
-	if a != nil {
-		return a.debugInfo.selectedLevel()
+	if h != nil {
+		return h.DebugInfoSelectedLevel()
 	}
 	return 0
 }
@@ -85,12 +85,12 @@ func (c *dlvCtl) armStackRefresh() {
 }
 
 func (c *dlvCtl) triggerPendingStackRefresh() {
-	a := c.app
-	if a == nil || !c.pendingStackRefresh {
+	h := c.host
+	if h == nil || !c.pendingStackRefresh {
 		return
 	}
 	c.pendingStackRefresh = false
-	a.debugInfo.scheduleStackRefresh()
+	h.ScheduleStackRefresh()
 }
 
 // armDebugInfoRefresh marks a post-stop threads/stack refresh and starts a
@@ -105,12 +105,12 @@ func (c *dlvCtl) armDebugInfoRefresh() {
 
 // triggerPendingDebugInfo runs a scheduled refresh once if still armed.
 func (c *dlvCtl) triggerPendingDebugInfo() {
-	a := c.app
-	if a == nil || !c.pendingDebugInfo {
+	h := c.host
+	if h == nil || !c.pendingDebugInfo {
 		return
 	}
 	c.pendingDebugInfo = false
-	a.debugInfo.scheduleRefresh()
+	h.ScheduleDebugInfoRefresh()
 }
 
 // clearPendingOnTeardown drops in-flight sync flags when the Delve session ends.
@@ -176,34 +176,32 @@ func (c *dlvCtl) Register(bus *platform.EventBus) {
 }
 
 func (c *dlvCtl) onCodeRefresh(msg codeRefreshMsg) {
-	a := c.app
-	if a == nil {
+	h := c.host
+	if h == nil {
 		return
 	}
 	if msg.fromStop {
 		if msg.stopGen != c.codeNavGen {
-			a.RequestFrame()
+			h.RequestFrame()
 			return
 		}
-		a.debugInfo.selectLevel(0)
+		h.DebugInfoSelectLevel(0)
 		if msg.stop != nil {
-			_ = a.updateCodeAfterStop(msg.stop)
-			if a.breaks.List() != nil {
-				a.breaks.paintCodeMarks(a.breaks.Items())
-			}
-			a.RequestFrame()
+			_ = h.UpdateCodeAfterStop(msg.stop)
+			h.PaintBreakpointMarks()
+			h.RequestFrame()
 			return
 		}
 	}
 	if msg.frame != nil {
-		a.debugInfo.syncCallStackViews()
-		a.debugInfo.selectLevel(msg.frame.Level)
-		a.showFrameSource(*msg.frame)
-		a.RequestFrame()
+		h.DebugInfoSyncCallStackViews()
+		h.DebugInfoSelectLevel(msg.frame.Level)
+		h.ShowFrameSource(*msg.frame)
+		h.RequestFrame()
 		return
 	}
 	if msg.widget != nil {
-		a.presentLocation(msg.widget, nil)
+		h.PresentLocation(msg.widget, nil)
 	}
-	a.RequestFrame()
+	h.RequestFrame()
 }
