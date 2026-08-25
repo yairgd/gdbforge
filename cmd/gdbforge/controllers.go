@@ -67,10 +67,20 @@ func (a *DebuggerApp) initControllers() {
 	a.console.host = a
 	a.inferiorIO.host = a
 	a.comp.host = a
+	a.cmd.host = a
 	a.search.app = a
 	a.lua.app = a
 	a.dlv.app = a
 	a.serial.app = a
+}
+
+func (a *DebuggerApp) registerUIComponents() {
+	if a == nil || a.ctx.Bus == nil {
+		return
+	}
+	for _, c := range []platform.UIComponent{&a.comp, &a.breaks, &a.cmd} {
+		c.Register(a.ctx.Bus)
+	}
 }
 
 // --- Composition-root adapters (host interfaces) ---
@@ -138,14 +148,14 @@ func (a *DebuggerApp) PublishBreakpointsChanged() {
 	if a == nil || a.ctx.Bus == nil {
 		return
 	}
-	platform.Publish(a.ctx.Bus, BreakpointsChangedMsg{})
+	a.ctx.Bus.Dispatch(BreakpointsChangedMsg{})
 }
 
 func (a *DebuggerApp) PublishCompletion(msg termui.CompletionMsg) {
 	if a == nil || a.ctx.Bus == nil {
 		return
 	}
-	platform.Publish(a.ctx.Bus, msg)
+	a.ctx.Bus.Dispatch(msg)
 }
 
 // --- breakCtl peers ---

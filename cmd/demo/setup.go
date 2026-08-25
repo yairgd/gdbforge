@@ -39,18 +39,25 @@ func (a *DemoApp) Init() error {
 	a.tab.SetEqualAlways(true)
 	a.AddWidget(a.tab)
 
-	bar := termui.NewCompletionBarWidget(a.ctx)
-	bar.Events = a.Events()
-	a.AddWidget(bar)
+	a.AddWidget(termui.NewCompletionBarWidget(a.ctx))
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
-	a.cmdWidget.Events = a.Events()
+	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
 	a.cmdWidget.SetOnExecute(func() {
 		_ = a.cmdWidget.ExecuteParsed()
 	})
 	a.AddWidget(a.cmdWidget)
+
+	if a.ctx.Bus != nil {
+		platform.Subscribe(a.ctx.Bus, func(msg termui.SubmitMsg) {
+			switch msg.CmdID {
+			case termui.CmdExitMode:
+				a.leaveCommandMode()
+			}
+		})
+	}
 
 	a.InitKeyBindings()
 	a.ExapData()
@@ -58,11 +65,5 @@ func (a *DemoApp) Init() error {
 	a.RegisterModeHandler(platform.ModeNormal, a.handleNormalKey)
 	a.RegisterModeHandler(platform.ModeInsert, a.handleInsertKey)
 	a.RegisterModeHandler(platform.ModeCommand, a.handleCommandKey)
-
-	a.RegisterCommandHandler(termui.CmdUnknown, func(termui.CommandEvent) bool { return true })
-	a.RegisterCommandHandler(termui.CmdExitMode, func(termui.CommandEvent) bool {
-		a.leaveCommandMode()
-		return true
-	})
 	return nil
 }

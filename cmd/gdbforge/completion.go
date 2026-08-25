@@ -51,6 +51,10 @@ func (c *completionCtl) attach(menu *termui.CompletionMenu, bar *termui.Completi
 	c.view = bar
 }
 
+func (c *completionCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onMsg)
+}
+
 // onMsg applies Tab results to the CompletionMenu and syncs the view.
 func (c *completionCtl) onMsg(msg termui.CompletionMsg) {
 	if c.menu == nil {

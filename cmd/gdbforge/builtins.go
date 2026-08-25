@@ -12,7 +12,6 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -56,7 +55,6 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.logoWidget = widgets.NewLogoWidget()
 
 	logWidget := termui.NewLoggerWidget(a.ctx)
-	logWidget.Events = a.Events()
 	logWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("logger", logWidget)
 
@@ -165,9 +163,6 @@ func (a *DebuggerApp) initBuiltins() error {
 	a.gdbMcp.SetDomain(appDebugDomain{app: a})
 	if a.cfg.IsDLV() {
 		a.gdbMcp.SetPromptToken(dlv.PromptToken)
-	}
-	if a.ctx.Bus != nil {
-		platform.Subscribe(a.ctx.Bus, a.breaks.onChangedMsg)
 	}
 	a.breaks.restoreSaved(savedBPs)
 	return nil

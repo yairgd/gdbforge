@@ -17,17 +17,6 @@ import (
 
 const defaultLogFile = "gdbforge.log"
 
-const (
-	cmdBreak termui.CommandID = iota + 2
-	cmdContinue
-	cmdNext
-	cmdStep
-	cmdPrint
-	cmdBacktrace
-	cmdInfo
-	cmdRun
-)
-
 type DebuggerApp struct {
 	*termui.TermApp
 	commandReg     *commands.CommandRegistry
@@ -53,6 +42,7 @@ type DebuggerApp struct {
 	console    consoleCtl
 	inferiorIO inferiorIOCtl
 	comp       completionCtl
+	cmd        cmdCtl
 	search     searchCtl
 	lua        luaCtl
 	dlv        dlvCtl

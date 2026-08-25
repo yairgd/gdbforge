@@ -6,13 +6,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
-const (
-	CmdPushData CommandID = iota + 10
-)
-
 type BaseWidget struct {
-	Events   chan Event // outbound -> app
-	Inbox    chan Event // inbound  <- app
 	Ctx      platform.AppContext
 	PaneName string
 
@@ -27,8 +21,6 @@ type BaseWidget struct {
 
 func NewBaseWidget(ctx platform.AppContext) BaseWidget {
 	return BaseWidget{
-		Events: make(chan Event, 16),
-		Inbox:  make(chan Event, 16),
 		Ctx:    ctx,
 		keys:   commands.NewKeyBindingRegistry(),
 		cursor: NewNativeCursor(),
@@ -112,20 +104,6 @@ func (b *BaseWidget) ResetKeyPartial() {
 	}
 }
 
-func (b *BaseWidget) Emit(ev Event) {
-	if b.Events != nil {
-		b.Events <- ev
-	}
-}
-
-func (b *BaseWidget) Start(handler func(Event)) {
-	go func() {
-		for ev := range b.Inbox {
-			handler(ev)
-		}
-	}()
-}
-
 // StatusLabel is the copyable status-band text (default: PaneName).
 func (b *BaseWidget) StatusLabel() string {
 	if b == nil {
@@ -144,14 +122,4 @@ func (b *BaseWidget) DrawStatusLine(c Canvas, active bool) {
 		return
 	}
 	PaintInactiveStatusBar(c, name)
-}
-
-// send event into the widget
-func (b *BaseWidget) Post(cmd Command, args ...string) {
-	if b.Events != nil {
-		b.Events <- BaseEvent{
-			Cmd:  cmd,
-			Args: args,
-		}
-	}
 }

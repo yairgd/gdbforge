@@ -1,7 +1,6 @@
 package core
 
 // Event is the domain event interface for debugger backends.
-// gdbforge's terminal UI bus uses termui.Event instead.
 type Event interface {
 	Type() string
 }

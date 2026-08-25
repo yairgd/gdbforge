@@ -6,7 +6,6 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/commands"
-	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 // CmdKind selects how the cmdline mux behaves after Activate / ActivateSearch.
@@ -36,6 +35,8 @@ type CmdWidget struct {
 	onChange func(text string)
 	// onSearchSubmit runs on Enter in search kind with the pattern (no leading '/').
 	onSearchSubmit func(pattern string)
+	// postInterrupt queues UI events on the main loop (SubmitMsg, CompletionMsg, …).
+	postInterrupt func(any)
 }
 
 func NewCmdWidget(reg *commands.CommandRegistry) *CmdWidget {
@@ -142,9 +143,19 @@ func (c *CmdWidget) hist() *MemoryHistory {
 	return c.history
 }
 
-func (c *CmdWidget) emit(ev Event) {
-	if c.Events != nil {
-		c.Events <- ev
+func (c *CmdWidget) SetPostInterrupt(fn func(any)) {
+	c.postInterrupt = fn
+}
+
+func (c *CmdWidget) emit(ev SubmitMsg) {
+	if c.postInterrupt != nil {
+		c.postInterrupt(ev)
+	}
+}
+
+func (c *CmdWidget) postCompletion(msg CompletionMsg) {
+	if c.postInterrupt != nil {
+		c.postInterrupt(msg)
 	}
 }
 
@@ -319,13 +330,11 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			token := c.parser.CurrentToken()
 			restArgs := c.parser.CurrentIsRestArgs()
 
-			if c.Ctx.Bus != nil {
-				platform.Publish(c.Ctx.Bus, CompletionMsg{
-					Input: c.text,
-					Token: token,
-					Names: names,
-				})
-			}
+			c.postCompletion(CompletionMsg{
+				Input: c.text,
+				Token: token,
+				Names: names,
+			})
 
 			if len(names) != 1 {
 				return
@@ -349,13 +358,11 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 					if node.RestArgs && node.CompleteArgs != nil {
 						c.syncParser()
 						rest := c.parser.SuggestionNames()
-						if c.Ctx.Bus != nil {
-							platform.Publish(c.Ctx.Bus, CompletionMsg{
-								Input: c.text,
-								Token: c.parser.CurrentToken(),
-								Names: rest,
-							})
-						}
+						c.postCompletion(CompletionMsg{
+							Input: c.text,
+							Token: c.parser.CurrentToken(),
+							Names: rest,
+						})
 					}
 				}
 			}

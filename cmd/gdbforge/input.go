@@ -474,12 +474,16 @@ func (a *DebuggerApp) HandleResize() {
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
-func (app *DebuggerApp) handleUnknownCommand(ev termui.CommandEvent) bool {
-	if msg, ok := ev.(termui.SubmitMsg); ok && app.tryGotoLineCmd(msg.Text) {
+func (a *DebuggerApp) dispatchBusEvent(data any) bool {
+	if a == nil || a.ctx.Bus == nil {
+		return false
+	}
+	switch data.(type) {
+	case termui.SubmitMsg, termui.CompletionMsg, BreakpointsChangedMsg:
+		a.ctx.Bus.Dispatch(data)
 		return true
 	}
-	// TODO: show unknown command feedback in the UI
-	return true
+	return false
 }
 
 // tryGotoLineCmd handles Vim-style :N / :0 — jump browse cursor to line N
@@ -525,12 +529,10 @@ func parseGotoLineCmd(text string) (line int, ok bool) {
 	return n, true
 }
 
-func (app *DebuggerApp) handleExitMode(_ termui.CommandEvent) bool {
-	app.leaveCommandMode()
-	return true
-}
-
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
+	if a.dispatchBusEvent(ev.Data()) {
+		return
+	}
 	switch data := ev.Data().(type) {
 	case events.GdbOutputMsg:
 		// Avoid per-line file logging during free-run floods (major TUI lag).

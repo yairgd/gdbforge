@@ -10,7 +10,15 @@ import (
 
 func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {}
 
-func (a *DemoApp) HandleInterrupt(ev *tcell.EventInterrupt) {}
+func (a *DemoApp) HandleInterrupt(ev *tcell.EventInterrupt) {
+	if a == nil || a.ctx.Bus == nil {
+		return
+	}
+	switch ev.Data().(type) {
+	case termui.SubmitMsg:
+		a.ctx.Bus.Dispatch(ev.Data())
+	}
+}
 
 func (a *DemoApp) HandleResize() {
 	c := a.UpdateCanvas()

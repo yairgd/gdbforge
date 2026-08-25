@@ -1,15 +1,9 @@
 package termui
 
-type Event interface {
-	Type() string
-}
+type CommandID int
 
-type CommandEvent interface {
-	Event
-	CommandID() CommandID
-}
-
-type Emitter func(Event)
+const CmdUnknown CommandID = 0
+const CmdExitMode CommandID = 1
 
 type SubmitMsg struct {
 	Text  string
@@ -17,11 +11,11 @@ type SubmitMsg struct {
 	Args  string
 }
 
-func (m SubmitMsg) Type() string         { return "SubmitMsg" }
-func (m SubmitMsg) CommandID() CommandID { return m.CmdID }
+func (m SubmitMsg) Type() string { return "SubmitMsg" }
 
-// CompletionMsg is published on platform.EventBus when Tab requests completions.
-// DebuggerApp applies it to CompletionMenu and syncs the CompletionView.
+// CompletionMsg is delivered on the UI thread (PostInterrupt → EventBus) when
+// Tab requests completions. DebuggerApp applies it to CompletionMenu and syncs
+// the CompletionView.
 type CompletionMsg struct {
 	Input string
 	Token string
@@ -29,11 +23,3 @@ type CompletionMsg struct {
 }
 
 func (m CompletionMsg) Type() string { return "CompletionMsg" }
-
-type BaseEvent struct {
-	Cmd  Command
-	Args []string
-}
-
-func (m BaseEvent) Type() string         { return "BaseEvent" }
-func (m BaseEvent) CommandID() CommandID { return m.Cmd.ID }

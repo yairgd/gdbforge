@@ -27,7 +27,6 @@ func (a *DebuggerApp) InitB() error {
 		logo = widgets.NewLogoWidget()
 		a.logoWidget = logo
 	}
-
 	a.ws = newWorkspace(a, a.newStartupTab(logo))
 	tab := a.Tab()
 	tab.SetStatusClipboard(a.ClipboardIO())
@@ -43,16 +42,12 @@ func (a *DebuggerApp) InitB() error {
 
 	// DebuggerApp wires the wildmenu into the layout; completionCtl owns it.
 	bar := termui.NewCompletionBarWidget(a.ctx)
-	bar.Events = a.Events()
 	a.comp.attach(&termui.CompletionMenu{}, bar)
 	a.AddWidget(bar)
-	if a.ctx.Bus != nil {
-		platform.Subscribe(a.ctx.Bus, a.comp.onMsg)
-	}
 
 	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
-	a.cmdWidget.Events = a.Events()
+	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
 	a.cmdWidget.SetOnExecute(func() {
 		_ = a.cmdWidget.ExecuteParsed()
@@ -66,6 +61,8 @@ func (a *DebuggerApp) InitB() error {
 	a.restoreCmdlineHistory()
 	a.AddWidget(a.cmdWidget)
 
+	a.registerUIComponents()
+
 	a.InitKeyBindings()
 	a.ExapData()
 
@@ -76,8 +73,5 @@ func (a *DebuggerApp) InitB() error {
 	a.RegisterModeHandler(platform.ModeSearch, a.withGlobalKeys(a.handleSearchKey))
 	a.RegisterModeHandler(platform.ModeCompletion, a.withGlobalKeys(a.handleCompletionKey))
 	a.RegisterModeHandler(platform.ModeLua, a.withGlobalKeys(a.lua.handleKey))
-
-	a.RegisterCommandHandler(termui.CmdUnknown, a.handleUnknownCommand)
-	a.RegisterCommandHandler(termui.CmdExitMode, a.handleExitMode)
 	return nil
 }

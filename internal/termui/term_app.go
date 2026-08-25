@@ -36,7 +36,6 @@ type TermApp struct {
 	Api     AppApi
 	widgets []WidgetNode
 	screen  tcell.Screen
-	events  chan Event
 	exit    bool
 	// widgets draw here all the time
 	// last frame that was actually displayed
@@ -69,13 +68,11 @@ func NewTermApp() *TermApp {
 	screen.EnablePaste()
 
 	return &TermApp{
-		screen:          screen,
-		exit:            false,
-		events:          make(chan Event, 100),
-		uiEvents:        make(chan tcell.Event, 100),
-		modeHandlers:    make(ModeKeyHandlers),
-		commandHandlers: make(CommandHandlers),
-		appState:        platform.NewAppState(),
+		screen:       screen,
+		exit:         false,
+		uiEvents:     make(chan tcell.Event, 100),
+		modeHandlers: make(ModeKeyHandlers),
+		appState:     platform.NewAppState(),
 	}
 }
 
@@ -97,20 +94,6 @@ func (app *TermApp) State() *platform.AppState {
 
 func (app *TermApp) RegisterModeHandler(mode platform.Mode, h KeyHandler) {
 	app.modeHandlers[mode] = h
-}
-
-func (app *TermApp) RegisterCommandHandler(id CommandID, h CommandHandler) {
-	app.commandHandlers[id] = h
-}
-
-func (app *TermApp) HandleCoreEvents(ev Event) {
-	msg, ok := ev.(CommandEvent)
-	if !ok {
-		return
-	}
-	if h, ok := app.commandHandlers[msg.CommandID()]; ok {
-		h(msg)
-	}
 }
 
 func (app *TermApp) HandleKey(ev *tcell.EventKey) {
@@ -227,9 +210,6 @@ func (app *TermApp) Run() {
 	dirty := false
 	for !app.exit {
 		select {
-		case ev := <-app.events:
-			app.HandleCoreEvents(ev)
-			dirty = true
 		case ev := <-app.uiEvents:
 			batch := drainUIEvents(app.uiEvents, ev, 96)
 			urgent := app.handleUIEventBatch(batch)
@@ -364,6 +344,14 @@ func (app *TermApp) RequestFrame() {
 	app.screen.PostEvent(tcell.NewEventInterrupt(frameInterrupt))
 }
 
+// PostInterrupt queues payload on the UI event loop (worker-safe via tcell).
+func (app *TermApp) PostInterrupt(payload any) {
+	if app == nil || app.screen == nil {
+		return
+	}
+	_ = app.screen.PostEvent(tcell.NewEventInterrupt(payload))
+}
+
 func (a *TermApp) HandleEvent(ev tcell.Event) {
 
 	switch e := ev.(type) {
@@ -459,6 +447,3 @@ func (app *TermApp) ClipboardIO() ClipboardIO {
 	}
 }
 
-func (app *TermApp) Events() chan Event {
-	return app.events
-}

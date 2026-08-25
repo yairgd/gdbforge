@@ -14,6 +14,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 // List returns the shared BreakpointList (may be nil before InitB).
@@ -454,6 +455,10 @@ func (c *breakCtl) onChangedMsg(_ BreakpointsChangedMsg) {
 		return
 	}
 	c.coalesce.Schedule(c.runRefresh)
+}
+
+func (c *breakCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onChangedMsg)
 }
 
 // maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
