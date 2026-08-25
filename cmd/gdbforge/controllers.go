@@ -49,10 +49,19 @@ type breakCtl struct {
 	coalesce    coalesceRunner
 }
 
+// searchHost is the narrow surface searchCtl needs from the composition root.
+type searchHost interface {
+	State() *platform.AppState
+	RequestFrame()
+	CmdWidget() *termui.CmdWidget
+	FocusedWidget() termui.Widget
+	ActiveCodeWidget() *widgets.CodeWidget
+}
+
 // searchCtl owns '/' / n/N / */# SearchHost policy and the last search target.
 // Mode entry/exit and search-vs-GDB-next stay on *DebuggerApp (orchestration).
 type searchCtl struct {
-	app    *DebuggerApp
+	host   searchHost
 	target termui.SearchHost
 }
 
@@ -72,8 +81,8 @@ func (a *DebuggerApp) initControllers() {
 	a.inferiorIO.host = a
 	a.comp.host = a
 	a.cmd.host = a
-	a.execIO.app = a
-	a.search.app = a
+	a.execIO.host = a
+	a.search.host = a
 	a.lua.app = a
 	a.dlv.app = a
 	a.serial.app = a
@@ -147,6 +156,11 @@ func (a *DebuggerApp) GdbMcp() *mcp.GdbMcpService          { return a.gdbMcp }
 func (a *DebuggerApp) CmdWidget() *termui.CmdWidget        { return a.cmdWidget }
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }
 func (a *DebuggerApp) OutputWidget() *widgets.OutputWidget { return a.outputWidget }
+func (a *DebuggerApp) ExecWidget() *widgets.ExecWidget     { return a.execWidget }
+func (a *DebuggerApp) FocusedWidget() termui.Widget      { return a.focusedWidget() }
+func (a *DebuggerApp) ActiveCodeWidget() *widgets.CodeWidget {
+	return a.activeCodeWidget()
+}
 func (a *DebuggerApp) FileListWidget() *widgets.FileListWidget {
 	return a.fileListWidget
 }

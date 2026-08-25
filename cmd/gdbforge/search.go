@@ -8,8 +8,8 @@ import (
 )
 
 func (c *searchCtl) onCmdChange(text string) {
-	a := c.app
-	if a.cmdWidget == nil || a.cmdWidget.Kind() != termui.CmdKindSearch {
+	h := c.host
+	if h == nil || h.CmdWidget() == nil || h.CmdWidget().Kind() != termui.CmdKindSearch {
 		return
 	}
 	host := c.target
@@ -25,48 +25,51 @@ func (c *searchCtl) onCmdChange(text string) {
 	if len(runes) > 1 {
 		pat = string(runes[1:])
 	}
-	host.SetSearchColor(a.State().SearchColor())
+	host.SetSearchColor(h.State().SearchColor())
 	host.SetSearchPattern(pat)
 }
 
 func (c *searchCtl) onCmdSubmit(pattern string) {
+	h := c.host
 	host := c.target
 	if host == nil {
 		host = c.resolveHost()
 	}
-	if host == nil {
+	if host == nil || h == nil {
 		return
 	}
-	host.SetSearchColor(c.app.State().SearchColor())
+	host.SetSearchColor(h.State().SearchColor())
 	host.CommitSearch(pattern)
 	c.target = host // keep for n/N and */# on same pane
 }
 
 func (c *searchCtl) nextMatch() {
+	h := c.host
 	host := c.target
 	if host == nil {
 		host = c.resolveHost()
 	}
-	if host == nil {
+	if host == nil || h == nil {
 		return
 	}
-	host.SetSearchColor(c.app.State().SearchColor())
+	host.SetSearchColor(h.State().SearchColor())
 	if host.SearchNext() {
-		c.app.RequestFrame()
+		h.RequestFrame()
 	}
 }
 
 func (c *searchCtl) prevMatch() {
+	h := c.host
 	host := c.target
 	if host == nil {
 		host = c.resolveHost()
 	}
-	if host == nil {
+	if host == nil || h == nil {
 		return
 	}
-	host.SetSearchColor(c.app.State().SearchColor())
+	host.SetSearchColor(h.State().SearchColor())
 	if host.SearchPrev() {
-		c.app.RequestFrame()
+		h.RequestFrame()
 	}
 }
 
@@ -78,13 +81,16 @@ func (c *searchCtl) prevMatch() {
 // /46 landed on "46" inside "1052946"), only navigate — do not expand to the
 // enclosing identifier.
 func (c *searchCtl) wordMatch(dir int) {
-	a := c.app
+	h := c.host
+	if h == nil {
+		return
+	}
 	// Always use the focused pane so */# follow the caret the user sees.
 	host := c.resolveHost()
 	if host == nil {
 		return
 	}
-	host.SetSearchColor(a.State().SearchColor())
+	host.SetSearchColor(h.State().SearchColor())
 
 	if host.SearchPattern() != "" && c.cursorInMatch(host) {
 		c.target = host
@@ -93,7 +99,7 @@ func (c *searchCtl) wordMatch(dir int) {
 		} else {
 			_ = host.SearchNext()
 		}
-		a.RequestFrame()
+		h.RequestFrame()
 		return
 	}
 
@@ -112,7 +118,7 @@ func (c *searchCtl) wordMatch(dir int) {
 		} else {
 			_ = host.SearchNext()
 		}
-		a.RequestFrame()
+		h.RequestFrame()
 		return
 	}
 	if dir < 0 {
@@ -188,11 +194,14 @@ func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.Viewport {
 // pane — the one with the green/blue status bar. Falls back to the active
 // CodeWidget when the focused pane has no viewport.
 func (c *searchCtl) resolveHost() termui.SearchHost {
-	a := c.app
-	if host := c.hostOf(a.focusedWidget()); host != nil {
+	h := c.host
+	if h == nil {
+		return nil
+	}
+	if host := c.hostOf(h.FocusedWidget()); host != nil {
 		return host
 	}
-	if cw := a.activeCodeWidget(); cw != nil {
+	if cw := h.ActiveCodeWidget(); cw != nil {
 		return cw
 	}
 	return nil
@@ -235,9 +244,10 @@ func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
 // captureFocused stores the focused pane as the search target and applies
 // the current search color. Used when entering '/' mode.
 func (c *searchCtl) captureFocused() {
+	h := c.host
 	c.target = c.resolveHost()
-	if c.target != nil {
-		c.target.SetSearchColor(c.app.State().SearchColor())
+	if c.target != nil && h != nil {
+		c.target.SetSearchColor(h.State().SearchColor())
 	}
 }
 
