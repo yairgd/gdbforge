@@ -11,6 +11,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
@@ -36,6 +37,7 @@ type debugInfoHost interface {
 	ShowCodeAt(file string, line int) *widgets.CodeWidget
 	LogError(area, msg string)
 	ApplyDebugInfoUI(stackOnly bool)
+	FocusCode()
 }
 
 // debugInfoCtl owns the Threads / Call Stack domain: shared models, their
@@ -52,6 +54,21 @@ type debugInfoCtl struct {
 
 func (c *debugInfoCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onUIMsg)
+	platform.Subscribe(bus, c.onThreadActivate)
+	platform.Subscribe(bus, c.onCallStackActivate)
+}
+
+func (c *debugInfoCtl) onThreadActivate(msg events.ThreadActivateMsg) {
+	c.activateThread(msg.Thread)
+}
+
+func (c *debugInfoCtl) onCallStackActivate(msg events.CallStackActivateMsg) {
+	c.activateCallStack(msg.Frame)
+	if msg.FocusCode {
+		if h := c.host; h != nil {
+			h.FocusCode()
+		}
+	}
 }
 
 func (c *debugInfoCtl) onUIMsg(msg debugInfoUIMsg) {
@@ -333,9 +350,6 @@ func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 }
 
 // --- Host adapters (ThreadHost / CallStackHost need *DebuggerApp methods) ---
-
-func (a *DebuggerApp) ActivateThread(th models.ThreadInfo)    { a.debugInfo.activateThread(th) }
-func (a *DebuggerApp) ActivateCallStack(fr models.StackFrame) { a.debugInfo.activateCallStack(fr) }
 
 // syncFileListViews pushes AppState source files to the FileList view.
 func (a *DebuggerApp) syncFileListViews() {

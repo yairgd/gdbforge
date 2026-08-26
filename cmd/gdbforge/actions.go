@@ -525,6 +525,7 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 	app.children.Track(client.Pid(), true)
 
 	w := widgets.NewExecWidget()
+	w.Ctx = app.ctx
 	w.SetClipboard(app.ClipboardIO())
 	w.SetSizeFunc(client.SetSize)
 	w.WireConsole(&widgets.ConsoleHandlers{
@@ -532,21 +533,6 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 		Interrupt: func() { _ = client.SendRaw("\x03") },
 		Suspend:   func() { _ = client.SendRaw("\x1a") },
 		EOF:       func() { _ = client.SendRaw("\x04") },
-	})
-	w.SetOnClose(func() {
-		client.Close()
-	})
-	w.SetOnDismiss(func() {
-		if app.execClient != nil {
-			app.execClient.Close()
-			app.execClient = nil
-		}
-		app.execWidget = nil
-		if app.builtins != nil {
-			delete(app.builtins, "exec")
-		}
-		app.JumpBack()
-		app.RequestFrame()
 	})
 	ch, _ := client.Subscribe()
 	w.StartExecUIBridge(app.Screen(), ch)

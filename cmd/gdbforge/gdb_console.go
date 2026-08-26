@@ -49,7 +49,7 @@ type consoleHost interface {
 	// (CLI frame/f/up/down) — already on the UI thread.
 	onGdbFrameSelected(fr gdb.MiFrameMsg)
 	clearDebugInfoPanes()
-	BreakpointsChanged()
+	PublishBreakpointsChanged()
 	SelectedFrameLevel() int
 	NoteStackNavGDB()
 	NoteStackNavDLV(cmd string, curLevel int)
@@ -486,7 +486,7 @@ func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
 	}
 	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, bpChanged, nil)
 	if upd.PromptReady && h.TakeDeferredBP() {
-		h.BreakpointsChanged()
+		h.PublishBreakpointsChanged()
 	}
 }
 
@@ -538,7 +538,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 		}
 	}
 	if breakpointsChanged {
-		h.BreakpointsChanged()
+		h.PublishBreakpointsChanged()
 	}
 	if h.serialActive() {
 		running := state == gdb.Running

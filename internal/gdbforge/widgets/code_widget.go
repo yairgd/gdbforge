@@ -13,6 +13,7 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -42,11 +43,6 @@ type CodeWidget struct {
 	buf      *platform.Buffer
 
 	state *debugstate.State
-
-	// onBreakToggle is Space — insert/clear breakpoint at cursor (app sends GDB).
-	onBreakToggle func(path string, line int)
-	// onToggleEnable is "e" — enable/disable at cursor.
-	onToggleEnable func()
 
 	path      string
 	pcLine    int // 1-based program counter
@@ -92,16 +88,6 @@ func (w *CodeWidget) SetAppState(state *debugstate.State) {
 	w.state = state
 }
 
-// SetOnBreakToggle registers Space → insert/clear at path:line (app owns GDB).
-func (w *CodeWidget) SetOnBreakToggle(fn func(path string, line int)) {
-	w.onBreakToggle = fn
-}
-
-// SetOnToggleEnable registers a callback for "e" (enable/disable at cursor).
-func (w *CodeWidget) SetOnToggleEnable(fn func()) {
-	w.onToggleEnable = fn
-}
-
 func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("sel-up", func(args ...any) { w.moveSel(-1) }, "<Up>", "k")
 	w.BindKeyFunc("sel-down", func(args ...any) { w.moveSel(1) }, "<Down>", "j")
@@ -113,9 +99,7 @@ func (w *CodeWidget) initKeyBindings() {
 	w.BindKeyFunc("end", func(args ...any) { w.moveSelTo(len(w.rawLines)) }, "<End>", "G")
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.breakAtSel() }, " ")
 	w.BindKeyFunc("break-enable-toggle", func(args ...any) {
-		if w.onToggleEnable != nil {
-			w.onToggleEnable()
-		}
+		w.Publish(events.CodeBreakEnableToggleMsg{Path: w.path, Line: w.selLine})
 	}, "e")
 }
 
@@ -128,11 +112,9 @@ func (w *CodeWidget) GotoLine(line int) { w.moveSelTo(line) }
 // BreakAtSel fires OnBreakToggle for the selected line (exported for global Space).
 func (w *CodeWidget) BreakAtSel() { w.breakAtSel() }
 
-// ToggleEnableAtSel runs the enable/disable callback (same as BreakpointWidget e).
+// ToggleEnableAtSel runs the enable/disable intent (same as BreakpointWidget e).
 func (w *CodeWidget) ToggleEnableAtSel() {
-	if w.onToggleEnable != nil {
-		w.onToggleEnable()
-	}
+	w.Publish(events.CodeBreakEnableToggleMsg{Path: w.path, Line: w.selLine})
 }
 
 func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
@@ -322,7 +304,7 @@ func (w *CodeWidget) setCursorContentCol(contentCol int) {
 }
 
 func (w *CodeWidget) breakAtSel() {
-	if w.path == "" || len(w.rawLines) == 0 || w.onBreakToggle == nil {
+	if w.path == "" || len(w.rawLines) == 0 {
 		return
 	}
 	if w.selLine < 1 {
@@ -331,7 +313,7 @@ func (w *CodeWidget) breakAtSel() {
 	if w.selLine > len(w.rawLines) {
 		w.selLine = len(w.rawLines)
 	}
-	w.onBreakToggle(w.path, w.selLine)
+	w.Publish(events.CodeBreakToggleMsg{Path: w.path, Line: w.selLine})
 }
 
 // ShowLocation loads path from disk (if needed), marks line with ━━▶, and scrolls to it.

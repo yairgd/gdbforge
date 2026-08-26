@@ -6,6 +6,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
@@ -20,13 +21,6 @@ const (
 	asmOffsetColsMin = 2
 	asmGutterCols    = 3 + 1 + asmAddrCols + 10
 )
-
-// AssemblyHost receives assembly pane intents from AssemblyWidget.
-type AssemblyHost interface {
-	BrowseAssembly(addr string, rows int)
-	ToggleAsmBreak(addr string)
-	ToggleAsmBreakEnable()
-}
 
 // AssemblyWidget shows disassembly around browse address X.
 // ━━▶ marks real $pc; the blue line is the browse caret (same as CodeWidget).
@@ -46,8 +40,6 @@ type AssemblyWidget struct {
 
 	bpByAddr map[string]models.BreakGutter
 
-	host AssemblyHost
-
 	lastHeight int
 	fetching   bool
 
@@ -62,7 +54,7 @@ type AssemblyWidget struct {
 	offWidth int
 }
 
-func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
+func NewAssemblyWidget() *AssemblyWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -77,7 +69,6 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 		viewport:          vp,
 		buf:               buf,
 		selIdx:            0,
-		host:              host,
 		browsePreserveRow: -1,
 		offWidth:          asmOffsetColsMin,
 	}
@@ -102,11 +93,6 @@ func NewAssemblyWidget(host AssemblyHost) *AssemblyWidget {
 	return w
 }
 
-// SetHost replaces the assembly host (tests).
-func (w *AssemblyWidget) SetHost(host AssemblyHost) {
-	w.host = host
-}
-
 func (w *AssemblyWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
@@ -126,9 +112,7 @@ func (w *AssemblyWidget) initKeyBindings() {
 	w.BindKeyFunc("page-down", func(args ...any) { w.MoveSel(w.pageRows()) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.BreakAtSel() }, " ")
 	w.BindKeyFunc("break-enable-toggle", func(args ...any) {
-		if w.host != nil {
-			w.host.ToggleAsmBreakEnable()
-		}
+		w.Publish(events.AsmBreakEnableToggleMsg{})
 	}, "e")
 }
 
@@ -368,7 +352,7 @@ func (w *AssemblyWidget) MoveSel(delta int) {
 }
 
 func (w *AssemblyWidget) requestBrowse() {
-	if w == nil || w.host == nil || w.fetching || w.completeDump() {
+	if w == nil || w.fetching || w.completeDump() {
 		return
 	}
 	addr := w.SelAddr()
@@ -380,7 +364,7 @@ func (w *AssemblyWidget) requestBrowse() {
 		rows = 20
 	}
 	w.fetching = true
-	w.host.BrowseAssembly(addr, rows)
+	w.Publish(events.AsmBrowseMsg{Addr: addr, Rows: rows})
 }
 
 // SelAddr returns the browse caret address.
@@ -393,14 +377,14 @@ func (w *AssemblyWidget) SelAddr() string {
 
 // BreakAtSel fires ToggleAsmBreak for the selected address (Space).
 func (w *AssemblyWidget) BreakAtSel() {
-	if w == nil || w.host == nil {
+	if w == nil {
 		return
 	}
 	addr := w.SelAddr()
 	if addr == "" {
 		return
 	}
-	w.host.ToggleAsmBreak(addr)
+	w.Publish(events.AsmBreakToggleMsg{Addr: addr})
 }
 
 // HasEnabledBreak reports an enabled breakpoint mark at addr.
@@ -623,7 +607,7 @@ func (w *AssemblyWidget) Draw(c termui.Canvas) {
 		// Refetch so the window fills the new rectangle (no caret-row preserve).
 		w.browsePreserveRow = -1
 		w.browseDir = 0
-		if len(w.items) > 0 && w.host != nil && !w.fetching {
+		if len(w.items) > 0 && !w.fetching {
 			w.requestBrowse()
 		}
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestAssemblyWidgetDualCursors(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	items := []models.AsmLine{
 		{Addr: "0x1000", Inst: "push"},
 		{Addr: "0x1001", Inst: "mov"},
@@ -45,7 +45,7 @@ func TestAssemblyWidgetDualCursors(t *testing.T) {
 }
 
 func TestAssemblyWidgetSyncSelFromViewport(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	items := []models.AsmLine{
 		{Addr: "0x1000", Inst: "a"},
 		{Addr: "0x1001", Inst: "b"},
@@ -63,7 +63,7 @@ func TestAssemblyWidgetSyncSelFromViewport(t *testing.T) {
 }
 
 func TestAssemblyWidgetCGDBView(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetContext([]string{
 		"#8  0x5555555551bc in main () at hello.c:12",
 		"12      printf(\"%s\\n\",b);",
@@ -104,7 +104,7 @@ func TestAssemblyWidgetCGDBView(t *testing.T) {
 }
 
 func TestAssemblyWidgetStatusLabelNamed(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetContext([]string{"#2  0x7ffff7ec56ea in write () from /usr/lib64/libc.so.6"})
 	w.SetItems([]models.AsmLine{
 		{Addr: "0x7ffff7ec56d0", Inst: "endbr64", Offset: "0"},
@@ -119,7 +119,7 @@ func TestAssemblyWidgetStatusLabelNamed(t *testing.T) {
 }
 
 func TestAssemblyWidgetStatusLabelPC(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetItems([]models.AsmLine{
 		{Addr: "0x7ffff7e5d03a", Inst: "add    $0x18,%rsp"},
 		{Addr: "0x7ffff7e5d03e", Inst: "ret"},
@@ -135,7 +135,7 @@ func TestAssemblyWidgetStatusLabelPC(t *testing.T) {
 }
 
 func TestAssemblyWidgetScrollPastPC(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetContext([]string{"#3  0x7ffff7e5899d in _IO_file_write () from /usr/lib64/libc.so.6"})
 	items := make([]models.AsmLine, 40)
 	for i := range items {
@@ -163,7 +163,7 @@ func TestAssemblyWidgetScrollPastPC(t *testing.T) {
 }
 
 func TestAssemblyWidgetBrowsePreservesScreenRow(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	items := make([]models.AsmLine, 40)
 	for i := range items {
 		items[i] = models.AsmLine{Addr: fmt.Sprintf("0x%x", 0x1000+i*4), Inst: "nop"}
@@ -180,7 +180,7 @@ func TestAssemblyWidgetBrowsePreservesScreenRow(t *testing.T) {
 }
 
 func TestAssemblyWidgetShowsEndAndRestoresHeader(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetContext([]string{"#5  0x7ffff7e5791e in _IO_do_write () from /usr/lib64/libc.so.6"})
 	items := make([]models.AsmLine, 30)
 	for i := range items {
@@ -229,7 +229,7 @@ func TestAssemblyWidgetShowsEndAndRestoresHeader(t *testing.T) {
 }
 
 func TestAssemblyWidgetKeepsPreambleVisible(t *testing.T) {
-	w := NewAssemblyWidget(nil)
+	w := NewAssemblyWidget()
 	w.SetContext([]string{
 		"#0  a", "#1  b", "#2  write", "#3  c", "#4  d", "#5  e", "#6  f", "#7  g", "#8  main",
 	})

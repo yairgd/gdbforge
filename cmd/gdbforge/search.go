@@ -4,8 +4,22 @@ import (
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
+
+func (c *searchCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onSearchTextChanged)
+	platform.Subscribe(bus, c.onSearchSubmitted)
+}
+
+func (c *searchCtl) onSearchTextChanged(msg termui.SearchTextChangedMsg) {
+	c.onCmdChange(msg.Text)
+}
+
+func (c *searchCtl) onSearchSubmitted(msg termui.SearchSubmittedMsg) {
+	c.onCmdSubmit(msg.Pattern)
+}
 
 func (c *searchCtl) onCmdChange(text string) {
 	h := c.host

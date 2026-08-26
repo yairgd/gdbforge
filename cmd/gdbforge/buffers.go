@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
+	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -18,12 +20,11 @@ import (
 type bufferHost interface {
 	Debug() *debugstate.State
 	Shell() *LayoutShell
+	AppContext() platform.AppContext
 	ClipboardIO() termui.ClipboardIO
 	Builtins() map[string]termui.Widget
 	FileListWidget() *widgets.FileListWidget
-	ToggleCodeBreak(path string, line int)
-	toggleCodeBreakEnable()
-	BreakpointsChanged()
+	PublishBreakpointsChanged()
 	PaintCodeBreaks(w *widgets.CodeWidget, path string)
 	placeCodeInSlot(w *widgets.CodeWidget)
 	OpenAssembly()
@@ -57,6 +58,14 @@ type bufferCtl struct {
 func (c *bufferCtl) initMaps() {
 	c.files = make(map[string]*widgets.CodeWidget)
 	c.listed = make(map[string]struct{})
+}
+
+func (c *bufferCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onOpenSource)
+}
+
+func (c *bufferCtl) onOpenSource(msg events.OpenSourceMsg) {
+	c.openSourcePath(msg.Path)
 }
 
 // Buffers returns the live per-path CodeWidget map (nil before InitB).
@@ -115,15 +124,14 @@ func normalizeCodePath(path string) string {
 	return filepath.Clean(path)
 }
 
-// wire attaches host-owned breakpoint intents and mark colors.
+// wire attaches AppContext and mark colors for breakpoint intents on the bus.
 func (c *bufferCtl) wire(w *widgets.CodeWidget) {
 	h := c.host
 	if w == nil || h == nil {
 		return
 	}
 	w.SetAppState(h.Debug())
-	w.SetOnBreakToggle(h.ToggleCodeBreak)
-	w.SetOnToggleEnable(h.toggleCodeBreakEnable)
+	w.Ctx = h.AppContext()
 }
 
 // find looks up an open file buffer by full path or basename.
@@ -351,7 +359,7 @@ func (c *bufferCtl) openSourcePath(path string) {
 		h.LogError("edit", err.Error())
 		return
 	}
-	h.BreakpointsChanged()
+	h.PublishBreakpointsChanged()
 	c.primary = w
 	if h.swapFocusedWidget(w) {
 		if leaf := h.Shell().Tab().FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
@@ -518,6 +526,3 @@ func (a *DebuggerApp) OnBuffer(args ...any) { a.bufs.onBuffer(joinCmdArgs(args))
 
 // OnEdit opens the project file list (:edit) or a source file (:edit name).
 func (a *DebuggerApp) OnEdit(args ...any) { a.bufs.onEdit(joinCmdArgs(args)) }
-
-// OpenSourcePath shows path in a CodeWidget (FileListWidget selection).
-func (a *DebuggerApp) OpenSourcePath(path string) { a.bufs.openSourcePath(path) }

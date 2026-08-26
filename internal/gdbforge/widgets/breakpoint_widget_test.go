@@ -1,16 +1,17 @@
 package widgets
 
 import (
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
 func TestBreakpointWidgetEmptyMessage(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	w := NewBreakpointWidget()
 	lines := w.LinesForTest()
 	if len(lines) != 1 || lines[0] != "no breakpoints" {
 		t.Fatalf("empty=%v", lines)
@@ -18,7 +19,12 @@ func TestBreakpointWidgetEmptyMessage(t *testing.T) {
 }
 
 func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	ctx := testWidgetCtx()
+	var gotIdx int = -1
+	platform.Subscribe(ctx.Bus, func(msg events.BreakpointToggleMsg) { gotIdx = msg.Index })
+
+	w := NewBreakpointWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
@@ -26,8 +32,6 @@ func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 	if lines := w.LinesForTest(); len(lines) != 1 || lines[0] != "  1  y  /tmp/a.c:10" {
 		t.Fatalf("display=%q", lines)
 	}
-	var gotIdx int = -1
-	w.SetHost(stubBreakpointHost{toggle: func(i int) { gotIdx = i }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)) {
 		t.Fatal("e")
 	}
@@ -37,12 +41,15 @@ func TestBreakpointWidgetSetItemsAndToggleIntent(t *testing.T) {
 }
 
 func TestBreakpointWidgetDeleteIntent(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	ctx := testWidgetCtx()
+	var gotIdx int = -1
+	platform.Subscribe(ctx.Bus, func(msg events.BreakpointDeleteMsg) { gotIdx = msg.Index })
+
+	w := NewBreakpointWidget()
+	w.Ctx = ctx
 	w.SetItems([]models.BreakInfo{
 		{Number: 3, Enabled: true, File: "/tmp/a.c", Line: 5},
 	})
-	var gotIdx int = -1
-	w.SetHost(stubBreakpointHost{delete: func(i int) { gotIdx = i }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone)) {
 		t.Fatal("d")
 	}
@@ -58,7 +65,7 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	st.SetBreakCondColor(tcell.ColorOrange)
 	st.SetMarkColor(tcell.ColorNavy)
 	st.SetMarkDimColor(tcell.ColorSilver)
-	w := NewBreakpointWidget(nil)
+	w := NewBreakpointWidget()
 	w.SetAppState(st)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
@@ -105,7 +112,7 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 	st.SetCurrentLocation("/tmp/a.c", 2)
 	st.SetStopLocation("/tmp/a.c", 2)
 
-	w := NewBreakpointWidget(nil)
+	w := NewBreakpointWidget()
 	w.SetAppState(st)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 1},
@@ -121,12 +128,10 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 
 	other := w.rowStyle(0, "")
 	_, otherBg, _ := other.Decompose()
-	// selected row 0 uses mark dim when unfocused
 	if otherBg != tcell.ColorSilver {
 		t.Fatalf("selected bg=%v want silver", otherBg)
 	}
 
-	// Selecting the stop-PC BP keeps green (not navy mark).
 	w.SelectIndex(1)
 	w.SetFocused(true)
 	selPC := w.rowStyle(1, "")
@@ -137,14 +142,17 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 }
 
 func TestBreakpointWidgetActivateOnMove(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.BreakInfo
+	platform.Subscribe(ctx.Bus, func(msg events.BreakpointActivateMsg) { got = msg.BP })
+
+	w := NewBreakpointWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
-	var got models.BreakInfo
-	w.SetHost(stubBreakpointHost{activate: func(bp models.BreakInfo) { got = bp }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -160,16 +168,20 @@ func TestBreakpointWidgetActivateOnMove(t *testing.T) {
 }
 
 func TestBreakpointWidgetEnterFocusesCode(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	ctx := testWidgetCtx()
+	var focus int
+	platform.Subscribe(ctx.Bus, func(msg events.BreakpointActivateMsg) {
+		if msg.FocusCode {
+			focus++
+		}
+	})
+
+	w := NewBreakpointWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
-	})
-	var focus int
-	w.SetHost(stubBreakpointHost{
-		activate:  func(models.BreakInfo) {},
-		focusCode: func() { focus++ },
 	})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
@@ -186,14 +198,17 @@ func TestBreakpointWidgetEnterFocusesCode(t *testing.T) {
 }
 
 func TestBreakpointWidgetWheelActivates(t *testing.T) {
-	w := NewBreakpointWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.BreakInfo
+	platform.Subscribe(ctx.Bus, func(msg events.BreakpointActivateMsg) { got = msg.BP })
+
+	w := NewBreakpointWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "/tmp/a.c", Line: 10},
 		{Number: 2, Enabled: true, File: "/tmp/b.c", Line: 20},
 	})
-	var got models.BreakInfo
-	w.SetHost(stubBreakpointHost{activate: func(bp models.BreakInfo) { got = bp }})
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.Number != 2 {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)

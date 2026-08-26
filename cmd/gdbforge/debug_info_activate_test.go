@@ -66,6 +66,7 @@ func (s *stubDebugInfoHost) ShowCodeAt(string, int) *widgets.CodeWidget {
 }
 func (s *stubDebugInfoHost) LogError(string, string) {}
 func (s *stubDebugInfoHost) ApplyDebugInfoUI(bool)   {}
+func (s *stubDebugInfoHost) FocusCode()                {}
 
 func TestActivateThreadArmsFrameSyncNotSyncRefresh(t *testing.T) {
 	host := &stubDebugInfoHost{}

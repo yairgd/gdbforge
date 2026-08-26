@@ -48,15 +48,6 @@ func (a *DebuggerApp) InitB() error {
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
-	a.cmdWidget.SetOnExecute(func() {
-		_ = a.cmdWidget.ExecuteParsed()
-	})
-	a.cmdWidget.SetOnChange(func(text string) {
-		a.search.onCmdChange(text)
-	})
-	a.cmdWidget.SetOnSearchSubmit(func(pattern string) {
-		a.search.onCmdSubmit(pattern)
-	})
 	a.restoreCmdlineHistory()
 	a.AddWidget(a.cmdWidget)
 

@@ -37,6 +37,8 @@ type breakHost interface {
 	IsDLVConfirming() bool
 	GdbMcp() *mcp.GdbMcpService
 	RequestFrame()
+	ActivateBreakpoint(bp models.BreakInfo)
+	FocusCode()
 }
 
 // breakCtl owns breakpoint domain logic and BP model state.
@@ -103,9 +105,37 @@ func (a *DebuggerApp) registerUIComponents() {
 		&a.dlv,
 		&a.lua,
 		&a.execIO,
+		&a.search,
+		&a.bufs,
 	} {
 		c.Register(a.ctx.Bus)
 	}
+	platform.Subscribe(a.ctx.Bus, a.onFocusCode)
+	platform.Subscribe(a.ctx.Bus, a.onExecClosed)
+	platform.Subscribe(a.ctx.Bus, a.onExecDismissed)
+}
+
+func (a *DebuggerApp) onFocusCode(_ events.FocusCodeMsg) {
+	a.FocusCode()
+}
+
+func (a *DebuggerApp) onExecClosed(_ events.ExecClosedMsg) {
+	if a.execClient != nil {
+		a.execClient.Close()
+	}
+}
+
+func (a *DebuggerApp) onExecDismissed(_ events.ExecDismissedMsg) {
+	if a.execClient != nil {
+		a.execClient.Close()
+		a.execClient = nil
+	}
+	a.execWidget = nil
+	if a.builtins != nil {
+		delete(a.builtins, "exec")
+	}
+	a.JumpBack()
+	a.RequestFrame()
 }
 
 // --- Composition-root adapters (host interfaces) ---
@@ -181,6 +211,8 @@ func (a *DebuggerApp) LogGdbMILines(msg events.GdbOutputMsg) {
 	}
 }
 
+func (a *DebuggerApp) AppContext() platform.AppContext { return a.ctx }
+
 func (a *DebuggerApp) PublishBreakpointsChanged() {
 	if a == nil || a.ctx.Bus == nil {
 		return
@@ -197,13 +229,9 @@ func (a *DebuggerApp) PublishCompletion(msg termui.CompletionMsg) {
 
 // --- breakCtl peers ---
 
-func (a *DebuggerApp) BreakpointsChanged() { a.breaks.onChanged() }
 func (a *DebuggerApp) PaintAsmBreaks()     { a.breaks.paintAsmMarks(a.breaks.Items()) }
 func (a *DebuggerApp) PaintCodeBreaks(w *widgets.CodeWidget, path string) {
 	a.breaks.paintCodeWidget(w, path)
-}
-func (a *DebuggerApp) ToggleCodeBreak(path string, line int) {
-	a.breaks.onCodeBreakToggle(path, line)
 }
 
 // --- asmCtl peers ---

@@ -10,6 +10,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
@@ -460,6 +461,75 @@ func (c *breakCtl) onChangedMsg(_ BreakpointsChangedMsg) {
 func (c *breakCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onChangedMsg)
 	platform.Subscribe(bus, c.onBreakpointsUI)
+	platform.Subscribe(bus, c.onCodeBreakToggleMsg)
+	platform.Subscribe(bus, c.onCodeBreakEnableToggleMsg)
+	platform.Subscribe(bus, c.onAsmBreakToggleMsg)
+	platform.Subscribe(bus, c.onAsmBreakEnableToggleMsg)
+	platform.Subscribe(bus, c.onBreakpointToggleMsg)
+	platform.Subscribe(bus, c.onBreakpointDeleteMsg)
+	platform.Subscribe(bus, c.onBreakpointActivateMsg)
+}
+
+func (c *breakCtl) onCodeBreakToggleMsg(msg events.CodeBreakToggleMsg) {
+	c.onCodeBreakToggle(msg.Path, msg.Line)
+}
+
+func (c *breakCtl) onCodeBreakEnableToggleMsg(msg events.CodeBreakEnableToggleMsg) {
+	path, line := msg.Path, msg.Line
+	if path == "" || line < 1 {
+		h := c.host
+		if h == nil {
+			return
+		}
+		cw := h.PrimaryCode()
+		if cw == nil {
+			return
+		}
+		path = cw.Path()
+		line = cw.SelLine()
+	}
+	if path == "" || line < 1 {
+		return
+	}
+	if h := c.host; h != nil {
+		if cw := h.FileBuffers()[path]; cw != nil {
+			c.toggleCodeBreakEnableOn(cw)
+			return
+		}
+		for p, cw := range h.FileBuffers() {
+			if p == path || cw.Path() == path {
+				c.toggleCodeBreakEnableOn(cw)
+				return
+			}
+		}
+	}
+}
+
+func (c *breakCtl) onAsmBreakToggleMsg(msg events.AsmBreakToggleMsg) {
+	c.ToggleAsm(msg.Addr)
+}
+
+func (c *breakCtl) onAsmBreakEnableToggleMsg(_ events.AsmBreakEnableToggleMsg) {
+	c.ToggleAsmEnable()
+}
+
+func (c *breakCtl) onBreakpointToggleMsg(msg events.BreakpointToggleMsg) {
+	c.Toggle(msg.Index)
+}
+
+func (c *breakCtl) onBreakpointDeleteMsg(msg events.BreakpointDeleteMsg) {
+	c.Delete(msg.Index)
+}
+
+func (c *breakCtl) onBreakpointActivateMsg(msg events.BreakpointActivateMsg) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	h.ActivateBreakpoint(msg.BP)
+	if msg.FocusCode {
+		h.FocusCode()
+	}
 }
 
 func (c *breakCtl) onBreakpointsUI(_ breakpointsUIMsg) {
@@ -523,13 +593,6 @@ func (c *breakCtl) saveOnQuit() {
 	}
 	_ = persist.SaveBreakpoints(".", items)
 }
-
-// --- Host adapters (BreakpointHost / AssemblyHost need *DebuggerApp methods) ---
-
-func (a *DebuggerApp) ToggleBreakpoint(index int) { a.breaks.Toggle(index) }
-func (a *DebuggerApp) DeleteBreakpoint(index int) { a.breaks.Delete(index) }
-func (a *DebuggerApp) ToggleAsmBreak(addr string) { a.breaks.ToggleAsm(addr) }
-func (a *DebuggerApp) ToggleAsmBreakEnable()      { a.breaks.ToggleAsmEnable() }
 
 // ActivateBreakpoint browses Code/Asm for a BP row — layout/focus orchestration.
 func (a *DebuggerApp) ActivateBreakpoint(bp models.BreakInfo) {

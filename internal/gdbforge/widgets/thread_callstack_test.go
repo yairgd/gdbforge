@@ -1,17 +1,18 @@
 package widgets
 
 import (
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 func TestThreadWidgetSetItems(t *testing.T) {
-	w := NewThreadWidget(nil)
+	w := NewThreadWidget()
 	if got := w.LinesForTest(); len(got) != 1 || got[0] != "no threads" {
 		t.Fatalf("empty=%v", got)
 	}
@@ -26,7 +27,7 @@ func TestThreadWidgetSetItems(t *testing.T) {
 }
 
 func TestCallStackWidgetSetItems(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	w := NewCallStackWidget()
 	if got := w.LinesForTest(); len(got) != 1 || got[0] != "no frames" {
 		t.Fatalf("empty=%v", got)
 	}
@@ -41,15 +42,18 @@ func TestCallStackWidgetSetItems(t *testing.T) {
 }
 
 func TestThreadWidgetActivateEnter(t *testing.T) {
-	w := NewThreadWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.ThreadInfo
+	platform.Subscribe(ctx.Bus, func(msg events.ThreadActivateMsg) { got = msg.Thread })
+
+	w := NewThreadWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
 	w.selected = 1
-	var got models.ThreadInfo
-	w.SetHost(stubThreadHost{activate: func(th models.ThreadInfo) { got = th }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -59,15 +63,18 @@ func TestThreadWidgetActivateEnter(t *testing.T) {
 }
 
 func TestCallStackWidgetActivateEnter(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.StackFrame
+	platform.Subscribe(ctx.Bus, func(msg events.CallStackActivateMsg) { got = msg.Frame })
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
 	})
 	w.selected = 1
-	var got models.StackFrame
-	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { got = fr }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -77,16 +84,20 @@ func TestCallStackWidgetActivateEnter(t *testing.T) {
 }
 
 func TestCallStackWidgetEnterFocusesCode(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var focus int
+	platform.Subscribe(ctx.Bus, func(msg events.CallStackActivateMsg) {
+		if msg.FocusCode {
+			focus++
+		}
+	})
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
-	})
-	var focus int
-	w.SetHost(stubCallStackHost{
-		activate:  func(models.StackFrame) {},
-		focusCode: func() { focus++ },
 	})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
@@ -103,14 +114,17 @@ func TestCallStackWidgetEnterFocusesCode(t *testing.T) {
 }
 
 func TestCallStackWidgetActivateOnMove(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.StackFrame
+	platform.Subscribe(ctx.Bus, func(msg events.CallStackActivateMsg) { got = msg.Frame })
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
 	})
-	var got models.StackFrame
-	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { got = fr }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -120,14 +134,17 @@ func TestCallStackWidgetActivateOnMove(t *testing.T) {
 }
 
 func TestThreadWidgetActivateOnMove(t *testing.T) {
-	w := NewThreadWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.ThreadInfo
+	platform.Subscribe(ctx.Bus, func(msg events.ThreadActivateMsg) { got = msg.Thread })
+
+	w := NewThreadWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	var got models.ThreadInfo
-	w.SetHost(stubThreadHost{activate: func(th models.ThreadInfo) { got = th }})
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
 		t.Fatal("down")
 	}
@@ -137,14 +154,17 @@ func TestThreadWidgetActivateOnMove(t *testing.T) {
 }
 
 func TestCallStackWidgetWheelActivates(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.StackFrame
+	platform.Subscribe(ctx.Bus, func(msg events.CallStackActivateMsg) { got = msg.Frame })
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "foo"},
 	})
-	var got models.StackFrame
-	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { got = fr }})
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.Func != "foo" {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
@@ -156,7 +176,7 @@ func TestCallStackWidgetWheelActivates(t *testing.T) {
 }
 
 func TestCallStackWidgetSelectedFrame(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	w := NewCallStackWidget()
 	if _, ok := w.SelectedFrame(); ok {
 		t.Fatal("empty list should have no frame")
 	}
@@ -183,7 +203,7 @@ func TestCallStackWidgetProgramPointStyle(t *testing.T) {
 	// Browsed location differs (mouse picked another frame) — green must stay on #0.
 	st.SetCurrentLocation("/tmp/b.c", 20)
 
-	w := NewCallStackWidget(nil)
+	w := NewCallStackWidget()
 	w.SetAppState(st)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main", File: "a.c", Line: 10},
@@ -210,7 +230,7 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 	st.SetCurrentLocation("/tmp/a.c", 10)
 	st.SetStopLocation("/tmp/a.c", 10)
 
-	w := NewThreadWidget(nil)
+	w := NewThreadWidget()
 	w.SetAppState(st)
 	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", File: "a.c", Line: 10, Current: true},
@@ -231,14 +251,17 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 }
 
 func TestThreadWidgetWheelActivates(t *testing.T) {
-	w := NewThreadWidget(nil)
+	ctx := testWidgetCtx()
+	var got models.ThreadInfo
+	platform.Subscribe(ctx.Bus, func(msg events.ThreadActivateMsg) { got = msg.Thread })
+
+	w := NewThreadWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	var got models.ThreadInfo
-	w.SetHost(stubThreadHost{activate: func(th models.ThreadInfo) { got = th }})
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
 	if w.Selected() != 1 || got.ID != "2" {
 		t.Fatalf("wheel down selected=%d activated=%v", w.Selected(), got)
@@ -250,7 +273,7 @@ func TestThreadWidgetWheelActivates(t *testing.T) {
 }
 
 func TestListWidgetsMouseSyncSelection(t *testing.T) {
-	bp := NewBreakpointWidget(nil)
+	bp := NewBreakpointWidget()
 	bp.SetFocused(true)
 	bp.SetItems([]models.BreakInfo{
 		{Number: 1, Enabled: true, File: "a.c", Line: 1},
@@ -262,7 +285,7 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 		t.Fatalf("bp selected=%d", bp.Selected())
 	}
 
-	th := NewThreadWidget(nil)
+	th := NewThreadWidget()
 	th.SetFocused(true)
 	th.SetItems([]models.ThreadInfo{
 		{ID: "1", State: "stopped"},
@@ -274,7 +297,7 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 		t.Fatalf("thread selected=%d", th.selected)
 	}
 
-	cs := NewCallStackWidget(nil)
+	cs := NewCallStackWidget()
 	cs.SetFocused(true)
 	cs.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
@@ -288,14 +311,17 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 }
 
 func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var n int
+	platform.Subscribe(ctx.Bus, func(events.CallStackActivateMsg) { n++ })
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	w.SetItems([]models.StackFrame{
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "start"},
 	})
-	var n int
-	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { n++ }})
 	g := termui.NewGrid(40, 10)
 	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 10)))
 
@@ -314,7 +340,12 @@ func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 }
 
 func TestCallStackEmptyClickDoesNotJumpToLast(t *testing.T) {
-	w := NewCallStackWidget(nil)
+	ctx := testWidgetCtx()
+	var got int = -1
+	platform.Subscribe(ctx.Bus, func(msg events.CallStackActivateMsg) { got = msg.Frame.Level })
+
+	w := NewCallStackWidget()
+	w.Ctx = ctx
 	w.SetFocused(true)
 	frames := make([]models.StackFrame, 9)
 	for i := range frames {
@@ -322,8 +353,6 @@ func TestCallStackEmptyClickDoesNotJumpToLast(t *testing.T) {
 	}
 	w.SetItems(frames)
 	w.moveTo(2)
-	var got int = -1
-	w.SetHost(stubCallStackHost{activate: func(fr models.StackFrame) { got = fr.Level }})
 	g := termui.NewGrid(40, 20)
 	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 20)))
 
@@ -339,7 +368,7 @@ func TestCallStackEmptyClickDoesNotJumpToLast(t *testing.T) {
 }
 
 func TestThreadWidgetHorizontalScrollKeys(t *testing.T) {
-	w := NewThreadWidget(nil)
+	w := NewThreadWidget()
 	w.SetFocused(true)
 	w.SetItems([]models.ThreadInfo{
 		{ID: "thread-with-a-very-long-identifier-0001", State: "stopped-waiting", File: "/tmp/a.c", Line: 99, Current: true},

@@ -115,28 +115,33 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	s.debugInfo.threads = &models.ThreadList{}
 	s.debugInfo.stack = &models.CallStack{}
 	s.asm.list = &models.AssemblyList{}
-	s.asm.widget = widgets.NewAssemblyWidget(a)
+	s.asm.widget = widgets.NewAssemblyWidget()
+	s.asm.widget.Ctx = a.ctx
 	s.asm.widget.SetClipboard(a.ClipboardIO())
 	s.asm.widget.SetAppState(s.debug)
 	a.registerBuiltin("asm", s.asm.widget)
 	a.registerBuiltin("assembly", s.asm.widget)
 
-	s.bpWidget = widgets.NewBreakpointWidget(a)
+	s.bpWidget = widgets.NewBreakpointWidget()
+	s.bpWidget.Ctx = a.ctx
 	s.bpWidget.SetClipboard(a.ClipboardIO())
 	s.bpWidget.SetAppState(s.debug)
 	a.registerBuiltin("breakpoint", s.bpWidget)
 
-	s.debugInfo.threadW = widgets.NewThreadWidget(a)
+	s.debugInfo.threadW = widgets.NewThreadWidget()
+	s.debugInfo.threadW.Ctx = a.ctx
 	s.debugInfo.threadW.SetClipboard(a.ClipboardIO())
 	s.debugInfo.threadW.SetAppState(s.debug)
 	a.registerBuiltin("threads", s.debugInfo.threadW)
 
-	s.debugInfo.stackW = widgets.NewCallStackWidget(a)
+	s.debugInfo.stackW = widgets.NewCallStackWidget()
+	s.debugInfo.stackW.Ctx = a.ctx
 	s.debugInfo.stackW.SetClipboard(a.ClipboardIO())
 	s.debugInfo.stackW.SetAppState(s.debug)
 	a.registerBuiltin("callstack", s.debugInfo.stackW)
 
-	s.fileListWidget = widgets.NewFileListWidget(a)
+	s.fileListWidget = widgets.NewFileListWidget()
+	s.fileListWidget.Ctx = a.ctx
 	s.fileListWidget.SetClipboard(a.ClipboardIO())
 	s.fileListWidget.SetAppState(s.debug)
 

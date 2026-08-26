@@ -12,6 +12,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -70,6 +71,11 @@ type asmCtl struct {
 
 func (c *asmCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onRefresh)
+	platform.Subscribe(bus, c.onBrowse)
+}
+
+func (c *asmCtl) onBrowse(msg events.AsmBrowseMsg) {
+	c.browse(msg.Addr, msg.Rows)
 }
 
 func (c *asmCtl) onRefresh(msg asmRefreshMsg) {
@@ -535,9 +541,6 @@ func isAssemblyWidget(w termui.Widget) bool {
 }
 
 // --- Host adapters (AssemblyHost / command trie need *DebuggerApp methods) ---
-
-// BrowseAssembly refetches disassembly centered on addr (widget edge/resize).
-func (a *DebuggerApp) BrowseAssembly(addr string, rows int) { a.asm.browse(addr, rows) }
 
 // frameHasFileInfo reports a frame that may show "at file:line" (+ source body).
 func frameHasFileInfo(fr models.StackFrame) bool {

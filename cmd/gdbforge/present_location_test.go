@@ -11,7 +11,7 @@ import (
 // so presentLocation / leaf-mark reclaim can be exercised without a GDB session.
 func newLocationLeafApp() *DebuggerApp {
 	code := widgets.NewCodeWidget()
-	asm := widgets.NewAssemblyWidget(nil)
+	asm := widgets.NewAssemblyWidget()
 	gdb := widgets.NewGDBWidget()
 	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{

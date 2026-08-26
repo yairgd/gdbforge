@@ -2,21 +2,16 @@ package widgets
 
 import (
 	"fmt"
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"path/filepath"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
-
-// CallStackHost receives call-stack list intents from CallStackWidget.
-type CallStackHost interface {
-	ActivateCallStack(fr models.StackFrame)
-	FocusCode()
-}
 
 // CallStackWidget shows GDB stack frames.
 //
@@ -39,11 +34,9 @@ type CallStackWidget struct {
 	pressSelected int
 	lastActLevel  int
 	lastActTime   time.Time
-
-	host CallStackHost
 }
 
-func NewCallStackWidget(host CallStackHost) *CallStackWidget {
+func NewCallStackWidget() *CallStackWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -54,7 +47,6 @@ func NewCallStackWidget(host CallStackHost) *CallStackWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Call Stack"},
 		viewport:   vp,
 		buf:        buf,
-		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -64,11 +56,6 @@ func NewCallStackWidget(host CallStackHost) *CallStackWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
-}
-
-// SetHost replaces the call-stack host (tests).
-func (w *CallStackWidget) SetHost(host CallStackHost) {
-	w.host = host
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
@@ -227,17 +214,13 @@ func (w *CallStackWidget) activateSelected(commitFocus bool) {
 		return
 	}
 	fr := w.items[w.selected]
-	if w.host != nil {
-		// Collapse duplicate activates from noisy mouse press/release sequences.
-		now := time.Now()
-		if fr.Level != w.lastActLevel || now.Sub(w.lastActTime) >= 300*time.Millisecond {
-			w.lastActLevel = fr.Level
-			w.lastActTime = now
-			w.host.ActivateCallStack(fr)
-		}
-	}
-	if commitFocus && w.host != nil {
-		w.host.FocusCode()
+	now := time.Now()
+	if fr.Level != w.lastActLevel || now.Sub(w.lastActTime) >= 300*time.Millisecond {
+		w.lastActLevel = fr.Level
+		w.lastActTime = now
+		w.Publish(events.CallStackActivateMsg{Frame: fr, FocusCode: commitFocus})
+	} else if commitFocus {
+		w.Publish(events.FocusCodeMsg{})
 	}
 }
 

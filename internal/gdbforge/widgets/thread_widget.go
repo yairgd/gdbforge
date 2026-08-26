@@ -2,20 +2,16 @@ package widgets
 
 import (
 	"fmt"
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"path/filepath"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
-
-// ThreadHost receives thread list intents from ThreadWidget.
-type ThreadHost interface {
-	ActivateThread(th models.ThreadInfo)
-}
 
 // ThreadWidget shows GDB threads.
 //
@@ -37,11 +33,9 @@ type ThreadWidget struct {
 	pressSelected int
 	lastActID     string
 	lastActTime   time.Time
-
-	host ThreadHost
 }
 
-func NewThreadWidget(host ThreadHost) *ThreadWidget {
+func NewThreadWidget() *ThreadWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -52,7 +46,6 @@ func NewThreadWidget(host ThreadHost) *ThreadWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Threads"},
 		viewport:   vp,
 		buf:        buf,
-		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -62,11 +55,6 @@ func NewThreadWidget(host ThreadHost) *ThreadWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
-}
-
-// SetHost replaces the thread host (tests).
-func (w *ThreadWidget) SetHost(host ThreadHost) {
-	w.host = host
 }
 
 // SetAppState wires mark / mark-dim colors for the selection row.
@@ -184,7 +172,7 @@ func (w *ThreadWidget) syncSelectedFromViewport() {
 }
 
 func (w *ThreadWidget) activateSelected() {
-	if w.host == nil || len(w.items) == 0 {
+	if len(w.items) == 0 {
 		return
 	}
 	if w.selected < 0 || w.selected >= len(w.items) {
@@ -197,7 +185,7 @@ func (w *ThreadWidget) activateSelected() {
 	}
 	w.lastActID = th.ID
 	w.lastActTime = now
-	w.host.ActivateThread(th)
+	w.Publish(events.ThreadActivateMsg{Thread: th})
 }
 
 // SetItems replaces the thread list and rebuilds the viewport.

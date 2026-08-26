@@ -45,9 +45,6 @@ func (a *DemoApp) Init() error {
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
-	a.cmdWidget.SetOnExecute(func() {
-		_ = a.cmdWidget.ExecuteParsed()
-	})
 	a.AddWidget(a.cmdWidget)
 
 	if a.ctx.Bus != nil {

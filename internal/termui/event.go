@@ -23,3 +23,18 @@ type CompletionMsg struct {
 }
 
 func (m CompletionMsg) Type() string { return "CompletionMsg" }
+
+// SearchTextChangedMsg is delivered on the UI thread when '/' search cmdline text
+// edits (live preview). searchCtl subscribes and updates the SearchHost pattern.
+type SearchTextChangedMsg struct {
+	Text string
+}
+
+func (m SearchTextChangedMsg) Type() string { return "SearchTextChangedMsg" }
+
+// SearchSubmittedMsg is delivered on the UI thread when Enter commits '/' search.
+type SearchSubmittedMsg struct {
+	Pattern string
+}
+
+func (m SearchSubmittedMsg) Type() string { return "SearchSubmittedMsg" }

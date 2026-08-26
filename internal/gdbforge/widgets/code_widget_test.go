@@ -10,6 +10,8 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -167,15 +169,18 @@ func TestCodeWidgetSyncSelFromViewportClick(t *testing.T) {
 }
 
 func TestCodeWidgetSpaceFiresBreakToggle(t *testing.T) {
+	ctx := testWidgetCtx()
+	var gotPath string
+	var gotLine int
+	platform.Subscribe(ctx.Bus, func(msg events.CodeBreakToggleMsg) {
+		gotPath, gotLine = msg.Path, msg.Line
+	})
+
 	w := NewCodeWidget()
+	w.Ctx = ctx
 	w.path = "/home/yair/gdbforge/hello.c"
 	w.rawLines = []string{"int main() {", "  return 0;", "}"}
 	w.selLine = 2
-	var gotPath string
-	var gotLine int
-	w.SetOnBreakToggle(func(path string, line int) {
-		gotPath, gotLine = path, line
-	})
 
 	ev := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
 	if !w.HandleFocusKey(ev) {

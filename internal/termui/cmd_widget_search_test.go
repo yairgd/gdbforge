@@ -12,8 +12,14 @@ func TestCmdWidgetActivateSearch(t *testing.T) {
 	w := NewCmdWidget(reg)
 	var changes []string
 	var submitted string
-	w.SetOnChange(func(text string) { changes = append(changes, text) })
-	w.SetOnSearchSubmit(func(pattern string) { submitted = pattern })
+	w.SetPostInterrupt(func(ev any) {
+		switch msg := ev.(type) {
+		case SearchTextChangedMsg:
+			changes = append(changes, msg.Text)
+		case SearchSubmittedMsg:
+			submitted = msg.Pattern
+		}
+	})
 
 	w.ActivateSearch()
 	if !w.Active() || w.Kind() != CmdKindSearch || w.Text() != "/" {
@@ -27,7 +33,7 @@ func TestCmdWidgetActivateSearch(t *testing.T) {
 		t.Fatalf("typed search got text=%q pattern=%q", w.Text(), w.Pattern())
 	}
 	if len(changes) != 3 || changes[2] != "/foo" {
-		t.Fatalf("onChange = %#v", changes)
+		t.Fatalf("SearchTextChangedMsg = %#v", changes)
 	}
 
 	// Tab must not run command completion in search mode.
@@ -38,7 +44,7 @@ func TestCmdWidgetActivateSearch(t *testing.T) {
 
 	w.HandleEvent(tcell.NewEventKey(tcell.KeyEnter, 0, 0))
 	if submitted != "foo" {
-		t.Fatalf("onSearchSubmit got %q", submitted)
+		t.Fatalf("SearchSubmittedMsg got %q", submitted)
 	}
 	if w.Active() {
 		t.Fatal("Enter should deactivate")

@@ -104,6 +104,14 @@ func (b *BaseWidget) ResetKeyPartial() {
 	}
 }
 
+// Publish dispatches a UI intent on the app event bus (UI thread only).
+func (b *BaseWidget) Publish(ev any) {
+	if b == nil || b.Ctx.Bus == nil || ev == nil {
+		return
+	}
+	b.Ctx.Bus.Dispatch(ev)
+}
+
 // StatusLabel is the copyable status-band text (default: PaneName).
 func (b *BaseWidget) StatusLabel() string {
 	if b == nil {

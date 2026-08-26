@@ -3,14 +3,10 @@ package widgets
 import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
-
-// FileListHost receives file-list intents from FileListWidget.
-type FileListHost interface {
-	OpenSourcePath(path string)
-}
 
 // FileListWidget shows GDB project source files (j/k selection; Enter opens).
 // Mouse: first click selects (blue mark); second click on the marked row opens.
@@ -22,11 +18,9 @@ type FileListWidget struct {
 
 	paths    []string
 	selected int
-
-	host FileListHost
 }
 
-func NewFileListWidget(host FileListHost) *FileListWidget {
+func NewFileListWidget() *FileListWidget {
 	buf := platform.NewBuffer()
 	vp := termui.NewViewport(buf)
 	vp.SetFollowTail(false)
@@ -37,7 +31,6 @@ func NewFileListWidget(host FileListHost) *FileListWidget {
 		BaseWidget: termui.BaseWidget{PaneName: "Files"},
 		viewport:   vp,
 		buf:        buf,
-		host:       host,
 	}
 	vp.RowStyle = w.rowStyle
 	vp.SetOnSearchJump(func(lineIdx int) {
@@ -47,11 +40,6 @@ func NewFileListWidget(host FileListHost) *FileListWidget {
 	w.initKeyBindings()
 	w.rebuild()
 	return w
-}
-
-// SetHost replaces the file-list host (tests).
-func (w *FileListWidget) SetHost(host FileListHost) {
-	w.host = host
 }
 
 func (w *FileListWidget) SetAppState(st *debugstate.State) {
@@ -139,13 +127,13 @@ func (w *FileListWidget) syncSelectedFromViewport() {
 }
 
 func (w *FileListWidget) openSelected() {
-	if len(w.paths) == 0 || w.host == nil {
+	if len(w.paths) == 0 {
 		return
 	}
 	if w.selected < 0 || w.selected >= len(w.paths) {
 		return
 	}
-	w.host.OpenSourcePath(w.paths[w.selected])
+	w.Publish(events.OpenSourceMsg{Path: w.paths[w.selected]})
 }
 
 // SetItems replaces the file list and rebuilds the viewport.

@@ -3,6 +3,7 @@ package widgets
 import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
@@ -10,6 +11,7 @@ import (
 // The app owns ExecClient and send policy; it paints via Append/HandleEvent
 // and handles OnSubmit / OnInterrupt / OnEOF intents.
 type ExecWidget struct {
+	termui.BaseWidget
 	console   *termui.ConsolePane
 	lineBuf   string
 	pending   bool // last buffer line is an incomplete PTY line
@@ -28,7 +30,7 @@ func NewExecWidget() *ExecWidget {
 	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorGreen)
 	console.SetANSI(true)
 
-	w := &ExecWidget{console: console}
+	w := &ExecWidget{BaseWidget: termui.BaseWidget{PaneName: "Exec"}, console: console}
 	bindConsoleIntents(console, w.handleSubmit, w.handleInterrupt, w.handleEOF, w.handleSuspend)
 	return w
 }
@@ -131,6 +133,10 @@ func (m *ExecWidget) handleEOF() {
 		m.dismiss()
 		return
 	}
+	if m.Ctx.Bus != nil {
+		m.Publish(events.ExecClosedMsg{})
+		return
+	}
 	if m.onClose != nil {
 		m.onClose()
 		return
@@ -159,6 +165,10 @@ func (m *ExecWidget) markEnded() {
 }
 
 func (m *ExecWidget) dismiss() {
+	if m.Ctx.Bus != nil {
+		m.Publish(events.ExecDismissedMsg{})
+		return
+	}
 	if m.onDismiss != nil {
 		m.onDismiss()
 	}

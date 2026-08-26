@@ -160,6 +160,14 @@ func (c *CmdWidget) postCompletion(msg CompletionMsg) {
 }
 
 func (c *CmdWidget) notifyChange() {
+	if c.kind == CmdKindSearch {
+		if c.postInterrupt != nil {
+			c.postInterrupt(SearchTextChangedMsg{Text: c.text})
+		} else if c.onChange != nil {
+			c.onChange(c.text)
+		}
+		return
+	}
 	if c.onChange != nil {
 		c.onChange(c.text)
 	}
@@ -373,7 +381,9 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			c.hist().ResetNavigation()
 			if c.kind == CmdKindSearch {
 				pat := c.Pattern()
-				if c.onSearchSubmit != nil {
+				if c.postInterrupt != nil {
+					c.postInterrupt(SearchSubmittedMsg{Pattern: pat})
+				} else if c.onSearchSubmit != nil {
 					c.onSearchSubmit(pat)
 				}
 			} else {
