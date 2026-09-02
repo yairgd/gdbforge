@@ -52,12 +52,12 @@ func (c *CompositeTerminal) AttachTTY(tty *ptyx.TTY, opts WireTTYOpts) {
 	}
 	c.detach()
 	if tty == nil {
-		WireTTYInput(nil, c.ctl)
+		WireTTYInput(nil, c.ctl, nil)
 		return
 	}
 	c.tty = tty
 	c.cancelPump = WireTTY(tty, c.ctl, opts)
-	WireTTYInput(tty, c.ctl)
+	WireTTYInput(tty, c.ctl, opts.OnSendRaw)
 }
 
 // WriteHostLine injects a host line with the configured prefix.
@@ -107,7 +107,7 @@ func (c *CompositeTerminal) detach() {
 		c.cancelPump = nil
 	}
 	c.tty = nil
-	WireTTYInput(nil, c.ctl)
+	WireTTYInput(nil, c.ctl, nil)
 }
 
 // Close detaches and disposes the emulator.

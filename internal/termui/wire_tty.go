@@ -14,6 +14,8 @@ type WireTTYOpts struct {
 	PostFrame func()
 	// OnData runs for each coalesced chunk before it is written to the emulator.
 	OnData func(data string)
+	// OnSendRaw runs for each keyboard chunk before it is sent to the PTY (Delve CLI side effects).
+	OnSendRaw func(data string)
 	// OnExit runs when the PTY session ends (EOF/EIO or subscribe channel closed).
 	OnExit func()
 	Interval  time.Duration
@@ -124,7 +126,7 @@ func WireTTY(tty *ptyx.TTY, ctl *TerminalController, opts WireTTYOpts) (cancel f
 }
 
 // WireTTYInput connects keyboard bytes from ctl to tty.SendRaw.
-func WireTTYInput(tty *ptyx.TTY, ctl *TerminalController) {
+func WireTTYInput(tty *ptyx.TTY, ctl *TerminalController, onSend func(data string)) {
 	if ctl == nil {
 		return
 	}
@@ -133,6 +135,10 @@ func WireTTYInput(tty *ptyx.TTY, ctl *TerminalController) {
 		return
 	}
 	ctl.SetInputHandler(func(b []byte) error {
-		return tty.SendRaw(string(b))
+		s := string(b)
+		if onSend != nil {
+			onSend(s)
+		}
+		return tty.SendRaw(s)
 	})
 }

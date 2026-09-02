@@ -74,10 +74,18 @@ func (w *GDBWidget) BackspaceInput() {
 	}
 }
 
-func (w *GDBWidget) ApplyCompletion(name string) {
-	if w != nil && name != "" {
-		_ = w.term.Controller().SendString(name)
+func (w *GDBWidget) InputText() string {
+	if w == nil || w.term == nil {
+		return ""
 	}
+	return termui.InputLineText(w.term.Controller())
+}
+
+func (w *GDBWidget) ApplyCompletion(name string) {
+	if w == nil || name == "" {
+		return
+	}
+	termui.ReplaceInputLine(w.term.Controller(), name)
 }
 
 func (w *GDBWidget) SetFocused(focused bool) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -77,6 +78,46 @@ type consoleCtl struct {
 	bridgeGen atomic.Uint64
 	// cliWireGen invalidates CLI WireTTY OnExit after deliberate PTY teardown.
 	cliWireGen atomic.Uint64
+	// dlvLine accumulates Delve CLI input for run/stack side effects (Enter submits).
+	dlvLine dlvLineTap
+}
+
+// dlvLineTap buffers xterm keystrokes until Enter so Delve run/stack commands
+// typed in the GDB pane can arm InferiorRunning and suppressStopUI.
+type dlvLineTap struct {
+	buf []byte
+}
+
+func (t *dlvLineTap) reset() {
+	if t == nil {
+		return
+	}
+	t.buf = t.buf[:0]
+}
+
+func (t *dlvLineTap) feed(raw string, submit func(line string)) {
+	if t == nil || raw == "" {
+		return
+	}
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		switch ch {
+		case '\r', '\n':
+			line := strings.TrimSpace(string(t.buf))
+			t.buf = t.buf[:0]
+			if line != "" && submit != nil {
+				submit(line)
+			}
+		case 0x7f, 0x08: // backspace
+			if len(t.buf) > 0 {
+				t.buf = t.buf[:len(t.buf)-1]
+			}
+		case 0x03, 0x04: // Ctrl-C / Ctrl-D
+			t.buf = t.buf[:0]
+		default:
+			t.buf = append(t.buf, ch)
+		}
+	}
 }
 
 // startGdbConsoleBridge coalesces debugger PTY chunks onto the UI event loop.
@@ -106,7 +147,7 @@ func (c *consoleCtl) wireCLI(w *widgets.GDBWidget, tty *ptyx.TTY, onFrame func()
 		return
 	}
 	gen := c.cliWireGen.Add(1)
-	w.WireCLI(tty, termui.WireTTYOpts{
+	opts := termui.WireTTYOpts{
 		PostFrame: onFrame,
 		OnExit: func() {
 			if c.cliWireGen.Load() != gen {
@@ -114,7 +155,38 @@ func (c *consoleCtl) wireCLI(w *widgets.GDBWidget, tty *ptyx.TTY, onFrame func()
 			}
 			c.postDebuggerExit()
 		},
-	})
+	}
+	if h := c.host; h != nil && h.isDLV() {
+		c.dlvLine.reset()
+		opts.OnSendRaw = c.onDlvTerminalSend
+	}
+	w.WireCLI(tty, opts)
+}
+
+func (c *consoleCtl) onDlvTerminalSend(raw string) {
+	if c == nil || raw == "" {
+		return
+	}
+	c.dlvLine.feed(raw, c.onDlvLineSubmitted)
+}
+
+// onDlvLineSubmitted mirrors the side effects of the old ConsolePane submit path
+// (InferiorRunning + stack-nav suppress) for commands typed in the xterm GDB pane.
+func (c *consoleCtl) onDlvLineSubmitted(cmd string) {
+	h := c.host
+	if h == nil || !h.isDLV() || h.Backend() == nil {
+		return
+	}
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" || h.DlvConfirming() {
+		return
+	}
+	if dlv.IsStackNavCmd(cmd) {
+		h.NoteStackNavDLV(cmd, h.SelectedFrameLevel())
+	}
+	if backend.IsRunCmd(cmd) && h.State() != nil {
+		h.Debug().SetInferiorRunning(true)
+	}
 }
 
 func (c *consoleCtl) postDebuggerExit() {

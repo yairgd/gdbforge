@@ -142,7 +142,8 @@ func (c *completionCtl) applySelected() {
 		return
 	}
 	if c.useGDBInput() {
-		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice("", name)))
+		cur := h.GDBWidget().InputText()
+		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
 		return
 	}
 	if c.useLuaInput() {
@@ -239,10 +240,47 @@ func (c *completionCtl) publishLuaMenu(text string, names []string) {
 	})
 }
 
-// gdbTabComplete runs MI tab completion for the GDB console line.
-// The GDB pane is an xterm emulator; CLI line capture is not wired yet.
+// gdbTabComplete runs completion for the GDB/Delve input line and feeds the same
+// CompletionMsg / wildmenu path used by cmdline trie Completer.
 func (c *completionCtl) gdbTabComplete() {
-	_ = c
+	h := c.host
+	if h == nil || h.GDBWidget() == nil {
+		return
+	}
+	text := h.GDBWidget().InputText()
+	if h.Backend() == nil {
+		return
+	}
+	if h.IsDLVConfirming() {
+		return
+	}
+	res := h.Backend().Complete(h.Session(), h.State(), text)
+
+	// Expand to longest common prefix when it grows the line.
+	if res.Completion != "" && res.Completion != text {
+		h.GDBWidget().ApplyCompletion(res.Completion)
+		text = res.Completion
+	}
+
+	names := res.Matches
+	if len(names) == 0 && res.Completion != "" {
+		names = []string{res.Completion}
+	}
+	c.publishGDBMenu(text, names)
+
+	switch len(names) {
+	case 0:
+		// nothing
+	case 1:
+		// Unique match — no further completions for this word; add a trailing space.
+		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(names[0]))
+		c.clear()
+	default:
+		c.forGDB = true
+		c.forLua = false
+		h.SetMode(platform.ModeCompletion)
+	}
+	h.RequestFrame()
 }
 
 // refreshGDBMenu re-runs -complete for the current GDB input and replaces the
@@ -253,7 +291,35 @@ func (c *completionCtl) gdbTabComplete() {
 // backspace keep refreshing. Leaving on ≤1 made small candidate sets die as
 // soon as the list narrowed (or -complete briefly returned empty).
 func (c *completionCtl) refreshGDBMenu() {
-	c.leaveMode()
+	h := c.host
+	if h == nil || h.GDBWidget() == nil {
+		c.leaveMode()
+		return
+	}
+	text := h.GDBWidget().InputText()
+	if strings.TrimSpace(text) == "" {
+		c.leaveMode()
+		return
+	}
+	if h.Backend() == nil {
+		c.leaveMode()
+		return
+	}
+	if h.IsDLVConfirming() {
+		c.leaveMode()
+		return
+	}
+	res := h.Backend().Complete(h.Session(), h.State(), text)
+	names := res.Matches
+	if len(names) == 0 && res.Completion != "" && res.Completion != text {
+		names = []string{res.Completion}
+	}
+	c.publishGDBMenu(text, names)
+	c.forGDB = true
+	c.forLua = false
+	if h.Mode() != platform.ModeCompletion {
+		h.SetMode(platform.ModeCompletion)
+	}
 }
 
 func (c *completionCtl) publishGDBMenu(text string, names []string) {

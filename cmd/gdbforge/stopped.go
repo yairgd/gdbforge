@@ -50,7 +50,6 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 	if stop == nil {
 		return
 	}
-	wasRunning := a.State() != nil && a.Debug().InferiorRunning()
 	a.Debug().SetInferiorRunning(false)
 	needsRefresh := gdb.StopNeedsUIRefresh(stop)
 	if a.isDLV() {
@@ -68,14 +67,10 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 		return
 	}
 
-	// Delve re-prints "> …" (often without [Breakpoint N]) on every `frame N` /
-	// call-stack select. That is not a new halt — never run stop UI unless the
-	// inferior was actually running (continue/next/step/…).
+	// Delve re-prints "> …" on frame/up/down; noteStackNavDLV arms suppressStopUI
+	// so those prompts do not snap Code back to frame 0.
 	if a.isDLV() {
 		if a.dlv.consumeSuppressStopUI() {
-			return
-		}
-		if !wasRunning {
 			return
 		}
 	}
