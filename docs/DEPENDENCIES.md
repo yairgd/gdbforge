@@ -31,7 +31,7 @@ The repo is split so a future non-debugger TUI app can reuse the same host witho
 | Layer | Packages | Role |
 |-------|----------|------|
 | **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `execcli`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
-| **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*` (incl. `backend`), `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg`, `InferiorOutputMsg`) |
+| **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*` (incl. `backend`), `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg` for MI bridge) |
 | **APP (demo)** | `internal/demo`, `cmd/demo` | Host showcase — same chrome, basic commands; no debugger |
 
 **Composition root:** only `cmd/gdbforge` (and tests) should wire APP packages into FRAMEWORK surfaces.
@@ -199,7 +199,7 @@ gdb     ──X──>  termui | tcell
 
 **Why:** FRAMEWORK must stay reusable for non-debugger apps; backends stay UI-agnostic.
 
-**How data crosses the boundary:** generic `core.PtyOutputMsg` / `ExecOutputMsg`; debugger UI payloads in `internal/gdbforge/events` (`GdbOutputMsg`, `InferiorOutputMsg`); composition in `cmd/gdbforge`.
+**How data crosses the boundary:** generic `core.PtyOutputMsg` / `ExecOutputMsg`; debugger MI payloads in `internal/gdbforge/events` (`GdbOutputMsg`); terminal pane bytes via `WireTTY` → `CompositeTerminal` (GDB/IO/exec); composition in `cmd/gdbforge`.
 
 **Automated check:** `task check-imports` (or `./scripts/check_imports.sh`).
 

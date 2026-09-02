@@ -124,7 +124,7 @@ Compile-time checks in `controllers.go` (`var _ breakHost = (*DebuggerApp)(nil)`
 
 **List widgets** (threads, breakpoints, call stack) still take `*DebuggerApp` as a **widget host** (`BreakpointHost`, `ThreadHost`, …) for activation intents — separate from controller hosts, same idea: narrow surface, app forwards into `*Ctl`.
 
-Consoles use `WireConsole` + `SetOn*` callbacks into `consoleCtl` / `luaCtl`.
+Consoles use `WireCLI` / `WireInferior` / `WireExec` on `CompositeTerminal`. Lua REPL still uses `ConsolePane` + `InputLine`.
 
 | Controller | Domain | Notes |
 |------------|--------|-------|
@@ -132,9 +132,9 @@ Consoles use `WireConsole` + `SetOn*` callbacks into `consoleCtl` / `luaCtl`.
 | `asmCtl` | Assembly list/widget, `preferAsm` / `autoAsm` | `:b asm`, missing-source swap |
 | `bufferCtl` | Per-path `CodeWidget` map | `:b` / `:edit` |
 | `debugInfoCtl` | Threads / call stack | Stop refresh |
-| `consoleCtl` | GDB **or** Delve console | Submit / paint / interrupt |
-| `inferiorIOCtl` | Inferior PTY → IO pane | |
-| `execIOCtl` | `ExecOutputMsg` → ExecWidget | |
+| `consoleCtl` | MI bridge on PTY #2; CLI `WireCLI` lifecycle | Submit / parse / gdb-exit |
+| `inferiorIOCtl` | Inferior or serial console → IO pane | `WireInferior` policy |
+| `execIOCtl` | Legacy `ExecOutputMsg` handler (unused; exec uses `WireExec`) | |
 | `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` / `cmdCtl` | Completion, `/` search, Lua, Delve sync, cmdline | All use host interfaces |
 
 ### Composition layers (`LayoutShell` · `DebugSession`)
@@ -697,31 +697,25 @@ sequenceDiagram
 
 ### Debugger output → UI
 
-GDB output arrives asynchronously on a `ptyx` reader goroutine, is **fan-out** via `Subscribe`, posted into the tcell event loop as `EventInterrupt(GdbOutputMsg)`, and handled by the **app controller** (`gdb_console.go`), which paints the GDB view.
+GDB **MI** output arrives on the MI PTY reader, is fan-out via `Subscribe`, posted as `EventInterrupt(GdbOutputMsg)`, and parsed by `consoleCtl` for app state. **CLI** output paints via `WireCLI` → `CompositeTerminal` (not the MI bridge).
 
 ```mermaid
 sequenceDiagram
     participant GDB as GDB process
-    participant PTY as ptyx reader
-    participant Fan as Subscribe fan-out
-    participant Screen as tcell.Screen
-    participant Ctrl as DebuggerApp controller
-    participant Widget as GDBWidget
-    participant Cons as ConsolePane
+    participant CLI as CLI PTY
+    participant MI as MI PTY
+    participant GDBW as GDBWidget
+    participant Ctrl as consoleCtl
 
-    GDB-->>PTY: MI output chunk
-    PTY->>Fan: PtyOutputMsg
-    Fan->>Screen: PostEvent GdbOutputMsg
-    Screen->>HI: HandleInterrupt
-    HI->>Bus: Dispatch(GdbOutputMsg)
-    Bus->>Ctrl: consoleCtl.onOutput
-    Ctrl->>Widget: PaintMiDisplay / AppendLines
-    Widget->>Cons: Draw on next frame
+    GDB-->>CLI: console bytes
+    CLI-->>GDBW: WireTTY → xterm
+    GDB-->>MI: MI records
+    MI-->>Ctrl: GdbOutputMsg → PushRaw
 ```
 
 *Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
 
-Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (view) ← controller owns MI + `Session`.
+Layering: `CompositeTerminal` + `WireTTY` (GDB/IO/exec panes) ← `*ptyx.TTY`. `ConsolePane` + `InputLine` remains for **Lua REPL** only. Controller owns MI `Session` on PTY #2.
 
 ### End-to-end data flow
 
@@ -863,7 +857,7 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
 
 - **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` PTY / UI events** — `PtyOutputMsg`, `GdbOutputMsg`, `ExecOutputMsg`, `InferiorOutputMsg` (`internal/core/events.go`).
+- **`core` PTY / UI events** — `PtyOutputMsg`, `ExecOutputMsg` (`internal/core/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
 - **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/gdbforge`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termui`).
@@ -871,11 +865,11 @@ See [Platform layer](#platform-layer). Today `internal/core` holds platform prim
 
 ### Infrastructure (`internal/ptyx`, `internal/gdb`, `internal/mcp`)
 
-- **`ptyx.Client`** — process PTY (GDB / exec): exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
-- **`ptyx.TTY`** — bare master/slave PTY for inferior stdin/stdout (`OpenTTY`, `SlaveName`).
-- **`gdb.GDBClient`** — embeds `*ptyx.Client`, owns `*ptyx.TTY`, sends `-inferior-tty-set` at startup.
-- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on `core.Session`.
-- MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb`.
+- **`ptyx.TTY`** — unified PTY type: `Start` (process), `Open` (pair), `AttachPath` (external slave path). Exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
+- **`gdb.GDBClient`** — **3 PTYs**: CLI (`CLITTY`), MI (`core.Session` embed), inferior; bootstrap via `new-ui mi2`.
+- **`termui.CompositeTerminal` + `WireTTY`** — xterm bridge for GDB/IO/exec panes.
+- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on MI `core.Session`.
+- MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb` (MI PTY stream only).
 
 **Dependency rule:** `termui` → `core` ← `gdb` / `ptyx` / `mcp`. Never `gdb` → `termui`.
 
@@ -926,24 +920,20 @@ flowchart TB
 - **`EventBus`** is for typed app notifications that can also be published synchronously (e.g. `BreakpointsChangedMsg`, `CompletionMsg`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#tab-completion-via-eventbus).
 - **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output).
 
-GDB output sequence (unchanged intent, updated dispatch):
+GDB output sequence (MI path only — CLI paints via `WireCLI`):
 
 ```mermaid
 sequenceDiagram
-    participant GDB as GDB process
-    participant PTY as ptyx reader
+    participant GDB as GDB MI PTY
     participant Screen as tcell.Screen
     participant HI as HandleInterrupt
     participant Bus as EventBus
     participant Ctrl as consoleCtl
-    participant Widget as GDBWidget
 
-    GDB-->>PTY: MI output chunk
-    PTY->>Screen: PostInterrupt GdbOutputMsg
+    GDB-->>Screen: PostInterrupt GdbOutputMsg
     Screen->>HI: uiEvents
     HI->>Bus: Dispatch(GdbOutputMsg)
-    Bus->>Ctrl: onOutput
-    Ctrl->>Widget: PaintMiDisplay / AppendLines
+    Bus->>Ctrl: onOutput → PushRaw → app state
 ```
 
 Mode and key-sequence routing happen in **`DebuggerApp.HandleKey`** before widgets see terminal keys — see [INPUT.md](INPUT.md#interaction-modes).
@@ -1000,9 +990,10 @@ classDiagram
 | `Event` | Base domain event — identified by `Type() string` |
 | `CommandEvent` | Events carrying a resolved `CommandID` (e.g. after `:` command entry) |
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
-| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB/exec/MCP) |
-| `GdbOutputMsg` | UI-routed GDB chunk (`EventInterrupt` → GDBWidget) |
-| `InferiorOutputMsg` | UI-routed inferior PTY chunk (`EventInterrupt` → IO / OutputWidget) |
+| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB MI, exec, MCP) |
+| `GdbOutputMsg` | MI PTY chunk routed to `consoleCtl` (`EventInterrupt` → parser) |
+| `ExecOutputMsg` | Legacy exec chunk type in `core`; exec panes use `WireExec` instead |
+| `InferiorOutputMsg` | Legacy type in `gdbforge/events`; inferior I/O uses `WireTTY` |
 
 ### Command IDs and colon commands
 

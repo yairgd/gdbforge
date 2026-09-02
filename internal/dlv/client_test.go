@@ -13,7 +13,7 @@ import (
 
 func TestClientIsSession(t *testing.T) {
 	var _ core.Session = (*Client)(nil)
-	var _ core.Session = (*ptyx.Client)(nil)
+	var _ core.Session = (*ptyx.TTY)(nil)
 }
 
 func TestNewClientRequiresProg(t *testing.T) {

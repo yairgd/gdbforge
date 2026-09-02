@@ -350,22 +350,26 @@ The `:buffer <name>` command displays an application model, not a file. Each `<n
 
 ## Async input from debugger
 
-GDB output is **not keyboard input** but arrives through the same event loop so it stays ordered with keys and draw:
+GDB **MI** output is **not keyboard input** but arrives through the same event loop so it stays ordered with keys and draw:
 
 ```go
-screen.PostEvent(tcell.NewEventInterrupt(msg))  // core.GdbOutputMsg
+screen.PostEvent(tcell.NewEventInterrupt(msg))  // events.GdbOutputMsg (MI PTY only)
 screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 ```
 
-Bridge path:
+**CLI console bytes** paint directly via `WireCLI` → `CompositeTerminal` (no `GdbOutputMsg` for pane display).
 
-1. `ptyx` reader → `Subscribe` fan-out → UI bridge `PostEvent(GdbOutputMsg)` (bridge only calls `PostEvent`, never widgets)
-2. UI thread `HandleInterrupt` / `GDBWidget.HandleEvent` → `GdbInputState.PushRaw`
-3. Each complete MI line → `MiUpdate` → `ConsolePane.AppendLines` / prompt attach
+MI bridge path:
 
-Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+1. MI PTY reader → `Subscribe` fan-out → UI bridge `PostEvent(GdbOutputMsg)` (bridge only calls `PostEvent`, never widgets)
+2. UI thread `HandleInterrupt` → `consoleCtl.onOutput` → `GdbInputState.PushRaw`
+3. Each complete MI line → `MiUpdate` → app state refresh (breakpoints, threads, source, …)
 
-See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB vs inferior), `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
+Inferior / exec bytes use **`WireTTY`** on their PTY masters — not `InferiorOutputMsg` (legacy event type; unused in `cmd/gdbforge`).
+
+Incomplete MI lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+
+See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for 3-PTY layout (CLI + MI + inferior), `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
 
 **Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 

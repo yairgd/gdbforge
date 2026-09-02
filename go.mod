@@ -19,6 +19,7 @@ require (
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
+	github.com/gitpod-io/xterm-go v0.0.0-20260828130427-e62e9648055e // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.design/x/x11 v0.2.0 // indirect

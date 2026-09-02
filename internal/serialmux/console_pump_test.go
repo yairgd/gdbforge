@@ -50,11 +50,11 @@ func TestConsolePumpForwards(t *testing.T) {
 	defer port.Close()
 	defer txR.Close()
 
-	termLeg, err := openLeg()
+	termLeg, err := openTermLeg()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer termLeg.close()
+	defer termLeg.Close()
 
 	m := &Mux{
 		termLeg: termLeg,
@@ -65,7 +65,7 @@ func TestConsolePumpForwards(t *testing.T) {
 	m.wg.Add(1)
 	go m.pumpConsoleToUSB()
 
-	user, err := os.OpenFile(termLeg.slaveName, os.O_RDWR, 0)
+	user, err := os.OpenFile(termLeg.SlaveName(), os.O_RDWR, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,5 @@ func TestConsolePumpForwards(t *testing.T) {
 		t.Fatalf("got %q want %q", got, want)
 	}
 	close(m.stop)
-	user.Close()
-	termLeg.close()
 	m.wg.Wait()
 }

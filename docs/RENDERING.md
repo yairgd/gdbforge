@@ -188,13 +188,17 @@ flowchart TB
 | **PTY / foreign** | `true` | May contain `\x1b[…m` from terminal tools | `Canvas.DrawANSIText` parses SGR → `SetContent` | GDB console, Output (`:b io`), Exec (`:!`) |
 | **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Call Stack, Breakpoints, Help, … |
 
-**Path 1 — data from TTY / PTY**
+**Path 1 — data from TTY / PTY (CompositeTerminal panes)**
 
 - GDB, gcc, make, bash send **already-colored** bytes.
-- App keeps ESC in the buffer (`OutputWidget` preserves `\x1b`).
-- Pane calls `ConsolePane.SetANSI(true)` → `Viewport.ANSI = true`.
-- `DrawANSIText` walks the string: escapes update `tcell.Style`; printable runes become cells.
-- `RowStyle` / `CellStyle` still apply (search highlights, line chrome) via the `decorate` callback.
+- `WireTTY` feeds bytes into the xterm emulator (`CompositeTerminal`).
+- `Paint` copies xterm cells (with SGR already resolved) onto the tcell canvas.
+- Used by GDB console (`:b gdb`), IO (`:b io`), and Exec (`:!`) panes.
+
+**Path 1b — Viewport ANSI panes (Lua REPL, legacy)**
+
+- `ConsolePane.SetANSI(true)` → `Viewport.ANSI = true` → `DrawANSIText` parses SGR in-buffer.
+- Only for line-based REPL scrollback, not the xterm terminal panes above.
 
 **Path 2 — data gdbforge builds (no ANSI in buffer)**
 
@@ -221,7 +225,8 @@ func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.St
 
 - Uses `utf8.DecodeRuneInString` for correct wide-character iteration.
 - Clips at canvas width.
-- **PTY path only:** ANSI/SGR parsing when `Viewport.ANSI` is true (`ConsolePane.SetANSI` / `GDBWidget.SetANSI`) so `make`/gcc colors and Delve listings render correctly. Native panes (`ANSI=false`) use plain UTF-8 + `CellStyle` instead — see [Viewport: two paint paths](#viewport-two-paint-paths-pty-ansi-vs-native-canvas). Copy selection strips ANSI to plain text.
+- **PTY terminal panes:** xterm emulator in `CompositeTerminal` resolves ANSI/SGR before paint — GDB, IO, Exec colors render correctly.
+- **Viewport ANSI path:** SGR parsing when `Viewport.ANSI` is true (`ConsolePane.SetANSI` for Lua REPL). Native panes (`ANSI=false`) use plain UTF-8 + `CellStyle` instead — see [Viewport: two paint paths](#viewport-two-paint-paths-pty-ansi-vs-native-canvas). Copy selection strips ANSI to plain text.
 
 **Gap:** no grapheme cluster / East Asian width handling yet. For debugger source code (mostly ASCII), this is acceptable short-term. Source view will need `runewidth` or equivalent before internationalized code display.
 

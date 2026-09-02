@@ -12,6 +12,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yairgd/gdbforge/internal/luahost"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/serialmux"
 )
 
@@ -124,6 +125,14 @@ func (c *serialCtl) TerminalPTY() (string, error) {
 		return "", err
 	}
 	return m.TerminalPTY(), nil
+}
+
+func (c *serialCtl) TermTTY() (*ptyx.TTY, error) {
+	m, err := c.muxOrErr()
+	if err != nil {
+		return nil, err
+	}
+	return m.TermTTY(), nil
 }
 
 func (c *serialCtl) Send(line string) error {
@@ -274,9 +283,12 @@ func (a *DebuggerApp) OnSerialSwitchCmd(args ...any) {
 			return
 		}
 		pty, _ := a.serial.TerminalPTY()
-		a.printHostLine("serial-switch: console — USB RX/TX on minicom PTY")
+		a.printHostLine("serial-switch: console — USB RX/TX on console PTY (IO pane)")
 		if pty != "" {
-			a.printHostLine("  minicom -D " + pty)
+			a.printHostLine("  console PTY: " + pty)
+		}
+		if err := a.wireSerialConsole(); err != nil {
+			a.printHostLine("serial-switch: wire IO: " + err.Error())
 		}
 	case "status":
 		a.serialSwitchStatus()
@@ -324,6 +336,7 @@ func (a *DebuggerApp) OnTerminalCmd(args ...any) {
 	switch strings.ToLower(tokens[0]) {
 	case "close", "stop":
 		a.serial.Close()
+		a.restoreInferiorIO()
 		a.printHostLine("terminal: closed")
 	case "status":
 		a.terminalStatus()
@@ -365,7 +378,7 @@ func (a *DebuggerApp) terminalStatus() {
 	if gdb != "" {
 		a.printHostLine("  gdb PTY:     " + gdb + "  (reserved)")
 	}
-	a.printHostLine("  gdbforge holds USB; minicom uses console PTY")
+	a.printHostLine("  gdbforge holds USB; serial console uses IO pane")
 }
 
 func (a *DebuggerApp) terminalOpen(device string, baud int) {
@@ -395,8 +408,14 @@ func (a *DebuggerApp) terminalOpen(device string, baud int) {
 		return
 	}
 
-	if err := spawnConsoleTerminal(a, pty, baud); err != nil {
-		a.printHostLine("terminal: spawn: " + err.Error())
+	useExternal := strings.EqualFold(strings.TrimSpace(os.Getenv("GDBFORGE_EXTERNAL_SERIAL")), "1")
+	if useExternal {
+		if err := spawnConsoleTerminal(a, pty, baud); err != nil {
+			a.printHostLine("terminal: spawn: " + err.Error())
+			return
+		}
+	} else if err := a.wireSerialConsole(); err != nil {
+		a.printHostLine("terminal: wire IO: " + err.Error())
 		return
 	}
 
@@ -405,6 +424,11 @@ func (a *DebuggerApp) terminalOpen(device string, baud int) {
 	a.printHostLine("  console PTY: " + pty)
 	if gdb != "" {
 		a.printHostLine("  gdb PTY:     " + gdb + "  (reserved)")
+	}
+	if useExternal {
+		a.printHostLine("  external minicom/screen (GDBFORGE_EXTERNAL_SERIAL=1)")
+	} else {
+		a.printHostLine("  serial console on IO pane (set GDBFORGE_EXTERNAL_SERIAL=1 for minicom)")
 	}
 	a.printHostLine("  :terminal close  — release port")
 }

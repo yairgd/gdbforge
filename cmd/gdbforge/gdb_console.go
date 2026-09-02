@@ -1,11 +1,8 @@
 package main
 
 import (
-	"errors"
-	"io"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -19,6 +16,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/gdbforge/internal/termui"
 )
 
 const (
@@ -80,6 +78,8 @@ type consoleCtl struct {
 	// bridgeGen identifies the active debugger console bridge. Bump before
 	// canceling a subscription so a deliberate restart does not post gdb-exit.
 	bridgeGen atomic.Uint64
+	// cliWireGen invalidates CLI WireTTY OnExit after deliberate PTY teardown.
+	cliWireGen atomic.Uint64
 }
 
 // startGdbConsoleBridge coalesces debugger PTY chunks onto the UI event loop.
@@ -93,14 +93,39 @@ func (c *consoleCtl) onGdbOutput(msg events.GdbOutputMsg) {
 	if h == nil {
 		return
 	}
+	if msg.Err != nil && ptyx.ClosedError(msg.Err) {
+		c.postDebuggerExit()
+		return
+	}
 	h.LogGdbMILines(msg)
 	if h.GDBWidget() != nil {
 		c.handleDebuggerOutputMsg(msg)
 	}
-	if out := h.OutputWidget(); out != nil && msg.Data != "" {
-		out.AppendPty(msg.Data)
-	}
 	// No RequestFrame: Run() already redraws after this interrupt.
+}
+
+func (c *consoleCtl) wireCLI(w *widgets.GDBWidget, tty *ptyx.TTY, onFrame func()) {
+	if c == nil || w == nil || tty == nil {
+		return
+	}
+	gen := c.cliWireGen.Add(1)
+	w.WireCLI(tty, termui.WireTTYOpts{
+		PostFrame: onFrame,
+		OnExit: func() {
+			if c.cliWireGen.Load() != gen {
+				return
+			}
+			c.postDebuggerExit()
+		},
+	})
+}
+
+func (c *consoleCtl) postDebuggerExit() {
+	h := c.host
+	if h == nil || h.Screen() == nil {
+		return
+	}
+	_ = h.Screen().PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 }
 
 func (c *consoleCtl) onAIReply(msg aiReplyMsg) {
@@ -140,6 +165,7 @@ func (c *consoleCtl) startGdbConsoleBridge() {
 // bridge generation, so a deliberate restart does not post gdb-exit.
 func (c *consoleCtl) stopBridge() {
 	c.bridgeGen.Add(1)
+	c.cliWireGen.Add(1)
 	if c.cancelSub != nil {
 		c.cancelSub()
 		c.cancelSub = nil
@@ -446,17 +472,6 @@ func (c *consoleCtl) applyGdbMiUpdate(upd gdb.MiUpdate) {
 	if gb != nil && gb.Client != nil {
 		gb.Client.Quit.Observe(upd)
 	}
-	silent := h.State() != nil && h.Debug().SuppressGdbConsole()
-	confirming := gb != nil && gb.Client != nil && gb.Client.Quit.Confirming()
-	if !silent && h.GDBWidget() != nil {
-		includeTarget := h.State() != nil && h.Debug().GdbTargetPrint()
-		h.GDBWidget().PaintMiDisplay(widgets.MiPaintUpdate{
-			DisplayLines: upd.DisplayLines,
-			TargetLines:  upd.TargetLines,
-			PromptReady:  upd.PromptReady,
-			PromptLine:   upd.PromptLine,
-		}, confirming, includeTarget)
-	}
 	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged, upd.FrameSelected)
 }
 
@@ -468,16 +483,8 @@ func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
 	silent := h.State() != nil && h.Debug().SuppressGdbConsole()
 	h.DlvObserveUpdate(upd)
 	confirming := h.DlvConfirming()
-	if !silent && h.GDBWidget() != nil {
-		h.GDBWidget().PaintDlvDisplay(upd.DisplayLines, upd.PromptReady, upd.PromptLine, confirming)
-		if upd.ConfirmReady {
-			host := upd.ConfirmHost
-			if host == "" {
-				host = h.DlvConfirmHost()
-			}
-			h.GDBWidget().BeginLiveHost(nil, host)
-		}
-	}
+	_ = silent
+	// Delve CLI paints via TerminalWidget; keep parser side effects only.
 	// Defer BP list Query while Delve waits for y/n (Query would steal the answer).
 	bpChanged := upd.BreakpointsChanged
 	if bpChanged && confirming {
@@ -579,21 +586,7 @@ func isDlvRunCmd(cmd string) bool {
 	}
 }
 
-// isExpectedPtyClose reports PTY reader errors that mean the debugger exited
-// (q / quit / process death). Linux often returns EIO ("input/output error")
-// on /dev/ptmx once the slave closes — not a startup or session-setup failure.
+// isExpectedPtyClose reports PTY reader errors that mean the debugger exited.
 func isExpectedPtyClose(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
-		return true
-	}
-	var errno syscall.Errno
-	if errors.As(err, &errno) && errno == syscall.EIO {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "input/output error") ||
-		strings.Contains(msg, "file already closed")
+	return ptyx.ClosedError(err)
 }

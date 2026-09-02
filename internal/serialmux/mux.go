@@ -11,6 +11,7 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/yairgd/gdbforge/internal/devport"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 	"golang.org/x/sys/unix"
 )
 
@@ -111,6 +112,24 @@ func (l *leg) close() {
 	l.master = nil
 }
 
+func openTermLeg() (*ptyx.TTY, error) {
+	tty, err := ptyx.Open()
+	if err != nil {
+		return nil, err
+	}
+	master := tty.Master()
+	if master == nil {
+		tty.Close()
+		return nil, fmt.Errorf("pty: no master")
+	}
+	_ = pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80})
+	if err := configurePTYRaw(master); err != nil {
+		tty.Close()
+		return nil, err
+	}
+	return tty, nil
+}
+
 func writePTY(dst *os.File, b []byte) {
 	if dst == nil || len(b) == 0 {
 		return
@@ -125,7 +144,7 @@ type Mux struct {
 	port   io.ReadWriteCloser
 
 	gdbLeg  *leg
-	termLeg *leg
+	termLeg *ptyx.TTY
 
 	ownerMu sync.RWMutex
 	owner   Owner
@@ -151,7 +170,7 @@ func Open(device string, baud int) (*Mux, error) {
 		release(device)
 		return nil, err
 	}
-	termLeg, err := openLeg()
+	termLeg, err := openTermLeg()
 	if err != nil {
 		_ = port.Close()
 		release(device)
@@ -159,7 +178,7 @@ func Open(device string, baud int) (*Mux, error) {
 	}
 	gdbLeg, err := openLeg()
 	if err != nil {
-		termLeg.close()
+		termLeg.Close()
 		_ = port.Close()
 		release(device)
 		return nil, err
@@ -247,7 +266,15 @@ func (m *Mux) TerminalPTY() string {
 	if m == nil || m.termLeg == nil {
 		return ""
 	}
-	return m.termLeg.slaveName
+	return m.termLeg.SlaveName()
+}
+
+// TermTTY returns the in-app console PTY (UART ↔ IO pane).
+func (m *Mux) TermTTY() *ptyx.TTY {
+	if m == nil {
+		return nil
+	}
+	return m.termLeg
 }
 
 func (m *Mux) Owner() Owner {
@@ -285,7 +312,7 @@ func (m *Mux) routeSerialRx(b []byte) {
 			writePTY(m.gdbLeg.master, b)
 		}
 		if m.termLeg != nil {
-			writePTY(m.termLeg.master, b)
+			_ = m.termLeg.SendRaw(string(b))
 		}
 	case OwnerDebugger:
 		if m.gdbLeg != nil {
@@ -293,7 +320,7 @@ func (m *Mux) routeSerialRx(b []byte) {
 		}
 	default:
 		if m.termLeg != nil {
-			writePTY(m.termLeg.master, b)
+			_ = m.termLeg.SendRaw(string(b))
 		}
 	}
 }
@@ -351,36 +378,22 @@ func (m *Mux) pumpUSBToConsole() {
 
 func (m *Mux) pumpConsoleToUSB() {
 	defer m.wg.Done()
-	if m.termLeg == nil || m.termLeg.master == nil {
+	if m.termLeg == nil || !m.termLeg.HasMaster() {
 		return
 	}
-	buf := make([]byte, 4096)
+	ch, cancel := m.termLeg.Subscribe()
+	defer cancel()
 	for {
 		select {
 		case <-m.stop:
 			return
-		default:
-		}
-		rn, err := m.termLeg.master.Read(buf)
-		if rn > 0 && m.consoleTxAllowed() {
-			_ = m.writeSerial(buf[:rn])
-		}
-		if err != nil {
-			select {
-			case <-m.stop:
+		case msg, ok := <-ch:
+			if !ok {
 				return
-			default:
 			}
-			if errors.Is(err, io.EOF) {
-				continue
+			if msg.Data != "" && m.consoleTxAllowed() {
+				_ = m.writeSerial([]byte(msg.Data))
 			}
-			var errno syscall.Errno
-			if errors.As(err, &errno) && (errno == syscall.EIO || errno == syscall.EBADF) {
-				time.Sleep(20 * time.Millisecond)
-				continue
-			}
-			time.Sleep(20 * time.Millisecond)
-			continue
 		}
 	}
 }
@@ -506,7 +519,7 @@ func (m *Mux) Close() error {
 			err = m.port.Close()
 		}
 		if m.termLeg != nil {
-			m.termLeg.close()
+			m.termLeg.Close()
 		}
 		if m.gdbLeg != nil {
 			m.gdbLeg.close()

@@ -1,394 +1,112 @@
 package widgets
 
 import (
-	"strings"
-	"unicode"
-
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
-	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-const (
-	outputTabWidth      = 8
-	outputScrollbackMax = 8000 // drop oldest under printf flood
-)
+const outputScrollback = 8000
 
-// OutputWidget is the IO console view: inferior stdout with terminal-like
-// \n / \r / \t handling and ANSI colors. Built on ConsolePane (same scrollback
-// path as GDB/Exec). Builtin name: :b io (:b output alias).
-//
-// The app owns the inferior PTY and send policy; this view paints via
-// AppendInferior / AppendPty and fires OnSubmit / OnInterrupt / OnEOF.
+// OutputWidget is the IO console: inferior PTY via xterm plus [lua] host lines.
 type OutputWidget struct {
 	termui.BaseWidget
-	console *termui.ConsolePane
-	buf     *platform.Buffer
-
-	miBuf           string // incomplete record across GDB PTY chunks
-	inferiorRunning bool
-	separateTTY     bool // true when using dedicated inferior PTY
-	cur             []rune
-	col             int
-
-	handlers *ConsoleHandlers
-	setSize   func(rows, cols uint16) error
-
-	lastRows, lastCols int
+	term *termui.CompositeTerminal
 }
 
 func NewOutputWidget() *OutputWidget {
-	console := termui.NewConsolePane("IO")
-	console.Prompt = ""
-	console.SetANSI(true)
-	console.SetInputEnabled(false)
-
-	w := &OutputWidget{
+	return &OutputWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "IO"},
-		console:    console,
-		buf:        console.Buffer(),
+		term:       termui.NewCompositeTerminal(80, 24, outputScrollback),
 	}
-	w.initKeyBindings()
-	w.ensureCurLine()
-	return w
 }
 
-func (w *OutputWidget) initKeyBindings() {
-	vp := w.console.Viewport()
-	// Avoid Up/Down — those belong to InputLine when stdin is enabled.
-	// Home/End scroll the buffer (Ctrl-A / Ctrl-E still move the input caret).
-	w.BindKeyFunc("home", func(args ...any) { vp.ScrollHome() }, "<Home>")
-	w.BindKeyFunc("end", func(args ...any) { vp.ScrollEnd() }, "<End>")
-	w.BindKeyFunc("page-up", func(args ...any) { vp.ScrollPageUp(10) }, "<PgUp>")
-	w.BindKeyFunc("page-down", func(args ...any) { vp.ScrollPageDown(10) }, "<PgDn>")
-	w.BindKeyFunc("clear", func(args ...any) { w.Clear() }, "<C-l>")
+func (w *OutputWidget) WireInferior(tty *ptyx.TTY, onFrame func()) {
+	w.WireInferiorOpts(tty, termui.WireTTYOpts{PostFrame: onFrame})
 }
 
-// WireConsole attaches app handlers and enables stdin on the IO pane.
-// nil disables input and clears handlers (external tty / detach).
+func (w *OutputWidget) WireInferiorOpts(tty *ptyx.TTY, opts termui.WireTTYOpts) {
+	if w == nil || w.term == nil {
+		return
+	}
+	w.term.AttachTTY(tty, opts)
+}
+
+func (w *OutputWidget) Detach() {
+	if w == nil || w.term == nil {
+		return
+	}
+	w.term.Detach()
+}
+
+// WireConsole is deprecated; use WireInferior or Detach.
 func (w *OutputWidget) WireConsole(h *ConsoleHandlers) {
-	w.handlers = h
 	if h == nil {
-		w.separateTTY = false
-		w.console.SetInputEnabled(false)
-		w.console.SetLivePrompt(false)
-		clearConsoleIntents(w.console)
-		return
+		w.Detach()
 	}
-	w.separateTTY = true
-	w.console.SetInputEnabled(true)
-	// Attach typing to the incomplete stdout line (e.g. a live "> "
-	// prompt with no trailing newline) so Enter does not look like it
-	// deleted the text before PTY echo arrives. Do not local-echo on
-	// submit — the inferior TTY usually echoes and that would double.
-	w.console.SetLivePrompt(true)
-	bindConsoleIntents(w.console, w.handleSubmit, w.handleInterrupt, w.handleEOF, w.handleSuspend)
 }
 
-// SetSizeFunc registers a callback used when the pane size changes (PTY winsize).
 func (w *OutputWidget) SetSizeFunc(fn func(rows, cols uint16) error) {
-	w.setSize = fn
+	// Winsize sync handled by CompositeTerminal.Resize on Draw.
+	_ = fn
 }
 
-// AppendPty ingests raw GDB PTY chunks: @" target streams, and (when no
-// separate inferior TTY) raw text while the inferior is running.
-func (w *OutputWidget) AppendPty(data string) {
-	if data == "" {
-		return
-	}
-	w.miBuf += data
-	for {
-		i := strings.IndexByte(w.miBuf, '\n')
-		if i < 0 {
-			break
-		}
-		line := strings.TrimRight(w.miBuf[:i], "\r")
-		w.miBuf = w.miBuf[i+1:]
-		w.consumeRecord(line)
-	}
-	w.console.FollowTailAndScroll()
-}
-
-// AppendInferior paints raw bytes from the program's dedicated PTY.
 func (w *OutputWidget) AppendInferior(data string) {
-	if data == "" {
+	if w == nil || data == "" {
 		return
 	}
-	w.writeTarget(data)
-	if w.buf != nil {
-		w.buf.TrimTo(outputScrollbackMax)
-	}
-	w.console.FollowTailAndScroll()
+	w.term.WriteRaw(data)
 }
 
-// AppendHostLine appends a host/script log line (e.g. gdbforge.print) with a [lua] prefix.
 func (w *OutputWidget) AppendHostLine(s string) {
-	s = strings.TrimRight(s, "\r\n")
-	if s == "" {
+	if w == nil {
 		return
 	}
-	w.writeTarget("[lua] " + s + "\n")
-	if w.buf != nil {
-		w.buf.TrimTo(outputScrollbackMax)
-	}
-	w.console.FollowTailAndScroll()
+	w.term.WriteHostLine(s)
 }
 
-// AppendRaw is an alias for AppendPty (GDB PTY path).
-func (w *OutputWidget) AppendRaw(data string) {
-	w.AppendPty(data)
-}
-
-func (w *OutputWidget) consumeRecord(line string) {
-	trim := strings.TrimSpace(line)
-
-	if isRunningRecord(trim) {
-		w.inferiorRunning = true
-		return
-	}
-	if isStoppedRecord(trim) {
-		// Only end capture when the process exits; keep accepting stdout across
-		// step/next stops so lines are not dropped, and ^running must not clear.
-		if strings.Contains(trim, "exited") {
-			w.inferiorRunning = false
-		}
-		return
-	}
-
-	if text, ok := decodeTargetStreamLine(trim); ok {
-		// With a dedicated inferior PTY, IO comes from AppendInferior only.
-		// MI @"..." is legacy — optional paint lives in the GDB console
-		// (:set gdbtargetprint), not here.
-		if !w.separateTTY {
-			w.writeTarget(text)
-		}
-		return
-	}
-
-	if isMILine(trim) {
-		return
-	}
-
-	// Raw inferior text on the GDB PTY (shared-TTY fallback only).
-	if !w.separateTTY && w.inferiorRunning {
-		w.writeTarget(line + "\n")
-	}
-}
-
-func isRunningRecord(line string) bool {
-	return strings.HasPrefix(line, "^running") ||
-		strings.HasPrefix(line, "*running") ||
-		hasTokenPrefix(line, "^running") ||
-		hasTokenPrefix(line, "*running")
-}
-
-func isStoppedRecord(line string) bool {
-	return strings.HasPrefix(line, "*stopped") || hasTokenPrefix(line, "*stopped")
-}
-
-func hasTokenPrefix(line, kind string) bool {
-	i := 0
-	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
-		i++
-	}
-	return i > 0 && strings.HasPrefix(line[i:], kind)
-}
-
-func isMILine(line string) bool {
-	if line == "" || mitext.IsMIPromptRecord(line) {
-		return true
-	}
-	if strings.HasPrefix(line, ">>>") {
-		return true
-	}
-	switch line[0] {
-	case '~', '@', '&', '^', '*', '=', '+':
-		return true
-	}
-	return hasTokenPrefix(line, "^") || hasTokenPrefix(line, "*") || hasTokenPrefix(line, "=") || hasTokenPrefix(line, "+")
-}
-
-func decodeTargetStreamLine(line string) (string, bool) {
-	if !strings.HasPrefix(line, "@\"") || !strings.HasSuffix(line, "\"") || len(line) < 3 {
-		return "", false
-	}
-	return mitext.DecodeMIString(line[2 : len(line)-1]), true
-}
-
-func (w *OutputWidget) writeTarget(text string) {
-	for _, r := range text {
-		switch r {
-		case '\n':
-			w.commitLine()
-		case '\r':
-			w.col = 0
-		case '\t':
-			spaces := outputTabWidth - (w.col % outputTabWidth)
-			if spaces == 0 {
-				spaces = outputTabWidth
-			}
-			for i := 0; i < spaces; i++ {
-				w.putRune(' ')
-			}
-		case '\x1b':
-			// Keep ESC so Viewport ANSI mode can colorize SGR sequences.
-			w.putRune(r)
-		default:
-			if unicode.IsControl(r) {
-				continue
-			}
-			w.putRune(r)
-		}
-	}
-	w.syncCurLine()
-}
-
-func (w *OutputWidget) putRune(r rune) {
-	w.ensureCurLine()
-	for len(w.cur) < w.col {
-		w.cur = append(w.cur, ' ')
-	}
-	if w.col < len(w.cur) {
-		w.cur[w.col] = r
-	} else {
-		w.cur = append(w.cur, r)
-	}
-	w.col++
-}
-
-func (w *OutputWidget) ensureCurLine() {
-	if w.buf.NumLines() == 0 {
-		w.buf.AppendLine("")
-	}
-}
-
-func (w *OutputWidget) syncCurLine() {
-	w.ensureCurLine()
-	idx := w.buf.NumLines() - 1
-	w.buf.SetLine(idx, string(w.cur))
-}
-
-func (w *OutputWidget) commitLine() {
-	w.syncCurLine()
-	w.cur = w.cur[:0]
-	w.col = 0
-	w.buf.AppendLine("")
-}
+func (w *OutputWidget) AppendPty(data string) { w.AppendInferior(data) }
 
 func (w *OutputWidget) Clear() {
-	w.miBuf = ""
-	w.cur = w.cur[:0]
-	w.col = 0
-	w.console.Clear()
-	w.ensureCurLine()
-	w.syncCurLine()
-	if w.console.InputEnabled() {
-		w.console.SetLivePrompt(true)
+	if w == nil {
+		return
 	}
-	w.console.ForceFollowTailAndScroll()
+	w.term.Close()
+	w.term = termui.NewCompositeTerminal(80, 24, outputScrollback)
 }
 
-func (w *OutputWidget) handleSubmit(raw string) {
-	line := raw
-	if line == "" {
-		line = w.console.Input().LastHistory()
+func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) { _ = io }
+
+func (w *OutputWidget) Draw(c termui.Canvas) {
+	if w == nil {
+		return
 	}
-	if line != "" {
-		w.console.Input().PushHistory(line)
-	}
-	if w.handlers != nil && w.handlers.Submit != nil {
-		w.handlers.Submit(line)
-	}
-	w.console.Input().Clear()
-	// Keep attach-to-tail so the next line types after the program prompt.
-	if w.console.InputEnabled() {
-		w.console.SetLivePrompt(true)
-	}
-	w.console.ForceFollowTailAndScroll()
+	w.term.Paint(c, w.Focused())
 }
 
-func (w *OutputWidget) handleInterrupt() {
-	if w.handlers != nil && w.handlers.Interrupt != nil {
-		w.handlers.Interrupt()
-	}
+func (w *OutputWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	w.BaseWidget.DrawStatusLine(c, active)
 }
 
-func (w *OutputWidget) handleEOF() {
-	if w.handlers != nil && w.handlers.EOF != nil {
-		w.handlers.EOF()
+func (w *OutputWidget) HandleEvent(ev tcell.Event) {
+	if w == nil {
+		return
 	}
-}
-
-func (w *OutputWidget) handleSuspend() {
-	if w.handlers != nil && w.handlers.Suspend != nil {
-		w.handlers.Suspend()
+	if e, ok := ev.(*tcell.EventKey); ok {
+		w.term.HandleKey(e)
 	}
 }
 
 func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
-	return w.HandleBoundKey(ev)
+	if w == nil {
+		return false
+	}
+	return w.term.HandleKey(ev)
 }
 
-func (w *OutputWidget) HandleEvent(ev tcell.Event) {
-	switch e := ev.(type) {
-	case *tcell.EventInterrupt:
-		if data, ok := e.Data().(events.InferiorOutputMsg); ok && data.Data != "" {
-			w.AppendInferior(data.Data)
-		}
-		return
-	case *tcell.EventKey:
-		if w.HandleBoundKey(e) {
-			return
-		}
-	}
-	w.console.HandleEvent(ev)
-}
+func (w *OutputWidget) Viewport() *termui.Viewport { return nil }
 
 func (w *OutputWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.console.SetFocused(focused)
-}
-
-func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
-	w.console.SetClipboard(io)
-}
-
-func (w *OutputWidget) Draw(c termui.Canvas) {
-	width, height := c.W(), c.H()
-	if w.setSize != nil && width > 0 && height > 1 {
-		rows := height - 1
-		cols := width
-		if rows != w.lastRows || cols != w.lastCols {
-			w.lastRows = rows
-			w.lastCols = cols
-			_ = w.setSize(uint16(rows), uint16(cols))
-		}
-	}
-	w.console.Draw(c)
-}
-
-func (w *OutputWidget) Viewport() *termui.Viewport {
-	if w == nil || w.console == nil {
-		return nil
-	}
-	return w.console.Viewport()
-}
-
-func (w *OutputWidget) DrawStatusLine(c termui.Canvas, active bool) {
-	w.console.DrawStatusLine(c, active)
-}
-
-func (w *OutputWidget) LinesForTest() []string {
-	n := w.buf.NumLines()
-	out := make([]string, 0, n)
-	for i := 0; i < n; i++ {
-		out = append(out, w.buf.Line(i))
-	}
-	if len(out) > 0 && out[len(out)-1] == "" && len(w.cur) == 0 {
-		out = out[:len(out)-1]
-	}
-	return out
 }

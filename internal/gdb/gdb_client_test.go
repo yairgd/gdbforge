@@ -75,7 +75,7 @@ func TestConcurrentSendSerialized(t *testing.T) {
 
 func TestGDBClientIsSession(t *testing.T) {
 	var _ core.Session = (*GDBClient)(nil)
-	var _ core.Session = (*ptyx.Client)(nil)
+	var _ core.Session = (*ptyx.TTY)(nil)
 }
 
 func TestHasInitScript(t *testing.T) {

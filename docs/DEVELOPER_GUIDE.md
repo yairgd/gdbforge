@@ -129,7 +129,8 @@ Async path:
 | **BreakGutter** | Per-line/addr BP view (`Numbers`, `Enabled`, `Condition`) for Code/Asm |
 | **autoAsm** | Swap location leaf to Assembly when source is missing; reclaim Code when it returns |
 | **InputLine** | Shared readline editor (text, cursor, history) |
-| **ConsolePane** | Shared natural REPL shell (scrollback + walking prompt) |
+| **ConsolePane** | Lua REPL shell (scrollback + walking prompt) — not GDB/IO/exec |
+| **CompositeTerminal** | xterm emulator + `WireTTY` for GDB / IO / exec panes |
 
 ---
 
@@ -314,22 +315,27 @@ Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](R
 
 ## GDB output path
 
+**Two paths after the 3-PTY refactor:**
+
+1. **CLI console (`:b gdb`)** — PTY #1 bytes → `WireCLI` → `CompositeTerminal` (xterm paint). No MI parser.
+2. **MI control (PTY #2)** — `Subscribe` → `GdbOutputMsg` → `consoleCtl` → `GdbInputState.PushRaw` → app state (breakpoints, threads, etc.).
+
 ```mermaid
 flowchart LR
-    PTY["ptyx reader"]
-    Fan["Subscribe fan-out"]
-    Bridge["UI bridge · PostEvent"]
-    Widget["GDBWidget.HandleEvent"]
+    CLI["CLI PTY #1"]
+    MI["MI PTY #2"]
+    Wire["WireCLI"]
+    Term["CompositeTerminal"]
+    Bridge["GdbOutputMsg bridge"]
     State["GdbInputState.PushRaw"]
-    Upd["MiUpdate"]
-    Cons["ConsolePane.AppendLines"]
 
-    PTY --> Fan --> Bridge --> Widget --> State --> Upd --> Cons
+    CLI --> Wire --> Term
+    MI --> Bridge --> State
 ```
 
-**Do not** read from a GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
+**Do not** read from a PTY in `Draw`. **Do not** call widget methods from reader or bridge goroutines — only `PostEvent`.
 
-`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. Console editing/layout lives in `InputLine` / `ConsolePane`; the app controller owns MI and `Session.Send`.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. GDB pane keys are raw tty bytes via `CompositeTerminal.HandleKey`; the app controller owns MI `Session.Send` on PTY #2.
 
 In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capture). See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md).
 

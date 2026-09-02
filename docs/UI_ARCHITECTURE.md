@@ -82,8 +82,8 @@ classDiagram
     }
 
     class GDBWidget {
-        +ConsolePane
-        +SetOnSubmit / Paint APIs
+        +CompositeTerminal
+        +WireCLI
     }
 
     class CmdWidget {
@@ -107,21 +107,23 @@ classDiagram
 
 **`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Widgets embed `BaseWidget` and set `PaneName` in their constructor, or override `DrawStatusLine` for custom behavior. Container widgets (`TabWidget`, `CmdWidget`) implement a no-op `DrawStatusLine`.
 
-**REPL building blocks** (for native terminal consoles, not chat UIs):
+**Terminal building blocks:**
 
 | Type | Role |
 |------|------|
+| `CompositeTerminal` | xterm emulator + key trie; `AttachTTY` / `WireTTY` |
+| `WireTTY` | PTY bytes ↔ xterm; shared by GDB / IO / exec panes |
 | `InputLine` | Single-line editor + readline history |
-| `ConsolePane` | Scrollback + walking/live prompt + `InputLine`; paste into input |
-| `GDBWidget` | View-only debugger console; app owns `Backend` (`SetOnSubmit` / paint) |
+| `ConsolePane` | Lua REPL only — scrollback + walking prompt + `InputLine` |
+| `GDBWidget` | GDB/Delve terminal view; `WireCLI` on CLI PTY |
 | `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space → break toggle; gutters from `BreakGutter` |
 | `AssemblyWidget` | Disassembly Viewport; addr breakpoints; `AssemblyHost`; `:b asm` |
 | `BreakpointWidget` | Builtin `:b breakpoint`; `SetItems` + `BreakpointHost` (activate / toggle / delete / FocusCode) |
 | `ThreadWidget` | Builtin `:b threads`; `SetItems` + `ThreadHost` |
 | `CallStackWidget` | Builtin `:b callstack`; `SetItems` + `CallStackHost` |
 | `FileListWidget` | `:edit` picker; `FileListHost` |
-| `OutputWidget` | Builtin `:b io`; paint inferior I/O; app owns PTY Send/Subscribe |
-| `ExecWidget` | View-only exec console; app owns `ExecClient` (`:!bash`) |
+| `OutputWidget` | Builtin `:b io`; `WireInferior` on inferior or serial console PTY |
+| `ExecWidget` | `:!` terminal view; `WireExec` on exec PTY |
 
 **Built-in views** (`:b about`, `:b gdb`, `:b logger`, `:b breakpoint`, `:b threads`, `:b callstack`, `:b io` / `:b output`, `:b exec`, `:b asm`, …), **per-file CodeWidgets** (`:edit file` / `:b file`), and **`:!cmd`** swaps use sticky-GDB-aware placement (`Workspace`), which pushes the outgoing view onto a jump list. `<C-o>` (`JumpBack`) restores it. Details: [EXEC_SHELL.md](EXEC_SHELL.md). Breakpoint sync: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
@@ -556,15 +558,16 @@ sequenceDiagram
 
 | Widget | File | Status |
 |--------|------|--------|
-| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | GDB console view; app owns session / MI |
+| `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | GDB terminal; `CompositeTerminal` + `WireCLI` |
 | `CodeWidget` | `internal/gdbforge/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space → break intent; gutters from model |
 | `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; `SetItems` + toggle/delete intents |
 | `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; `SetItems` from app `ThreadList` after stop |
 | `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; `SetItems` from app `CallStack` after stop |
-| `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; paint inferior I/O; app owns PTY |
-| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | `:!` console view; app owns `ExecClient` |
+| `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; `CompositeTerminal` + `WireInferior` |
+| `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | `:!` terminal; `CompositeTerminal` + `WireExec` |
 | `AboutWidget` | `internal/gdbforge/widgets/about_widget.go` | Built-in About page; shown via `:b about` |
-| `ConsolePane` | `internal/termui/console_pane.go` | Shared REPL shell (scrollback + walking prompt + InputLine) |
+| `CompositeTerminal` | `internal/termui/composite_terminal.go` | xterm emulator + key trie + `WireTTY` attach |
+| `ConsolePane` | `internal/termui/console_pane.go` | Lua REPL shell (scrollback + walking prompt + InputLine) |
 | `InputLine` | `internal/termui/input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `internal/termui/logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
 | `CmdWidget` | `internal/termui/cmd_widget.go` | Functional — Vim-style `:` / `/` cmdline mux (`CmdKindCommand` / `CmdKindSearch`), tab complete for `:`, emits execute / search callbacks |

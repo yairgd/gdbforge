@@ -1,394 +1,136 @@
 package widgets
 
 import (
-	"strings"
-
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
+
+	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// GDBWidget is a display-only GDB console view (ConsolePane chrome).
-// The app owns GDBClient, MI parsing, and quit/send policy; it paints via
-// these methods and handles OnSubmit / OnInterrupt / OnEOF intents.
+const gdbScrollback = 8000
+
+// GDBWidget is the debugger CLI terminal (:b gdb).
 type GDBWidget struct {
-	console          *termui.ConsolePane
-	promptStyleToken string // "(gdb)" or "(dlv)" for yellow line styling
-	handlers         *ConsoleHandlers
+	termui.BaseWidget
+	term *termui.CompositeTerminal
 }
 
-// NewGDBWidget builds an empty GDB console view. Wire intents with WireConsole.
 func NewGDBWidget() *GDBWidget {
-	console := termui.NewConsolePane("GDB")
-	// No standing Prompt: Draw must not invent "(gdb)" while waiting.
-	console.Prompt = ""
-	console.PromptStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	w := &GDBWidget{console: console, promptStyleToken: mitext.MIPromptToken}
-	console.LineStyle = w.lineStyle
-	return w
+	return &GDBWidget{
+		BaseWidget: termui.BaseWidget{PaneName: "GDB"},
+		term: termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, ""),
+	}
 }
 
-// SetPromptStyleToken sets which prompt token gets yellow styling ("(gdb)" / "(dlv)").
-func (m *GDBWidget) SetPromptStyleToken(token string) {
-	if m == nil {
+func (w *GDBWidget) WireCLI(tty *ptyx.TTY, opts termui.WireTTYOpts) {
+	if w == nil || w.term == nil {
 		return
 	}
-	if token == "" {
-		token = mitext.MIPromptToken
-	}
-	m.promptStyleToken = token
+	w.term.AttachTTY(tty, opts)
 }
 
-// SetANSI enables ANSI/SGR color rendering in the console scrollback
-// (make/gcc diagnostics, Delve source listings, …).
-func (m *GDBWidget) SetANSI(on bool) {
-	if m == nil || m.console == nil {
+// WireConsole is deprecated; keys go through the terminal emulator.
+func (w *GDBWidget) WireConsole(h *ConsoleHandlers) { _ = h }
+
+func (w *GDBWidget) SetPromptStyleToken(token string) { _ = token }
+func (w *GDBWidget) SetANSI(on bool)                  { _ = on }
+func (w *GDBWidget) SetClipboard(io termui.ClipboardIO) { _ = io }
+
+func (w *GDBWidget) WriteBoot(data string) {
+	if w != nil && data != "" {
+		w.term.WriteRaw(data)
+	}
+}
+
+func (w *GDBWidget) AppendLines(lines []string) {
+	for _, line := range lines {
+		w.AppendHostLine(line)
+	}
+}
+
+func (w *GDBWidget) AppendHostLine(s string) {
+	if w == nil || s == "" {
 		return
 	}
-	m.console.SetANSI(on)
+	w.term.WriteRaw(s + "\r\n")
 }
 
-func (m *GDBWidget) lineStyle(line string) tcell.Style {
-	st := tcell.StyleDefault
-	if strings.HasPrefix(line, ">>>") {
-		return st.Foreground(tcell.ColorTeal).Bold(true)
+func (w *GDBWidget) AppendTargetText(text string) {
+	if w != nil && text != "" {
+		w.term.WriteRaw(text)
 	}
-	// Ctrl-C feedback from GDB log stream (&"Quit" / &"❌️ Quit"), not UI text.
-	if mitext.IsCtrlCQuitLog(line) {
-		return st.Foreground(tcell.ColorRed).Bold(true)
-	}
-	tok := m.promptStyleToken
-	if tok == "" {
-		tok = mitext.MIPromptToken
-	}
-	if strings.HasPrefix(line, tok) {
-		return st.Foreground(tcell.ColorYellow)
-	}
-	return st
 }
 
-// WireConsole attaches app handlers to this pane. nil clears handlers.
-func (m *GDBWidget) WireConsole(h *ConsoleHandlers) {
-	if m == nil || m.console == nil {
+func (w *GDBWidget) Clear() {
+	if w == nil {
 		return
 	}
-	m.handlers = h
-	if h == nil {
-		clearConsoleIntents(m.console)
+	w.term.Close()
+	w.term = termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, "")
+}
+
+func (w *GDBWidget) InsertInputRune(r rune) {
+	if w != nil {
+		_ = w.term.Controller().SendInput([]byte(string(r)))
+	}
+}
+
+func (w *GDBWidget) BackspaceInput() {
+	if w != nil {
+		_ = w.term.Controller().SendInput([]byte("\x7f"))
+	}
+}
+
+func (w *GDBWidget) InputText() string            { return "" }
+func (w *GDBWidget) LastHistory() string          { return "" }
+func (w *GDBWidget) PushHistory(cmd string)         { _ = cmd }
+func (w *GDBWidget) EchoSubmit(cmd string)          { _ = cmd }
+func (w *GDBWidget) ClearInput()                    {}
+func (w *GDBWidget) ApplyCompletion(name string) {
+	if w != nil && name != "" {
+		_ = w.term.Controller().SendString(name)
+	}
+}
+func (w *GDBWidget) FollowTailAndScroll()       {}
+func (w *GDBWidget) ForceFollowTailAndScroll()  {}
+func (w *GDBWidget) LivePrompt() bool           { return false }
+func (w *GDBWidget) SetLivePrompt(on bool)      { _ = on }
+func (w *GDBWidget) BeginLiveHost(_ []string, _ string) {}
+func (w *GDBWidget) AttachGdbPrompt(_ string)           {}
+func (w *GDBWidget) StripTrailingGdbPrompt()              {}
+func (w *GDBWidget) PaintMiDisplay(_ MiPaintUpdate, _, _ bool) {
+}
+func (w *GDBWidget) PaintDlvDisplay(_ []string, _ bool, _ string, _ bool) {}
+
+func (w *GDBWidget) SetFocused(focused bool) {
+	w.BaseWidget.SetFocused(focused)
+}
+
+func (w *GDBWidget) Draw(c termui.Canvas) {
+	if w == nil {
 		return
 	}
-	bindConsoleIntents(m.console, m.handleSubmit, m.handleInterrupt, m.handleEOF, m.handleSuspend)
+	w.term.Paint(c, w.Focused())
 }
 
-func (m *GDBWidget) handleSubmit(cmd string) {
-	if m.handlers != nil && m.handlers.Submit != nil {
-		m.handlers.Submit(cmd)
-	}
+func (w *GDBWidget) Viewport() *termui.Viewport { return nil }
+
+func (w *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
+	w.BaseWidget.DrawStatusLine(c, active)
 }
 
-func (m *GDBWidget) handleInterrupt() {
-	if m.handlers != nil && m.handlers.Interrupt != nil {
-		m.handlers.Interrupt()
-	}
-}
-
-func (m *GDBWidget) handleEOF() {
-	if m.handlers != nil && m.handlers.EOF != nil {
-		m.handlers.EOF()
-	}
-}
-
-func (m *GDBWidget) handleSuspend() {
-	if m.handlers != nil && m.handlers.Suspend != nil {
-		m.handlers.Suspend()
-	}
-}
-
-func (m *GDBWidget) SetClipboard(io termui.ClipboardIO) {
-	if m == nil || m.console == nil {
+func (w *GDBWidget) HandleEvent(ev tcell.Event) {
+	if w == nil {
 		return
 	}
-	m.console.SetClipboard(io)
-}
-
-func (m *GDBWidget) AppendLines(lines []string) {
-	if m == nil || m.console == nil || len(lines) == 0 {
-		return
+	if e, ok := ev.(*tcell.EventKey); ok {
+		w.term.HandleKey(e)
 	}
-	m.console.AppendLines(lines)
-	m.console.FollowTailAndScroll()
 }
 
-// AppendTargetText paints raw inferior stdout (legacy gdbtargetprint mode).
-func (m *GDBWidget) AppendTargetText(text string) {
-	if m == nil || m.console == nil || text == "" {
-		return
-	}
-	m.console.AppendText(text)
-	m.console.FollowTailAndScroll()
-}
-
-func (m *GDBWidget) Clear() {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.Clear()
-}
-
-// InputText returns the current input-line contents.
-func (m *GDBWidget) InputText() string {
-	if m == nil || m.console == nil || m.console.Input() == nil {
-		return ""
-	}
-	return m.console.Input().Text()
-}
-
-// LastHistory returns the previous submitted command (empty Enter repeat).
-func (m *GDBWidget) LastHistory() string {
-	if m == nil || m.console == nil || m.console.Input() == nil {
-		return ""
-	}
-	return m.console.Input().LastHistory()
-}
-
-// PushHistory records a submitted command in the input history.
-func (m *GDBWidget) PushHistory(cmd string) {
-	if m == nil || m.console == nil || m.console.Input() == nil || cmd == "" {
-		return
-	}
-	m.console.Input().PushHistory(cmd)
-}
-
-// EchoSubmit paints prompt+cmd into scrollback (native REPL echo).
-func (m *GDBWidget) EchoSubmit(cmd string) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.EchoSubmit(cmd)
-}
-
-// ClearInput clears the editable input line.
-func (m *GDBWidget) ClearInput() {
-	if m == nil || m.console == nil || m.console.Input() == nil {
-		return
-	}
-	m.console.Input().Clear()
-}
-
-// ApplyCompletion replaces the input line with name.
-func (m *GDBWidget) ApplyCompletion(name string) {
-	if m == nil || m.console == nil || m.console.Input() == nil || name == "" {
-		return
-	}
-	m.console.Input().SetText(name)
-	m.console.ForceFollowTailAndScroll()
-}
-
-// InsertInputRune types into the input line (e.g. while wildmenu is open).
-func (m *GDBWidget) InsertInputRune(r rune) {
-	if m == nil || m.console == nil || m.console.Input() == nil {
-		return
-	}
-	m.console.Input().InsertRune(r)
-	m.console.ForceFollowTailAndScroll()
-}
-
-// BackspaceInput deletes one character from the input line.
-func (m *GDBWidget) BackspaceInput() {
-	if m == nil || m.console == nil || m.console.Input() == nil {
-		return
-	}
-	m.console.Input().Backspace()
-	m.console.ForceFollowTailAndScroll()
-}
-
-func (m *GDBWidget) SetFocused(focused bool) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.SetFocused(focused)
-}
-
-func (m *GDBWidget) Draw(c termui.Canvas) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.Draw(c)
-}
-
-func (m *GDBWidget) Viewport() *termui.Viewport {
-	if m == nil || m.console == nil {
-		return nil
-	}
-	return m.console.Viewport()
-}
-
-func (m *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.DrawStatusLine(c, active)
-}
-
-func (m *GDBWidget) FollowTailAndScroll() {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.FollowTailAndScroll()
-}
-
-// ForceFollowTailAndScroll re-pins the console after submit / Clear.
-func (m *GDBWidget) ForceFollowTailAndScroll() {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.ForceFollowTailAndScroll()
-}
-
-func (m *GDBWidget) LivePrompt() bool {
-	if m == nil || m.console == nil {
+func (w *GDBWidget) HandleFocusKey(ev *tcell.EventKey) bool {
+	if w == nil {
 		return false
 	}
-	return m.console.LivePrompt()
-}
-
-func (m *GDBWidget) SetLivePrompt(on bool) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.SetLivePrompt(on)
-}
-
-// BeginLiveHost appends scrollback lines then a live host line for typing.
-// Text comes from the controller / gdb session (e.g. QuitConfirmLines); the
-// view does not invent GDB CLI wording.
-func (m *GDBWidget) BeginLiveHost(scrollback []string, host string) {
-	if m == nil || m.console == nil {
-		return
-	}
-	if len(scrollback) > 0 {
-		m.console.AppendLines(scrollback)
-	}
-	if host != "" {
-		if buf := m.console.Buffer(); buf != nil {
-			buf.AppendLine(host)
-		}
-		m.console.SetLivePrompt(true)
-	}
-	m.ClearInput()
-	m.console.ForceFollowTailAndScroll()
-}
-
-// AttachGdbPrompt paints GDB's MI prompt record as the live input host.
-func (m *GDBWidget) AttachGdbPrompt(fromGDB string) {
-	if m == nil || m.console == nil {
-		return
-	}
-	host := mitext.LivePromptHost(fromGDB)
-	if host == "" {
-		return
-	}
-	buf := m.console.Buffer()
-	if buf == nil {
-		return
-	}
-	n := buf.NumLines()
-	if n > 0 {
-		last := buf.Line(n - 1)
-		bare := mitext.IsBareMIPromptHost(last) || strings.TrimSpace(last) == strings.TrimSpace(fromGDB)
-		if bare {
-			buf.SetLine(n-1, host)
-			m.console.SetLivePrompt(true)
-			return
-		}
-	}
-	buf.AppendLine(host)
-	m.console.SetLivePrompt(true)
-}
-
-// StripTrailingGdbPrompt drops a trailing bare MI/Delve prompt host before new output.
-func (m *GDBWidget) StripTrailingGdbPrompt() {
-	if m == nil || m.console == nil {
-		return
-	}
-	buf := m.console.Buffer()
-	if buf == nil {
-		return
-	}
-	tok := m.promptStyleToken
-	if tok == "" {
-		tok = mitext.MIPromptToken
-	}
-	for buf.NumLines() > 0 {
-		last := buf.Line(buf.NumLines() - 1)
-		bare := mitext.IsBareMIPromptHost(last) || strings.TrimSpace(last) == tok
-		if strings.TrimSpace(last) != "" && !bare {
-			return
-		}
-		buf.RemoveLine(buf.NumLines() - 1)
-		m.console.SetLivePrompt(false)
-		if bare {
-			return
-		}
-	}
-}
-
-// PaintMiDisplay applies DisplayLines / Ctrl-C quit logs from an MI update.
-// confirming suppresses attaching a new (gdb) host (quit prompt owns the line).
-func (m *GDBWidget) PaintMiDisplay(upd MiPaintUpdate, confirming, includeTarget bool) {
-	if m == nil || m.console == nil {
-		return
-	}
-	lines := upd.DisplayLines
-	if includeTarget {
-		lines = append(lines, upd.TargetLines...)
-	}
-	var rest []string
-	painted := false
-	for _, line := range lines {
-		if mitext.IsCtrlCQuitLog(line) {
-			m.console.EchoSubmit(line)
-			painted = true
-			continue
-		}
-		rest = append(rest, line)
-	}
-	if len(rest) > 0 {
-		m.console.AppendLines(rest)
-		m.StripTrailingGdbPrompt()
-		painted = true
-	}
-	if upd.PromptReady && !confirming {
-		m.AttachGdbPrompt(upd.PromptLine)
-	}
-	if painted || (upd.PromptReady && !confirming) {
-		m.console.FollowTailAndScroll()
-	}
-}
-
-// PaintDlvDisplay paints Delve CLI output (peer of PaintMiDisplay).
-// confirming suppresses attaching a new (dlv) host (yes/no prompt owns the line).
-func (m *GDBWidget) PaintDlvDisplay(displayLines []string, promptReady bool, promptLine string, confirming bool) {
-	if m == nil || m.console == nil {
-		return
-	}
-	painted := false
-	if len(displayLines) > 0 {
-		m.console.AppendLines(displayLines)
-		m.StripTrailingGdbPrompt()
-		painted = true
-	}
-	if promptReady && !confirming {
-		m.AttachGdbPrompt(promptLine)
-	}
-	if painted || (promptReady && !confirming) {
-		m.console.FollowTailAndScroll()
-	}
-}
-
-func (m *GDBWidget) HandleEvent(ev tcell.Event) {
-	if m == nil || m.console == nil {
-		return
-	}
-	m.console.HandleEvent(ev)
+	return w.term.HandleKey(ev)
 }

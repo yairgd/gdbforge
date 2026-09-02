@@ -1,21 +1,21 @@
 flowchart TB
-    subgraph Root["Root Layout"]
-        TB["TabBar"]
-        WS["Workspace"]
-        CL["CmdLine"]
+    subgraph Widgets["gdbforge widgets"]
+        N1["CodeWidget · Viewport"]
+        N2["AssemblyWidget · Viewport"]
+        N3["BreakpointWidget · Viewport"]
+        N4["ThreadWidget · Viewport"]
+        N5["GDBWidget · CompositeTerminal + WireCLI"]
+        N6["OutputWidget · CompositeTerminal + WireInferior"]
+        N7["ExecWidget · CompositeTerminal + WireExec"]
+        N8["LuaConsoleWidget · ConsolePane + InputLine"]
     end
 
-    subgraph SplitTree["Split Tree (inside Workspace)"]
-        N1["Node: Split / Leaf"]
-        N2["Node: Split / Leaf"]
-        N3["Leaf: CodeWidget"]
-        N4["Leaf: GDBWidget · LoggerWidget"]
-        N5["GDBWidget uses ConsolePane + InputLine"]
+    subgraph TermUI["termui"]
+        CT["CompositeTerminal · xterm + WireTTY"]
+        CP["ConsolePane · REPL scrollback + InputLine"]
     end
 
-    WS --> SplitTree
-    CL --> CmdWidget["CmdWidget · top-level"]
-    N1 --> N2
-    N2 --> N3
-    N2 --> N4
-    N4 -.-> N5
+    N5 --> CT
+    N6 --> CT
+    N7 --> CT
+    N8 --> CP

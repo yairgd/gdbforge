@@ -12,9 +12,7 @@ import (
 )
 
 const (
-	// PromptToken is the interactive Delve CLI prompt.
-	PromptToken = "(dlv)"
-	// PromptLiveHost is PromptToken plus one trailing space for the caret.
+	PromptToken    = "(dlv)"
 	PromptLiveHost = PromptToken + " "
 
 	startupPromptWait = 30 * time.Second
@@ -23,30 +21,22 @@ const (
 // Client is an interactive Delve session over a PTY, plus a separate inferior
 // TTY for the debugged program's stdin/stdout when supported.
 type Client struct {
-	*ptyx.Client
-	inferior    *ptyx.TTY
-	externalTTY string // --tty path when not using an internal master
-	startupOut  string
+	*ptyx.TTY
+	inferior *ptyx.TTY
+	startupOut string
 }
 
 // ClientOptions configures NewClient.
 type ClientOptions struct {
-	// InferiorTTY, if non-empty, is passed as `dlv exec --tty` instead of
-	// opening an internal ptyx.TTY.
 	InferiorTTY string
 }
 
 var _ core.Session = (*Client)(nil)
 
-// NewClient spawns `dlv exec --tty <slave> -- prog [args...]` so the inferior's
-// stdin/stdout use a dedicated PTY (same dual-PTY model as GDB's
-// -inferior-tty-set), painted in the IO / Output widget unless InferiorTTY is
-// an external path.
 func NewClient(dlvPath string, dlvArgs []string) (*Client, error) {
 	return NewClientOpts(dlvPath, dlvArgs, ClientOptions{})
 }
 
-// NewClientOpts is NewClient with optional external inferior TTY path.
 func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Client, error) {
 	if dlvPath == "" {
 		dlvPath = "dlv"
@@ -63,9 +53,9 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 	ext := strings.TrimSpace(opts.InferiorTTY)
 	ttyPath := ext
 	if ext != "" {
-		c.externalTTY = ext
+		c.inferior = ptyx.AttachPath(ext)
 	} else {
-		inf, err := ptyx.OpenTTY()
+		inf, err := ptyx.Open()
 		if err != nil {
 			return nil, err
 		}
@@ -73,22 +63,21 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 		ttyPath = inf.SlaveName()
 	}
 
-	// --tty must be a Delve flag (before "--"); program args follow "--".
 	argv := []string{dlvPath, "exec", "--tty", ttyPath, "--"}
 	argv = append(argv, dlvArgs...)
 
 	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
 	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
 
-	dlvPty, err := ptyx.New(argv, ptyx.Options{Env: env})
+	dlvPty, err := ptyx.Start(argv, ptyx.Options{Env: env})
 	if err != nil {
-		if c.inferior != nil {
+		if c.inferior != nil && c.inferior.HasMaster() {
 			c.inferior.Close()
 		}
 		return nil, err
 	}
 
-	c.Client = dlvPty
+	c.TTY = dlvPty
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
 		c.Close()
@@ -98,7 +87,6 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 	return c, nil
 }
 
-// TakeStartupOutput returns and clears bytes captured through the first prompt.
 func (c *Client) TakeStartupOutput() string {
 	if c == nil {
 		return ""
@@ -108,9 +96,6 @@ func (c *Client) TakeStartupOutput() string {
 	return s
 }
 
-// NewConnectClient spawns `dlv connect <addr>` on a PTY (terminal client to a
-// headless Delve server). Inferior stdio stays with the headless process /
-// its terminal — no local --tty.
 func NewConnectClient(dlvPath, addr string) (*Client, error) {
 	if dlvPath == "" {
 		dlvPath = "dlv"
@@ -126,14 +111,14 @@ func NewConnectClient(dlvPath, addr string) (*Client, error) {
 	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
 	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
 
-	dlvPty, err := ptyx.New([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
+	dlvPty, err := ptyx.Start([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
 	if err != nil {
 		return nil, err
 	}
 
 	c := &Client{
-		Client:      dlvPty,
-		externalTTY: "headless:" + addr,
+		TTY:      dlvPty,
+		inferior: ptyx.AttachPath("headless:" + addr),
 	}
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
@@ -155,40 +140,25 @@ func normalizeConnectAddr(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		return "127.0.0.1" + addr
 	}
-	// bare port
 	if !strings.Contains(addr, ":") {
 		return "127.0.0.1:" + addr
 	}
 	return addr
 }
 
-// ConfigureInferiorTTY is a no-op after spawn: the inferior TTY is already
-// attached via `dlv exec --tty <slave>` (peer of GDB -inferior-tty-set).
-func (c *Client) ConfigureInferiorTTY() error {
-	return nil
-}
+func (c *Client) ConfigureInferiorTTY() error { return nil }
 
-// InferiorTTYPath returns the --tty path used for the inferior.
 func (c *Client) InferiorTTYPath() string {
-	if c == nil {
+	if c == nil || c.inferior == nil {
 		return ""
 	}
-	if c.externalTTY != "" {
-		return c.externalTTY
-	}
-	if c.inferior != nil {
-		return c.inferior.SlaveName()
-	}
-	return ""
+	return c.inferior.SlaveName()
 }
 
-// UsesExternalInferiorTTY reports whether stdio is an external terminal path.
 func (c *Client) UsesExternalInferiorTTY() bool {
-	return c != nil && c.externalTTY != ""
+	return c != nil && c.inferior != nil && c.inferior.IsExternal()
 }
 
-// SetInferiorTTYPath is unused by the app: Delve --tty is applied only at
-// spawn, so DebuggerApp restarts the session instead. Kept for API symmetry.
 func (c *Client) SetInferiorTTYPath(path string) error {
 	path = strings.TrimSpace(path)
 	cur := c.InferiorTTYPath()
@@ -204,16 +174,15 @@ func (c *Client) SetInferiorTTYPath(path string) error {
 	return fmt.Errorf("dlv inferior tty requires session restart")
 }
 
-// InferiorTTY returns the program I/O PTY, or nil when using an external path.
 func (c *Client) InferiorTTY() *ptyx.TTY {
-	if c == nil {
+	if c == nil || c.inferior == nil || !c.inferior.HasMaster() {
 		return nil
 	}
 	return c.inferior
 }
 
 func (c *Client) waitForPrompt(timeout time.Duration) (string, error) {
-	if c == nil || c.Client == nil {
+	if c == nil || c.TTY == nil {
 		return "", fmt.Errorf("no dlv session")
 	}
 	ch, cancel := c.Subscribe()
@@ -251,7 +220,6 @@ func (c *Client) waitForPrompt(timeout time.Duration) (string, error) {
 	}
 }
 
-// filterEnv drops entries whose key (before '=') is in drop (case-sensitive).
 func filterEnv(env []string, drop ...string) []string {
 	if len(env) == 0 || len(drop) == 0 {
 		return env
@@ -271,11 +239,6 @@ func filterEnv(env []string, drop ...string) []string {
 	return out
 }
 
-// Interrupt stops a running target.
-//
-// While Delve's CLI is blocked in continue/next/step, typed commands such as
-// "halt" are not read until the prompt returns — only ^C / SIGINT unblocks it.
-// SIGINT is sent first (no dependency on the PTY write lock), then a PTY ^C.
 func (c *Client) Interrupt() error {
 	if c == nil {
 		return nil
@@ -285,16 +248,16 @@ func (c *Client) Interrupt() error {
 	return err
 }
 
-// Close tears down the inferior TTY then the Delve PTY session.
 func (c *Client) Close() {
 	if c == nil {
 		return
 	}
-	if c.inferior != nil {
+	if c.inferior != nil && c.inferior.HasMaster() {
 		c.inferior.Close()
 		c.inferior = nil
 	}
-	if c.Client != nil {
-		c.Client.Close()
+	if c.TTY != nil {
+		c.TTY.Close()
+		c.TTY = nil
 	}
 }

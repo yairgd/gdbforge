@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
 // coalesceRunner runs at most one worker; bursts set pending for one trailing run.
@@ -137,6 +138,10 @@ func coalescePtyOutput(ch <-chan core.PtyOutputMsg, opts ptyCoalesceOpts) {
 				flush()
 				if opts.Post != nil {
 					opts.Post("", msg.Err)
+				}
+				if opts.OnExit != nil && ptyx.ClosedError(msg.Err) {
+					opts.OnExit()
+					return
 				}
 				continue
 			}

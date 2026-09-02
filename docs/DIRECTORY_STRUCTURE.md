@@ -31,7 +31,7 @@ This document maps the **gdbforge** repository packages to their responsibilitie
 |------|------|-------|
 | FRAMEWORK | `internal/termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Reusable TUI / host |
 | APP | `internal/gdb`, `dlv`, `mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
-| APP events | `internal/gdbforge/events` | `GdbOutputMsg`, `InferiorOutputMsg` (not in `core`) |
+| APP events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge); `InferiorOutputMsg` legacy type (inferior I/O now via `WireTTY`) |
 | APP state | `internal/gdbforge/debugstate` | Debugger fields formerly on `platform.AppState` |
 | APP DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers/string helpers |
 
@@ -54,13 +54,15 @@ gdbforge/
 │   ├── platform/          # Buffer, Logger, AppContext ★
 │   ├── luahost/           # Lua VM + framework API (APP wires gdb/dlv) ★
 │   ├── ptyx/              # PTY sessions (FRAMEWORK) ★
+│   ├── serialmux/         # UART ↔ PTY mux (kgdb one-cable) ★
+│   ├── devport/           # Serial port open helper ★
 │   ├── demo/               # Host showcase app (no debugger) ★
 │   ├── gdbforge/              # Debugger app layer ★
 │   │   ├── models/        # Break/thread/stack DTOs
 │   │   ├── parse/         # MI parsers (not in mcp)
 │   │   ├── mitext/        # MI string unescape / prompt tokens
 │   │   ├── debugstate/    # Debugger AppState fields
-│   │   ├── events/        # GdbOutputMsg / InferiorOutputMsg
+│   │   ├── events/        # GdbOutputMsg (MI bridge)
 │   │   ├── domain/
 │   │   ├── layout/
 │   │   ├── persist/
@@ -167,7 +169,10 @@ task build
 | `app_api.go` | `AppAPI` / `UIContext` interfaces |
 | `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
 | `input_line.go` | Reusable readline editor (text, cursor, history, paste insert) |
-| `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine |
+| `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine (Lua REPL) |
+| `composite_terminal.go` | xterm emulator + key trie; `AttachTTY`, `Paint`, `HandleKey` |
+| `wire_tty.go` | `WireTTY` — PTY bytes ↔ xterm; `WireTTYOpts` (PostFrame, OnExit) |
+| `termnial_widget.go` | Generic pane wrapper around one `CompositeTerminal` |
 | `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional ANSI + `OmitTail` |
 | `viewport_word.go` | Double-click word / triple-click line select + copy |
 | `viewport_clipboard.go` | Selection → CLIPBOARD + PRIMARY |
@@ -218,12 +223,12 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `widgets/thread_widget.go` | `:b threads`; `ThreadHost` |
 | `widgets/callstack_widget.go` | `:b callstack`; `CallStackHost` |
 | `widgets/file_list_widget.go` | `:edit` picker; `FileListHost` |
-| `widgets/output_widget.go` | `:b io`; paint inferior I/O; no PTY ownership |
+| `widgets/output_widget.go` | `:b io`; `CompositeTerminal` + `WireInferior` |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |
 | `widgets/logo_widget.go` | Startup splash in the code leaf until source loads |
-| `widgets/gdb_widget.go` | GDB/Delve console view — ConsolePane + paint / `SetOn*` |
-| `widgets/exec_widget.go` | Exec/shell console view — `SetOn*` + paint (`:!bash`) |
+| `widgets/gdb_widget.go` | GDB/Delve terminal — `CompositeTerminal` + `WireCLI` |
+| `widgets/exec_widget.go` | Exec/shell terminal — `CompositeTerminal` + `WireExec` |
 | `widgets/lua_widget.go` | Lua script panes |
 
 ## internal/mcp
@@ -241,12 +246,33 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 ## internal/ptyx
 
-**PTY helpers** for GDB (MI), inferior I/O, and exec backends.
+**Unified PTY transport** for GDB (CLI + MI + inferior), Delve, exec, and serial console legs.
 
 | File | Responsibility |
 |------|----------------|
-| `client.go` | `ptyx.Client` — process PTY: exclusive `WithWrite`, `Subscribe` fan-out, `Send` / `SetSize` / `Close` |
-| `tty.go` | `ptyx.TTY` — bare master/slave for inferior stdin/stdout (`OpenTTY`, slave path for `-inferior-tty-set`) |
+| `tty.go` | `ptyx.TTY` — `Start` / `Open` / `AttachPath`; `Subscribe`, `Send`/`SendRaw`, `SetSize`, `Close`, `Master()` |
+| `closed.go` | `ClosedError` — detect PTY session end (EOF/EIO) |
+| `tty_test.go` | Fan-out, process, attach-path tests |
+
+## internal/serialmux
+
+**Shared UART mux** for kgdb on one serial cable — bridges hardware UART to virtual PTY legs.
+
+| File | Responsibility |
+|------|----------------|
+| `mux.go` | `Mux` — `devport.Open` (UART) + `ptyx.Open` (console + gdb legs); owner routing |
+| `registry.go` | One mux per device path |
+| `termios_ioctl_*.go` | Raw mode on PTY masters (not the UART) |
+
+See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) and [KERNEL_KGDB.md](KERNEL_KGDB.md).
+
+## internal/devport
+
+**Device open helper** — `go.bug.st/serial` wrapper for `/dev/ttyUSB*` (8N1).
+
+| File | Responsibility |
+|------|----------------|
+| `open.go` | `Open(device, baud)` — hardware UART (used by `serialmux`) |
 
 ## internal/execcli
 
@@ -254,7 +280,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 | File | Responsibility |
 |------|----------------|
-| `exec_client.go` | `ExecClient` embeds `*ptyx.Client`; argv + initial winsize |
+| `exec_client.go` | `ExecClient` embeds `*ptyx.TTY`; `ptyx.Start` |
 
 See [EXEC_SHELL.md](EXEC_SHELL.md).
 
@@ -278,14 +304,14 @@ Today this package holds shared primitives (`Buffer`, `Debugger` interface, back
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Backend events (`PtyOutputMsg`, `GdbOutputMsg` / `ExecOutputMsg` / `InferiorOutputMsg`, …) |
+| `events.go` | Backend events (`PtyOutputMsg`, `ExecOutputMsg` in `core`; `GdbOutputMsg` in `gdbforge/events`) |
 | `debugger.go` | `Debugger` / `Session` / `PTYWriter` — send, Subscribe, WithWrite |
 | `buffer.go` | Line-oriented text storage — building block for text-oriented models |
 | `viewport.go` | Scroll window over buffer |
 
 **Rule:** if it can be tested without a terminal, it belongs here.
 
-CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`. UI domain events (`SubmitMsg`, `CommandID`) also live in **`termui`**; `core/events.go` holds debugger-backend event types (`GdbOutputMsg`, …).
+CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`. UI domain events (`SubmitMsg`, `CommandID`) also live in **`termui`**; `core/events.go` holds generic PTY/exec types; `gdbforge/events` holds `GdbOutputMsg` (MI bridge).
 
 ---
 
@@ -295,12 +321,12 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 
 | File | Responsibility |
 |------|----------------|
-| `gdb_client.go` | `GDBClient` embeds `*ptyx.Client`, owns `*ptyx.TTY`; sends `-inferior-tty-set` at start |
+| `gdb_client.go` | `GDBClient` — CLI + MI + inferior `*ptyx.TTY`; `new-ui mi2` bootstrap |
 | `mi.go` | MI string decode, field extraction, tab expansion |
 | `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 
-**Rule:** no imports from `termui`. GDB output → `GdbOutputMsg`; inferior stdio → `InferiorOutputMsg` (`EventInterrupt`).
+**Rule:** no imports from `termui`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
 
 Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
 
@@ -312,7 +338,7 @@ Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp
 
 | File | Responsibility |
 |------|----------------|
-| `client.go` | `Client` embeds `*ptyx.Client`; waits for `(dlv)` on startup |
+| `client.go` | `Client` embeds `*ptyx.TTY`; waits for `(dlv)` on startup |
 | `input_state.go` | Stream splitter: `PushRaw` → `Update` (stops, prompts, `[Y/n]?`, BP notifies) |
 | `confirm.go` | `ConfirmGate` for Delve yes/no prompts (suspended breakpoint after exit) |
 | `complete.go` | Console Tab: command names + `funcs ^<prefix>` locspec completion |

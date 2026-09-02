@@ -99,7 +99,6 @@ func (a *DebuggerApp) registerUIComponents() {
 		&a.breaks,
 		&a.cmd,
 		&a.console,
-		&a.inferiorIO,
 		&a.asm,
 		&a.debugInfo,
 		&a.dlv,

@@ -527,15 +527,13 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 	w := widgets.NewExecWidget()
 	w.Ctx = app.ctx
 	w.SetClipboard(app.ClipboardIO())
-	w.SetSizeFunc(client.SetSize)
-	w.WireConsole(&widgets.ConsoleHandlers{
-		Submit:    func(cmd string) { _ = client.Send(cmd) },
-		Interrupt: func() { _ = client.SendRaw("\x03") },
-		Suspend:   func() { _ = client.SendRaw("\x1a") },
-		EOF:       func() { _ = client.SendRaw("\x04") },
-	})
+	w.WireExec(client.TTY, app.RequestFrame)
 	ch, _ := client.Subscribe()
-	w.StartExecUIBridge(app.Screen(), ch)
+	go func() {
+		for range ch {
+		}
+		w.NotifyExecEnded(app.Screen())
+	}()
 	app.execWidget = w
 	app.registerBuiltin("exec", w)
 	return w

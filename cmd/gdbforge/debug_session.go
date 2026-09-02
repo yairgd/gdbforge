@@ -5,7 +5,6 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -46,7 +45,6 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	var (
 		boot          string
 		inferior      *ptyx.TTY
-		promptTok     string
 		skipBreakMain bool
 		extTTY        = inferiorTTYFromEnvOrCfg(a.cfg)
 	)
@@ -70,24 +68,19 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	}
 	boot = s.backend.TakeStartupOutput()
 	inferior = s.backend.InferiorTTY()
-	promptTok = s.backend.PromptToken()
 	_ = s.backend.ConfigureInferiorTTY()
 
-	s.gdbWidget = widgets.NewGDBWidget()
-	s.gdbWidget.SetClipboard(a.ClipboardIO())
-	s.gdbWidget.SetPromptStyleToken(promptTok)
-	s.gdbWidget.SetANSI(true)
 	if s.backend.PaintTargetInConsole() {
 		s.debug.SetGdbTargetPrint(true)
 	}
-	s.gdbWidget.WireConsole(&widgets.ConsoleHandlers{
-		Submit:    s.console.onGdbConsoleSubmit,
-		Interrupt: s.console.onGdbConsoleInterrupt,
-		Suspend:   s.console.onGdbConsoleSuspend,
-		EOF:       s.console.onGdbConsoleEOF,
-	})
+
+	s.gdbWidget = widgets.NewGDBWidget()
+	s.gdbWidget.SetClipboard(a.ClipboardIO())
+	if cli := debuggerCLITTY(s.backend); cli != nil {
+		s.console.wireCLI(s.gdbWidget, cli, a.RequestFrame)
+	}
 	if boot != "" {
-		s.console.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
+		s.gdbWidget.WriteBoot(boot)
 	}
 	s.console.startGdbConsoleBridge()
 	a.registerBuiltin("gdb", s.gdbWidget)
@@ -168,6 +161,23 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	return nil
 }
 
+func debuggerCLITTY(b backend.Backend) *ptyx.TTY {
+	if b == nil {
+		return nil
+	}
+	switch b.Kind() {
+	case backend.GDB:
+		if gb, ok := b.(*backend.GDBBackend); ok && gb.Client != nil {
+			return gb.Client.CLITTY()
+		}
+	case backend.DLV:
+		if db, ok := b.(*backend.DLVBackend); ok && db.Client != nil {
+			return db.Client.TTY
+		}
+	}
+	return nil
+}
+
 func (s *DebugSession) close(a *DebuggerApp) {
 	if s == nil {
 		return
@@ -177,7 +187,7 @@ func (s *DebugSession) close(a *DebuggerApp) {
 		s.gdbMcp.Close()
 		s.gdbMcp = nil
 	}
-	s.inferiorIO.stop()
+	s.inferiorIO.unwire()
 	s.console.stopBridge()
 	if s.backend != nil {
 		s.backend.Close()

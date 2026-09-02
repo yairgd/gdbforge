@@ -12,7 +12,6 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 )
 
 // SetInferiorTTY switches program stdio to path ("internal" / empty restores
@@ -108,17 +107,15 @@ func (a *DebuggerApp) attachRestartedDlv(client *dlv.Client) {
 	}
 
 	if boot := client.TakeStartupOutput(); boot != "" && a.gdbWidget != nil {
-		a.console.handleDebuggerOutputMsg(events.GdbOutputMsg{Data: boot})
+		a.gdbWidget.WriteBoot(boot)
+	}
+	if cli := client.TTY; cli != nil && a.gdbWidget != nil {
+		a.console.wireCLI(a.gdbWidget, cli, a.RequestFrame)
 	}
 	a.console.startGdbConsoleBridge()
 
 	if a.gdbMcp != nil {
 		a.gdbMcp.SetSession(a.GDB())
-	}
-	// Ensure the Delve console accepts typing even if prompt paint was partial.
-	if a.gdbWidget != nil {
-		a.gdbWidget.AttachGdbPrompt(dlv.PromptLiveHost)
-		a.gdbWidget.ForceFollowTailAndScroll()
 	}
 }
 

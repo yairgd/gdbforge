@@ -1,29 +1,35 @@
 sequenceDiagram
     participant User as User
     participant GDBPane as GDBWidget
-    participant IOPane as IO console
+    participant IOPane as OutputWidget
     participant Client as gdb.GDBClient
-    participant GDBPTY as PTY#1 GDB
-    participant InfPTY as PTY#2 inferior
-    participant GDB as GDB MI2
+    participant CLIPTY as PTY#1 CLI
+    participant MIPTY as PTY#2 MI
+    participant InfPTY as PTY#3 inferior
+    participant GDB as GDB
     participant Prog as Program
 
-    Note over Client,InfPTY: Startup
-    Client->>GDBPTY: ptyx.New(gdb --interpreter=mi2)
-    Client->>InfPTY: ptyx.OpenTTY()
-    Client->>GDBPTY: -inferior-tty-set /dev/pts/N
-    GDBPTY->>GDB: MI command
-    Note over GDB,Prog: run attaches program to PTY#2 slave
+    Note over Client,InfPTY: Startup (3 PTY)
+    Client->>CLIPTY: ptyx.Start(gdb console mode)
+    Client->>MIPTY: ptyx.Open()
+    Client->>InfPTY: ptyx.Open()
+    Client->>CLIPTY: new-ui mi2 /dev/pts/N
+    Client->>MIPTY: -inferior-tty-set /dev/pts/M
+    Note over GDB,Prog: run attaches program to PTY#3 slave
 
-    User->>GDBPane: Enter "break main"
-    GDBPane->>Client: Send (GDB PTY)
-    Client->>GDBPTY: Write
-    GDBPTY->>GDB: CLI/MI
-    GDB-->>GDBPTY: ~ / ^done / *stopped
-    GDBPTY-->>GDBPane: GdbOutputMsg
+    User->>GDBPane: type q / commands
+    GDBPane->>CLIPTY: WireTTY SendRaw (CLI PTY)
+    CLIPTY->>GDB: readline / console
+    GDB-->>MIPTY: MI records
+    MIPTY-->>Client: GdbOutputMsg (MI bridge)
+    CLIPTY-->>GDBPane: WireTTY → xterm paint
 
-    User->>IOPane: Enter "hello"
-    IOPane->>InfPTY: Send("hello\n")
+    User->>IOPane: type hello
+    IOPane->>InfPTY: WireTTY SendRaw
     InfPTY->>Prog: stdin
     Prog-->>InfPTY: stdout
-    InfPTY-->>IOPane: InferiorOutputMsg
+    InfPTY-->>IOPane: WireTTY → xterm paint
+
+    Note over CLIPTY,GDB: GDB exit
+    GDB-->>CLIPTY: PTY close
+    CLIPTY-->>GDBPane: OnExit → gdb-exit → app Exit

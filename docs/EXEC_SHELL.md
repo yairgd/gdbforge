@@ -32,11 +32,10 @@ Bang may be glued or spaced: `:!ls` and `:! ls` both work.
 ```mermaid
 flowchart LR
   Cmd[":!bash"] --> OnRun
-  OnRun --> Client["execcli.ExecClient embeds ptyx.Client"]
-  OnRun --> Widget["ExecWidget + ConsolePane"]
-  Client -->|PtyOutputMsg| Bridge["EventInterrupt ExecOutputMsg"]
-  Bridge --> Widget
-  Widget -->|Send / SendRaw| Client
+  OnRun --> Client["execcli.ExecClient · *ptyx.TTY"]
+  OnRun --> Widget["ExecWidget · CompositeTerminal"]
+  Client -->|WireTTY| Widget
+  Widget -->|SendRaw| Client
   OnRun --> Jump["push previous widget"]
   JumpBack["Ctrl-O JumpBack"] --> Jump
 ```
@@ -44,13 +43,15 @@ flowchart LR
 | Layer | Package / type | Role |
 |-------|----------------|------|
 | Command | `LeafRest("!", OnRun)` | Rest-args leaf; remainder of line → argv |
-| PTY | `internal/ptyx.Client` | Shared PTY: mutex writes, `Subscribe` fan-out, `SetSize` |
-| Client | `internal/execcli.ExecClient` | Thin wrapper (`*ptyx.Client` + initial winsize) |
-| Event | `core.ExecOutputMsg` | UI-routed PTY chunks to the UI thread |
-| Widget | `widgets.ExecWidget` | View — ConsolePane + live prompt + ANSI; `SetOnSubmit` |
-| App | `DebuggerApp.OnRun` | Owns `ExecClient`; wire intents; `Workspace.swapFocusedWidget`; insert mode |
+| PTY | `*ptyx.TTY` (`ptyx.Start`) | Process PTY: `Subscribe`, `SendRaw`, `SetSize` |
+| Client | `internal/execcli.ExecClient` | Thin embed of `*ptyx.TTY` |
+| Terminal | `CompositeTerminal` + `WireTTY` | xterm emulator in Exec pane |
+| Widget | `widgets.ExecWidget` | View — `WireExec`, keys, cursor |
+| App | `DebuggerApp.OnRun` | Owns `ExecClient`; `swapFocusedWidget`; insert mode |
 
-GDB uses the same `ptyx.Client` via app-owned `gdb.GDBClient`. Exec reuses **ConsolePane** but has **no MI parser** — plain text + ANSI.
+GDB/IO panes use the same **`WireTTY`** pattern; exec has **no MI parser** — plain terminal bytes only.
+
+**Nested gdbforge:** You can run `./gdbforge` from `:!bash`, but nested full TUIs inside the Exec pane are **not supported** — use an external terminal or tmux pane for a second gdbforge session.
 
 ---
 
@@ -71,24 +72,16 @@ Implementation: `internal/commands/dsl.go` (`CmdRest` / `LeafRest`) and `Command
 
 ---
 
-## ConsolePane live prompt
+## Terminal rendering
 
-For both GDB and Exec, the input caret can sit on the **same row** as the last buffer line when that line is marked live (`SetLivePrompt` / `EnsureLivePrompt`):
+Exec uses **`CompositeTerminal`** (xterm via `gitpod-io/xterm-go`):
 
-- **GDB:** on MI `(gdb)` ready → `EnsureLivePrompt()` with `"(gdb) "`
-- **Exec:** incomplete PTY line (bash PS1) → `SetLivePrompt(true)` while pending
+- Full ANSI/VT sequences from bash, ssh, etc.
+- Keys forwarded as raw bytes (`WireTTYInput`)
+- Inverse cursor when the Exec pane is focused
+- Scrollback in the emulator buffer
 
-When `livePrompt` is set and follow-tail is on, `ConsolePane.Draw` paints the host line (ANSI-aware) and draws `InputLine` immediately after its visible width.
-
----
-
-## ANSI rendering
-
-Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `StripANSI` in `internal/termui/utf.go`:
-
-- SGR colors (`\x1b[01;32m` …) → tcell styles
-- OSC / private CSI (title, bracketed paste) → skipped, not drawn
-- Copy selection strips ANSI so the clipboard is plain text
+Copy/paste: mouse selection + clipboard bridge (same as other panes); paste sends bytes to the PTY.
 
 ---
 
@@ -96,10 +89,10 @@ Exec enables `ConsolePane.SetANSI(true)`. Scrollback uses `DrawANSIText` / `Stri
 
 | Action | Behavior |
 |--------|----------|
-| Mouse drag + `Ctrl-C` | Copy selection from scrollback (ANSI stripped) |
-| `Ctrl-V` | Paste into the **input line** or **`:` cmdline** (viewport is read-only) |
-| Middle-click | Paste into the input under the pointer (Linux terminal style) |
-| `EventClipboard` | In command mode → `CmdWidget` only; otherwise → workspace widgets |
+| Mouse drag + `Ctrl-C` | Copy selection (ANSI stripped where applicable) |
+| `Ctrl-V` | Paste into **`:`` cmdline** when in command mode; in Exec pane, keys go to PTY |
+| Middle-click | Platform PRIMARY paste where supported |
+| `EventClipboard` | In command mode → `CmdWidget` only; otherwise → focused widget |
 
 ---
 
@@ -120,9 +113,9 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 ## Lifecycle notes
 
 - Each `:!…` **restarts** the exec session (closes previous `ExecClient`).
-- When the PTY process exits (or Ctrl-D closes it), the Exec pane shows  
+- When the PTY process exits, the Exec pane shows  
   `[exec] process exited — press any key to return`, then **any key** runs `JumpBack` to the previous widget and clears the `exec` builtin.
-- App exit (`:quit` / Ctrl-D → debugger quit → `gdb-exit`) still closes `execClient` if present (`DebuggerApp.Close`).
+- App exit (`:quit` / GDB `q` → `gdb-exit`) still closes `execClient` if present (`DebuggerApp.Close`).
 
 ---
 
@@ -131,13 +124,11 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 | Path | Responsibility |
 |------|----------------|
 | `cmd/gdbforge/command_tree.go` | `LeafRest("!", a.OnRun)` |
-| `cmd/gdbforge/actions.go` | `OnRun` |
+| `cmd/gdbforge/actions.go` | `OnRun`, `startExecSession` |
 | `cmd/gdbforge/workspace_place.go` | `swapFocusedWidget`, `JumpBack`, jump list |
-| `cmd/gdbforge/builtins.go` | Thin `DebuggerApp` delegates to `Workspace` |
 | `cmd/gdbforge/keybindings.go` | `<C-o>` |
-| `internal/execcli/exec_client.go` | PTY process I/O |
-| `internal/gdbforge/widgets/exec_widget.go` | Exec console view (`SetOn*`) |
-| `internal/commands/{dsl,command_parser,command_node}.go` | Rest-args |
-| `internal/termui/console_pane.go` | Live prompt + paste into input |
-| `internal/termui/utf.go` | ANSI draw / strip |
-| `internal/core/events.go` | `ExecOutputMsg` |
+| `internal/execcli/exec_client.go` | `ptyx.Start` wrapper |
+| `internal/gdbforge/widgets/exec_widget.go` | Exec terminal view |
+| `internal/termui/composite_terminal.go` | xterm + `WireTTY` |
+| `internal/termui/wire_tty.go` | PTY ↔ terminal bridge |
+| `internal/ptyx/tty.go` | Unified PTY type |
