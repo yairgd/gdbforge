@@ -825,8 +825,7 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 					return
 				}
 				if h.GDBWidget() != nil {
-					h.GDBWidget().EchoSubmit(cmd)
-					h.GDBWidget().ForceFollowTailAndScroll()
+					h.GDBWidget().AppendHostLine(">>> " + cmd)
 				}
 				h.SendGdbExec(cmd)
 				h.RequestFrame()

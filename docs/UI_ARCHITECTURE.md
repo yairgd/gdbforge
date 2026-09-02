@@ -514,7 +514,7 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#cmdwidget-integration) and [ARCHITECTU
 
 GDB output uses `tcell.NewEventInterrupt` to inject messages into the main loop from background goroutines. This avoids locking the screen from reader threads — a common tcell pattern.
 
-**Current:** GDB / inferior / exec output is posted via `PostInterrupt` and handled through `HandleInterrupt` → `EventBus` → controller handlers (e.g. `consoleCtl`, `inferiorIOCtl`, `execIOCtl`).
+**Current:** GDB MI output uses `GdbOutputMsg` → `consoleCtl`. GDB/IO/exec pane bytes use **`WireTTY`** → `CompositeTerminal`.
 
 **Design decision:** prefer `EventInterrupt` for tcell wakeups today; domain bus for application-level reactions.
 

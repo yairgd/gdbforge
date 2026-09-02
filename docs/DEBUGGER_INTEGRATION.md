@@ -58,7 +58,7 @@ flowchart TB
     subgraph Domain["Domain · core"]
         SessIF["Session / Debugger / PTYWriter"]
         PtyMsg["PtyOutputMsg"]
-        UIMsg["GdbOutputMsg · ExecOutputMsg"]
+        UIMsg["GdbOutputMsg · WireTTY"]
     end
 
     subgraph Ptyx["PTY · ptyx.TTY"]

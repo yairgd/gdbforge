@@ -5,7 +5,7 @@ import "testing"
 func TestOutputWidgetHostLine(t *testing.T) {
 	w := NewOutputWidget()
 	w.AppendHostLine("hello")
-	w.AppendInferior("world\r\n")
+	w.AppendHostLine("world")
 }
 
 func TestOutputWidgetClear(t *testing.T) {

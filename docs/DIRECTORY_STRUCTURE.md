@@ -31,7 +31,7 @@ This document maps the **gdbforge** repository packages to their responsibilitie
 |------|------|-------|
 | FRAMEWORK | `internal/termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Reusable TUI / host |
 | APP | `internal/gdb`, `dlv`, `mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
-| APP events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge); `InferiorOutputMsg` legacy type (inferior I/O now via `WireTTY`) |
+| APP events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
 | APP state | `internal/gdbforge/debugstate` | Debugger fields formerly on `platform.AppState` |
 | APP DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers/string helpers |
 
@@ -172,7 +172,6 @@ task build
 | `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine (Lua REPL) |
 | `composite_terminal.go` | xterm emulator + key trie; `AttachTTY`, `Paint`, `HandleKey` |
 | `wire_tty.go` | `WireTTY` — PTY bytes ↔ xterm; `WireTTYOpts` (PostFrame, OnExit) |
-| `termnial_widget.go` | Generic pane wrapper around one `CompositeTerminal` |
 | `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional ANSI + `OmitTail` |
 | `viewport_word.go` | Double-click word / triple-click line select + copy |
 | `viewport_clipboard.go` | Selection → CLIPBOARD + PRIMARY |
@@ -304,7 +303,7 @@ Today this package holds shared primitives (`Buffer`, `Debugger` interface, back
 
 | File | Responsibility |
 |------|----------------|
-| `events.go` | Backend events (`PtyOutputMsg`, `ExecOutputMsg` in `core`; `GdbOutputMsg` in `gdbforge/events`) |
+| `events.go` | Backend events (`PtyOutputMsg` in `core`; `GdbOutputMsg` in `gdbforge/events`) |
 | `debugger.go` | `Debugger` / `Session` / `PTYWriter` — send, Subscribe, WithWrite |
 | `buffer.go` | Line-oriented text storage — building block for text-oriented models |
 | `viewport.go` | Scroll window over buffer |

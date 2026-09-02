@@ -113,7 +113,6 @@ LayoutShell ──uses──▶ layoutHost ◀──implements──  DebuggerAp
 | `bufferCtl` | `bufferHost` | `Shell()` (layout), `placeCodeInSlot`, buffer widgets |
 | `asmCtl` | `asmHost` | `Shell()`, assembly widget, `Workspace` tab ops |
 | `inferiorIOCtl` | `inferiorHost` | `OutputWidget()`, inferior PTY routing |
-| `execIOCtl` | `execHost` | `ExecWidget()` only |
 | `searchCtl` | `searchHost` | `CmdWidget()`, `ActiveCodeWidget()`, `State()` |
 | `luaCtl` | `luaHost` | UI + debug + serial surface for scripts (~40 methods) |
 | `dlvCtl` | `dlvHost` | Code refresh, frame sync, debug-info peers |
@@ -134,7 +133,6 @@ Consoles use `WireCLI` / `WireInferior` / `WireExec` on `CompositeTerminal`. Lua
 | `debugInfoCtl` | Threads / call stack | Stop refresh |
 | `consoleCtl` | MI bridge on PTY #2; CLI `WireCLI` lifecycle | Submit / parse / gdb-exit |
 | `inferiorIOCtl` | Inferior or serial console → IO pane | `WireInferior` policy |
-| `execIOCtl` | Legacy `ExecOutputMsg` handler (unused; exec uses `WireExec`) | |
 | `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` / `cmdCtl` | Completion, `/` search, Lua, Delve sync, cmdline | All use host interfaces |
 
 ### Composition layers (`LayoutShell` · `DebugSession`)
@@ -857,7 +855,7 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
 
 - **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` PTY / UI events** — `PtyOutputMsg`, `ExecOutputMsg` (`internal/core/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
+- **`core` PTY events** — `PtyOutputMsg` (`internal/core/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
 - **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/gdbforge`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termui`).
@@ -990,10 +988,8 @@ classDiagram
 | `Event` | Base domain event — identified by `Type() string` |
 | `CommandEvent` | Events carrying a resolved `CommandID` (e.g. after `:` command entry) |
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
-| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB MI, exec, MCP) |
+| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB MI, MCP) |
 | `GdbOutputMsg` | MI PTY chunk routed to `consoleCtl` (`EventInterrupt` → parser) |
-| `ExecOutputMsg` | Legacy exec chunk type in `core`; exec panes use `WireExec` instead |
-| `InferiorOutputMsg` | Legacy type in `gdbforge/events`; inferior I/O uses `WireTTY` |
 
 ### Command IDs and colon commands
 

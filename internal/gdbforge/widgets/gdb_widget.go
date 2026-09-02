@@ -18,7 +18,7 @@ type GDBWidget struct {
 func NewGDBWidget() *GDBWidget {
 	return &GDBWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "GDB"},
-		term: termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, ""),
+		term:       termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, ""),
 	}
 }
 
@@ -28,13 +28,6 @@ func (w *GDBWidget) WireCLI(tty *ptyx.TTY, opts termui.WireTTYOpts) {
 	}
 	w.term.AttachTTY(tty, opts)
 }
-
-// WireConsole is deprecated; keys go through the terminal emulator.
-func (w *GDBWidget) WireConsole(h *ConsoleHandlers) { _ = h }
-
-func (w *GDBWidget) SetPromptStyleToken(token string) { _ = token }
-func (w *GDBWidget) SetANSI(on bool)                  { _ = on }
-func (w *GDBWidget) SetClipboard(io termui.ClipboardIO) { _ = io }
 
 func (w *GDBWidget) WriteBoot(data string) {
 	if w != nil && data != "" {
@@ -52,7 +45,7 @@ func (w *GDBWidget) AppendHostLine(s string) {
 	if w == nil || s == "" {
 		return
 	}
-	w.term.WriteRaw(s + "\r\n")
+	w.term.WriteHostLine(s)
 }
 
 func (w *GDBWidget) AppendTargetText(text string) {
@@ -81,26 +74,11 @@ func (w *GDBWidget) BackspaceInput() {
 	}
 }
 
-func (w *GDBWidget) InputText() string            { return "" }
-func (w *GDBWidget) LastHistory() string          { return "" }
-func (w *GDBWidget) PushHistory(cmd string)         { _ = cmd }
-func (w *GDBWidget) EchoSubmit(cmd string)          { _ = cmd }
-func (w *GDBWidget) ClearInput()                    {}
 func (w *GDBWidget) ApplyCompletion(name string) {
 	if w != nil && name != "" {
 		_ = w.term.Controller().SendString(name)
 	}
 }
-func (w *GDBWidget) FollowTailAndScroll()       {}
-func (w *GDBWidget) ForceFollowTailAndScroll()  {}
-func (w *GDBWidget) LivePrompt() bool           { return false }
-func (w *GDBWidget) SetLivePrompt(on bool)      { _ = on }
-func (w *GDBWidget) BeginLiveHost(_ []string, _ string) {}
-func (w *GDBWidget) AttachGdbPrompt(_ string)           {}
-func (w *GDBWidget) StripTrailingGdbPrompt()              {}
-func (w *GDBWidget) PaintMiDisplay(_ MiPaintUpdate, _, _ bool) {
-}
-func (w *GDBWidget) PaintDlvDisplay(_ []string, _ bool, _ string, _ bool) {}
 
 func (w *GDBWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
@@ -112,8 +90,6 @@ func (w *GDBWidget) Draw(c termui.Canvas) {
 	}
 	w.term.Paint(c, w.Focused())
 }
-
-func (w *GDBWidget) Viewport() *termui.Viewport { return nil }
 
 func (w *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
 	w.BaseWidget.DrawStatusLine(c, active)

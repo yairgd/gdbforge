@@ -526,7 +526,6 @@ func (app *DebuggerApp) startExecSession(argv []string) *widgets.ExecWidget {
 
 	w := widgets.NewExecWidget()
 	w.Ctx = app.ctx
-	w.SetClipboard(app.ClipboardIO())
 	w.WireExec(client.TTY, app.RequestFrame)
 	ch, _ := client.Subscribe()
 	go func() {

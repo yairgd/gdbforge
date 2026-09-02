@@ -30,7 +30,7 @@ The repo is split so a future non-debugger TUI app can reuse the same host witho
 
 | Layer | Packages | Role |
 |-------|----------|------|
-| **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `execcli`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`, `ExecOutputMsg`) |
+| **FRAMEWORK** | `termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `execcli`, `core` | Generic TUI, input, PTY, Lua host, shared events (`PtyOutputMsg`) |
 | **APP (gdbforge)** | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*` (incl. `backend`), `cmd/gdbforge` | Debugger backends, MI parse/models, debug widgets, app events (`GdbOutputMsg` for MI bridge) |
 | **APP (demo)** | `internal/demo`, `cmd/demo` | Host showcase — same chrome, basic commands; no debugger |
 
@@ -199,7 +199,7 @@ gdb     ──X──>  termui | tcell
 
 **Why:** FRAMEWORK must stay reusable for non-debugger apps; backends stay UI-agnostic.
 
-**How data crosses the boundary:** generic `core.PtyOutputMsg` / `ExecOutputMsg`; debugger MI payloads in `internal/gdbforge/events` (`GdbOutputMsg`); terminal pane bytes via `WireTTY` → `CompositeTerminal` (GDB/IO/exec); composition in `cmd/gdbforge`.
+**How data crosses the boundary:** generic `core.PtyOutputMsg`; debugger MI payloads in `internal/gdbforge/events` (`GdbOutputMsg`); terminal pane bytes via `WireTTY` → `CompositeTerminal` (GDB/IO/exec); composition in `cmd/gdbforge`.
 
 **Automated check:** `task check-imports` (or `./scripts/check_imports.sh`).
 

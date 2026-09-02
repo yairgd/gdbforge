@@ -40,33 +40,12 @@ func (w *OutputWidget) Detach() {
 	w.term.Detach()
 }
 
-// WireConsole is deprecated; use WireInferior or Detach.
-func (w *OutputWidget) WireConsole(h *ConsoleHandlers) {
-	if h == nil {
-		w.Detach()
-	}
-}
-
-func (w *OutputWidget) SetSizeFunc(fn func(rows, cols uint16) error) {
-	// Winsize sync handled by CompositeTerminal.Resize on Draw.
-	_ = fn
-}
-
-func (w *OutputWidget) AppendInferior(data string) {
-	if w == nil || data == "" {
-		return
-	}
-	w.term.WriteRaw(data)
-}
-
 func (w *OutputWidget) AppendHostLine(s string) {
 	if w == nil {
 		return
 	}
 	w.term.WriteHostLine(s)
 }
-
-func (w *OutputWidget) AppendPty(data string) { w.AppendInferior(data) }
 
 func (w *OutputWidget) Clear() {
 	if w == nil {
@@ -75,8 +54,6 @@ func (w *OutputWidget) Clear() {
 	w.term.Close()
 	w.term = termui.NewCompositeTerminal(80, 24, outputScrollback)
 }
-
-func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) { _ = io }
 
 func (w *OutputWidget) Draw(c termui.Canvas) {
 	if w == nil {
@@ -104,8 +81,6 @@ func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 	}
 	return w.term.HandleKey(ev)
 }
-
-func (w *OutputWidget) Viewport() *termui.Viewport { return nil }
 
 func (w *OutputWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)

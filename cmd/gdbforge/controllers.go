@@ -83,7 +83,6 @@ func (a *DebuggerApp) initControllers() {
 	a.inferiorIO.host = a
 	a.comp.host = a
 	a.cmd.host = a
-	a.execIO.host = a
 	a.search.host = a
 	a.lua.host = a
 	a.dlv.host = a
@@ -103,7 +102,6 @@ func (a *DebuggerApp) registerUIComponents() {
 		&a.debugInfo,
 		&a.dlv,
 		&a.lua,
-		&a.execIO,
 		&a.search,
 		&a.bufs,
 	} {

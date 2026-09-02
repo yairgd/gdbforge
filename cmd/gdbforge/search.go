@@ -243,10 +243,6 @@ func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
 		return t.Viewport()
 	case *widgets.HelpWidget:
 		return t.Viewport()
-	case *widgets.GDBWidget:
-		return t.Viewport()
-	case *widgets.OutputWidget:
-		return t.Viewport()
 	case *termui.LoggerWidget:
 		return t.Viewport()
 	case interface{ Viewport() *termui.Viewport }:

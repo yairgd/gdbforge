@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -69,9 +68,7 @@ type consoleHost interface {
 	LogGdbMILines(msg events.GdbOutputMsg)
 }
 
-// consoleCtl owns the debugger console domain: the PTY bridge, submit /
-// interrupt / suspend / EOF intents, and MI / Delve update apply.
-// Wired as gdbWidget.WireConsole(..., a.console.onGdbConsoleSubmit, ...).
+// consoleCtl owns the MI PTY bridge, CLI WireTTY lifecycle, and debugger update apply.
 type consoleCtl struct {
 	host      consoleHost
 	cancelSub func()
@@ -186,142 +183,10 @@ func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(events.GdbOutputMs
 	})
 }
 
-func (c *consoleCtl) onGdbConsoleSubmit(raw string) {
-	h := c.host
-	if h == nil {
-		return
-	}
-	if h.GDBWidget() == nil || h.Backend() == nil {
-		return
-	}
-	if h.isDLV() {
-		c.onDlvConsoleSubmit(raw)
-		return
-	}
-	gb := h.gdbBackend()
-	if gb == nil || gb.Client == nil {
-		return
-	}
-	w := h.GDBWidget()
-	cli := gb.Client
-
-	cmd := raw
-	if !cli.Quit.Confirming() && cmd == "" {
-		cmd = w.LastHistory()
-	}
-
-	if cli.Quit.Confirming() {
-		ans := strings.TrimSpace(strings.ToLower(raw))
-		display := ans
-		if display == "" {
-			display = "n"
-		}
-		act := cli.Quit.Answer(raw)
-		if act == gdb.QuitReprompt {
-			w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
-			h.activateGdbInsertMode()
-			return
-		}
-		w.EchoSubmit(display)
-		w.ClearInput()
-		c.sendGdbQuitAction(act)
-		w.ForceFollowTailAndScroll()
-		return
-	}
-
-	if act := cli.Quit.SubmitQuitCommand(cmd); act != gdb.QuitNoop {
-		if act == gdb.QuitShowConfirm {
-			if cmd != "" {
-				w.PushHistory(cmd)
-				w.EchoSubmit(cmd)
-			}
-			w.BeginLiveHost(gdb.QuitConfirmLines(cli.Quit.InferiorPID()), gdb.QuitConfirmHost)
-			h.activateGdbInsertMode()
-			return
-		}
-		if cmd != "" {
-			w.PushHistory(cmd)
-			w.EchoSubmit(cmd)
-		}
-		w.ClearInput()
-		c.sendGdbQuitAction(act)
-		w.ForceFollowTailAndScroll()
-		return
-	}
-
-	if gdb.IsStackNavCmd(cmd) {
-		h.NoteStackNavGDB()
-	}
-	h.MaybeEnableRemoteMode(cmd)
-	sendCmd, _ := h.Backend().MapExec(cmd)
-	send := func() {
-		_ = cli.Send(sendCmd)
-		h.MaybeSwitchSerialConsoleOnContinue(cmd)
-	}
-	if cmd != "" {
-		w.PushHistory(cmd)
-		w.EchoSubmit(cmd)
-	}
-	c.withGdbUIOwner(send)
-	w.ClearInput()
-	w.ForceFollowTailAndScroll()
-}
-
-func (c *consoleCtl) onDlvConsoleSubmit(raw string) {
-	h := c.host
-	if h == nil {
-		return
-	}
-	db := h.dlvBackend()
-	if db == nil || db.Client == nil || h.GDBWidget() == nil {
-		return
-	}
-	w := h.GDBWidget()
-	cli := db.Client
-
-	cmd := raw
-	if cmd == "" {
-		cmd = w.LastHistory()
-	}
-
-	// Answer Delve [Y/n]? without treating the reply as a new CLI command.
-	if h.DlvConfirming() {
-		send := func() { _ = cli.Send(cmd) }
-		if cmd != "" {
-			w.EchoSubmit(cmd)
-		}
-		c.withGdbUIOwner(send)
-		w.ClearInput()
-		w.ForceFollowTailAndScroll()
-		return
-	}
-
-	if dlv.IsStackNavCmd(cmd) {
-		h.NoteStackNavDLV(cmd, h.SelectedFrameLevel())
-	}
-	if isDlvRunCmd(cmd) {
-		if h.State() != nil {
-			h.Debug().SetInferiorRunning(true)
-		}
-	}
-	// Keep Delve CLI as-is (no MI mapping).
-	send := func() { _ = cli.Send(cmd) }
-	if cmd != "" {
-		w.PushHistory(cmd)
-		w.EchoSubmit(cmd)
-	}
-	c.withGdbUIOwner(send)
-	w.ClearInput()
-	w.ForceFollowTailAndScroll()
-}
-
 func (c *consoleCtl) onGdbConsoleInterrupt() {
 	h := c.host
 	if h == nil {
 		return
-	}
-	if w := h.GDBWidget(); w != nil {
-		w.ClearInput()
 	}
 	if h.Backend() == nil {
 		return
@@ -339,9 +204,6 @@ func (c *consoleCtl) onConfirmingInterrupt() {
 	h := c.host
 	if h == nil {
 		return
-	}
-	if w := h.GDBWidget(); w != nil {
-		w.ClearInput()
 	}
 	if h.Backend() == nil {
 		return
@@ -396,12 +258,6 @@ func (c *consoleCtl) onGdbConsoleEOF() {
 		if h.Backend() == nil {
 			return
 		}
-		// Delve: send quit; it may ask for confirmation interactively.
-		if w := h.GDBWidget(); w != nil {
-			w.PushHistory("quit")
-			w.EchoSubmit("quit")
-			w.ClearInput()
-		}
 		c.withGdbUIOwner(func() { _ = h.Backend().SendLine("quit") })
 		return
 	}
@@ -409,34 +265,21 @@ func (c *consoleCtl) onGdbConsoleEOF() {
 	if gb == nil || gb.Client == nil {
 		return
 	}
-	c.handleGdbQuitAction(gb.Client.RequestQuit(), "q")
+	c.handleGdbQuitAction(gb.Client.RequestQuit())
 }
 
-func (c *consoleCtl) handleGdbQuitAction(act gdb.QuitAction, echoCmd string) {
+func (c *consoleCtl) handleGdbQuitAction(act gdb.QuitAction) {
 	h := c.host
 	if h == nil {
 		return
 	}
-	gb := h.gdbBackend()
-	if gb == nil || gb.Client == nil || h.GDBWidget() == nil {
-		return
-	}
-	w := h.GDBWidget()
-	switch act {
-	case gdb.QuitShowConfirm:
-		if echoCmd != "" {
-			w.PushHistory(echoCmd)
-			w.EchoSubmit(echoCmd)
-		}
-		w.BeginLiveHost(gdb.QuitConfirmLines(gb.Client.Quit.InferiorPID()), gdb.QuitConfirmHost)
-		h.activateGdbInsertMode()
-	case gdb.QuitReprompt:
-		w.BeginLiveHost(gdb.QuitRepromptLines(), gdb.QuitConfirmHost)
-		h.activateGdbInsertMode()
-	default:
-		w.ForceFollowTailAndScroll()
+	if act == gdb.QuitShowConfirm {
+		act = gdb.QuitSendQ
 	}
 	c.sendGdbQuitAction(act)
+	if act.Sends() || act == gdb.QuitSendQ {
+		h.activateGdbInsertMode()
+	}
 }
 
 func (c *consoleCtl) sendGdbQuitAction(act gdb.QuitAction) {
@@ -445,10 +288,22 @@ func (c *consoleCtl) sendGdbQuitAction(act gdb.QuitAction) {
 		return
 	}
 	gb := h.gdbBackend()
-	if gb == nil || gb.Client == nil || !act.Sends() {
+	if gb == nil || gb.Client == nil {
 		return
 	}
-	c.withGdbUIOwner(func() { _ = gdb.ApplyQuitAction(gb.Client, act) })
+	if act == gdb.QuitShowConfirm {
+		act = gdb.QuitSendQ
+	}
+	if !act.Sends() {
+		return
+	}
+	c.withGdbUIOwner(func() {
+		if cli := gb.Client.CLI; cli != nil {
+			_ = gdb.ApplyQuitActionCLI(cli, act)
+			return
+		}
+		_ = gdb.ApplyQuitAction(gb.Client, act)
+	})
 }
 
 func (c *consoleCtl) withGdbUIOwner(fn func()) {
@@ -484,7 +339,7 @@ func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
 	h.DlvObserveUpdate(upd)
 	confirming := h.DlvConfirming()
 	_ = silent
-	// Delve CLI paints via TerminalWidget; keep parser side effects only.
+	// Delve CLI paints via CompositeTerminal; keep parser side effects only.
 	// Defer BP list Query while Delve waits for y/n (Query would steal the answer).
 	bpChanged := upd.BreakpointsChanged
 	if bpChanged && confirming {
@@ -570,19 +425,6 @@ func (c *consoleCtl) handleDebuggerOutputMsg(msg events.GdbOutputMsg) {
 	}
 	if u := backend.AsDLVUpdate(ev); u != nil {
 		c.applyDlvUpdate(*u)
-	}
-}
-
-func isDlvRunCmd(cmd string) bool {
-	cmd = strings.TrimSpace(cmd)
-	if cmd == "" {
-		return false
-	}
-	switch strings.Fields(cmd)[0] {
-	case "c", "continue", "n", "next", "s", "step", "stepout", "finish", "nexti", "ni", "stepi", "si", "restart", "run":
-		return true
-	default:
-		return false
 	}
 }
 

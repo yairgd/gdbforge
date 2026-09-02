@@ -17,7 +17,6 @@ type ExecWidget struct {
 	termui.BaseWidget
 	term      *termui.CompositeTerminal
 	ended     bool
-	onClose   func()
 	onDismiss func()
 }
 
@@ -28,10 +27,6 @@ func NewExecWidget() *ExecWidget {
 	}
 }
 
-func (m *ExecWidget) SetClipboard(io termui.ClipboardIO) { _ = io }
-
-func (m *ExecWidget) SetSizeFunc(fn func(rows, cols uint16) error) { _ = fn }
-
 func (m *ExecWidget) WireExec(tty *ptyx.TTY, onFrame func()) {
 	if m == nil || m.term == nil {
 		return
@@ -40,9 +35,6 @@ func (m *ExecWidget) WireExec(tty *ptyx.TTY, onFrame func()) {
 	m.term.AttachTTY(tty, termui.WireTTYOpts{PostFrame: onFrame})
 }
 
-func (m *ExecWidget) WireConsole(h *ConsoleHandlers) { _ = h }
-
-func (m *ExecWidget) SetOnClose(fn func())   { m.onClose = fn }
 func (m *ExecWidget) SetOnDismiss(fn func()) { m.onDismiss = fn }
 
 func (m *ExecWidget) NotifyExecEnded(screen tcell.Screen) {
@@ -50,10 +42,6 @@ func (m *ExecWidget) NotifyExecEnded(screen tcell.Screen) {
 		return
 	}
 	_ = screen.PostEvent(tcell.NewEventInterrupt(execSessionEnded))
-}
-
-func (m *ExecWidget) StartExecUIBridge(screen tcell.Screen, _ <-chan struct{}) {
-	m.NotifyExecEnded(screen)
 }
 
 func (m *ExecWidget) Clear() {

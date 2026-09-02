@@ -40,7 +40,6 @@ type DebuggerApp struct {
 	lua      luaCtl
 	serial   serialCtl
 	children childProcCtl
-	execIO   execIOCtl
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget

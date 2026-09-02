@@ -365,7 +365,7 @@ MI bridge path:
 2. UI thread `HandleInterrupt` → `consoleCtl.onOutput` → `GdbInputState.PushRaw`
 3. Each complete MI line → `MiUpdate` → app state refresh (breakpoints, threads, source, …)
 
-Inferior / exec bytes use **`WireTTY`** on their PTY masters — not `InferiorOutputMsg` (legacy event type; unused in `cmd/gdbforge`).
+Inferior / exec bytes use **`WireTTY`** on their PTY masters.
 
 Incomplete MI lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
 
