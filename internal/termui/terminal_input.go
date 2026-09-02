@@ -47,6 +47,25 @@ func ReplaceInputLine(c *TerminalController, newText string) {
 	}
 }
 
+// ApplyCompletion inserts full into the PTY input line. When full extends cur,
+// only the new suffix is sent — the PTY already echoed cur. Otherwise the
+// editable line is replaced (wildmenu token swap, non-prefix completion).
+func ApplyCompletion(c *TerminalController, cur, full string) {
+	if c == nil || full == "" {
+		return
+	}
+	if full == cur {
+		return
+	}
+	if cur != "" && strings.HasPrefix(full, cur) {
+		if suffix := full[len(cur):]; suffix != "" {
+			_ = c.SendString(suffix)
+		}
+		return
+	}
+	ReplaceInputLine(c, full)
+}
+
 func readLineRunes(term *xterm.Terminal, cx, cy int) string {
 	if term == nil || cx < 0 || cy < 0 {
 		return ""

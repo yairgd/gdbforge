@@ -55,6 +55,13 @@ func (w *OutputWidget) Clear() {
 	w.term = termui.NewCompositeTerminal(80, 24, outputScrollback)
 }
 
+func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
+	if w == nil || w.term == nil {
+		return
+	}
+	w.term.SetClipboard(io)
+}
+
 func (w *OutputWidget) Draw(c termui.Canvas) {
 	if w == nil {
 		return
@@ -70,7 +77,12 @@ func (w *OutputWidget) HandleEvent(ev tcell.Event) {
 	if w == nil {
 		return
 	}
-	if e, ok := ev.(*tcell.EventKey); ok {
+	switch e := ev.(type) {
+	case *tcell.EventMouse:
+		if w.term != nil {
+			w.term.HandleMouse(e)
+		}
+	case *tcell.EventKey:
 		w.term.HandleKey(e)
 	}
 }

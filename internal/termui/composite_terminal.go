@@ -1,7 +1,10 @@
 package termui
 
 import (
+	"time"
+
 	tcell "github.com/gdamore/tcell/v2"
+	xterm "github.com/gitpod-io/xterm-go"
 	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
@@ -17,6 +20,22 @@ type CompositeTerminal struct {
 	cancelPump func()
 	hostPrefix string
 	keys       *commands.KeyBindingRegistry
+	clipboard  ClipboardIO
+
+	// Screen origin during Paint (for mouse hit testing).
+	screenX int
+	screenY int
+
+	// Text selection (absolute scrollback coordinates).
+	selAnchor termPos
+	selCursor termPos
+	selActive bool
+	hasSel    bool
+
+	lastClickTime time.Time
+	lastClickPos  termPos
+	clickCount    int
+	suppressDrag  bool
 }
 
 // NewCompositeTerminal creates an empty terminal emulator.
@@ -125,6 +144,7 @@ func (c *CompositeTerminal) Paint(cv Canvas, paintCursor bool) {
 	if c == nil || c.ctl == nil {
 		return
 	}
+	c.screenX, c.screenY = cv.Rect().X(), cv.Rect().Y()
 	_ = c.Resize(cv.W(), cv.H())
 	cols, rows := c.ctl.Size()
 	if cols > cv.W() {
@@ -133,10 +153,19 @@ func (c *CompositeTerminal) Paint(cv Canvas, paintCursor bool) {
 	if rows > cv.H() {
 		rows = cv.H()
 	}
+	var yDisp int
+	c.ctl.WithTerminal(func(term *xterm.Terminal) {
+		yDisp = term.Buffer().YDisp
+	})
 	for y := 0; y < rows; y++ {
+		absLine := yDisp + y
 		for x := 0; x < cols; x++ {
 			cell := c.ctl.Cell(x, y)
-			cv.SetContent(x, y, cell.Rune, cell.Style)
+			st := cell.Style
+			if c.containsSel(absLine, x) {
+				st = st.Reverse(true)
+			}
+			cv.SetContent(x, y, cell.Rune, st)
 		}
 	}
 	if !paintCursor {
@@ -174,11 +203,7 @@ func (c *CompositeTerminal) initKeyBindings() {
 	bind("down", "\x1b[B", "<Down>")
 	bind("left", "\x1b[D", "<Left>")
 	bind("right", "\x1b[C", "<Right>")
-	bind("home", "\x1b[H", "<Home>")
-	bind("end", "\x1b[F", "<End>")
 	bind("delete", "\x1b[3~", "<Delete>")
-	bind("page-up", "\x1b[5~", "<PgUp>", "<C-b>")
-	bind("page-down", "\x1b[6~", "<PgDn>", "<C-f>")
 	bind("interrupt", "\x03", "<C-c>")
 	bind("eof", "\x04", "<C-d>")
 	bind("suspend", "\x1a", "<C-z>")
@@ -190,6 +215,23 @@ func (c *CompositeTerminal) initKeyBindings() {
 func (c *CompositeTerminal) HandleKey(ev *tcell.EventKey) bool {
 	if c == nil || c.ctl == nil || ev == nil {
 		return false
+	}
+	if isCopyCutKey(ev) && c.hasSel {
+		c.copySelection()
+		return true
+	}
+	if isPasteKey(ev) {
+		text := c.clipboard.pasteText()
+		if text != "" {
+			_ = c.ctl.SendInput([]byte(text))
+		}
+		return true
+	}
+	if c.handleScrollKey(ev) {
+		return true
+	}
+	if c.handleEnterScrollSnap(ev) {
+		return true
 	}
 	key, ok := platform.KeyFromEvent(ev)
 	if !ok {

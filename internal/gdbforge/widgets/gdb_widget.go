@@ -81,15 +81,28 @@ func (w *GDBWidget) InputText() string {
 	return termui.InputLineText(w.term.Controller())
 }
 
-func (w *GDBWidget) ApplyCompletion(name string) {
-	if w == nil || name == "" {
+func (w *GDBWidget) ApplyCompletion(full string) {
+	w.ApplyCompletionFrom(w.InputText(), full)
+}
+
+// ApplyCompletionFrom inserts full using cur as the already-echoed input (avoids
+// re-reading the xterm buffer while PTY echo is in flight).
+func (w *GDBWidget) ApplyCompletionFrom(cur, full string) {
+	if w == nil || full == "" {
 		return
 	}
-	termui.ReplaceInputLine(w.term.Controller(), name)
+	termui.ApplyCompletion(w.term.Controller(), cur, full)
 }
 
 func (w *GDBWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
+}
+
+func (w *GDBWidget) SetClipboard(io termui.ClipboardIO) {
+	if w == nil || w.term == nil {
+		return
+	}
+	w.term.SetClipboard(io)
 }
 
 func (w *GDBWidget) Draw(c termui.Canvas) {
@@ -107,7 +120,12 @@ func (w *GDBWidget) HandleEvent(ev tcell.Event) {
 	if w == nil {
 		return
 	}
-	if e, ok := ev.(*tcell.EventKey); ok {
+	switch e := ev.(type) {
+	case *tcell.EventMouse:
+		if w.term != nil {
+			w.term.HandleMouse(e)
+		}
+	case *tcell.EventKey:
 		w.term.HandleKey(e)
 	}
 }

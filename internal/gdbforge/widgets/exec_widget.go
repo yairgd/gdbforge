@@ -57,6 +57,13 @@ func (m *ExecWidget) SetFocused(focused bool) {
 	m.BaseWidget.SetFocused(focused)
 }
 
+func (m *ExecWidget) SetClipboard(io termui.ClipboardIO) {
+	if m == nil || m.term == nil {
+		return
+	}
+	m.term.SetClipboard(io)
+}
+
 func (m *ExecWidget) Draw(c termui.Canvas) {
 	if m == nil {
 		return
@@ -108,6 +115,10 @@ func (m *ExecWidget) HandleEvent(ev tcell.Event) {
 		if s, ok := e.Data().(string); ok && s == execSessionEnded {
 			m.markEnded()
 			return
+		}
+	case *tcell.EventMouse:
+		if m.term != nil {
+			m.term.HandleMouse(e)
 		}
 	case *tcell.EventKey:
 		if m.ended {

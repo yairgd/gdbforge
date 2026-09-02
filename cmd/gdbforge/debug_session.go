@@ -75,6 +75,7 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	}
 
 	s.gdbWidget = widgets.NewGDBWidget()
+	s.gdbWidget.SetClipboard(a.ClipboardIO())
 	if cli := debuggerCLITTY(s.backend); cli != nil {
 		s.console.wireCLI(s.gdbWidget, cli, a.RequestFrame)
 	}
@@ -85,6 +86,7 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	a.registerBuiltin("gdb", s.gdbWidget)
 
 	s.outputWidget = widgets.NewOutputWidget()
+	s.outputWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("io", s.outputWidget)
 	a.registerBuiltin("output", s.outputWidget)
 	a.maybeClearOutput()

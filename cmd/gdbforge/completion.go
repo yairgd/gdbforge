@@ -143,7 +143,8 @@ func (c *completionCtl) applySelected() {
 	}
 	if c.useGDBInput() {
 		cur := h.GDBWidget().InputText()
-		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
+		full := gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name))
+		h.GDBWidget().ApplyCompletionFrom(cur, full)
 		return
 	}
 	if c.useLuaInput() {
@@ -258,7 +259,7 @@ func (c *completionCtl) gdbTabComplete() {
 
 	// Expand to longest common prefix when it grows the line.
 	if res.Completion != "" && res.Completion != text {
-		h.GDBWidget().ApplyCompletion(res.Completion)
+		h.GDBWidget().ApplyCompletionFrom(text, res.Completion)
 		text = res.Completion
 	}
 
@@ -273,7 +274,7 @@ func (c *completionCtl) gdbTabComplete() {
 		// nothing
 	case 1:
 		// Unique match — no further completions for this word; add a trailing space.
-		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(names[0]))
+		h.GDBWidget().ApplyCompletionFrom(text, gdb.WithCompletionSpace(names[0]))
 		c.clear()
 	default:
 		c.forGDB = true
