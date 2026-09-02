@@ -7,10 +7,8 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/dlv"
-	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 )
 
@@ -24,7 +22,7 @@ type codeRefreshMsg struct {
 	stopGen uint64
 	// stop is applied on the UI thread (not in a background goroutine) so a
 	// call-stack browse cannot be overwritten by a racing showCodeAt.
-	stop *gdb.MiStopMsg
+	stop *debugger.StopInfo
 	// frame is set for console frame/f/up/down. showFrameSource runs on the
 	// UI thread with this frame (never present off-thread then re-present
 	// with a nil frame — that snapped Asm back to $pc and skipped Code).
@@ -44,17 +42,14 @@ func (a *DebuggerApp) maybeClearOutput() {
 	a.outputWidget.Clear()
 }
 
-// onGdbStopped updates AppState / CodeWidget when GDB hits a breakpoint or steps,
+// onGdbStopped updates AppState / CodeWidget when the debugger hits a breakpoint or steps,
 // and marks Threads / Call stack for refresh after the next MI prompt.
-func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
+func (a *DebuggerApp) onGdbStopped(stop *debugger.StopInfo) {
 	if stop == nil {
 		return
 	}
 	a.Debug().SetInferiorRunning(false)
-	needsRefresh := gdb.StopNeedsUIRefresh(stop)
-	if a.isDLV() {
-		needsRefresh = dlv.StopNeedsUIRefresh(stop)
-	}
+	needsRefresh := stop.NeedsUIRefresh()
 	if !needsRefresh {
 		// exited / kill — clear Threads + Call Stack (do not query stack).
 		a.clearDebugInfoPanes()
@@ -69,7 +64,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 
 	// Delve re-prints "> …" on frame/up/down; noteStackNavDLV arms suppressStopUI
 	// so those prompts do not snap Code back to frame 0.
-	if a.isDLV() {
+	if a.backend != nil && a.backend.NavigationAsync() {
 		if a.dlv.consumeSuppressStopUI() {
 			return
 		}
@@ -130,7 +125,7 @@ func (a *DebuggerApp) onGdbStopped(stop *gdb.MiStopMsg) {
 // updateCodeAfterStop moves ━━▶ to the stop location. Prefers *stopped frame;
 // if that has no source file (common for SIGINT in libc), uses the first
 // call-stack frame that has a file after a stack query.
-func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
+func (a *DebuggerApp) updateCodeAfterStop(stop *debugger.StopInfo) *widgets.CodeWidget {
 	kgdb := a.Debug() != nil && a.Debug().KgdbMode()
 	var w *widgets.CodeWidget
 	if stop != nil && stop.File != "" {
@@ -164,15 +159,9 @@ func (a *DebuggerApp) updateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidg
 
 // onGdbFrameSelected presents Code/Asm from =thread-selected (CLI frame/f/up/down).
 // Called on the UI thread with the frame GDB already reported — no MI Query.
-func (a *DebuggerApp) onGdbFrameSelected(fr gdb.MiFrameMsg) {
+func (a *DebuggerApp) onGdbFrameSelected(fr debugger.FrameInfo) {
 	a.debugInfo.selectLevel(fr.Level)
-	a.showFrameSource(models.StackFrame{
-		Level: fr.Level,
-		Func:  fr.Func,
-		File:  fr.File,
-		Line:  fr.Line,
-		Addr:  fr.Addr,
-	})
+	a.showFrameSource(fr.StackFrame())
 	a.RequestFrame()
 	if a.Debug() != nil && a.Debug().KgdbMode() {
 		return
@@ -214,20 +203,15 @@ func (a *DebuggerApp) onGdbFrameSync() {
 // fetchCurrentFrameFromGDB queries the selected frame and updates the call-stack
 // model. Does not touch Code/Asm or Call Stack views — UI thread must present.
 func (a *DebuggerApp) fetchCurrentFrameFromGDB() (models.StackFrame, bool) {
-	if a.gdbMcp == nil {
+	if a.gdbMcp == nil || a.backend == nil {
 		return models.StackFrame{}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	if a.isDLV() {
-		raw, err := a.gdbMcp.Query(ctx, "stack")
-		if err != nil {
-			a.LogError("frame", err.Error())
-			return models.StackFrame{}, false
-		}
-		frames := dlv.ParseStack(raw)
-		if len(frames) == 0 {
+	if a.backend.NavigationAsync() {
+		frames, ok := a.backend.FetchStackList(ctx, a.gdbMcp, false)
+		if !ok || len(frames) == 0 {
 			return models.StackFrame{}, false
 		}
 		a.debugInfo.setStackFrames(frames)
@@ -242,20 +226,14 @@ func (a *DebuggerApp) fetchCurrentFrameFromGDB() (models.StackFrame, bool) {
 		return fr, true
 	}
 
-	raw, err := a.gdbMcp.Query(ctx, "-stack-info-frame")
-	if err != nil {
-		a.LogError("frame", err.Error())
-		return models.StackFrame{}, false
-	}
-	fr, ok := parse.ParseStackInfoFrame(raw)
+	fr, ok := a.backend.CurrentFrame(ctx, a.gdbMcp)
 	if !ok {
 		return models.StackFrame{}, false
 	}
 
 	if a.debugInfo.CallStackWidget() != nil || a.debugInfo.Stack() != nil {
-		rawStack, err := a.gdbMcp.Query(ctx, "-stack-list-frames")
-		if err == nil {
-			a.debugInfo.setStackFrames(parse.ParseStackListFrames(rawStack))
+		if frames, stackOK := a.backend.FetchStackList(ctx, a.gdbMcp, false); stackOK {
+			a.debugInfo.setStackFrames(frames)
 		}
 	}
 	return fr, true
@@ -423,21 +401,13 @@ func frameAtLevel(frames []models.StackFrame, level int) (models.StackFrame, boo
 // stick to the first cached hit — an early/partial capture used to leave only
 // the current frame's main.cpp in :edit / Tab completions).
 func (a *DebuggerApp) ensureSourceFiles() {
-	if a.gdbMcp == nil {
-		return
-	}
-	if a.backend == nil || !a.backend.SupportsSourceFileList() {
+	if a.gdbMcp == nil || a.backend == nil || !a.backend.SupportsSourceFileList() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	raw, err := a.gdbMcp.Query(ctx, "-file-list-exec-source-files")
-	if err != nil {
-		a.LogError("code", err.Error())
-		return
-	}
-	files := parse.ParseSourceFileList(raw)
-	if len(files) == 0 {
+	files, ok := a.backend.ListSourceFiles(ctx, a.gdbMcp)
+	if !ok || len(files) == 0 {
 		return
 	}
 	a.Debug().SetSourceFiles(files)

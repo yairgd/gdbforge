@@ -82,12 +82,12 @@ func (d appDebugDomain) SetBreakpoint(file string, line int) error {
 	if list.HasEnabledAt(file, line) {
 		return nil
 	}
-	cmd, ok := list.ToggleInsertClear(file, line)
+	intent, ok := list.ToggleInsertClear(file, line)
 	if !ok {
 		return fmt.Errorf("could not set breakpoint")
 	}
 	d.app.breaks.syncBreakpointViews()
-	d.app.breaks.sendBreakpointCmd(cmd)
+	d.app.breaks.applyBreakIntent(intent)
 	return nil
 }
 
@@ -105,12 +105,12 @@ func (d appDebugDomain) ClearBreakpoint(file string, line int) error {
 	if !list.HasEnabledAt(file, line) {
 		return nil
 	}
-	cmd, ok := list.ToggleInsertClear(file, line)
+	intent, ok := list.ToggleInsertClear(file, line)
 	if !ok {
 		return fmt.Errorf("could not clear breakpoint")
 	}
 	d.app.breaks.syncBreakpointViews()
-	d.app.breaks.sendBreakpointCmd(cmd)
+	d.app.breaks.applyBreakIntent(intent)
 	return nil
 }
 

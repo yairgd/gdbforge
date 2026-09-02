@@ -199,10 +199,17 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 | Path | Responsibility |
 |------|----------------|
-| `backend/` | `Backend` iface — GDB vs Delve policy (`Kind`, `MapExec`, `SupportsAssembly`, …) |
-| `backend/gdb_backend.go` | Wraps `*gdb.GDBClient` |
-| `backend/dlv_backend.go` | Wraps `*dlv.Client` |
+| `backend/` | `Backend` iface — semantic debugger ops + capability flags; GDB vs Delve policy |
+| `backend/gdb_backend.go` | `GDBBackend` — wraps `*gdb.GDBClient`; MI strings internal |
+| `backend/dlv_backend.go` | `DLVBackend` — wraps `*dlv.Client`; rpc2 + CLI |
+| `backend/ops.go` | Shared `Exec`, frame/thread select, navigation helpers |
+| `backend/break_cmds.go` | Breakpoint semantic commands |
+| `backend/dlv_rpc.go` | Delve rpc2-backed queries and ops |
 | `backend/refresh.go` | Shared threads/stack query helpers |
+| `debugger/` | Cross-backend stop/console types — `StopInfo`, `ConsoleUpdate`, `InferiorIO` |
+| `debugger/stop.go` | Stop pipeline input |
+| `debugger/update.go` | Console update from backend parsers |
+| `debugger/inferior_io.go` | Inferior routing interface (`InferiorInternal` / external) |
 | `models/breakpoints.go` | `BreakpointList` — shared BP model (GUI + MCP) |
 | `models/types.go` | `BreakInfo`, `BreakGutter`, `GuttersByLine` / `GuttersByAddr` |
 | `models/threads.go` | `ThreadList` — stop snapshot |
@@ -333,15 +340,17 @@ Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp
 
 ## internal/dlv
 
-**Delve interactive CLI backend** (peer of `internal/gdb`). Spawns `dlv exec --` on `ptyx`; implements `core.Session`.
+**Delve backend** (peer of `internal/gdb`). Headless `dlv exec` + **rpc2** + `dlv connect` CLI PTY; inferior via `--tty`.
 
 | File | Responsibility |
 |------|----------------|
-| `client.go` | `Client` embeds `*ptyx.TTY`; waits for `(dlv)` on startup |
+| `client.go` | `Client` — headless child, rpc2 dial, `dlv connect` PTY, inferior TTY |
+| `rpc_dial.go` | `DialRPC`, `PickListenAddr` |
+| `rpc_convert.go` | Delve `api.*` → `models.*` row types |
 | `input_state.go` | Stream splitter: `PushRaw` → `Update` (stops, prompts, `[Y/n]?`, BP notifies) |
 | `confirm.go` | `ConfirmGate` for Delve yes/no prompts (suspended breakpoint after exit) |
 | `complete.go` | Console Tab: command names + `funcs ^<prefix>` locspec completion |
-| `parse.go` | Text parsers for `breakpoints` / `stack` / `goroutines` → MCP row types |
+| `parse.go` | Text parsers for CLI fallback scrape → MCP row types |
 
 Selected with `gdbforge -g dlv`. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb).
 

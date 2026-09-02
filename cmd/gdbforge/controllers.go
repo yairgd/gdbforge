@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
@@ -33,8 +32,8 @@ type breakHost interface {
 	GDBWidget() *widgets.GDBWidget
 	Screen() tcell.Screen
 	PublishBreakpointsChanged()
-	DeferDLVBPRefresh()
-	IsDLVConfirming() bool
+	DeferBPRefresh()
+	IsConfirming() bool
 	GdbMcp() *mcp.GdbMcpService
 	RequestFrame()
 	ActivateBreakpoint(bp models.BreakInfo)
@@ -249,20 +248,21 @@ func (a *DebuggerApp) SelectedFrameLevel() int { return a.debugInfo.selectedLeve
 
 // --- dlvCtl peers ---
 
-func (a *DebuggerApp) DeferDLVBPRefresh() { a.dlv.deferBPRefresh() }
+func (a *DebuggerApp) DeferBPRefresh() { a.dlv.deferBPRefresh() }
 func (a *DebuggerApp) TakeDeferredBP() bool {
 	return a.dlv.takeDeferredBP()
 }
-func (a *DebuggerApp) IsDLVConfirming() bool {
-	return a.isDLV() && a.dlv.confirm.Confirming()
+func (a *DebuggerApp) IsConfirming() bool {
+	if a.backend == nil {
+		return false
+	}
+	return a.backend.Confirming()
 }
-func (a *DebuggerApp) NoteStackNavGDB() { a.dlv.noteStackNavGDB() }
+func (a *DebuggerApp) Confirming() bool { return a.IsConfirming() }
 func (a *DebuggerApp) NoteStackNavDLV(cmd string, curLevel int) {
 	a.dlv.noteStackNavDLV(cmd, curLevel)
 }
-func (a *DebuggerApp) DlvConfirming() bool             { return a.dlv.confirm.Confirming() }
-func (a *DebuggerApp) DlvObserveUpdate(upd dlv.Update) { a.dlv.confirm.Observe(upd) }
-func (a *DebuggerApp) DlvConfirmHost() string          { return a.dlv.confirm.Host() }
+func (a *DebuggerApp) NoteStackNavGDB() { a.dlv.noteStackNavGDB() }
 func (a *DebuggerApp) BumpCodeNav()                    { a.dlv.bumpCodeNav() }
 func (a *DebuggerApp) SuppressDlvStopUI()              { a.dlv.suppressStopUI++ }
 func (a *DebuggerApp) SuppressStopUICount() int        { return a.dlv.suppressStopUI }

@@ -268,7 +268,39 @@ flowchart LR
     GDB -.->|"inferior tty"| Target
 ```
 
-GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
+GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty). Unified controller/backend layering: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#unified-backend-api).
+
+```mermaid
+flowchart TB
+  subgraph ui ["Controllers — protocol-agnostic"]
+    breakCtl[breakCtl]
+    debugInfoCtl[debugInfoCtl]
+    consoleCtl[consoleCtl]
+    stopped[stopped / code_nav]
+    inferiorIO[inferiorIOCtl]
+  end
+
+  subgraph shared ["Shared domain"]
+    models["models.*"]
+    debuggerPkg["debugger.* StopInfo ConsoleUpdate"]
+  end
+
+  subgraph api ["backend.Backend"]
+    SemanticOps["Semantic ops + capabilities"]
+  end
+
+  subgraph impl ["Implementations"]
+    GDB["GDBBackend · MI"]
+    DLV["DLVBackend · rpc2 + CLI"]
+  end
+
+  ui --> api
+  ui --> shared
+  api --> GDB
+  api --> DLV
+```
+
+(Full diagram: [`docs/diagrams/unified_backend.mermaid`](diagrams/unified_backend.mermaid).)
 
 ---
 

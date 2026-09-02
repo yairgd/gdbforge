@@ -1,22 +1,22 @@
 package backend
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 )
 
-// DLVBackend is the Delve CLI implementation of Backend.
+// DLVBackend is the Delve CLI + rpc2 implementation of Backend.
 type DLVBackend struct {
-	Client *dlv.Client
-	Input  *dlv.InputState
+	Client  *dlv.Client
+	Input   *dlv.InputState
+	Confirm dlv.ConfirmGate
 }
 
 func NewDLV(client *dlv.Client) *DLVBackend {
@@ -47,6 +47,7 @@ func (b *DLVBackend) ReplaceClient(client *dlv.Client) {
 	}
 	b.Client = client
 	b.Input = dlv.NewInputState()
+	b.Confirm.Clear()
 }
 
 func (b *DLVBackend) TakeStartupOutput() string {
@@ -67,11 +68,17 @@ func (b *DLVBackend) ConfigureInferiorTTY() error {
 	}
 	return nil
 }
+
+func (b *DLVBackend) SetInferiorTTYPath(path string) error {
+	if c := b.client(); c != nil {
+		return c.SetInferiorTTYPath(path)
+	}
+	return ErrNotSupported
+}
 func (b *DLVBackend) PromptToken() string        { return dlv.PromptToken }
 func (b *DLVBackend) PaintTargetInConsole() bool { return true }
 
 func (b *DLVBackend) SupportsAssembly() bool        { return false }
-func (b *DLVBackend) SupportsSourceFileList() bool  { return false }
 func (b *DLVBackend) SupportsLiveInferiorTTY() bool { return false }
 func (b *DLVBackend) BreakRefreshImmediate() bool   { return false }
 
@@ -94,32 +101,6 @@ func (b *DLVBackend) SelectFrameCmd(level int) string {
 }
 func (b *DLVBackend) SelectThreadCmd(id string) string {
 	return "goroutine " + id
-}
-
-func (b *DLVBackend) FetchBreakpoints(ctx context.Context, q Querier) ([]models.BreakInfo, bool) {
-	if q == nil {
-		return nil, false
-	}
-	raw, err := q.Query(ctx, "breakpoints")
-	if err != nil {
-		return nil, false
-	}
-	items := dlv.ParseBreakpoints(raw)
-	low := strings.ToLower(raw)
-	if len(items) == 0 {
-		if strings.Contains(low, "no breakpoints") {
-			return items, true
-		}
-		if strings.Contains(low, "breakpoint") {
-			return nil, false
-		}
-		return nil, false
-	}
-	return items, true
-}
-
-func (b *DLVBackend) RefreshThreadsAndStack(ctx context.Context, q Querier, log LogFn) ([]models.ThreadInfo, []models.StackFrame, bool, bool) {
-	return ThreadsAndStack(ctx, DLV, q, log)
 }
 
 func (b *DLVBackend) Complete(sess core.Session, state *platform.AppState, text string) gdb.CompleteResult {
@@ -156,18 +137,29 @@ func (b *DLVBackend) SendLine(cmd string) error {
 	return nil
 }
 
-func (b *DLVBackend) PushConsoleOutput(data string) ConsoleEvent {
+func (b *DLVBackend) PushConsoleOutput(data string) debugger.ConsoleUpdate {
 	if b.Input == nil {
-		return ConsoleEvent{Kind: DLV}
+		return debugger.ConsoleUpdate{}
 	}
 	u := b.Input.PushRaw(data)
-	return ConsoleEvent{Kind: DLV, DLV: &u}
+	b.Confirm.Observe(u)
+	return debugger.FromDLVUpdate(u)
 }
 
-// AsDLVUpdate extracts the Delve update from a ConsoleEvent.
-func AsDLVUpdate(ev ConsoleEvent) *dlv.Update {
-	if u, ok := ev.DLV.(*dlv.Update); ok {
-		return u
+func (b *DLVBackend) Confirming() bool { return b.Confirm.Confirming() }
+
+func (b *DLVBackend) InferiorTTYPath() string {
+	if c := b.client(); c != nil {
+		return c.InferiorTTYPath()
 	}
-	return nil
+	return ""
 }
+
+func (b *DLVBackend) UsesExternalInferiorTTY() bool {
+	if c := b.client(); c != nil {
+		return c.UsesExternalInferiorTTY()
+	}
+	return false
+}
+
+func (b *DLVBackend) RequiresInferiorTTYRestart() bool { return true }

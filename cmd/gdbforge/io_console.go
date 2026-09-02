@@ -87,30 +87,15 @@ func (c *inferiorIOCtl) rewireInternal(tty *ptyx.TTY) {
 		return
 	}
 	c.unwire()
+	out := h.OutputWidget()
+	out.Clear()
 	c.wire(tty)
-	h.OutputWidget().Clear()
-	h.OutputWidget().AppendHostLine("stdio: internal IO pane")
+	out.AppendHostLine("stdio: internal IO pane")
 }
 
 // restoreInferiorIO re-attaches the debug session inferior PTY after serial console teardown.
 func (a *DebuggerApp) restoreInferiorIO() {
-	if a.isDLV() {
-		if db := a.dlvBackend(); db != nil && db.Client != nil {
-			if db.Client.UsesExternalInferiorTTY() {
-				a.inferiorIO.markExternal(db.Client.InferiorTTYPath())
-			} else if inf := db.Client.InferiorTTY(); inf != nil {
-				a.inferiorIO.rewireInternal(inf)
-			}
-		}
-		return
-	}
-	if gb := a.gdbBackend(); gb != nil && gb.Client != nil {
-		if gb.Client.UsesExternalInferiorTTY() {
-			a.inferiorIO.markExternal(gb.Client.InferiorTTYPath())
-		} else {
-			a.inferiorIO.rewireInternal(gb.Client.InferiorTTY())
-		}
-	}
+	a.syncInferiorIOView()
 }
 
 // wireSerialConsole attaches the UART console leg to the IO pane (in-app minicom).
@@ -120,9 +105,11 @@ func (a *DebuggerApp) wireSerialConsole() error {
 		return err
 	}
 	a.inferiorIO.unwire()
-	a.inferiorIO.wire(tty)
 	if a.outputWidget != nil {
 		a.outputWidget.Clear()
+	}
+	a.inferiorIO.wire(tty)
+	if a.outputWidget != nil {
 		a.outputWidget.AppendHostLine("serial: console on " + a.serial.Device() + " (IO pane)")
 	}
 	if a.TermApp != nil {

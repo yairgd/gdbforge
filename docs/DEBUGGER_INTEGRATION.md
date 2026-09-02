@@ -4,7 +4,7 @@ description: Technical guide to gdbforge debugger integration with GDB MI2, Delv
 
 # Debugger Integration
 
-gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB** (`gdb.GDBClient`, **3 PTYs**: CLI + MI + inferior) and **Delve** (`dlv.Client`, **2 PTYs**: CLI + inferior) via `-g gdb|dlv`. The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP. Program I/O is wired to the IO pane (`:b io`) via `CompositeTerminal` + `WireTTY`.
+gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB** (`gdb.GDBClient`, **3 PTYs**: CLI + MI + inferior) and **Delve** (`dlv.Client`, headless **rpc2** + `dlv connect` CLI PTY + inferior `--tty`) via `-g gdb|dlv`. Controllers call **semantic backend ops** (breakpoints, frame/thread select, exec) — not raw MI or Delve CLI strings. The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP. Program I/O is wired to the IO pane (`:b io`) via `CompositeTerminal` + `WireTTY`.
 
 **Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -13,6 +13,7 @@ gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbf
 ## Table of contents
 
 - [Integration overview](#integration-overview)
+- [Unified backend API](#unified-backend-api)
 - [Debugger interface](#debugger-interface)
 - [PTY mux](#pty-mux)
 - [Inferior I/O (dual PTY)](#inferior-io-dual-pty)
@@ -104,8 +105,105 @@ flowchart TB
 - `internal/gdb`, `internal/dlv`, and `internal/ptyx` must not import `internal/termui`
 - `DebuggerApp` owns `backend.Backend` (concrete GDB or Delve client); views never hold `Session`
 - External APIs use `app.GDB() core.Session` (works for `-g dlv` too)
-- Prefer `Backend` methods over new `isDLV()` branches
+- Controllers use **`Backend` semantic ops** (`InsertBreakpoint`, `SelectFrame`, `Exec`, …) and **capability flags** (`NavigationAsync`, `WireCLILineTap`, `DeferBreakpointRefresh`, …) — not `isDLV()` / `isGDB()` branches or MI string literals in `cmd/gdbforge/`
 - Never `Close()` the session from MCP/AI — the app owns lifetime
+
+---
+
+## Unified backend API
+
+Controllers (`breakCtl`, `debugInfoCtl`, `consoleCtl`, stop pipeline / `code_nav`, `inferiorIOCtl`) are **protocol-agnostic**. They talk to shared domain types and a single **`backend.Backend`** interface; GDB MI and Delve rpc2/CLI details stay inside `GDBBackend` and `DLVBackend`.
+
+```mermaid
+flowchart TB
+  subgraph ui ["Controllers — protocol-agnostic"]
+    breakCtl[breakCtl]
+    debugInfoCtl[debugInfoCtl]
+    consoleCtl[consoleCtl]
+    stopped[stopped / code_nav]
+    inferiorIO[inferiorIOCtl]
+  end
+
+  subgraph shared ["Shared domain"]
+    models["models.* · BreakInfo StackFrame ThreadInfo"]
+    debuggerPkg["debugger.* · StopInfo ConsoleUpdate InferiorIO"]
+  end
+
+  subgraph api ["Backend interface"]
+    BackendIface[backend.Backend]
+    Capabilities["Capabilities · NavigationAsync WireCLILineTap DeferBreakpointRefresh …"]
+    SemanticOps["Semantic ops · InsertBreakpoint SelectFrame Exec FetchStackList …"]
+  end
+
+  subgraph gdb_impl ["GDBBackend"]
+    GdbCLI["CLI PTY → GDBWidget"]
+    GdbMI["MI PTY → GdbInputState"]
+    GdbOps["MI strings inside backend only"]
+  end
+
+  subgraph dlv_impl ["DLVBackend"]
+    DlvCLI["dlv connect PTY → human console"]
+    DlvRPC["go-delve rpc2 → machine ops"]
+    DlvParse["dlv.InputState → ConsoleUpdate"]
+  end
+
+  ui --> BackendIface
+  ui --> models
+  ui --> debuggerPkg
+  BackendIface --> Capabilities
+  BackendIface --> SemanticOps
+  BackendIface --> gdb_impl
+  BackendIface --> dlv_impl
+  inferiorIO --> debuggerPkg
+```
+
+Source: [`docs/diagrams/unified_backend.mermaid`](diagrams/unified_backend.mermaid).
+
+### Shared domain (`internal/gdbforge/models`, `internal/gdbforge/debugger`)
+
+| Package | Types | Used by |
+|---------|-------|---------|
+| `models` | `BreakInfo`, `StackFrame`, `ThreadInfo`, list merge helpers | Controllers, widgets, MCP parsers |
+| `debugger` | `StopInfo`, `FrameInfo`, `ConsoleUpdate` | Stop pipeline, `consoleCtl`, inferior routing (`InferiorIO`) |
+
+Controllers **merge snapshots** into `models.*` lists and paint widgets. The stop pipeline builds `debugger.StopInfo` from backend console updates — widgets never parse MI or Delve text.
+
+### `backend.Backend` surface
+
+**Semantic ops** (controllers call these instead of crafting MI / CLI):
+
+| Op | Purpose |
+|----|---------|
+| `InsertBreakpoint` / `ClearBreakpointAt` / `DisableBreakpoint` / … | Breakpoint intents from Code, BP pane, Space |
+| `SelectFrame` / `SelectThread` | Call stack / thread pane navigation |
+| `Exec` / `ExecUI` | `-exec-*` or Delve CLI equivalents |
+| `FetchStackList` / `RefreshThreadsAndStack` / `FetchBreakpoints` | Pane refresh queries |
+| `PushConsoleOutput` | PTY chunk → `debugger.ConsoleUpdate` |
+
+**Capability flags** (replace scattered `isDLV()` routing):
+
+| Flag | GDB | Delve |
+|------|-----|-------|
+| `NavigationAsync()` | false — MI frame select is synchronous | true — rpc2 + deferred code refresh |
+| `WireCLILineTap()` | false | true — Delve CLI line buffer for run/stack side effects |
+| `DeferBreakpointRefresh()` | false | true — defer `breakpoints` query during `[Y/n]?` |
+| `BreakRefreshImmediate()` | true — `=breakpoint-*` triggers refresh | false |
+| `RequiresInferiorTTYRestart()` | false — live `-inferior-tty-set` | true — `--tty` fixed at spawn |
+| `PaintTargetInConsole()` | false | true — mirror inferior stdout in debugger pane |
+
+Implementation files: `backend/gdb_backend.go`, `backend/dlv_backend.go`, `backend/ops.go`, `backend/break_cmds.go`, `backend/dlv_rpc.go`.
+
+### GDB vs Delve implementation split
+
+| Layer | GDB | Delve |
+|-------|-----|-------|
+| Human console | CLI PTY #1 → `GDBWidget` | `dlv connect` PTY → `GDBWidget` |
+| Machine control | MI PTY #2 → `GdbInputState` | **go-delve `rpc2`** (`Client.RPC`) |
+| Inferior stdio | PTY #3 or external `-inferior-tty-set` | `--tty` slave (restart to switch) |
+| Protocol strings | `-break-insert`, `-stack-select-frame`, … **only in backend** | rpc2 methods + CLI fallback scrape |
+
+Lua extensions (`gdbforge.gdb`, `set_inferior_tty`, probe spawn scripts) remain unchanged — they orchestrate external tools and call the same host APIs; they do not import `backend` directly.
+
 ---
 ## Debugger interface
 
@@ -247,7 +345,7 @@ For TUI inferiors (htop, games, …) or programs that need a **real** terminal e
 | Mode | How | IO pane |
 |------|-----|---------|
 | **internal** (default) | Internal PTY + wire `:b io` | Program stdin/stdout |
-| **external** | `:set inferior-tty` (opens terminal), `GDBFORGE_INFERIOR_TTY`, Lua `open_external_tty` / `set_inferior_tty` | Note only — no subscribe |
+| **external** | `:set inferior-tty` or `:set inferior-tty external` (opens terminal), `GDBFORGE_INFERIOR_TTY`, Lua `open_external_tty` / `set_inferior_tty("external")` | Note only — no subscribe |
 
 | | **GDB** | **Delve (`-g dlv`)** |
 |--|---------|----------------------|
@@ -648,29 +746,30 @@ The GDB pane uses a full **xterm emulator** (scrollback, ANSI, cursor at emulato
 
 ## Delve backend (peer of GDB)
 
-Delve plugs into the **same** architecture as GDB — no new control plane:
+Delve plugs into the **same** unified backend as GDB:
 
 | Piece | Role |
 |-------|------|
 | CLI | `gdbforge -g dlv [-d dlv] prog [args…]` |
-| `backend.DLVBackend` | Policy wrapper; `DebuggerApp.backend` |
-| `internal/dlv.Client` | Implements `core.Session` over `ptyx` (`dlv exec -- prog…`) |
-| `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `[Y/n]?` confirms, `> file:line` stops, BP lines |
+| `backend.DLVBackend` | Semantic ops + capabilities; `DebuggerApp.backend` |
+| `internal/dlv.Client` | Headless `dlv exec --headless --accept-multiclient` + **rpc2** dial + `dlv connect` CLI PTY |
+| `Client.RPC` | `go-delve/delve/service/rpc2` — breakpoints, threads, stack, exec, halt |
+| `dlv.InputState` | CLI PTY parser → `debugger.ConsoleUpdate` (prompt, confirms, display lines) |
 | Console | Same `GDBWidget` + `consoleCtl`; prompt token `(dlv)` |
-| Pane refresh | Via `Backend` + local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
+| Pane refresh | `Backend.FetchStackList`, `RefreshThreadsAndStack`, `FetchBreakpoints` (rpc2-first) |
 
 ```mermaid
 flowchart LR
   CLI["gdbforge -g gdb|dlv"] --> App["DebuggerApp"]
   App --> BE["backend.Backend"]
-  BE --> GDB["gdb.GDBClient"]
-  BE --> DLV["dlv.Client"]
-  GDB --> Sess["core.Session"]
-  DLV --> Sess
-  Sess --> PTY["ptyx"]
+  BE --> GDB["GDBBackend · gdb.GDBClient"]
+  BE --> DLV["DLVBackend · dlv.Client"]
+  GDB --> Sess["core.Session + MI"]
+  DLV --> RPC["rpc2 machine"]
+  DLV --> PTY["dlv connect PTY"]
 ```
 
-**MVP limits:** Delve CLI output parsing is less structured than MI (known debt). `:edit` source-file list from `-file-list-exec-source-files` is skipped under Delve. MCP/`:AI` tools remain GDB-oriented; the shared `Query` helper still drives pane refreshes with prompt token `(dlv)`.
+**MVP limits:** Delve CLI output parsing remains for human-console edge cases; rpc2 covers machine queries. `:edit` source-file list from `-file-list-exec-source-files` is GDB-only (`SupportsSourceFileList()`). MCP/`:AI` tools remain GDB-oriented; shared `Query` uses prompt token `(dlv)` when on Delve.
 
 **Interactive yes/no:** After the inferior exits, Delve may ask `Set a suspended breakpoint … [Y/n]?`. gdbforge detects that prompt (including when it arrives without a trailing newline), paints it as a live host (same idea as GDB quit confirm), and answers with the next console submit. While confirming, breakpoint `Query("breakpoints")` is deferred so the query line cannot be consumed as `y`/`n`. Ctrl-C at a yes/no prompt sends `n` (cancel); SIGINT/`^C` is only used when the inferior is actually running.
 

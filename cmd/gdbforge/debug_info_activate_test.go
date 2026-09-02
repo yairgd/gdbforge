@@ -37,7 +37,12 @@ type stubDebugInfoHost struct {
 	dlv          bool
 }
 
-func (s *stubDebugInfoHost) Backend() backend.Backend { return nil }
+func (s *stubDebugInfoHost) Backend() backend.Backend {
+	if s.dlv {
+		return backend.NewDLV(nil)
+	}
+	return backend.NewGDB(nil)
+}
 func (s *stubDebugInfoHost) Session() core.Session    { return noopSession{} }
 func (s *stubDebugInfoHost) State() *platform.AppState {
 	if s.st == nil {
@@ -58,7 +63,6 @@ func (s *stubDebugInfoHost) RequestFrame()                     {}
 func (s *stubDebugInfoHost) BumpCodeNav()                      { s.bumpCodeNav++ }
 func (s *stubDebugInfoHost) NoteStackNavGDB()                  { s.noteStackNav++ }
 func (s *stubDebugInfoHost) SuppressDlvStopUI()                { s.suppressDlv++ }
-func (s *stubDebugInfoHost) isDLV() bool                       { return s.dlv }
 func (s *stubDebugInfoHost) showFrameSource(models.StackFrame) {}
 func (s *stubDebugInfoHost) ShowCodeAt(string, int) *widgets.CodeWidget {
 	s.showCode++

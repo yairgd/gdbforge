@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
@@ -32,7 +30,6 @@ type debugInfoHost interface {
 	BumpCodeNav()
 	NoteStackNavGDB()
 	SuppressDlvStopUI()
-	isDLV() bool
 	showFrameSource(fr models.StackFrame)
 	ShowCodeAt(file string, line int) *widgets.CodeWidget
 	LogError(area, msg string)
@@ -168,6 +165,18 @@ func (c *debugInfoCtl) scheduleStackRefresh() {
 	c.coalesce.Schedule(c.runStackRefresh)
 }
 
+func (c *debugInfoCtl) cmdEnv() backend.CommandEnv {
+	h := c.host
+	if h == nil {
+		return backend.CommandEnv{}
+	}
+	return backend.CommandEnv{
+		Session:  h.Session(),
+		App:      h.State(),
+		Inferior: h.Debug(),
+	}
+}
+
 func (c *debugInfoCtl) runStackRefresh() {
 	h := c.host
 	if h == nil || h.GdbMcp() == nil || h.Backend() == nil {
@@ -175,7 +184,6 @@ func (c *debugInfoCtl) runStackRefresh() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Second)
 	defer cancel()
-	logFn := backend.LogFn(func(area, msg string) { h.LogError(area, msg) })
 	longCap := h.Debug() != nil && h.Debug().KgdbMode()
 	var frames []models.StackFrame
 	var ok bool
@@ -183,7 +191,7 @@ func (c *debugInfoCtl) runStackRefresh() {
 		if attempt > 0 {
 			time.Sleep(80 * time.Millisecond)
 		}
-		frames, ok = backend.StackList(ctx, h.Backend().Kind(), h.GdbMcp(), longCap, logFn)
+		frames, ok = h.Backend().FetchStackList(ctx, h.GdbMcp(), longCap)
 		if ok && len(frames) > 0 {
 			break
 		}
@@ -258,53 +266,40 @@ func (c *debugInfoCtl) activateCallStack(fr models.StackFrame) {
 	h.showFrameSource(fr)
 	h.RequestFrame()
 
-	if h.GDBWidget() == nil {
+	if h.GDBWidget() == nil || h.Backend() == nil {
 		return
 	}
-	sess := h.Session()
-	if sess == nil {
-		return
-	}
-	cmd := fmt.Sprintf("-stack-select-frame %d", fr.Level)
-	if h.Backend() != nil {
-		cmd = h.Backend().SelectFrameCmd(fr.Level)
-	}
-	if h.isDLV() {
+	be := h.Backend()
+	if be.NavigationAsync() {
 		// Selecting a call-stack row must update Code from the row's file:line.
 		// Sending `frame N` makes Delve re-emit "> …" and dump source, which we
 		// used to treat as a new stop (goroutines/stack refresh → snap to frame 0).
 		h.SuppressDlvStopUI()
-		go gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
-		return
 	}
-	// GDB MI frame select is cheap; keep it on the UI path like before.
-	gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+	be.SelectFrame(c.cmdEnv(), fr.Level, backend.NavigationOpts{Async: be.NavigationAsync()})
 }
 
 // activateThread switches GDB to the selected thread and refreshes stack/threads
 // after the MI prompt (=thread-selected), not before the switch completes.
 func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 	h := c.host
-	if h == nil || h.GDBWidget() == nil || th.ID == "" {
+	if h == nil || h.GDBWidget() == nil || th.ID == "" || h.Backend() == nil {
 		return
 	}
-	sess := h.Session()
-	if sess == nil {
-		return
-	}
-	cmd := "-thread-select " + th.ID
-	if h.Backend() != nil {
-		cmd = h.Backend().SelectThreadCmd(th.ID)
-	}
+	be := h.Backend()
+	env := c.cmdEnv()
+	navAsync := be.NavigationAsync()
 
-	if h.isDLV() {
+	if navAsync {
 		h.BumpCodeNav()
 		h.SuppressDlvStopUI()
-		go gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+		be.SelectThread(env, th.ID, backend.NavigationOpts{Async: true})
 		c.scheduleRefresh()
-	} else if h.Debug() != nil && h.Debug().KgdbMode() {
+		return
+	}
+	if h.Debug() != nil && h.Debug().KgdbMode() {
 		// kgdb: legacy path unchanged — no frame-sync deferral (slow serial constraints).
-		gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+		be.SelectThread(env, th.ID, backend.NavigationOpts{})
 		c.refreshThreadsAndStack()
 		c.syncThreadViews()
 		c.syncCallStackViews()
@@ -331,12 +326,11 @@ func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
 		}
 		h.RequestFrame()
 		return
-	} else {
-		// Zephyr / OpenOCD / local GDB: wait for =thread-selected + prompt.
-		h.BumpCodeNav()
-		h.NoteStackNavGDB()
-		gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
 	}
+	// Zephyr / OpenOCD / local GDB: wait for =thread-selected + prompt.
+	h.BumpCodeNav()
+	h.NoteStackNavGDB()
+	be.SelectThread(env, th.ID, backend.NavigationOpts{})
 
 	// Optimistic Code from the thread row until GDB confirms the frame.
 	file, line := th.File, th.Line

@@ -73,7 +73,7 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		commands.NewCommand("gdb-quit", func(args ...any) {
 			if gb := a.gdbBackend(); gb != nil && gb.Client != nil {
 				a.console.handleGdbQuitAction(gb.Client.RequestQuit())
-			} else if a.isDLV() {
+			} else if a.backend != nil && a.backend.ConsoleEOFCommand() != "" {
 				a.console.onGdbConsoleEOF()
 			}
 			a.RequestFrame()

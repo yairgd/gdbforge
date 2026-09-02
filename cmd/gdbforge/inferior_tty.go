@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,26 +15,35 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 )
 
-// SetInferiorTTY switches program stdio to path ("internal" / empty restores
-// the in-app IO pane). GDB can switch live via -inferior-tty-set. Delve's
-// --tty is fixed at spawn, so this restarts the dlv session with the new path.
+// SetInferiorTTY switches program stdio to path ("internal" or "" restores the
+// in-app IO pane; "external" or a /dev/pts/N path routes stdio to an external
+// terminal). GDB switches live via -inferior-tty-set. Delve external stdio uses
+// :lua dlv_ext_port; only internal is supported here for -g dlv.
 func (a *DebuggerApp) SetInferiorTTY(path string) error {
 	path = strings.TrimSpace(path)
-	if a.isDLV() {
+	if a.backend == nil {
+		return fmt.Errorf("no debugger session")
+	}
+	if path == "" || path == "internal" {
+		a.closeExternalInferiorHold()
+	}
+	if a.backend.RequiresInferiorTTYRestart() {
+		if path == "external" || (path != "" && path != "internal" && strings.HasPrefix(path, "/dev/")) {
+			return fmt.Errorf("Delve: use :lua dlv_ext_port for external stdio (not :set inferior-tty)")
+		}
 		return a.setDlvInferiorTTY(path)
 	}
-	gb := a.gdbBackend()
-	if gb == nil || gb.Client == nil {
-		return fmt.Errorf("no gdb session")
+	if path == "external" {
+		pts, err := a.OpenExternalTTY()
+		if err != nil {
+			return err
+		}
+		path = pts
 	}
-	if err := gb.Client.SetInferiorTTYPath(path); err != nil {
+	if err := a.backend.SetInferiorTTYPath(path); err != nil {
 		return err
 	}
-	if gb.Client.UsesExternalInferiorTTY() {
-		a.inferiorIO.markExternal(gb.Client.InferiorTTYPath())
-		return nil
-	}
-	a.inferiorIO.rewireInternal(gb.Client.InferiorTTY())
+	a.syncInferiorIOView()
 	return nil
 }
 
@@ -62,6 +72,12 @@ func (a *DebuggerApp) setDlvInferiorTTY(path string) error {
 		return nil
 	}
 	return a.restartDlvWithInferiorTTY(ext)
+}
+
+// inferiorTTYSetMsg runs SetInferiorTTY on the next UI turn so :set inferior-tty
+// can return immediately and the cmdline clears before opening a terminal.
+type inferiorTTYSetMsg struct {
+	path string
 }
 
 // restartDlvWithInferiorTTY tears down the current Delve PTY session and
@@ -133,7 +149,7 @@ func (a *DebuggerApp) tearDownDlvSession() {
 // ConnectDlv replaces the local `dlv exec` session with `dlv connect <addr>`
 // (headless server in another terminal / process). Same-UID localhost only.
 func (a *DebuggerApp) ConnectDlv(addr string) error {
-	if !a.isDLV() {
+	if a.backend == nil || a.backend.Kind() != backend.DLV {
 		return fmt.Errorf("dlv_connect: start gdbforge with -g dlv")
 	}
 	addr = strings.TrimSpace(addr)
@@ -237,8 +253,8 @@ func (a *DebuggerApp) SpawnDlvHeadless(port string, extraArgs []string) error {
 	b.WriteString(shellSingleQuote(dlvBin))
 	b.WriteString(" exec --headless --listen=")
 	b.WriteString(shellSingleQuote(addr))
-	// Single client only — --accept-multiclient makes Ctrl-C ask [s/q]? instead of halting.
-	b.WriteString(" --api-version=2 --")
+	// --accept-multiclient allows gdbforge rpc2 + dlv connect to share one session.
+	b.WriteString(" --api-version=2 --accept-multiclient --")
 	for _, arg := range progArgs {
 		b.WriteByte(' ')
 		b.WriteString(shellSingleQuote(arg))
@@ -248,14 +264,45 @@ func (a *DebuggerApp) SpawnDlvHeadless(port string, extraArgs []string) error {
 	return a.SpawnTerminal([]string{"sh", "-c", b.String()})
 }
 
-// OpenExternalTTY spawns a real terminal that holds a slave pts and returns
-// its path (for -inferior-tty-set / dlv --tty). Override launcher with
-// GDBFORGE_TERMINAL (kitty, xterm, gnome-terminal, …).
-func (a *DebuggerApp) OpenExternalTTY() (string, error) {
-	pathFile := filepath.Join(os.TempDir(), fmt.Sprintf("gdbforge-inf-tty-%d", os.Getpid()))
-	_ = os.Remove(pathFile)
+func (a *DebuggerApp) closeExternalInferiorHold() {
+	if a == nil || a.extInferiorHold == nil {
+		return
+	}
+	h := a.extInferiorHold
+	a.extInferiorHold = nil
+	// Kill the shell/sleep inside the terminal first — mate-terminal exits with it.
+	if h.holdPID > 0 {
+		signalProcess(h.holdPID, false, syscall.SIGTERM)
+		time.Sleep(150 * time.Millisecond)
+		if processAlive(h.holdPID) {
+			signalProcess(h.holdPID, false, syscall.SIGKILL)
+		}
+	}
+	if h.termPID > 0 {
+		a.children.KillTracked(h.termPID)
+	}
+}
 
-	hold := fmt.Sprintf("tty > %s; exec sleep infinity", shellSingleQuote(pathFile))
+// externalInferiorHold tracks the terminal emulator and its hold shell so
+// :set inferior-tty internal can close the external window.
+type externalInferiorHold struct {
+	holdPID int // sh/sleep inside the terminal (from pid file)
+	termPID int // mate-terminal (etc.) process
+}
+
+// OpenExternalTTY opens a real terminal, records its /dev/pts/N for GDB
+// -inferior-tty-set, and keeps the window open until internal mode.
+func (a *DebuggerApp) OpenExternalTTY() (string, error) {
+	a.closeExternalInferiorHold()
+
+	tag := fmt.Sprintf("gdbforge-inf-tty-%d", os.Getpid())
+	pathFile := filepath.Join(os.TempDir(), tag)
+	pidFile := filepath.Join(os.TempDir(), tag+".pid")
+	_ = os.Remove(pathFile)
+	_ = os.Remove(pidFile)
+
+	hold := fmt.Sprintf("echo $$ > %s; tty > %s; exec sleep infinity",
+		shellSingleQuote(pidFile), shellSingleQuote(pathFile))
 	argv, err := terminalHoldArgv(hold)
 	if err != nil {
 		return "", err
@@ -267,24 +314,52 @@ func (a *DebuggerApp) OpenExternalTTY() (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start terminal %v: %w", argv, err)
 	}
+	termPID := cmd.Process.Pid
 	a.trackStartedCmd(cmd, true)
-	// Detach: do not wait; the hold process keeps the pts open.
 	go func() { _ = cmd.Wait() }()
 
+	var pts string
+	var holdPID int
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		b, err := os.ReadFile(pathFile)
-		if err == nil {
-			pts := strings.TrimSpace(string(b))
-			if pts != "" && strings.HasPrefix(pts, "/dev/") {
-				if _, err := os.Stat(pts); err == nil {
-					return pts, nil
+		if pts == "" {
+			if b, err := os.ReadFile(pathFile); err == nil {
+				p := strings.TrimSpace(string(b))
+				if p != "" && strings.HasPrefix(p, "/dev/") {
+					if _, err := os.Stat(p); err == nil {
+						pts = p
+					}
 				}
 			}
 		}
+		if holdPID == 0 {
+			if p, err := readPIDFile(pidFile); err == nil {
+				holdPID = p
+			}
+		}
+		if pts != "" && holdPID > 0 {
+			break
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return "", fmt.Errorf("timeout waiting for external tty at %s", pathFile)
+	if pts == "" {
+		a.children.KillTracked(termPID)
+		return "", fmt.Errorf("timeout waiting for external tty at %s", pathFile)
+	}
+	a.extInferiorHold = &externalInferiorHold{holdPID: holdPID, termPID: termPID}
+	return pts, nil
+}
+
+func readPIDFile(path string) (int, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return 0, fmt.Errorf("invalid pid in %s", path)
+	}
+	return pid, nil
 }
 
 // SpawnTerminal opens a real terminal emulator running argv (foreground UI

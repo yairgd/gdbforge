@@ -2,10 +2,14 @@ package dlv
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/go-delve/delve/service/rpc2"
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/ptyx"
@@ -18,11 +22,15 @@ const (
 	startupPromptWait = 30 * time.Second
 )
 
-// Client is an interactive Delve session over a PTY, plus a separate inferior
-// TTY for the debugged program's stdin/stdout when supported.
+// Client is an interactive Delve session: CLI PTY (`dlv connect`) for human
+// I/O plus an optional rpc2 client for machine control when attached to a
+// headless server. Inferior program I/O uses a separate TTY (--tty).
 type Client struct {
 	*ptyx.TTY
-	inferior *ptyx.TTY
+	inferior   *ptyx.TTY
+	RPC        *rpc2.RPCClient
+	headless   *exec.Cmd
+	listenAddr string
 	startupOut string
 }
 
@@ -44,16 +52,23 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 	if len(dlvArgs) == 0 {
 		return nil, fmt.Errorf("dlv arguments required (program path)")
 	}
-
 	if _, err := exec.LookPath(dlvPath); err != nil {
 		return nil, fmt.Errorf("cannot find debugger %q: %w", dlvPath, err)
 	}
 
-	c := &Client{}
 	ext := strings.TrimSpace(opts.InferiorTTY)
-	ttyPath := ext
-	if ext != "" {
-		c.inferior = ptyx.AttachPath(ext)
+	return newHeadlessRPCClient(dlvPath, dlvArgs, ext)
+}
+
+// newHeadlessRPCClient runs headless dlv exec + rpc2 + dlv connect. When extTTY
+// is set, program stdio uses that path (owned pts from OpenExternalTTY); otherwise
+// gdbforge allocates an internal pair for the IO pane.
+func newHeadlessRPCClient(dlvPath string, dlvArgs []string, extTTY string) (*Client, error) {
+	c := &Client{}
+	var ttyPath string
+	if extTTY != "" {
+		c.inferior = ptyx.AttachPath(extTTY)
+		ttyPath = extTTY
 	} else {
 		inf, err := ptyx.Open()
 		if err != nil {
@@ -63,21 +78,40 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 		ttyPath = inf.SlaveName()
 	}
 
-	argv := []string{dlvPath, "exec", "--tty", ttyPath, "--"}
-	argv = append(argv, dlvArgs...)
-
-	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
-	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
-
-	dlvPty, err := ptyx.Start(argv, ptyx.Options{Env: env})
+	listenAddr, err := PickListenAddr()
 	if err != nil {
-		if c.inferior != nil && c.inferior.HasMaster() {
-			c.inferior.Close()
-		}
+		c.closeInferior()
 		return nil, err
 	}
 
-	c.TTY = dlvPty
+	env := delveEnv()
+	headArgs := headlessExecArgv(dlvPath, listenAddr, ttyPath, dlvArgs)
+	headCmd := exec.Command(headArgs[0], headArgs[1:]...)
+	headCmd.Env = env
+	headCmd.Stdout = io.Discard
+	headCmd.Stderr = io.Discard
+	headCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := headCmd.Start(); err != nil {
+		c.closeInferior()
+		return nil, fmt.Errorf("dlv headless: %w", err)
+	}
+	c.headless = headCmd
+	c.listenAddr = listenAddr
+
+	rpc, err := DialRPC(listenAddr, startupPromptWait)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	c.RPC = rpc
+
+	cli, err := startConnectPTY(dlvPath, listenAddr, env)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	c.TTY = cli
+
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
 		c.Close()
@@ -87,6 +121,33 @@ func NewClientOpts(dlvPath string, dlvArgs []string, opts ClientOptions) (*Clien
 	return c, nil
 }
 
+func headlessExecArgv(dlvPath, listenAddr, ttyPath string, dlvArgs []string) []string {
+	argv := []string{
+		dlvPath, "exec",
+		"--headless",
+		"--listen=" + listenAddr,
+		"--api-version=2",
+		"--accept-multiclient",
+		"--tty", ttyPath,
+		"--",
+	}
+	return append(argv, dlvArgs...)
+}
+
+func startConnectPTY(dlvPath, addr string, env []string) (*ptyx.TTY, error) {
+	addr = normalizeConnectAddr(addr)
+	dlvPty, err := ptyx.Start([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
+	if err != nil {
+		return nil, err
+	}
+	return dlvPty, nil
+}
+
+func delveEnv() []string {
+	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
+	return append(env, "PAGER=cat", "DELVE_PAGER=cat")
+}
+
 func (c *Client) TakeStartupOutput() string {
 	if c == nil {
 		return ""
@@ -94,6 +155,14 @@ func (c *Client) TakeStartupOutput() string {
 	s := c.startupOut
 	c.startupOut = ""
 	return s
+}
+
+// ListenAddr returns the headless server address when known.
+func (c *Client) ListenAddr() string {
+	if c == nil {
+		return ""
+	}
+	return c.listenAddr
 }
 
 func NewConnectClient(dlvPath, addr string) (*Client, error) {
@@ -108,17 +177,23 @@ func NewConnectClient(dlvPath, addr string) (*Client, error) {
 		return nil, fmt.Errorf("cannot find debugger %q: %w", dlvPath, err)
 	}
 
-	env := filterEnv(os.Environ(), "PAGER", "DELVE_PAGER")
-	env = append(env, "PAGER=cat", "DELVE_PAGER=cat")
-
-	dlvPty, err := ptyx.Start([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
+	rpc, err := DialRPC(addr, startupPromptWait)
 	if err != nil {
 		return nil, err
 	}
 
+	env := delveEnv()
+	cli, err := startConnectPTY(dlvPath, addr, env)
+	if err != nil {
+		_ = rpc.Detach(false)
+		return nil, err
+	}
+
 	c := &Client{
-		TTY:      dlvPty,
-		inferior: ptyx.AttachPath("headless:" + addr),
+		TTY:        cli,
+		RPC:        rpc,
+		listenAddr: addr,
+		inferior:   ptyx.AttachPath("headless:" + addr),
 	}
 	out, err := c.waitForPrompt(startupPromptWait)
 	if err != nil {
@@ -243,19 +318,34 @@ func (c *Client) Interrupt() error {
 	if c == nil {
 		return nil
 	}
+	if c.RPC != nil {
+		go func() { _, _ = c.RPC.Halt() }()
+	}
 	err := c.SignalInterrupt()
 	_ = c.SendRaw("\x03")
 	return err
+}
+
+func (c *Client) closeInferior() {
+	if c != nil && c.inferior != nil && c.inferior.HasMaster() {
+		c.inferior.Close()
+		c.inferior = nil
+	}
 }
 
 func (c *Client) Close() {
 	if c == nil {
 		return
 	}
-	if c.inferior != nil && c.inferior.HasMaster() {
-		c.inferior.Close()
-		c.inferior = nil
+	if c.RPC != nil {
+		_ = c.RPC.Detach(true)
+		c.RPC = nil
 	}
+	if c.headless != nil && c.headless.Process != nil {
+		_ = c.headless.Process.Kill()
+		c.headless = nil
+	}
+	c.closeInferior()
 	if c.TTY != nil {
 		c.TTY.Close()
 		c.TTY = nil

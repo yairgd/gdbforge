@@ -106,7 +106,9 @@ Async path:
 | **Widget host** | List widget intents (`BreakpointHost`, …); app forwards to `*Ctl` |
 | **Model** | Domain state on `*Ctl` / `internal/gdbforge/models` (e.g. `BreakpointList`) |
 | **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; host intents / callbacks only; no `Send` |
-| **Backend** | `gdbforge/backend.Backend` — GDB vs Delve policy surface |
+| **Backend** | `gdbforge/backend.Backend` — semantic debugger ops + capability flags; `GDBBackend` / `DLVBackend` |
+| **ConsoleUpdate** | `debugger.ConsoleUpdate` — unified console/stop delta from `PushConsoleOutput` |
+| **StopInfo** | `debugger.StopInfo` — normalized stop event for the stop pipeline |
 | **Service** | External-system adapter (`ptyx` / `GDBClient` / `dlv.Client` / `GdbMcpService`); never imports UI |
 | **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; via `app.GDB()`; MCP/AI external API |
 | **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |

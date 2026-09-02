@@ -317,30 +317,24 @@ func (app *DebuggerApp) SetLogCmd(args ...any) {
 
 // SetInferiorTTYCmd handles:
 //
-//	:set inferior-tty              — open an external terminal and route stdio there
+//	:set inferior-tty              — GDB: open external terminal; Delve: use :lua dlv_ext_port
+//	:set inferior-tty external     — same as bare :set inferior-tty (GDB only)
 //	:set inferior-tty internal     — restore the in-app IO pane
-//	:set inferior-tty /dev/pts/N   — use an already-open slave (advanced)
+//	:set inferior-tty /dev/pts/N   — GDB: use an already-open slave (advanced)
 func (app *DebuggerApp) SetInferiorTTYCmd(args ...any) {
 	path := strings.TrimSpace(joinCmdArgs(args))
 	if path == "" {
-		pts, err := app.OpenExternalTTY()
-		if err != nil {
-			if app.ctx.Log != nil {
-				app.ctx.Log.Named("set").Error(err.Error())
-			}
-			return
-		}
-		path = pts
+		path = "external"
 	}
-	if err := app.SetInferiorTTY(path); err != nil && app.ctx.Log != nil {
-		app.ctx.Log.Named("set").Error(err.Error())
-	}
-	app.RequestFrame()
+	app.PostInterrupt(inferiorTTYSetMsg{path: path})
 }
 
 // inferiorTTYCompletions is Tab after :set inferior-tty.
 func (app *DebuggerApp) inferiorTTYCompletions(prefix string, _ bool) []string {
 	cands := []string{"internal"}
+	if app == nil || !app.isDLV() {
+		cands = append(cands, "external")
+	}
 	var out []string
 	for _, c := range cands {
 		if prefix == "" || strings.HasPrefix(c, prefix) {

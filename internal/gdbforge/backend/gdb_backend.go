@@ -7,6 +7,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/platform"
@@ -58,6 +59,13 @@ func (b *GDBBackend) ConfigureInferiorTTY() error {
 		return c.ConfigureInferiorTTY()
 	}
 	return nil
+}
+
+func (b *GDBBackend) SetInferiorTTYPath(path string) error {
+	if c := b.client(); c != nil {
+		return c.SetInferiorTTYPath(path)
+	}
+	return ErrNotSupported
 }
 func (b *GDBBackend) PromptToken() string        { return gdb.MIPromptToken }
 func (b *GDBBackend) PaintTargetInConsole() bool { return false }
@@ -147,13 +155,39 @@ func (b *GDBBackend) SendLine(cmd string) error {
 	return nil
 }
 
-func (b *GDBBackend) PushConsoleOutput(data string) ConsoleEvent {
+func (b *GDBBackend) PushConsoleOutput(data string) debugger.ConsoleUpdate {
 	if b.Input == nil {
-		return ConsoleEvent{Kind: GDB}
+		return debugger.ConsoleUpdate{}
 	}
 	u := b.Input.PushRaw(data)
-	return ConsoleEvent{Kind: GDB, GDB: &u}
+	if c := b.client(); c != nil {
+		c.Quit.Observe(u)
+	}
+	return debugger.FromGDBUpdate(u)
 }
+
+func (b *GDBBackend) Confirming() bool {
+	if c := b.client(); c != nil {
+		return c.Quit.Confirming()
+	}
+	return false
+}
+
+func (b *GDBBackend) InferiorTTYPath() string {
+	if c := b.client(); c != nil {
+		return c.InferiorTTYPath()
+	}
+	return ""
+}
+
+func (b *GDBBackend) UsesExternalInferiorTTY() bool {
+	if c := b.client(); c != nil {
+		return c.UsesExternalInferiorTTY()
+	}
+	return false
+}
+
+func (b *GDBBackend) RequiresInferiorTTYRestart() bool { return false }
 
 // IsRunCmd reports continue/step/run-style commands (shared by GDB/DLV exec arming).
 func IsRunCmd(cmd string) bool {

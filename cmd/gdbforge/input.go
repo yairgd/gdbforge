@@ -478,6 +478,18 @@ func (a *DebuggerApp) HandleResize() {
 
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	data := ev.Data()
+	if msg, ok := data.(inferiorTTYSetMsg); ok {
+		if err := a.SetInferiorTTY(msg.path); err != nil {
+			if a.outputWidget != nil {
+				a.outputWidget.AppendHostLine("inferior-tty: " + err.Error())
+			}
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("set").Error(err.Error())
+			}
+		}
+		a.RequestFrame()
+		return
+	}
 	if s, ok := data.(string); ok {
 		if s == "gdb-exit" {
 			a.Exit()

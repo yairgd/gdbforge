@@ -40,6 +40,7 @@ type DebuggerApp struct {
 	lua      luaCtl
 	serial   serialCtl
 	children childProcCtl
+	extInferiorHold *externalInferiorHold
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
@@ -125,6 +126,7 @@ func (a *DebuggerApp) enableFileLog(path string) error {
 }
 
 func (a *DebuggerApp) Close() {
+	a.closeExternalInferiorHold()
 	a.lua.closeAll()
 	a.DebugSession.close(a)
 	a.saveCmdlineHistoryOnQuit()

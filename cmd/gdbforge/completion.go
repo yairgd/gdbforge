@@ -24,7 +24,7 @@ type completionHost interface {
 	State() *platform.AppState
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
-	IsDLVConfirming() bool
+	IsConfirming() bool
 	PublishCompletion(msg termui.CompletionMsg)
 	RequestFrame()
 }
@@ -251,7 +251,7 @@ func (c *completionCtl) gdbTabComplete() {
 	if h.Backend() == nil {
 		return
 	}
-	if h.IsDLVConfirming() {
+	if h.IsConfirming() {
 		return
 	}
 	res := h.Backend().Complete(h.Session(), h.State(), text)
@@ -305,7 +305,7 @@ func (c *completionCtl) refreshGDBMenu() {
 		c.leaveMode()
 		return
 	}
-	if h.IsDLVConfirming() {
+	if h.IsConfirming() {
 		c.leaveMode()
 		return
 	}

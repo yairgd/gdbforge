@@ -19,7 +19,6 @@ func main() {
 		fmt.Println(version)
 		os.Exit(0)
 	}
-
 	cfg, err := parseFlags(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {

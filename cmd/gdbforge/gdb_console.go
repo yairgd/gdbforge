@@ -8,9 +8,9 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -30,8 +30,6 @@ type consoleHost interface {
 	Session() core.Session
 	Backend() backend.Backend
 	gdbBackend() *backend.GDBBackend
-	dlvBackend() *backend.DLVBackend
-	isDLV() bool
 	GDBWidget() *widgets.GDBWidget
 	State() *platform.AppState
 	Debug() *debugstate.State
@@ -41,20 +39,18 @@ type consoleHost interface {
 	activateGdbInsertMode()
 	sendInferior(tty *ptyx.TTY, send func())
 	// Stop pipeline / peer-controller hooks.
-	onGdbStopped(stop *gdb.MiStopMsg)
+	onGdbStopped(stop *debugger.StopInfo)
 	onGdbFrameSync()
 	// onGdbFrameSelected presents Code/Asm for a frame from =thread-selected
 	// (CLI frame/f/up/down) — already on the UI thread.
-	onGdbFrameSelected(fr gdb.MiFrameMsg)
+	onGdbFrameSelected(fr debugger.FrameInfo)
 	clearDebugInfoPanes()
 	PublishBreakpointsChanged()
 	SelectedFrameLevel() int
 	NoteStackNavGDB()
 	NoteStackNavDLV(cmd string, curLevel int)
-	DlvConfirming() bool
-	DlvObserveUpdate(upd dlv.Update)
-	DlvConfirmHost() string
-	DeferDLVBPRefresh()
+	Confirming() bool
+	DeferBPRefresh()
 	TakeDeferredBP() bool
 	TriggerPendingDebugInfoIfReady(promptReady bool)
 	TriggerPendingStackRefreshIfReady(promptReady bool)
@@ -156,7 +152,7 @@ func (c *consoleCtl) wireCLI(w *widgets.GDBWidget, tty *ptyx.TTY, onFrame func()
 			c.postDebuggerExit()
 		},
 	}
-	if h := c.host; h != nil && h.isDLV() {
+	if h := c.host; h != nil && h.Backend() != nil && h.Backend().WireCLILineTap() {
 		c.dlvLine.reset()
 		opts.OnSendRaw = c.onDlvTerminalSend
 	}
@@ -174,14 +170,14 @@ func (c *consoleCtl) onDlvTerminalSend(raw string) {
 // (InferiorRunning + stack-nav suppress) for commands typed in the xterm GDB pane.
 func (c *consoleCtl) onDlvLineSubmitted(cmd string) {
 	h := c.host
-	if h == nil || !h.isDLV() || h.Backend() == nil {
+	if h == nil || h.Backend() == nil || !h.Backend().WireCLILineTap() {
 		return
 	}
 	cmd = strings.TrimSpace(cmd)
-	if cmd == "" || h.DlvConfirming() {
+	if cmd == "" || h.Confirming() {
 		return
 	}
-	if dlv.IsStackNavCmd(cmd) {
+	if backend.StackNavIsStackNavCmd(cmd) {
 		h.NoteStackNavDLV(cmd, h.SelectedFrameLevel())
 	}
 	if backend.IsRunCmd(cmd) && h.State() != nil {
@@ -281,12 +277,8 @@ func (c *consoleCtl) onConfirmingInterrupt() {
 		return
 	}
 	running := h.State() != nil && h.Debug().InferiorRunning()
-	if h.isDLV() && h.DlvConfirming() {
-		c.withGdbUIOwner(func() { _ = h.Backend().Interrupt(running, true) })
-		h.RequestFrame()
-		return
-	}
-	_ = h.Backend().Interrupt(running, false)
+	confirming := h.Backend().Confirming()
+	c.withGdbUIOwner(func() { _ = h.Backend().Interrupt(running, confirming) })
 	h.RequestFrame()
 }
 
@@ -323,14 +315,11 @@ func (c *consoleCtl) inferiorTTY() *ptyx.TTY {
 
 func (c *consoleCtl) onGdbConsoleEOF() {
 	h := c.host
-	if h == nil {
+	if h == nil || h.Backend() == nil {
 		return
 	}
-	if h.isDLV() {
-		if h.Backend() == nil {
-			return
-		}
-		c.withGdbUIOwner(func() { _ = h.Backend().SendLine("quit") })
+	if cmd := h.Backend().ConsoleEOFCommand(); cmd != "" {
+		c.withGdbUIOwner(func() { _ = h.Backend().SendLine(cmd) })
 		return
 	}
 	gb := h.gdbBackend()
@@ -390,52 +379,31 @@ func (c *consoleCtl) withGdbUIOwner(fn func()) {
 	}
 }
 
-func (c *consoleCtl) applyGdbMiUpdate(upd gdb.MiUpdate) {
+func (c *consoleCtl) applyConsoleUpdate(upd debugger.ConsoleUpdate) {
 	h := c.host
-	if h == nil {
-		return
+	if h != nil && h.Backend() != nil && h.Backend().DeferBreakpointRefresh() {
+		if upd.BreakpointsChanged && h.Confirming() {
+			h.DeferBPRefresh()
+			upd.BreakpointsChanged = false
+		}
+		if upd.PromptReady && h.TakeDeferredBP() {
+			h.PublishBreakpointsChanged()
+		}
 	}
-	gb := h.gdbBackend()
-	if gb != nil && gb.Client != nil {
-		gb.Client.Quit.Observe(upd)
-	}
-	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, upd.BreakpointsChanged, upd.FrameSelected)
+	c.applyStopAndPromptSideEffects(upd)
 }
 
-func (c *consoleCtl) applyDlvUpdate(upd dlv.Update) {
+func (c *consoleCtl) applyStopAndPromptSideEffects(upd debugger.ConsoleUpdate) {
 	h := c.host
 	if h == nil {
 		return
 	}
-	silent := h.State() != nil && h.Debug().SuppressGdbConsole()
-	h.DlvObserveUpdate(upd)
-	confirming := h.DlvConfirming()
-	_ = silent
-	// Delve CLI paints via CompositeTerminal; keep parser side effects only.
-	// Defer BP list Query while Delve waits for y/n (Query would steal the answer).
-	bpChanged := upd.BreakpointsChanged
-	if bpChanged && confirming {
-		h.DeferDLVBPRefresh()
-		bpChanged = false
-	}
-	c.applyStopAndPromptSideEffects(upd.Stopped, upd.InferiorExited, upd.PromptReady, upd.State, bpChanged, nil)
-	if upd.PromptReady && h.TakeDeferredBP() {
-		h.PublishBreakpointsChanged()
-	}
-}
-
-func (c *consoleCtl) applyStopAndPromptSideEffects(
-	stopped *gdb.MiStopMsg,
-	inferiorExited bool,
-	promptReady bool,
-	state gdb.GdbState,
-	breakpointsChanged bool,
-	frameSelected *gdb.MiFrameMsg,
-) {
-	h := c.host
-	if h == nil {
-		return
-	}
+	stopped := upd.Stopped
+	inferiorExited := upd.InferiorExited
+	promptReady := upd.PromptReady
+	state := upd.State
+	breakpointsChanged := upd.BreakpointsChanged
+	frameSelected := upd.FrameSelected
 	if stopped != nil {
 		h.onGdbStopped(stopped)
 	}
@@ -445,7 +413,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	h.TriggerPendingDebugInfoIfReady(promptReady)
 	h.TriggerPendingStackRefreshIfReady(promptReady)
 	kgdb := h.Debug() != nil && h.Debug().KgdbMode()
-	if !kgdb && h.ApplyPendingFrameSync(promptReady, state == gdb.Error) {
+	if !kgdb && h.ApplyPendingFrameSync(promptReady, state == debugger.StateError) {
 		if frameSelected != nil {
 			h.onGdbFrameSelected(*frameSelected)
 		} else {
@@ -455,7 +423,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 		h.onGdbFrameSelected(*frameSelected)
 	}
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
-	if promptReady && h.isDLV() && h.SuppressStopUICount() > 0 && stopped == nil {
+	if promptReady && h.Backend() != nil && h.Backend().WireCLILineTap() && h.SuppressStopUICount() > 0 && stopped == nil {
 		h.ClearSuppressStopUI()
 	}
 	// InferiorRunning drives Ctrl-Z and runtime Space-break (Ctrl-C + continue).
@@ -465,7 +433,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 	// *stopped alone sets State=Done, so prompt/stop still clear the flag (Ctrl-Z).
 	if h.State() != nil {
 		switch {
-		case state == gdb.Running:
+		case state == debugger.StateRunning:
 			h.Debug().SetInferiorRunning(true)
 		case promptReady || stopped != nil:
 			h.Debug().SetInferiorRunning(false)
@@ -475,7 +443,7 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(
 		h.PublishBreakpointsChanged()
 	}
 	if h.serialActive() {
-		running := state == gdb.Running
+		running := state == debugger.StateRunning
 		stoppedNow := stopped != nil
 		h.serialOnState(stoppedNow, promptReady, running)
 	}
@@ -490,14 +458,7 @@ func (c *consoleCtl) handleDebuggerOutputMsg(msg events.GdbOutputMsg) {
 	if msg.Data == "" || h.Backend() == nil {
 		return
 	}
-	ev := h.Backend().PushConsoleOutput(msg.Data)
-	if ev.GDB != nil {
-		c.applyGdbMiUpdate(*ev.GDB)
-		return
-	}
-	if u := backend.AsDLVUpdate(ev); u != nil {
-		c.applyDlvUpdate(*u)
-	}
+	c.applyConsoleUpdate(h.Backend().PushConsoleOutput(msg.Data))
 }
 
 // isExpectedPtyClose reports PTY reader errors that mean the debugger exited.
