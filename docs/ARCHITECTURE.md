@@ -34,7 +34,7 @@ flowchart TB
     end
 
     subgraph events ["UI thread events"]
-        UI["uiEvents loop"]
+        Poll["PollEvent batch"]
         HI["HandleInterrupt"]
         Bus["platform.EventBus"]
     end
@@ -58,7 +58,7 @@ flowchart TB
     MCP --> Surf
 
     GUI -->|"Register Subscribe"| Bus
-    UI --> HI
+    Poll --> HI
     HI -->|"typed payload"| Bus
     Bus --> GUI
     Dom --> W
@@ -165,18 +165,19 @@ Background work (GDB PTY, Lua jobs, exec) must not call widgets directly. Everyt
 flowchart LR
     Worker["Worker goroutine"]
     Post["TermApp.PostInterrupt"]
-    UI["uiEvents loop"]
+    Screen["tcell.PostEvent"]
+    Poll["PollEvent · UI thread"]
     HI["HandleInterrupt"]
     Str["string · gdb-exit / widget forward"]
     Bus["platform.EventBus.Dispatch"]
     Ctl["*Ctl Register handlers"]
 
-    Worker --> Post --> UI --> HI
+    Worker --> Post --> Screen --> Poll --> HI
     HI --> Str
     HI --> Bus --> Ctl
 ```
 
-1. **`PostInterrupt(payload)`** — thread-safe enqueue (replaces the old `events chan` + `HandleCoreEvents` switch).
+1. **`PostInterrupt(payload)`** — thread-safe enqueue via `screen.PostEvent(EventInterrupt)` (replaces the old `events chan` + `HandleCoreEvents` switch and the removed `uiEvents` channel).
 2. **`HandleInterrupt`** — thin app shell: string session exits + `Bus.Dispatch(data)`.
 3. **`Register` on each `*Ctl`** — typed handler per message (`GdbOutputMsg`, `codeRefreshMsg`, `SubmitMsg`, …).
 
@@ -919,7 +920,8 @@ flowchart TB
     end
 
     subgraph Loop["TermApp.Run · UI thread"]
-        UI["uiEvents channel"]
+        Poll["pollEventBatch · PollEvent"]
+        Batch["handleUIEventBatch"]
         HI["DebuggerApp.HandleInterrupt"]
         Bus["platform.EventBus.Dispatch"]
     end
@@ -931,11 +933,12 @@ flowchart TB
         Other["asm · debugInfo · dlv · execIO · cmd …"]
     end
 
-    PTY -->|"PostInterrupt(GdbOutputMsg)"| UI
-    CmdW --> UI
-    Lua --> UI
-    Exec --> UI
-    UI --> HI
+    PTY -->|"PostInterrupt(GdbOutputMsg)"| Poll
+    CmdW --> Poll
+    Lua --> Poll
+    Exec --> Poll
+    Poll --> Batch
+    Batch -->|"EventInterrupt"| HI
     HI -->|"string exits"| HI
     HI --> Bus
     Bus --> Console
@@ -948,20 +951,24 @@ flowchart TB
 
 - Domain reactions live on **controllers**, not in a giant `switch` on `DebuggerApp`.
 - **`EventBus`** is for typed app notifications that can also be published synchronously (e.g. `BreakpointsChangedMsg`, `CompletionMsg`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#tab-completion-via-eventbus).
-- **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output).
+- **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output). Workers call `PostEvent(EventInterrupt)`; the UI thread receives them through the same `PollEvent` batch as keyboard input.
 
 GDB output sequence (MI path only — CLI paints via `WireCLI`):
 
 ```mermaid
 sequenceDiagram
     participant GDB as GDB MI PTY
+    participant Post as PostInterrupt
     participant Screen as tcell.Screen
+    participant Poll as PollEvent
     participant HI as HandleInterrupt
     participant Bus as EventBus
     participant Ctrl as consoleCtl
 
-    GDB-->>Screen: PostInterrupt GdbOutputMsg
-    Screen->>HI: uiEvents
+    GDB-->>Post: GdbOutputMsg
+    Post->>Screen: PostEvent(EventInterrupt)
+    Screen->>Poll: PollEvent · EventInterrupt
+    Poll->>HI: HandleInterrupt
     HI->>Bus: Dispatch(GdbOutputMsg)
     Bus->>Ctrl: onOutput → PushRaw → app state
 ```

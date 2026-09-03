@@ -5,10 +5,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -67,6 +65,8 @@ func NewTermApp() *TermApp {
 
 	screen.EnableMouse(tcell.MouseMotionEvents)
 	screen.EnablePaste()
+
+	blockJobControlStop()
 
 	return &TermApp{
 		screen:       screen,
@@ -194,17 +194,9 @@ func (app *TermApp) resumeAfterSuspend() error {
 			return err
 		}
 	}
+	blockJobControlStop()
 	app.restoreAfterResume()
 	return nil
-}
-
-func stopForShellJobControl() error {
-	signal.Reset(syscall.SIGTSTP)
-	p, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		return err
-	}
-	return p.Signal(syscall.SIGTSTP)
 }
 
 // withTTYReleased disengages tcell, runs fn on the real tty, then re-engages.

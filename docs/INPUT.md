@@ -26,34 +26,37 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 ## Input overview
 
 ```text
-Keyboard / Mouse
+Keyboard / Mouse / async workers
         ↓
-TermApp (select loop)
-        ├── PostInterrupt / uiEvents  → HandleInterrupt → EventBus → *Ctl
-        └── tcell.Event               → TermApp.HandleEvent
-                                ├── EventResize → UpdateCanvas, AppApi.HandleResize
-                                └── EventKey    → AppApi.HandleKey
-                                      ├── mode router (AppState)
-                                      ├── Trie (key sequences)
-                                      └── TabWidget / CmdWidget HandleEvent → redraw
+TermApp.Run (UI thread · pollEventBatch)
+        ├── PollEvent → tcell.Event
+        │     ├── EventKey / EventMouse / EventResize → TermApp.HandleEvent
+        │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
+        │     │       └── EventKey → AppApi.HandleKey → mode router / Trie / widgets
+        │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
+        └── paint ticker (16ms) when dirty
 ```
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
+    participant Worker as Worker goroutine
     participant App as TermApp
+    participant Screen as tcell.Screen
     participant Dbg as DebuggerApp
     participant Widget as Widget
-    participant UI as uiEvents
     participant HI as HandleInterrupt
     participant Bus as EventBus
     participant Ctl as *Ctl handler
 
-    Input ->> App: PollEvent · tcell.Event
+    Input ->> Screen: terminal bytes
+    Screen ->> App: PollEvent · tcell.Event
     App ->> Dbg: HandleKey(ev)
     Dbg ->> Widget: HandleEvent(ev)
-    Note over App,UI: Async: PostInterrupt(payload)
-    UI ->> HI: HandleInterrupt
+    Note over Worker,Screen: Async: PostInterrupt(payload)
+    Worker ->> Screen: PostEvent(EventInterrupt)
+    Screen ->> App: PollEvent · EventInterrupt
+    App ->> HI: HandleInterrupt
     HI ->> Bus: Dispatch(typed msg)
     Bus ->> Ctl: Register handler
     App ->> App: Draw → Grid → Screen
@@ -61,8 +64,8 @@ sequenceDiagram
 
 **Design principles:**
 
-1. One thread owns input and rendering.
-2. Async sources post **`PostInterrupt`** — never call widget methods from reader goroutines.
+1. One thread owns input and rendering (`TermApp.Run` polls tcell directly — no background `PollEvent` goroutine).
+2. Async sources post **`PostInterrupt`** → `screen.PostEvent(EventInterrupt)` — never call widget methods from reader goroutines.
 3. Typed reactions live on **`*Ctl` handlers** registered on **`EventBus`**, not in a giant app `switch`.
 4. **Mode-aware routing** lives in `DebuggerApp`, not `TermApp`.
 
@@ -98,18 +101,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    Select["TermApp.Run select loop"]
-    Poll["PollEvent · tcell"]
+    Select["TermApp.Run · UI thread"]
+    Poll["pollEventBatch · PollEvent"]
+    Batch["handleUIEventBatch"]
     TermHandler["TermApp.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
     HandleResize["AppApi.HandleResize"]
+    HandleInt["HandleInterrupt → EventBus"]
     Router["DebuggerApp · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
     Comp["CompletionBarWidget"]
 
-    Poll --> TermHandler
+    Select --> Poll --> Batch
+    Batch -->|"EventKey / Mouse / Resize"| TermHandler
+    Batch -->|"EventInterrupt"| HandleInt
     TermHandler -->|"EventKey"| HandleKey --> Router
     TermHandler -->|"EventResize"| HandleResize
     Router -->|"ModeNormal"| Trie

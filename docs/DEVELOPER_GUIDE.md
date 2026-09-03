@@ -81,7 +81,7 @@ Widget (view)
   └── host intents / SetOn*  → app → *Ctl
 
 Async path:
-  PTY reader → PostInterrupt(msg) → uiEvents → HandleInterrupt → EventBus → *Ctl → paint
+  PTY reader → PostInterrupt(msg) → EventInterrupt → PollEvent → HandleInterrupt → EventBus → *Ctl → paint
 ```
 
 **Rules:**
@@ -181,14 +181,15 @@ sequenceDiagram
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
     Main->>App: InitB · AddWidget · HandleResize()
-    loop until Ctrl+D
-        App->>Screen: select: termui.Event OR PollEvent
-        alt termui.Event
-            App->>App: HandleCoreEvents
-        else tcell
-            App->>App: HandleEvent · HandleKey / HandleResize
-            App->>App: Draw + grid flush + Show
+    loop until exit
+        App->>Screen: pollEventBatch (PollEvent)
+        App->>App: handleUIEventBatch
+        alt EventInterrupt
+            App->>App: HandleInterrupt → EventBus
+        else EventKey / Mouse / Resize
+            App->>App: HandleEvent → HandleKey / HandleResize
         end
+        App->>App: present when dirty
     end
     App->>Screen: Fini
 ```
