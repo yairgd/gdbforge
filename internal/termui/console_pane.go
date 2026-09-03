@@ -73,6 +73,12 @@ func (p *ConsolePane) SetClipboard(io ClipboardIO) {
 	p.out.SetClipboard(io)
 }
 
+func (p *ConsolePane) SetMouseOrigin(screenX, screenY int) {
+	if p != nil && p.out != nil {
+		p.out.SetMouseOrigin(screenX, screenY)
+	}
+}
+
 // SetANSI enables ANSI/SGR color rendering in the scrollback viewport.
 func (p *ConsolePane) SetANSI(on bool) {
 	p.out.ANSI = on

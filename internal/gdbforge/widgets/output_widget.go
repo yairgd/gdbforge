@@ -13,6 +13,7 @@ const outputScrollback = 8000
 type OutputWidget struct {
 	termui.BaseWidget
 	term *termui.CompositeTerminal
+	clip termui.TerminalClipboard
 }
 
 func NewOutputWidget() *OutputWidget {
@@ -53,13 +54,23 @@ func (w *OutputWidget) Clear() {
 	}
 	w.term.Close()
 	w.term = termui.NewCompositeTerminal(80, 24, outputScrollback)
+	w.clip.Apply(w.term)
 }
 
 func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
-	if w == nil || w.term == nil {
+	if w == nil {
 		return
 	}
-	w.term.SetClipboard(io)
+	w.clip.Set(io)
+	if w.term != nil {
+		w.term.SetClipboard(io)
+	}
+}
+
+func (w *OutputWidget) SetMouseOrigin(screenX, screenY int) {
+	if w != nil && w.term != nil {
+		w.term.SetMouseOrigin(screenX, screenY)
+	}
 }
 
 func (w *OutputWidget) Draw(c termui.Canvas) {
@@ -82,6 +93,10 @@ func (w *OutputWidget) HandleEvent(ev tcell.Event) {
 		if w.term != nil {
 			w.term.HandleMouse(e)
 		}
+	case *tcell.EventClipboard:
+		if w.term != nil {
+			w.term.PasteBytes(e.Data())
+		}
 	case *tcell.EventKey:
 		w.term.HandleKey(e)
 	}
@@ -96,4 +111,14 @@ func (w *OutputWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 
 func (w *OutputWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
+}
+
+func (w *OutputWidget) HasTerminalSelection() bool {
+	return w != nil && w.term != nil && w.term.HasSelection()
+}
+
+func (w *OutputWidget) ResetTerminalInput() {
+	if w != nil && w.term != nil {
+		w.term.AfterHostResume()
+	}
 }

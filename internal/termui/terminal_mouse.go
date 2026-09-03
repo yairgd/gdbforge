@@ -21,6 +21,14 @@ func (c *CompositeTerminal) SetClipboard(io ClipboardIO) {
 	c.clipboard = io
 }
 
+// SetMouseOrigin sets the screen position of this pane's top-left cell.
+func (c *CompositeTerminal) SetMouseOrigin(screenX, screenY int) {
+	if c == nil {
+		return
+	}
+	c.screenX, c.screenY = screenX, screenY
+}
+
 func (c *CompositeTerminal) HasSelection() bool {
 	return c != nil && c.hasSel
 }

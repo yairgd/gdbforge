@@ -30,6 +30,22 @@ func TestCompositeTerminalHandleKeyTrie(t *testing.T) {
 	if string(got) != "\r" {
 		t.Fatalf("enter: got %q", got)
 	}
+
+	for _, tc := range []struct {
+		key tcell.Key
+		seq string
+	}{
+		{tcell.KeyCtrlA, "\x01"},
+		{tcell.KeyCtrlE, "\x05"},
+		{tcell.KeyCtrlU, "\x15"},
+		{tcell.KeyCtrlL, "\x0c"},
+	} {
+		got = nil
+		c.HandleKey(tcell.NewEventKey(tc.key, 0, tcell.ModNone))
+		if string(got) != tc.seq {
+			t.Fatalf("%v: got %q want %q", tc.key, got, tc.seq)
+		}
+	}
 }
 
 func TestCompositeTerminalPaintCursor(t *testing.T) {

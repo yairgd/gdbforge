@@ -13,6 +13,7 @@ const gdbScrollback = 8000
 type GDBWidget struct {
 	termui.BaseWidget
 	term *termui.CompositeTerminal
+	clip termui.TerminalClipboard
 }
 
 func NewGDBWidget() *GDBWidget {
@@ -60,6 +61,7 @@ func (w *GDBWidget) Clear() {
 	}
 	w.term.Close()
 	w.term = termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, "")
+	w.clip.Apply(w.term)
 }
 
 func (w *GDBWidget) InsertInputRune(r rune) {
@@ -99,10 +101,19 @@ func (w *GDBWidget) SetFocused(focused bool) {
 }
 
 func (w *GDBWidget) SetClipboard(io termui.ClipboardIO) {
-	if w == nil || w.term == nil {
+	if w == nil {
 		return
 	}
-	w.term.SetClipboard(io)
+	w.clip.Set(io)
+	if w.term != nil {
+		w.term.SetClipboard(io)
+	}
+}
+
+func (w *GDBWidget) SetMouseOrigin(screenX, screenY int) {
+	if w != nil && w.term != nil {
+		w.term.SetMouseOrigin(screenX, screenY)
+	}
 }
 
 func (w *GDBWidget) Draw(c termui.Canvas) {
@@ -125,6 +136,10 @@ func (w *GDBWidget) HandleEvent(ev tcell.Event) {
 		if w.term != nil {
 			w.term.HandleMouse(e)
 		}
+	case *tcell.EventClipboard:
+		if w.term != nil {
+			w.term.PasteBytes(e.Data())
+		}
 	case *tcell.EventKey:
 		w.term.HandleKey(e)
 	}
@@ -135,4 +150,14 @@ func (w *GDBWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 		return false
 	}
 	return w.term.HandleKey(ev)
+}
+
+func (w *GDBWidget) HasTerminalSelection() bool {
+	return w != nil && w.term != nil && w.term.HasSelection()
+}
+
+func (w *GDBWidget) ResetTerminalInput() {
+	if w != nil && w.term != nil {
+		w.term.AfterHostResume()
+	}
 }

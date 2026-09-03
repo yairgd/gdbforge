@@ -40,9 +40,17 @@ func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 }
 
 // tryGlobalInterrupt handles Ctrl-C in any mode/focus via Activity (+ Confirm).
+// When a terminal pane has a text selection, copy instead of interrupting.
 func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	if !isCtrlC(ev) {
 		return false
+	}
+	if w := a.focusedWidget(); w != nil {
+		if ts, ok := w.(termui.TerminalSelectionPane); ok && ts.HasTerminalSelection() {
+			a.Tab().HandleEvent(ev)
+			a.RequestFrame()
+			return true
+		}
 	}
 	a.onActivityCtrlC()
 	return true
@@ -474,6 +482,18 @@ func (a *DebuggerApp) HandleResize() {
 	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))
 	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
+}
+
+func (a *DebuggerApp) HandleTTYResume() {
+	if a.gdbWidget != nil {
+		a.gdbWidget.ResetTerminalInput()
+	}
+	if a.outputWidget != nil {
+		a.outputWidget.ResetTerminalInput()
+	}
+	if a.execWidget != nil {
+		a.execWidget.ResetTerminalInput()
+	}
 }
 
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {

@@ -16,6 +16,7 @@ const execSessionEnded = "exec-session-ended"
 type ExecWidget struct {
 	termui.BaseWidget
 	term      *termui.CompositeTerminal
+	clip      termui.TerminalClipboard
 	ended     bool
 	onDismiss func()
 }
@@ -50,6 +51,7 @@ func (m *ExecWidget) Clear() {
 	}
 	m.term.Close()
 	m.term = termui.NewCompositeTerminalWithPrefix(80, 24, execScrollback, "")
+	m.clip.Apply(m.term)
 	m.ended = false
 }
 
@@ -58,10 +60,19 @@ func (m *ExecWidget) SetFocused(focused bool) {
 }
 
 func (m *ExecWidget) SetClipboard(io termui.ClipboardIO) {
-	if m == nil || m.term == nil {
+	if m == nil {
 		return
 	}
-	m.term.SetClipboard(io)
+	m.clip.Set(io)
+	if m.term != nil {
+		m.term.SetClipboard(io)
+	}
+}
+
+func (m *ExecWidget) SetMouseOrigin(screenX, screenY int) {
+	if m != nil && m.term != nil {
+		m.term.SetMouseOrigin(screenX, screenY)
+	}
 }
 
 func (m *ExecWidget) Draw(c termui.Canvas) {
@@ -95,6 +106,16 @@ func (m *ExecWidget) dismiss() {
 
 func (m *ExecWidget) Ended() bool { return m != nil && m.ended }
 
+func (m *ExecWidget) HasTerminalSelection() bool {
+	return m != nil && m.term != nil && m.term.HasSelection()
+}
+
+func (m *ExecWidget) ResetTerminalInput() {
+	if m != nil && m.term != nil {
+		m.term.AfterHostResume()
+	}
+}
+
 func (m *ExecWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 	if m != nil && m.ended {
 		m.dismiss()
@@ -119,6 +140,10 @@ func (m *ExecWidget) HandleEvent(ev tcell.Event) {
 	case *tcell.EventMouse:
 		if m.term != nil {
 			m.term.HandleMouse(e)
+		}
+	case *tcell.EventClipboard:
+		if m.term != nil {
+			m.term.PasteBytes(e.Data())
 		}
 	case *tcell.EventKey:
 		if m.ended {

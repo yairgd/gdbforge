@@ -151,6 +151,14 @@ func (v *Viewport) cursorDrawPos() (localX, localY int, under rune, ok bool) {
 	return localX, localY, under, true
 }
 
+// SetMouseOrigin sets the screen position of this viewport's top-left cell.
+func (v *Viewport) SetMouseOrigin(screenX, screenY int) {
+	if v == nil {
+		return
+	}
+	v.screenX, v.screenY = screenX, screenY
+}
+
 // Draw renders the visible portion of the buffer.
 func (v *Viewport) Draw(c Canvas) {
 	if v.Buffer == nil {

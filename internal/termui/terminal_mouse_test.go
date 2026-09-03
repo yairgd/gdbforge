@@ -26,6 +26,54 @@ func TestCompositeTerminalMouseScroll(t *testing.T) {
 	}
 }
 
+func TestCompositeTerminalMouseCopyWithOrigin(t *testing.T) {
+	c := NewCompositeTerminal(20, 3, 100)
+	c.SetMouseOrigin(10, 5)
+	var copied string
+	c.SetClipboard(ClipboardIO{Copy: func(s string) { copied = s }})
+	_ = c.ctl.WriteString("hello world\r\n")
+
+	c.HandleMouse(tcell.NewEventMouse(10, 5, tcell.ButtonPrimary, 0))
+	c.HandleMouse(tcell.NewEventMouse(15, 5, tcell.ButtonPrimary, 0))
+	c.HandleMouse(tcell.NewEventMouse(15, 5, tcell.ButtonNone, 0))
+
+	if copied != "hello" {
+		t.Fatalf("copied %q want %q", copied, "hello")
+	}
+}
+
+func TestCompositeTerminalMiddleClickPaste(t *testing.T) {
+	resetMiddlePasteState()
+	c := NewCompositeTerminal(20, 3, 100)
+	const paste = "pasted text"
+	c.SetClipboard(ClipboardIO{
+		PastePrimary: func() string { return paste },
+	})
+	var sent string
+	c.ctl.SetInputHandler(func(b []byte) error {
+		sent += string(b)
+		return nil
+	})
+
+	c.HandleMouse(tcell.NewEventMouse(0, 0, tcell.ButtonMiddle, 0))
+	if sent != paste {
+		t.Fatalf("sent %q want %q", sent, paste)
+	}
+}
+
+func TestCompositeTerminalPasteBytes(t *testing.T) {
+	c := NewCompositeTerminal(20, 3, 100)
+	var sent string
+	c.ctl.SetInputHandler(func(b []byte) error {
+		sent += string(b)
+		return nil
+	})
+	c.PasteBytes([]byte("clip"))
+	if sent != "clip" {
+		t.Fatalf("sent %q want clip", sent)
+	}
+}
+
 func TestCompositeTerminalMouseCopy(t *testing.T) {
 	c := NewCompositeTerminal(20, 3, 100)
 	var copied string

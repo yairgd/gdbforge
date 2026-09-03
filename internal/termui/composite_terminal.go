@@ -144,7 +144,7 @@ func (c *CompositeTerminal) Paint(cv Canvas, paintCursor bool) {
 	if c == nil || c.ctl == nil {
 		return
 	}
-	c.screenX, c.screenY = cv.Rect().X(), cv.Rect().Y()
+	c.SetMouseOrigin(cv.ScreenX(0), cv.ScreenY(0))
 	_ = c.Resize(cv.W(), cv.H())
 	cols, rows := c.ctl.Size()
 	if cols > cv.W() {
@@ -206,7 +206,10 @@ func (c *CompositeTerminal) initKeyBindings() {
 	bind("delete", "\x1b[3~", "<Delete>")
 	bind("interrupt", "\x03", "<C-c>")
 	bind("eof", "\x04", "<C-d>")
-	bind("suspend", "\x1a", "<C-z>")
+	// Ctrl-Z is handled globally by TermApp.Suspend (job control); do not forward to PTY.
+	bind("cursor-home", "\x01", "<C-a>")
+	bind("cursor-end", "\x05", "<C-e>")
+	bind("kill-bol", "\x15", "<C-u>")
 	bind("refresh", "\x0c", "<C-l>")
 }
 
@@ -256,8 +259,39 @@ func (c *CompositeTerminal) HandleKey(ev *tcell.EventKey) bool {
 	return false
 }
 
+// PasteBytes injects clipboard payload into the attached PTY (EventClipboard).
+func (c *CompositeTerminal) PasteBytes(data []byte) {
+	if c == nil || c.ctl == nil || len(data) == 0 {
+		return
+	}
+	_ = c.ctl.SendInput(data)
+}
+
+// PasteText injects a string into the attached PTY.
+func (c *CompositeTerminal) PasteText(text string) {
+	if text != "" {
+		c.PasteBytes([]byte(text))
+	}
+}
+
 func (c *CompositeTerminal) ResetKeyPartial() {
 	if c != nil && c.keys != nil {
 		c.keys.ResetPartial()
+	}
+}
+
+// AfterHostResume resets input state and resyncs the attached PTY after tcell
+// disengage/engage (Ctrl-Z job control).
+func (c *CompositeTerminal) AfterHostResume() {
+	if c == nil {
+		return
+	}
+	c.ResetKeyPartial()
+	if c.ctl == nil || c.tty == nil {
+		return
+	}
+	cols, rows := c.ctl.Size()
+	if cols > 0 && rows > 0 {
+		_ = c.tty.SetSize(uint16(rows), uint16(cols))
 	}
 }

@@ -30,6 +30,12 @@ func (m *LuaConsoleWidget) SetClipboard(io termui.ClipboardIO) {
 	m.console.SetClipboard(io)
 }
 
+func (m *LuaConsoleWidget) SetMouseOrigin(screenX, screenY int) {
+	if m != nil && m.console != nil {
+		m.console.SetMouseOrigin(screenX, screenY)
+	}
+}
+
 // WireConsole attaches app handlers to this pane. nil clears handlers.
 func (m *LuaConsoleWidget) WireConsole(h *ConsoleHandlers) {
 	if m == nil || m.console == nil {

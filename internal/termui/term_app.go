@@ -19,6 +19,8 @@ type AppApi interface {
 	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
 	HandleInterrupt(ev *tcell.EventInterrupt)
+	// HandleTTYResume runs after Suspend/Resume or RunForeground; reset in-pane terminals.
+	HandleTTYResume()
 }
 
 type WidgetNode struct {
@@ -152,6 +154,7 @@ func (app *TermApp) resumeAfterSuspend() error {
 	if err := app.screen.Resume(); err != nil {
 		return err
 	}
+	flushControllingTTYInput()
 	app.screen.EnableMouse(tcell.MouseMotionEvents)
 	app.screen.EnablePaste()
 	app.screen.Clear()
@@ -160,6 +163,7 @@ func (app *TermApp) resumeAfterSuspend() error {
 	app.layoutDirty = true
 	if app.Api != nil {
 		app.Api.HandleResize()
+		app.Api.HandleTTYResume()
 	}
 	return nil
 }
@@ -200,7 +204,7 @@ func (app *TermApp) Run() {
 	defer app.Close()
 	// UI event source — PollEvent blocks; run off the main loop goroutine.
 	go func() {
-		for {
+		for !app.exit {
 			app.uiEvents <- app.screen.PollEvent()
 		}
 	}()
@@ -299,11 +303,9 @@ func (app *TermApp) present() {
 func (app *TermApp) UpdateCanvas() Canvas {
 	app.screen.Sync()
 	w, h := app.screen.Size()
-	//	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
 	app.canvas = Canvas{rect: NewRect(0, 0, w, h), grid: app.frontBuffer}
 	return app.canvas
-
 }
 
 func (app *TermApp) MarkLayoutDirty() {
@@ -445,4 +447,3 @@ func (app *TermApp) ClipboardIO() ClipboardIO {
 		PastePrimary: app.PasteFromPrimary,
 	}
 }
-
