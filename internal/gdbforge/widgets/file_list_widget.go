@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"fmt"
+
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
@@ -11,47 +13,37 @@ import (
 // FileListWidget shows GDB project source files (j/k selection; Enter opens).
 // Mouse: first click selects (blue mark); second click on the marked row opens.
 type FileListWidget struct {
-	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
-	state    *debugstate.State
+	*termui.TableWidget
+	state *debugstate.State
 
-	paths    []string
-	selected int
+	paths []string
 }
 
 func NewFileListWidget() *FileListWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(false)
-	vp.SetReadOnly(true)
-	vp.SetCursorVisible(false)
+	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw.PaneName = "Files"
+	tbl := tw.Table()
+	tbl.SetShowHeader(false)
+	tbl.SetGutter(2)
+	tbl.AddColumn("#")
+	tbl.AddColumn("File")
 
-	w := &FileListWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Files"},
-		viewport:   vp,
-		buf:        buf,
-	}
-	vp.RowStyle = w.rowStyle
-	vp.SetOnSearchJump(func(lineIdx int) {
-		w.viewport.CursorLine = lineIdx
-		w.syncSelectedFromViewport()
-	})
+	w := &FileListWidget{TableWidget: tw}
+	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
+	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
-	w.rebuild()
 	return w
 }
 
-func (w *FileListWidget) SetAppState(st *debugstate.State) {
-	w.state = st
-}
+func (w *FileListWidget) SetAppState(st *debugstate.State) { w.state = st }
 
 func (w *FileListWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
-	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.PanLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.PanRight() }, "<Right>")
+	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>", "<C-m>")
 }
 
 func (w *FileListWidget) markColor() tcell.Color {
@@ -75,153 +67,107 @@ func (w *FileListWidget) mutedColor() tcell.Color {
 	return platform.DefaultMutedColor
 }
 
-func (w *FileListWidget) rowStyle(lineIdx int, line string) tcell.Style {
+func (w *FileListWidget) rowStyle(lineIdx int, _ string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.paths) == 0 {
 		return st.Foreground(w.mutedColor())
 	}
-	if lineIdx == w.selected {
+	if lineIdx == w.SelectedRow() {
 		bg := w.markDimColor()
 		if w.Focused() {
 			bg = w.markColor()
 		}
-		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	_ = line
 	return st
 }
 
 func (w *FileListWidget) move(delta int) {
-	n := len(w.paths)
-	if n == 0 {
-		return
-	}
-	w.selected = (w.selected + delta%n + n) % n
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureLineVisible()
-}
-
-func (w *FileListWidget) clampLine(line int) int {
-	n := len(w.paths)
-	if n == 0 {
-		return 0
-	}
-	if line < 0 {
-		return 0
-	}
-	if line >= n {
-		return n - 1
-	}
-	return line
-}
-
-func (w *FileListWidget) syncSelectedFromViewport() {
 	if len(w.paths) == 0 {
 		return
 	}
-	line := w.clampLine(w.viewport.CursorLine)
-	w.selected = line
-	w.viewport.CursorLine = line
+	w.MoveSelection(delta)
 }
 
 func (w *FileListWidget) openSelected() {
 	if len(w.paths) == 0 {
 		return
 	}
-	if w.selected < 0 || w.selected >= len(w.paths) {
+	row := w.SelectedRow()
+	if row < 0 || row >= len(w.paths) {
 		return
 	}
-	w.Publish(events.OpenSourceMsg{Path: w.paths[w.selected]})
+	w.Publish(events.OpenSourceMsg{Path: w.paths[row]})
 }
 
-// SetItems replaces the file list and rebuilds the viewport.
 func (w *FileListWidget) SetItems(paths []string) {
 	w.paths = append([]string(nil), paths...)
-	if w.selected >= len(w.paths) {
-		w.selected = len(w.paths) - 1
+	row := w.SelectedRow()
+	if row >= len(w.paths) && len(w.paths) > 0 {
+		row = len(w.paths) - 1
 	}
-	if w.selected < 0 {
-		w.selected = 0
+	if row < 0 {
+		row = 0
 	}
-	w.rebuild()
+	w.RectViewport().Origin.X = 0
+	w.SetSelectedRow(row)
+	w.EnsureRowVisible()
 }
 
-func (w *FileListWidget) rebuild() {
-	w.buf.Clear()
-	w.viewport.Left = 0
+func (w *FileListWidget) fillTable(t *termui.Table) {
 	if len(w.paths) == 0 {
-		w.buf.AppendLine("no files")
-		w.viewport.CursorLine = 0
+		t.AddRow("no files")
 		return
 	}
-	for _, p := range w.paths {
-		w.buf.AppendLine(p)
+	for i, p := range w.paths {
+		t.AddRow(fmt.Sprintf("%d", i+1), p)
 	}
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureCursorVisible()
-}
-
-func (w *FileListWidget) HandleFocusKey(ev *tcell.EventKey) bool {
-	return w.HandleBoundKey(ev)
 }
 
 func (w *FileListWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		if e.Buttons()&tcell.ButtonPrimary == 0 {
-			w.viewport.HandleEvent(e)
+		if w.TryDoubleClickWord(e) {
 			return
 		}
-		prev := w.selected
-		w.viewport.HandleEvent(e)
-		line := w.clampLine(w.viewport.CursorLine)
-		w.selected = line
-		w.viewport.CursorLine = line
-		// Open only on a second click when the blue mark is already on this row.
-		if line == prev {
+		if e.Buttons()&tcell.ButtonPrimary == 0 {
+			return
+		}
+		mx, my := e.Position()
+		hitRow, onRow := w.HitDataRow(mx, my)
+		if !onRow {
+			return
+		}
+		prev := w.SelectedRow()
+		w.SetSelectedRow(hitRow)
+		if hitRow == prev {
 			w.openSelected()
 		}
 	case *tcell.EventKey:
-		if w.HandleBoundKey(e) {
-			return
-		}
-		w.viewport.HandleEvent(e)
+		w.HandleFocusKey(e)
 	}
 }
 
 func (w *FileListWidget) SetFocused(focused bool) {
-	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
-}
-
-func (w *FileListWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
-}
-
-func (w *FileListWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
+	w.TableWidget.SetFocused(focused)
 }
 
 func (w *FileListWidget) Paths() []string {
 	return append([]string(nil), w.paths...)
 }
 
-func (w *FileListWidget) Viewport() *termui.Viewport {
-	return w.viewport
-}
-
-func (w *FileListWidget) Selected() int {
-	return w.selected
-}
+func (w *FileListWidget) Selected() int { return w.SelectedRow() }
 
 func (w *FileListWidget) LinesForTest() []string {
-	n := w.buf.NumLines()
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		out[i] = w.buf.Line(i)
+	tbl := w.Table()
+	tbl.ClearRows()
+	w.fillTable(tbl)
+	if len(w.paths) == 0 {
+		return []string{"no files"}
+	}
+	out := make([]string, tbl.NumRows())
+	for i := 0; i < tbl.NumRows(); i++ {
+		out[i] = tbl.RowDisplayLine(i)
 	}
 	return out
 }

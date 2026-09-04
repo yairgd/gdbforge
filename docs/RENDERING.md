@@ -166,7 +166,9 @@ flowchart TB
 
 ## Viewport: two paint paths (PTY ANSI vs native Canvas)
 
-Every scrollable pane uses **`termui.Viewport`** over a **`platform.Buffer`**. At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
+**Line-based panes** use **`termui.Viewport`** over a **`platform.Buffer`**. **Tabular list panes** (Breakpoints, Threads, Call Stack) use **`TableWidget`** → `CellBuffer` + `RectViewport` instead — see [TableWidget paint path](#tablewidget-paint-path) below.
+
+At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
 
 ```mermaid
 flowchart TB
@@ -186,7 +188,8 @@ flowchart TB
 | Path | `Viewport.ANSI` | Buffer contents | Paint API | gdbforge panes |
 |------|-----------------|-----------------|-------------|----------------|
 | **PTY / foreign** | `true` | May contain `\x1b[…m` from terminal tools | `Canvas.DrawANSIText` parses SGR → `SetContent` | GDB console, Output (`:b io`), Exec (`:!`) |
-| **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Call Stack, Breakpoints, Help, … |
+| **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Help, FileList, … |
+| **Table lists** | N/A (no Viewport) | Column cells in `Table` | `CellBuffer` blit → `Canvas` | Breakpoints, Threads, Call Stack, FileList (`:edit`) |
 
 **Path 1 — data from TTY / PTY (CompositeTerminal panes)**
 
@@ -209,7 +212,28 @@ flowchart TB
 
 **Rule:** do not embed `\x1b` in buffers you paint with path 2. Do not set `ANSI=true` on panes whose buffer is plain text.
 
-Implementation: `internal/termui/viewport.go` (`Draw`, `ANSI` field), `internal/termui/utf.go` (`DrawANSIText`), `internal/gdbforge/widgets/assembly_widget.go` / `code_widget.go` (native example).
+Implementation: `internal/termui/viewport.go` (`Draw`, `ANSI` field), `internal/termui/utf.go` (`DrawANSIText`), `internal/gdbforge/widgets/assembly_widget.go` / `code_widget.go` (native Viewport example).
+
+---
+
+## TableWidget paint path
+
+Tabular debugger lists do **not** use `platform.Buffer` / `Viewport`. Paint stack:
+
+```text
+SetFill(model) → Table layout → RectViewport (origin) → CellBuffer (window) → Canvas → Grid
+```
+
+| Piece | Role |
+|-------|------|
+| `Table` | Columns, rows, auto column width, sticky title/header |
+| `RectViewport` | Pan when contentW/contentH exceeds pane; `EnsureRowVisible` scrolls Y only |
+| `CellBuffer` | Off-screen rune+style grid for visible slice |
+| `TablePaintState` | `RowStyleFunc` + `/search` highlight spans |
+
+Row colors (selection, PC mark, BP gutter) come from app widget `SetRowStyleFunc`, not embedded `\x1b` sequences.
+
+Implementation: `internal/termui/table.go`, `table_widget.go`, `table_paint.go`; adapters in `widgets/breakpoint_widget.go`, `thread_widget.go`, `callstack_widget.go`.
 
 ---
 

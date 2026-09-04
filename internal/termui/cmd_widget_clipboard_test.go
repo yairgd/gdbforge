@@ -93,6 +93,44 @@ func TestCmdWidgetCopyCut(t *testing.T) {
 	}
 }
 
+func TestCmdWidgetEditKeys(t *testing.T) {
+	reg := commands.NewCommandRegistry()
+	w := NewCmdWidget(reg)
+	w.Activate()
+	w.pasteText("edit foo bar")
+	w.SetCursorAtLocalX(8) // after "edit f"
+
+	w.HandleEvent(tcell.NewEventKey(tcell.KeyCtrlA, 0, tcell.ModCtrl))
+	if w.cursor != 1 {
+		t.Fatalf("Ctrl-A cursor=%d want 1", w.cursor)
+	}
+
+	w.HandleEvent(tcell.NewEventKey(tcell.KeyCtrlE, 0, tcell.ModCtrl))
+	if w.cursor != len([]rune(w.Text())) {
+		t.Fatalf("Ctrl-E cursor=%d want end", w.cursor)
+	}
+
+	w.SetCursorAtLocalX(8)
+	w.HandleEvent(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModCtrl))
+	if w.Active() {
+		t.Fatal("Ctrl-U should exit command mode")
+	}
+	if w.Text() != "" {
+		t.Fatalf("Ctrl-U should clear cmdline, got %q", w.Text())
+	}
+
+	w.ActivateSearch()
+	w.pasteText("pattern")
+	w.SetCursorAtLocalX(5)
+	w.HandleEvent(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModCtrl))
+	if w.Active() {
+		t.Fatal("Ctrl-U should exit search mode")
+	}
+	if w.Text() != "" {
+		t.Fatalf("Ctrl-U should clear search cmdline, got %q", w.Text())
+	}
+}
+
 func TestCmdWidgetSetCursorAtLocalX(t *testing.T) {
 	reg := commands.NewCommandRegistry()
 	w := NewCmdWidget(reg)

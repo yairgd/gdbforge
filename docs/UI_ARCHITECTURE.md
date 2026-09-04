@@ -46,7 +46,7 @@ Design goals:
 
 Widgets are **views**. They display application models and handle local input; they do not own business logic and never communicate directly with services.
 
-Reusable widgets (`LoggerWidget`, `GraphWidget`, `TableWidget`, `TreeWidget`, `TextWidget`) depend on **generic model interfaces** (`TextModel`, `GraphModel`, …), not application-specific types. See [ARCHITECTURE.md — Widget philosophy](ARCHITECTURE.md#widget-philosophy) and [Generic widgets](ARCHITECTURE.md#generic-widgets).
+Reusable widgets (`LoggerWidget`, `GraphWidget`, **`TableWidget`** (implemented), `TreeWidget`, `TextWidget`) depend on **generic model interfaces** (`TextModel`, `GraphModel`, …) where applicable — debugger list panes use **`SetFill` adapters** today. See [ARCHITECTURE.md — Widget philosophy](ARCHITECTURE.md#widget-philosophy).
 
 A widget is created only when the user asks to display a model (for example via `:buffer code` or `:split`). Multiple widgets may display the same model simultaneously. Closing a pane destroys the widget, not the model.
 
@@ -118,10 +118,10 @@ classDiagram
 | `GDBWidget` | GDB/Delve terminal view; `WireCLI` on CLI PTY |
 | `CodeWidget` | Per-file source Viewport; `━━▶` PC; Space → break toggle; gutters from `BreakGutter` |
 | `AssemblyWidget` | Disassembly Viewport; addr breakpoints; `AssemblyHost`; `:b asm` |
-| `BreakpointWidget` | Builtin `:b breakpoint`; `SetItems` + `BreakpointHost` (activate / toggle / delete / FocusCode) |
-| `ThreadWidget` | Builtin `:b threads`; `SetItems` + `ThreadHost` |
-| `CallStackWidget` | Builtin `:b callstack`; `SetItems` + `CallStackHost` |
-| `FileListWidget` | `:edit` picker; `FileListHost` |
+| `BreakpointWidget` | Builtin `:b breakpoint`; embeds `TableWidget` (3 cols: # · y/n · loc); `SetItems` + `BreakpointHost` |
+| `ThreadWidget` | Builtin `:b threads`; embeds `TableWidget` (ID · State · loc); `SetItems` + `ThreadHost` |
+| `CallStackWidget` | Builtin `:b callstack`; embeds `TableWidget` (# · Func · loc); `SetItems` + `CallStackHost` |
+| `FileListWidget` | `:edit` picker; embeds `TableWidget` (# · File); `FileListHost` |
 | `OutputWidget` | Builtin `:b io`; `WireInferior` on inferior or serial console PTY |
 | `ExecWidget` | `:!` terminal view; `WireExec` on exec PTY |
 
@@ -560,9 +560,10 @@ sequenceDiagram
 |--------|------|--------|
 | `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | GDB terminal; `CompositeTerminal` + `WireCLI` |
 | `CodeWidget` | `internal/gdbforge/widgets/code_widget.go` | Per-file source; `━━▶` PC; Space → break intent; gutters from model |
-| `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; `SetItems` + toggle/delete intents |
-| `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; `SetItems` from app `ThreadList` after stop |
-| `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; `SetItems` from app `CallStack` after stop |
+| `BreakpointWidget` | `internal/gdbforge/widgets/breakpoint_widget.go` | `:b breakpoint`; `TableWidget` adapter; `SetItems` + toggle/delete intents |
+| `ThreadWidget` | `internal/gdbforge/widgets/thread_widget.go` | `:b threads`; `TableWidget` adapter; `SetItems` from `ThreadList` after stop |
+| `CallStackWidget` | `internal/gdbforge/widgets/callstack_widget.go` | `:b callstack`; `TableWidget` adapter; `SetItems` from `CallStack` after stop |
+| `TableWidget` | `internal/termui/table_widget.go` | Generic columnar list: `RectViewport`, `CellBuffer`, selection, `/search`, copy |
 | `OutputWidget` | `internal/gdbforge/widgets/output_widget.go` | `:b io`; `CompositeTerminal` + `WireInferior` |
 | `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | `:!` terminal; `CompositeTerminal` + `WireExec` |
 | `AboutWidget` | `internal/gdbforge/widgets/about_widget.go` | Built-in About page; shown via `:b about` |

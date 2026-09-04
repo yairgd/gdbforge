@@ -436,7 +436,7 @@ Models are **application-specific** (`BreakpointModel`, `OrdersModel`, `MSPV2Inf
 ```text
 TextWidget   →  TextModel
 GraphWidget  →  GraphModel
-TableWidget  →  TableModel
+TableWidget  →  TableModel   (aspirational — debugger lists use SetFill adapters today)
 TreeWidget   →  TreeModel
 ```
 
@@ -452,11 +452,11 @@ Widgets are **views**. A widget should contain little or no business logic. It r
 |--------|------|
 | `LoggerWidget` | Scrollable log output |
 | `GraphWidget` | Time series, histograms, scatter plots |
-| `TableWidget` | Tabular data |
+| `TableWidget` | Tabular data (implemented in `internal/termui`; BP/threads/callstack embed it) |
 | `TreeWidget` | Hierarchical data |
 | `TextWidget` | Line-oriented text |
 
-Widgets should be **reusable across applications** whenever possible. The same `TableWidget` can display breakpoints in a debugger, orders in a trading app, or MSP telemetry in a monitoring app — as long as the bound model implements `TableModel`.
+Widgets should be **reusable across applications** whenever possible. **`TableWidget`** is implemented (`RectViewport`, `CellBuffer`, columns, `SetFill`); gdbforge debugger list panes embed it with thin adapters. A future generic `TableModel` interface remains aspirational.
 
 ---
 
@@ -597,7 +597,8 @@ Platform components do not import terminal or widget packages. Today many of the
 |-----------|------|
 | **Canvas** | Local-coordinate drawing context |
 | **Grid** | Off-screen cell framebuffer |
-| **Viewport** | Scroll window, cursor visibility, visible region over a model |
+| **Viewport** | Scroll window over line `Buffer`; cursor, selection, ANSI path |
+| **TableWidget** | Columnar grid over `CellBuffer` + `RectViewport`; row selection, `/search` |
 | **Widget** | View interface (`Draw`, `DrawStatusLine`, `HandleEvent`) |
 | **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
@@ -669,7 +670,8 @@ flowchart TB
 | **Widget layer** | `termui.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
 | **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
-| **Text model (legacy)** | `core.Buffer`, `core.Viewport` | Scrollable line storage — used today by console/source widgets; target is explicit domain models per pane |
+| **Text model (legacy)** | `platform.Buffer`, `Viewport` | Line storage — Code/Asm/Help/FileList; **list panes BP/threads/stack use `TableWidget`** |
+| Generic `TableModel` | — | Not yet — widgets use `SetFill` + typed `SetItems` |
 | **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
 | **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
@@ -1071,7 +1073,8 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Backend → controller → model → view | Debugger events update models; widgets paint snapshots | **Done** — `backend.Backend` + `*Ctl`; views are hosts / `Set*` |
 | Composition root | Thin app + embedded layers | **Done** — `LayoutShell` + `DebugSession` + host adapters |
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
-| Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both migrating |
+| Viewport ownership | Viewport in TermUI; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
+| TableWidget | Columnar lists off Viewport | **Done** — `internal/termui/table_*.go`; BP/threads/callstack adapters |
 | Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |

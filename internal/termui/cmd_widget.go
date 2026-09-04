@@ -315,18 +315,14 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			}
 			return
 		}
+		if c.handleEditKey(e) {
+			return
+		}
 
 		switch e.Key() {
 
 		case tcell.KeyEscape:
-			c.emit(SubmitMsg{
-				Text:  "exit from command mode",
-				CmdID: CmdExitMode,
-			})
-			c.active = false
-			c.text = ""
-			c.cursor = 0
-
+			c.exitMode()
 			return
 
 		case tcell.KeyTAB:
@@ -428,28 +424,13 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 			}
 			return
 
-		case tcell.KeyCtrlA:
-			c.cursor = 1 // after prefix
-			return
-
-		case tcell.KeyCtrlE:
-			c.cursor = len([]rune(c.text))
-			return
-
 		case tcell.KeyBackspace, tcell.KeyBackspace2:
 			r := []rune(c.text)
 			pfx := c.prefix()
 
 			// deleting prefix exits cmdline mode
 			if len(r) == 1 && r[0] == pfx {
-				c.emit(SubmitMsg{
-					Text:  "exit from command mode",
-					CmdID: CmdExitMode,
-				})
-				c.active = false
-				c.text = ""
-				c.cursor = 0
-
+				c.exitMode()
 				return
 			}
 
@@ -506,6 +487,59 @@ func (c *CmdWidget) HandleEvent(ev tcell.Event) {
 	default:
 		panic(fmt.Sprintf("unexpected tcell.Event: %#v", e))
 	}
+}
+
+func (c *CmdWidget) exitMode() {
+	c.emit(SubmitMsg{
+		Text:  "exit from command mode",
+		CmdID: CmdExitMode,
+	})
+	c.active = false
+	c.text = ""
+	c.cursor = 0
+}
+
+// handleEditKey handles readline-style editing chords on ':' and '/' cmdlines.
+func (c *CmdWidget) handleEditKey(e *tcell.EventKey) bool {
+	switch e.Key() {
+	case tcell.KeyCtrlA:
+		c.cursor = 1
+		return true
+	case tcell.KeyCtrlE:
+		c.cursor = len([]rune(c.text))
+		return true
+	case tcell.KeyCtrlU:
+		c.exitMode()
+		return true
+	}
+	if e.Key() == tcell.KeyRune {
+		r := e.Rune()
+		if e.Modifiers()&tcell.ModCtrl != 0 {
+			switch r {
+			case 'a', 'A':
+				c.cursor = 1
+				return true
+			case 'e', 'E':
+				c.cursor = len([]rune(c.text))
+				return true
+			case 'u', 'U':
+				c.exitMode()
+				return true
+			}
+		}
+		switch r {
+		case 0x01: // Ctrl-A
+			c.cursor = 1
+			return true
+		case 0x05: // Ctrl-E
+			c.cursor = len([]rune(c.text))
+			return true
+		case 0x15: // Ctrl-U
+			c.exitMode()
+			return true
+		}
+	}
+	return false
 }
 
 func (c *CmdWidget) pasteAtCursor() {

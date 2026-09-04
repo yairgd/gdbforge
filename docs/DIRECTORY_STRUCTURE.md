@@ -172,7 +172,14 @@ task build
 | `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine (Lua REPL) |
 | `composite_terminal.go` | xterm emulator + key trie; `AttachTTY`, `Paint`, `HandleKey` |
 | `wire_tty.go` | `WireTTY` — PTY bytes ↔ xterm; `WireTTYOpts` (PostFrame, OnExit) |
-| `viewport.go` | Scroll window, follow-tail, selection/clipboard, optional ANSI + `OmitTail` |
+| `viewport.go` | Scroll window over line buffer; follow-tail, selection/clipboard, optional ANSI |
+| `viewport_search.go` | `SearchHost` for Viewport-backed panes |
+| `rect_viewport.go` | Content rect + origin; pan/clamp; `EnsureRowVisible` (Y-only) |
+| `cell_buffer.go` | Pane-sized rune+style grid; `BlitTo` canvas |
+| `table.go` | Column layout, sticky header, `PaintVisible` |
+| `table_widget.go` | `TableWidget`: `SetFill`, selection, pan, mouse, copy |
+| `table_search.go` | `SearchHost` for table-backed panes |
+| `table_paint.go` | Row style + search highlight spans |
 | `viewport_word.go` | Double-click word / triple-click line select + copy |
 | `viewport_clipboard.go` | Selection → CLIPBOARD + PRIMARY |
 | `clipboard.go` | Middle-paste rising-edge + debounce; paste routing |
@@ -225,10 +232,10 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `widgets/code_widget.go` | Source view; Space → break toggle; gutters via `BreakGutter` |
 | `widgets/assembly_widget.go` | `:b asm`; addr breakpoints; `AssemblyHost` |
 | `widgets/break_paint.go` | Shared gutter colors (disabled / conditional / enabled) |
-| `widgets/breakpoint_widget.go` | `:b breakpoint`; `BreakpointHost` intents |
-| `widgets/thread_widget.go` | `:b threads`; `ThreadHost` |
-| `widgets/callstack_widget.go` | `:b callstack`; `CallStackHost` |
-| `widgets/file_list_widget.go` | `:edit` picker; `FileListHost` |
+| `widgets/breakpoint_widget.go` | `:b breakpoint`; embeds `TableWidget`; `BreakpointHost` |
+| `widgets/thread_widget.go` | `:b threads`; embeds `TableWidget`; `ThreadHost` |
+| `widgets/callstack_widget.go` | `:b callstack`; embeds `TableWidget`; `CallStackHost` |
+| `widgets/file_list_widget.go` | `:edit` picker; embeds `TableWidget` (# · File); `FileListHost` |
 | `widgets/output_widget.go` | `:b io`; `CompositeTerminal` + `WireInferior` |
 | `widgets/about_widget.go` | Built-in About page (singleton via `:b about`) |
 | `widgets/help_widget.go` | Viewport user manual (`:help` / `:b help`) |

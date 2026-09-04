@@ -175,6 +175,8 @@ Example: `CmdWidget` (`cmd_widget.go`) — uses the same `ClipboardIO` bridge as
 | `Up` / `Down` | History navigation |
 | `Tab` | Complete command name |
 | `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
+| `Ctrl+A` / `Ctrl+E` | Move caret to start / end of editable text (after `:` or `/`) |
+| `Ctrl+U` | Kill from caret to start of editable text (keeps prefix) |
 | `Ctrl+V` / middle-click | Paste into the cmdline (CLIPBOARD / PRIMARY; first line only; middle-click rising-edge) |
 | `Ctrl+C` / `Ctrl+X` | Copy / cut text after `:` |
 | Rune / editing keys | Insert, move cursor |

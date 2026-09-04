@@ -42,8 +42,9 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | Working | `:b breakpoint`; internal list; `e`/`d`; syncs with GDB + CodeWidget |
-| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; refreshed on GDB stop |
+| `BreakpointWidget` | Working | `:b breakpoint`; `TableWidget` (3 cols); `e`/`d`; syncs with GDB + CodeWidget |
+| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; `TableWidget` lists; refreshed on GDB stop |
+| `TableWidget` (termui) | Working | `RectViewport` + `CellBuffer`; selection, search, copy; used by BP/threads/stack |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Working | `CompositeTerminal` + `WireCLI`; app owns MI on PTY #2 |
 | `ExecWidget` / `:!` | Working | `CompositeTerminal` + `WireExec`; PTY via `ptyx.Start` |

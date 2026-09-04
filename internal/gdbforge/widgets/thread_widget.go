@@ -19,16 +19,11 @@ import (
 //	wheel — same as j/k (Code / GDB follow the selected thread)
 //	Enter / click — ActivateThread
 type ThreadWidget struct {
-	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
-	state    *debugstate.State
+	*termui.TableWidget
+	state *debugstate.State
 
-	items    []models.ThreadInfo
-	selected int
+	items []models.ThreadInfo
 
-	// mouseDown tracks primary-button press so we activate on release, not on
-	// every drag sample (which flooded GDB with thread/frame console noise).
 	mouseDown     bool
 	pressSelected int
 	lastActID     string
@@ -36,37 +31,30 @@ type ThreadWidget struct {
 }
 
 func NewThreadWidget() *ThreadWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(false)
-	vp.SetReadOnly(true)
-	vp.SetCursorVisible(false)
+	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw.PaneName = "Threads"
+	tbl := tw.Table()
+	tbl.SetShowHeader(false)
+	tbl.SetGutter(2)
+	tbl.AddColumn("ID")
+	tbl.AddColumn("State")
+	tbl.AddColumn("Loc")
 
-	w := &ThreadWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Threads"},
-		viewport:   vp,
-		buf:        buf,
-	}
-	vp.RowStyle = w.rowStyle
-	vp.SetOnSearchJump(func(lineIdx int) {
-		w.viewport.CursorLine = lineIdx
-		w.syncSelectedFromViewport()
-	})
+	w := &ThreadWidget{TableWidget: tw}
+	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
+	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
-	w.rebuild()
 	return w
 }
 
-// SetAppState wires mark / mark-dim colors for the selection row.
-func (w *ThreadWidget) SetAppState(st *debugstate.State) {
-	w.state = st
-}
+func (w *ThreadWidget) SetAppState(st *debugstate.State) { w.state = st }
 
 func (w *ThreadWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected() }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected() }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.PanLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.PanRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 }
 
@@ -84,13 +72,6 @@ func (w *ThreadWidget) markDimColor() tcell.Color {
 	return platform.DefaultMarkDimColor
 }
 
-func (w *ThreadWidget) pcColor() tcell.Color {
-	if w.state != nil {
-		return w.state.PCColor()
-	}
-	return platform.DefaultPCColor
-}
-
 func (w *ThreadWidget) stackBreakColor() tcell.Color {
 	if w.state != nil {
 		return w.state.StackBreakColor()
@@ -105,26 +86,22 @@ func (w *ThreadWidget) mutedColor() tcell.Color {
 	return platform.DefaultMutedColor
 }
 
-func (w *ThreadWidget) rowStyle(lineIdx int, line string) tcell.Style {
+func (w *ThreadWidget) rowStyle(lineIdx int, _ string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
 		return st.Foreground(w.mutedColor())
 	}
-	if lineIdx == w.selected {
+	if lineIdx == w.SelectedRow() {
 		bg := w.markDimColor()
 		if w.Focused() {
 			bg = w.markColor()
 		}
-		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	// Green only for the current thread when ━━▶ matches (that thread's frame 0).
 	if w.isCurrentThread(lineIdx) && w.atProgramPoint(lineIdx) {
 		bg := w.stackBreakColor()
-		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	_ = line
 	return st
 }
 
@@ -144,41 +121,41 @@ func (w *ThreadWidget) isCurrentThread(lineIdx int) bool {
 }
 
 func (w *ThreadWidget) move(delta int) {
-	n := len(w.items)
-	if n == 0 {
+	if len(w.items) == 0 {
 		return
 	}
-	w.selected = (w.selected + delta%n + n) % n
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureLineVisible()
+	w.MoveSelection(delta)
 }
 
-// syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
 func (w *ThreadWidget) syncSelectedFromViewport() {
+	w.clampSelectedToItems()
+}
+
+func (w *ThreadWidget) clampSelectedToItems() {
 	n := len(w.items)
 	if n == 0 {
+		w.SetSelectedRow(0)
 		return
 	}
-	line := w.viewport.CursorLine
-	if line < 0 {
-		line = 0
+	row := w.SelectedRow()
+	if row < 0 {
+		row = 0
 	}
-	if line >= n {
-		line = n - 1
+	if row >= n {
+		row = n - 1
 	}
-	w.selected = line
-	w.viewport.CursorLine = line
+	w.SetSelectedRow(row)
 }
 
 func (w *ThreadWidget) activateSelected() {
 	if len(w.items) == 0 {
 		return
 	}
-	if w.selected < 0 || w.selected >= len(w.items) {
+	row := w.SelectedRow()
+	if row < 0 || row >= len(w.items) {
 		return
 	}
-	th := w.items[w.selected]
+	th := w.items[row]
 	now := time.Now()
 	if th.ID == w.lastActID && now.Sub(w.lastActTime) < 300*time.Millisecond {
 		return
@@ -188,46 +165,43 @@ func (w *ThreadWidget) activateSelected() {
 	w.Publish(events.ThreadActivateMsg{Thread: th})
 }
 
-// SetItems replaces the thread list and rebuilds the viewport.
-// Keeps the previously selected thread ID when still present; otherwise
-// prefers the GDB current thread.
 func (w *ThreadWidget) SetItems(items []models.ThreadInfo) {
 	prevID := ""
-	if w.selected >= 0 && w.selected < len(w.items) {
-		prevID = w.items[w.selected].ID
+	row := w.SelectedRow()
+	if row >= 0 && row < len(w.items) {
+		prevID = w.items[row].ID
 	}
 	w.items = append([]models.ThreadInfo(nil), items...)
-	w.selected = 0
+	w.RectViewport().Origin.X = 0
+	sel := 0
 	if prevID != "" {
 		for i, it := range w.items {
 			if it.ID == prevID {
-				w.selected = i
+				sel = i
 				break
 			}
 		}
 	} else {
 		for i, it := range w.items {
 			if it.Current {
-				w.selected = i
+				sel = i
 				break
 			}
 		}
 	}
-	if w.selected >= len(w.items) {
-		w.selected = len(w.items) - 1
+	if sel >= len(w.items) && len(w.items) > 0 {
+		sel = len(w.items) - 1
 	}
-	if w.selected < 0 {
-		w.selected = 0
+	if sel < 0 {
+		sel = 0
 	}
-	w.rebuild()
+	w.SetSelectedRow(sel)
+	w.EnsureRowVisible()
 }
 
-func (w *ThreadWidget) rebuild() {
-	w.buf.Clear()
-	w.viewport.Left = 0
+func (w *ThreadWidget) fillTable(t *termui.Table) {
 	if len(w.items) == 0 {
-		w.buf.AppendLine("no threads")
-		w.viewport.CursorLine = 0
+		t.AddRow("no threads")
 		return
 	}
 	for _, it := range w.items {
@@ -239,22 +213,17 @@ func (w *ThreadWidget) rebuild() {
 		if state == "" {
 			state = "-"
 		}
-		w.buf.AppendLine(fmt.Sprintf("%s  %s  %s", it.ID, state, loc))
+		t.AddRow(it.ID, state, loc)
 	}
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureLineVisible()
-}
-
-func (w *ThreadWidget) HandleFocusKey(ev *tcell.EventKey) bool {
-	return w.HandleBoundKey(ev)
 }
 
 func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		if w.TryDoubleClickWord(e) {
+			return
+		}
 		btns := e.Buttons()
-		// Wheel moves selection and activates like Enter (same as j/k).
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
 			w.activateSelected()
@@ -265,66 +234,61 @@ func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 			w.activateSelected()
 			return
 		}
-		w.viewport.HandleEvent(e)
+		mx, my := e.Position()
+		hitRow, onRow := w.HitDataRow(mx, my)
 		if btns&tcell.ButtonPrimary != 0 {
-			w.syncSelectedFromViewport()
-			if !w.mouseDown {
-				w.mouseDown = true
-				w.pressSelected = w.selected
+			if onRow {
+				w.SetSelectedRow(hitRow)
+				if !w.mouseDown {
+					w.mouseDown = true
+					w.pressSelected = w.SelectedRow()
+				}
 			}
 			return
 		}
 		if w.mouseDown {
 			w.mouseDown = false
-			w.syncSelectedFromViewport()
-			if !w.viewport.HasSelection() || w.selected != w.pressSelected {
+			if onRow {
+				w.SetSelectedRow(hitRow)
+			}
+			if w.pressSelected != w.SelectedRow() {
+				w.activateSelected()
+			} else {
 				w.activateSelected()
 			}
 		}
 	case *tcell.EventKey:
-		if w.HandleBoundKey(e) {
-			return
-		}
-		w.viewport.HandleEvent(e)
+		w.HandleFocusKey(e)
 	}
 }
 
 func (w *ThreadWidget) SetFocused(focused bool) {
-	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
+	w.TableWidget.SetFocused(focused)
 	if !focused {
 		w.mouseDown = false
 	}
 }
 
-func (w *ThreadWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
-}
-
-func (w *ThreadWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
-}
-
-func (w *ThreadWidget) Viewport() *termui.Viewport {
-	return w.viewport
-}
-
-func (w *ThreadWidget) Selected() int { return w.selected }
+func (w *ThreadWidget) Selected() int { return w.SelectedRow() }
 
 func (w *ThreadWidget) Items() []models.ThreadInfo {
 	return append([]models.ThreadInfo(nil), w.items...)
 }
 
 func (w *ThreadWidget) LinesForTest() []string {
-	n := w.buf.NumLines()
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		out[i] = w.buf.Line(i)
+	tbl := w.Table()
+	tbl.ClearRows()
+	w.fillTable(tbl)
+	if len(w.items) == 0 {
+		return []string{"no threads"}
+	}
+	out := make([]string, tbl.NumRows())
+	for i := 0; i < tbl.NumRows(); i++ {
+		out[i] = tbl.RowDisplayLine(i)
 	}
 	return out
 }
 
-// ViewportLeftForTest exposes the horizontal scroll offset for unit tests.
 func (w *ThreadWidget) ViewportLeftForTest() int {
-	return w.viewport.Left
+	return w.RectViewport().Origin.X
 }
