@@ -1,7 +1,5 @@
-//go:build !unix
+//go:build !linux && !darwin && !dragonfly && !freebsd && !netbsd && !openbsd
 
 package termui
 
-func blockJobControlStop()           {}
-func unblockJobControlStop()         {}
 func stopForShellJobControl() error { return nil }

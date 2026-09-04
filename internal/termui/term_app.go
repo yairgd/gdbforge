@@ -46,6 +46,9 @@ type TermApp struct {
 	mouseX      int
 	mouseY      int
 
+	// ttyReleases counts completed Suspend/RunForeground cycles so the event
+	// loop can tell that a key handler gave the tty away and came back.
+	ttyReleases  int
 	layoutDirty  bool
 	appState     *platform.AppState
 	modeHandlers ModeKeyHandlers
@@ -65,8 +68,6 @@ func NewTermApp() *TermApp {
 
 	screen.EnableMouse(tcell.MouseMotionEvents)
 	screen.EnablePaste()
-
-	blockJobControlStop()
 
 	return &TermApp{
 		screen:       screen,
@@ -194,7 +195,6 @@ func (app *TermApp) resumeAfterSuspend() error {
 			return err
 		}
 	}
-	blockJobControlStop()
 	app.restoreAfterResume()
 	return nil
 }
@@ -211,6 +211,7 @@ func (app *TermApp) withTTYReleased(fn func() error) error {
 	if err := app.screen.Suspend(); err != nil {
 		return fmt.Errorf("suspend: %w", err)
 	}
+	app.ttyReleases++
 
 	runErr := fn()
 	if err := app.resumeAfterSuspend(); err != nil {
@@ -366,8 +367,17 @@ func (app *TermApp) handleUIEventBatch(batch []tcell.Event) bool {
 			urgent = true
 		}
 	}
+	// A key that releases the tty (Ctrl-Z) blocks until the shell resumes us,
+	// so the rest of the batch was typed before we stopped. Drop it, like
+	// restoreAfterResume already drops input queued while stopped: a fast
+	// double Ctrl-Z read in one go would otherwise suspend twice and need a
+	// second fg.
+	gen := app.ttyReleases
 	for _, ev := range keys {
 		app.HandleEvent(ev)
+		if app.ttyReleases != gen {
+			return true
+		}
 	}
 	for _, ev := range mice {
 		app.HandleEvent(ev)
