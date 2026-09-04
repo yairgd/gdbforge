@@ -10,6 +10,15 @@ import (
 	"github.com/yairgd/gdbforge/internal/luahost"
 )
 
+func TestOnCmdBareLuaRequiresScriptName(t *testing.T) {
+	a := &DebuggerApp{}
+	a.lua.host = a
+	a.lua.OnCmd()
+	if a.lua.repl != nil {
+		t.Fatal("bare :lua must not open the REPL")
+	}
+}
+
 func TestCancelLuaJob(t *testing.T) {
 	a := &DebuggerApp{}
 	a.lua.host = a

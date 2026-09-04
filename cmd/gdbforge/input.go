@@ -195,11 +195,14 @@ func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	// Cmdline owns completion — never keep a prior GDB wildmenu session.
 	a.comp.setForGDB(false)
 	a.cmdWidget.HandleEvent(ev)
-	if ev.Key() == tcell.KeyTAB && a.comp.active() {
-		a.comp.setForGDB(false)
-		a.SetMode(platform.ModeCompletion)
-		a.RequestFrame()
-		return true
+	if ev.Key() == tcell.KeyTAB {
+		if a.comp.active() || (a.cmdWidget != nil && len(a.cmdWidget.CompletionNames()) > 1) {
+			a.comp.setForGDB(false)
+			a.comp.setForLua(false)
+			a.SetMode(platform.ModeCompletion)
+			a.RequestFrame()
+			return true
+		}
 	}
 	if ev.Key() == tcell.KeyEnter {
 		a.comp.clear()

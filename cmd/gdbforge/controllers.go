@@ -310,6 +310,7 @@ func (a *DebuggerApp) LuaEnterBuffer(w termui.Widget) { a.lua.maybeEnterBuffer(w
 func (a *DebuggerApp) LuaEnsureBuffer(name string, from *luahost.Runtime) bool {
 	return a.lua.ensureBuffer(name, from)
 }
+func (a *DebuggerApp) OpenLuaConsole() { a.lua.openConsole() }
 
 var (
 	_ breakHost      = (*DebuggerApp)(nil)

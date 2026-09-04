@@ -62,6 +62,35 @@ func (c *completionCtl) onMsg(msg termui.CompletionMsg) {
 	}
 	c.menu.Set(msg.Names)
 	c.syncView()
+	c.maybeEnterCommandCompletionMode(len(msg.Names))
+}
+
+// maybeEnterCommandCompletionMode switches to ModeCompletion when the cmdline
+// wildmenu has multiple candidates. CmdWidget posts CompletionMsg via
+// PostInterrupt, so handleCommandKey often runs before the menu exists; enter
+// completion mode here when the async delivery lands.
+func (c *completionCtl) maybeEnterCommandCompletionMode(n int) {
+	if n <= 1 {
+		return
+	}
+	h := c.host
+	if h == nil {
+		return
+	}
+	cmd := h.CmdWidget()
+	if cmd == nil || !cmd.Active() {
+		return
+	}
+	mode := h.Mode()
+	if mode != platform.ModeCommand && mode != platform.ModeCompletion {
+		return
+	}
+	c.forGDB = false
+	c.forLua = false
+	if mode != platform.ModeCompletion {
+		h.SetMode(platform.ModeCompletion)
+		h.RequestFrame()
+	}
 }
 
 func (c *completionCtl) syncView() {

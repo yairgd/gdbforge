@@ -37,6 +37,7 @@ type bufferHost interface {
 	swapFocusedWidget(w termui.Widget) bool
 	LuaEnterBuffer(w termui.Widget)
 	LuaEnsureBuffer(name string, from *luahost.Runtime) bool
+	OpenLuaConsole()
 	LogError(area, msg string)
 }
 
@@ -306,6 +307,10 @@ func (c *bufferCtl) onBuffer(name string) {
 	if name == "gdb" {
 		h.activateGdbPane()
 		h.RequestFrame()
+		return
+	}
+	if name == "lua" {
+		h.OpenLuaConsole()
 		return
 	}
 	c.openOrCreate(name, nil)

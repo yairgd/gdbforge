@@ -163,16 +163,17 @@ func (c *luaCtl) registerCmd(name string, rt *luahost.Runtime) {
 // Pane scripts (on_key/on_tick): :lua snake [bufname] create-or-focuses that
 // buffer (default via main() → open_buffer("snake"); :lua snake snake1 → new VM).
 // :lua name help|-h|--help calls global help() (if any) and skips main().
+// Bare :lua requires a script name; use :b lua for the REPL.
 func (c *luaCtl) OnCmd(args ...any) {
 	h := c.host
 	if len(args) == 0 {
-		c.openConsole()
+		c.logMissingScriptName()
 		return
 	}
 	name, _ := args[0].(string)
 	name = strings.TrimSpace(name)
 	if name == "" {
-		c.openConsole()
+		c.logMissingScriptName()
 		return
 	}
 	if name == "console" || name == "repl" {
@@ -238,7 +239,7 @@ func (c *luaCtl) OnCmd(args ...any) {
 	c.startJob(rt, name, strArgs)
 }
 
-// openConsole focuses the line Lua REPL (:b lua, bare :lua, :lua console).
+// openConsole focuses the line Lua REPL (:b lua, :lua console/repl).
 func (c *luaCtl) openConsole() {
 	h := c.host
 	w := h.LuaConsoleWidget()
@@ -257,6 +258,12 @@ func (c *luaCtl) openConsole() {
 	w.EnsureLivePrompt()
 	w.ForceFollowTailAndScroll()
 	h.RequestFrame()
+}
+
+func (c *luaCtl) logMissingScriptName() {
+	if h := c.host; h != nil && h.AppLog() != nil {
+		h.AppLog().Named("lua").Error("script name required (use :b lua for REPL)")
+	}
 }
 
 func (c *luaCtl) onReplSubmit(raw string) {
