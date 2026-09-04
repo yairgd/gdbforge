@@ -272,7 +272,7 @@ Full per-script recipes and env vars: [`lua/README.md`](https://github.com/yairg
 
 ### Breakpoints while the inferior is running
 
-Space / BP pane may interrupt GDB (Ctrl-C), send break/clear, then continue only for insert (or clear if `continueafterclear`). Switching threads/frames while running interrupts but does not auto-continue.
+Space / BP pane may interrupt GDB via `-exec-interrupt` on the MI channel, send break/clear, then continue only for insert (or clear if `continueafterclear`). Switching threads/frames while running interrupts but does not auto-continue.
 
 ### Tips
 

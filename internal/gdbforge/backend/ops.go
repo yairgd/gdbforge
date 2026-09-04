@@ -18,7 +18,7 @@ type NavigationOpts struct {
 
 // SelectFrame sends a frame selection command.
 func (b *GDBBackend) SelectFrame(env CommandEnv, level int, _ NavigationOpts) {
-	SendDebuggerCmd(env, fmt.Sprintf("-stack-select-frame %d", level))
+	sendDebuggerCmdGDB(env, fmt.Sprintf("-stack-select-frame %d", level))
 }
 
 // SelectFrame sends a frame selection command on Delve CLI.
@@ -33,7 +33,7 @@ func (b *DLVBackend) SelectFrame(env CommandEnv, level int, opts NavigationOpts)
 
 // SelectThread sends a thread/goroutine selection command.
 func (b *GDBBackend) SelectThread(env CommandEnv, id string, _ NavigationOpts) {
-	SendDebuggerCmd(env, "-thread-select "+id)
+	sendDebuggerCmdGDB(env, "-thread-select "+id)
 }
 
 // SelectThread sends a goroutine selection command on Delve.
@@ -52,7 +52,7 @@ func (b *DLVBackend) SelectThread(env CommandEnv, id string, opts NavigationOpts
 // Exec sends a run-control command (continue, next, step, …).
 func (b *GDBBackend) Exec(env CommandEnv, cmd string) {
 	send, _ := b.MapExec(cmd)
-	SendDebuggerCmd(env, send)
+	sendDebuggerCmdGDB(env, send)
 }
 
 // ExecUI sends run-control from UI keybindings (PTYOwnerUI).

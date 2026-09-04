@@ -185,6 +185,43 @@ There is **no** MI command that feeds program stdin. Stdin is always via the inf
 
 `ptyx.TTY` keeps the slave FD open so `/dev/pts/N` remains valid while gdbforge holds the master.
 
+### Three channels working together (and why `new-ui` needs extra setup)
+
+After `new-ui mi2`, GDB runs **two UIs inside one process**:
+
+| UI | PTY | GDB role | Typical prompt |
+|----|-----|----------|----------------|
+| **CLI UI** | PTY #1 | User-facing console (readline, `make`, typed `continue`) | `(gdb)` — idle while the target runs |
+| **MI UI** | PTY #2 | Machine interface — `Send` / `Subscribe`, breakpoint toggles, MCP | `(gdb)` — owns execution while the target runs |
+| **Inferior** | PTY #3 | Program stdin/stdout/stderr | *(no GDB prompt)* |
+
+**Bootstrap order** (`internal/gdb/gdb_client.go`):
+
+1. Start GDB on **CLI PTY #1** (console mode — no `--interpreter=mi2`).
+2. `new-ui mi2 <MI slave path>` on the CLI — GDB attaches the MI UI to **PTY #2**.
+3. **`-gdb-set mi-async on`** on the **MI PTY** (`const miAsyncOn = "-gdb-set mi-async on"`).
+4. `-inferior-tty-set <inferior slave>` on the **MI PTY** — routes program I/O to **PTY #3**.
+
+#### Why `mi-async on` is required
+
+With **`mi-async off`** (GDB default), while the target runs GDB **stops reading PTY #2**. Commands written to the MI master — `-exec-interrupt`, `break`, `clear` — sit unread until the target stops on its own. Before `new-ui`, a `\x03` on the controlling MI pty reached GDB as SIGINT; after the split, the MI pty has no foreground process group and that path is gone.
+
+#### How interrupts move
+
+| Action | Channel | Mechanism |
+|--------|---------|-----------|
+| **Space / toggle BP while running** | MI #2 | `-exec-interrupt` (`gdb.MIExecInterrupt`), then `break`/`clear`, then optional `continue` via `gdb.SendCmd` |
+| **Frame / thread select while running** | MI #2 | `-exec-interrupt`, then MI command — no auto-`continue` |
+| **UI Ctrl-C while target runs** | MI #2 | `GDBClient.Interrupt()` → `-exec-interrupt` |
+| **UI Ctrl-C at idle `(gdb)`** | CLI #1 | `GDBClient.InterruptIdle()` → terminal `^C` (`Quit`) |
+| **Delve** | CLI pty | inline `\x03` (`SendOpts{}`) |
+
+GDB backend wiring: `sendDebuggerCmdGDB` in `internal/gdbforge/backend/command.go` passes `InterruptCmd: gdb.MIExecInterrupt` to `SendCmd`. Delve uses `SendDebuggerCmd` with empty opts.
+
+Why not `\x03` on MI or SIGINT on CLI? `\x03` on the MI pty is swallowed; SIGINT on the CLI pty hits the idle CLI UI and prints `Quit` while the target keeps running.
+
+See also [DEBUGGER_INTEGRATION.md — Breakpoints while running](DEBUGGER_INTEGRATION.md#breakpoints-while-the-inferior-is-running).
+
 ---
 
 ## Mode B — GDB with an external terminal

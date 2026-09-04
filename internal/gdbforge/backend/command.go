@@ -16,12 +16,26 @@ type CommandEnv struct {
 	Inferior gdb.InferiorCtl
 }
 
+func gdbSendOpts() gdb.SendOpts {
+	return gdb.SendOpts{InterruptCmd: gdb.MIExecInterrupt}
+}
+
 // SendDebuggerCmd sends a debugger command using the shared interrupt/continue policy.
+// Delve keeps inline ^C on its CLI PTY (empty SendOpts).
 func SendDebuggerCmd(env CommandEnv, cmd string) {
 	if cmd == "" {
 		return
 	}
-	gdb.SendCmd(env.Session, env.App, env.Inferior, cmd)
+	gdb.SendCmd(env.Session, env.App, env.Inferior, cmd, gdb.SendOpts{})
+}
+
+// sendDebuggerCmdGDB is like SendDebuggerCmd but routes interrupts through MI
+// -exec-interrupt (required after new-ui mi2 split PTYs).
+func sendDebuggerCmdGDB(env CommandEnv, cmd string) {
+	if cmd == "" {
+		return
+	}
+	gdb.SendCmd(env.Session, env.App, env.Inferior, cmd, gdbSendOpts())
 }
 
 // SendMappedBreak applies MapBreak then SendDebuggerCmd.
@@ -29,7 +43,7 @@ func (b *GDBBackend) SendMappedBreak(env CommandEnv, cmd string) {
 	if b != nil {
 		cmd = b.MapBreak(cmd)
 	}
-	SendDebuggerCmd(env, cmd)
+	sendDebuggerCmdGDB(env, cmd)
 }
 
 func (b *DLVBackend) SendMappedBreak(env CommandEnv, cmd string) {

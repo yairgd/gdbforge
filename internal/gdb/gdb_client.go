@@ -34,6 +34,17 @@ var _ core.Session = (*GDBClient)(nil)
 // How long to wait for the first (gdb) prompt after spawn (covers -x remote load).
 const startupPromptWait = 90 * time.Second
 
+// miAsyncOn puts the MI UI in background execution mode.
+//
+// With mi-async off (GDB's default) a running target blocks the MI UI entirely:
+// GDB stops reading the MI channel, so -exec-interrupt, break and clear sit
+// unread in the pty until the target happens to stop on its own. Before new-ui
+// this was masked, because MI was GDB's controlling terminal and a ^C byte on it
+// reached GDB as SIGINT through the line discipline. The MI pty has no
+// foreground process group, so that escape hatch is gone and async is required.
+// Targets that cannot do async are unaffected — GDB keeps running them synchronously.
+const miAsyncOn = "-gdb-set mi-async on"
+
 func NewGDBClient(gdbPath string, gdbArgs []string) (*GDBClient, error) {
 	return NewGDBClientOpts(gdbPath, gdbArgs, ClientOptions{})
 }
@@ -95,6 +106,11 @@ func NewGDBClientOpts(gdbPath string, gdbArgs []string, opts ClientOptions) (*GD
 	if _, err := waitTTYPrompt(mi, startupPromptWait); err != nil {
 		c.Close()
 		return nil, fmt.Errorf("mi ui ready: %w", err)
+	}
+
+	if err := mi.Send(miAsyncOn); err != nil {
+		c.Close()
+		return nil, fmt.Errorf("%s: %w", miAsyncOn, err)
 	}
 
 	if path := c.InferiorTTYPath(); path != "" {
@@ -273,8 +289,29 @@ func (c *GDBClient) RequestQuit() QuitAction {
 	return c.Quit.RequestQuit()
 }
 
-// Interrupt stops a running inferior via CLI PTY ^C and SIGINT to GDB.
+// Interrupt stops a running inferior.
+//
+// new-ui makes the MI UI the owner of execution while the CLI UI sits at its own
+// (gdb) prompt. GDB attributes a SIGINT / ^C on the CLI terminal to that idle UI,
+// so it only prints "Quit" and the target keeps running. -exec-interrupt on the
+// MI channel is what actually stops it; the terminal signal stays as a fallback
+// for when there is no MI channel.
 func (c *GDBClient) Interrupt() error {
+	if c == nil {
+		return nil
+	}
+	if c.TTY != nil {
+		if err := c.TTY.Send(MIExecInterrupt); err == nil {
+			return nil
+		}
+	}
+	return c.InterruptIdle()
+}
+
+// InterruptIdle delivers ^C to GDB's own terminal, which is what a Ctrl-C at an
+// idle prompt should do ("Quit"). -exec-interrupt would answer with an error
+// because no program is being run.
+func (c *GDBClient) InterruptIdle() error {
 	if c == nil || c.CLI == nil {
 		return nil
 	}

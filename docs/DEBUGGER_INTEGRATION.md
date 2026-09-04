@@ -322,9 +322,10 @@ gdbforge (GDB session)
 2. Wait up to **90s** for the first `(gdb)` prompt on CLI PTY
 3. `ptyx.Open()` → PTY #2 (MI); send `new-ui mi2 <slave path>` on CLI PTY
 4. Wait for MI ready on PTY #2
-5. `ptyx.Open()` or `AttachPath` → PTY #3 (inferior)
-6. Send `-inferior-tty-set <slaveName>` on **MI PTY** only after MI is ready
-7. Wire CLI PTY → `GDBWidget`; inferior PTY → `OutputWidget` via `WireTTY`
+5. Send **`-gdb-set mi-async on`** on MI PTY — required so GDB keeps reading MI while the target runs ([details](PTY_ARCHITECTURE.md#three-channels-working-together-and-why-new-ui-needs-extra-setup))
+6. `ptyx.Open()` or `AttachPath` → PTY #3 (inferior)
+7. Send `-inferior-tty-set <slaveName>` on **MI PTY** only after MI is ready
+8. Wire CLI PTY → `GDBWidget`; inferior PTY → `OutputWidget` via `WireTTY`
 
 Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitScript` detects `-x`/`-ex` so the app skips default `break main` when an init script is present.
 
@@ -415,16 +416,20 @@ Breakpoints are coordinated across the debugger console, CodeWidget, AssemblyWid
 
 ## Breakpoints while the inferior is running
 
-While the program is in `continue` / `^running`, sync GDB does not process a queued `break` until the target stops. Space (and BreakpointWidget e/`d`) therefore:
+While the program is in `continue` / `^running`, GDB will not process a queued `break` until the target stops. Space (and BreakpointWidget e/`d`) go through `backend` → `gdb.SendCmd`, which:
 
-1. Send Ctrl-C (`\x03`) to interrupt
-2. Send `break` / `clear` / `-break-delete`
-3. On **insert** (`break` / `tbreak` / `-break-insert`): send `continue` so execution can hit the new breakpoint
-4. On **remove** (`clear` / `-break-delete`): send `continue` only if `:set continueafterclear` (default **off** — stay stopped)
+1. Sends **`-exec-interrupt`** on the **MI PTY** (`gdb.MIExecInterrupt`) via `sendDebuggerCmdGDB` — not `\x03` on the MI pty ([why](PTY_ARCHITECTURE.md#three-channels-working-together-and-why-new-ui-needs-extra-setup))
+2. Sends `break` / `clear` / `-break-delete`
+3. On **insert**: sends `continue` so execution can hit the new breakpoint
+4. On **remove**: sends `continue` only if `:set continueafterclear` (default **off**)
 
-Other App PTY commands (`-stack-select-frame`, `-thread-select`, …) also interrupt when running, but **do not** auto-`continue` — a surprise resume was resuming the inferior after call-stack / thread clicks.
+Requires **`-gdb-set mi-async on`** at GDB startup (`miAsyncOn` in `gdb_client.go`).
 
-`AppState.InferiorRunning` tracks `^running` → `*stopped` for this path. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
+**UI Ctrl-C:** `GDBBackend.Interrupt` → `GDBClient.Interrupt()` → `-exec-interrupt` when running; `InterruptIdle()` at idle prompt.
+
+Other App commands (`-stack-select-frame`, `-thread-select`, …) also interrupt via the same MI path but **do not** auto-`continue`.
+
+`AppState.InferiorRunning` tracks `^running` → `*stopped`. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
 
 ### Builtins and keys
 
@@ -569,12 +574,14 @@ Run gdbforge from the project/build dir so the YAML matches the sources you debu
 3. `ptyx.Start` → **CLI PTY** (#1); `ptyx.Open` → **MI PTY** (#2) and **inferior PTY** (#3).
 4. Waits for `(gdb)` on CLI PTY (up to 90s); captures startup bytes for `WriteBoot`.
 5. Sends `new-ui mi2 <MI slave path>` on CLI PTY; waits for MI ready on PTY #2.
-6. Sends `-inferior-tty-set <inferior slave path>` on MI PTY.
+6. Sends `-gdb-set mi-async on` on MI PTY (constant `miAsyncOn`).
+7. Sends `-inferior-tty-set <inferior slave path>` on MI PTY.
 
 ```go
 cli, _ := ptyx.Start([]string{"gdb", "-iex", "set pagination off", "hello"}, ptyx.Options{})
 mi, _ := ptyx.Open()
 // cli.Send("new-ui mi2 " + mi.SlaveName())
+// mi.Send("-gdb-set mi-async on")
 // mi.Send("-inferior-tty-set " + inf.SlaveName())
 ```
 
@@ -589,7 +596,9 @@ mi, _ := ptyx.Open()
 | Method | Use |
 |--------|-----|
 | `Send(cmd)` | Append `\n`, send CLI/MI command (takes write lock) |
-| `SendRaw(raw)` | Send raw bytes (SIGINT, …) under write lock |
+| `SendRaw(raw)` | Send raw bytes under write lock (Delve inline `^C`; inferior PTY) |
+| `Interrupt()` | Stop running inferior: `-exec-interrupt` on MI PTY |
+| `InterruptIdle()` | Idle GDB prompt: SIGINT + `^C` on CLI PTY (`Quit`) |
 | `SuspendInferior()` | SIGTSTP like terminal Ctrl-Z (`^Z` on inferior PTY or `kill`) |
 | `WithWrite(ctx, fn)` | Hold write lock for multi-step MCP capture |
 | `CLIExecToMI(cmd)` | Map CLI `next`/`step`/`continue`/… → `-exec-*` so console/`n`/`s`/`c` do not dump source into the GDB pane; Code follows `*stopped` |

@@ -133,12 +133,17 @@ func (b *GDBBackend) EnrichLinespecMenu(text string, menu []string, sess core.Se
 }
 
 func (b *GDBBackend) Interrupt(inferiorRunning, confirming bool) error {
-	_ = inferiorRunning
 	_ = confirming
-	if c := b.client(); c != nil {
+	c := b.client()
+	if c == nil {
+		return nil
+	}
+	if inferiorRunning {
 		return c.Interrupt()
 	}
-	return nil
+	// Idle prompt: ^C on GDB's terminal prints "Quit" like real GDB, whereas
+	// -exec-interrupt would answer "The program is not being run."
+	return c.InterruptIdle()
 }
 
 func (b *GDBBackend) SuspendInferior() error {
