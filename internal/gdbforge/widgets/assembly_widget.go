@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
@@ -27,8 +28,8 @@ const (
 // Space / e fire breakpoint intents at the browse address (app owns GDB).
 type AssemblyWidget struct {
 	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
+	doc *termui.DocumentView
+	
 	state    *debugstate.State
 
 	items    []models.AsmLine
@@ -55,27 +56,19 @@ type AssemblyWidget struct {
 }
 
 func NewAssemblyWidget() *AssemblyWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(false)
-	vp.SetReadOnly(true)
-	vp.SetDragAutoScroll(false) // mouse-drag must not scroll the asm dump
-	vp.SetCursor(termui.NewInverseCursor())
-	vp.SetCursorVisible(false)
-	vp.ANSI = false
-
 	w := &AssemblyWidget{
 		BaseWidget:        termui.BaseWidget{PaneName: "Assembly"},
-		viewport:          vp,
-		buf:               buf,
+		doc:               termui.NewDocumentView(),
 		selIdx:            0,
 		browsePreserveRow: -1,
 		offWidth:          asmOffsetColsMin,
 	}
-	vp.RowStyle = w.rowStyle
-	vp.CellStyle = w.cellStyle
-	vp.SetSearchContentOffset(asmGutterCols)
-	vp.SetOnSearchJump(func(lineIdx int) {
+	w.doc.SetReadOnly(true)
+	w.doc.SetDragAutoScroll(false)
+	w.doc.SetCursor(termui.NewInverseCursor())
+	w.doc.SetCursorVisible(false)
+	w.doc.SetSearchContentOffset(asmGutterCols)
+	w.doc.SetOnSearchJump(func(lineIdx int) {
 		idx := lineIdx - w.prefix
 		if idx < 0 {
 			idx = 0
@@ -85,11 +78,11 @@ func NewAssemblyWidget() *AssemblyWidget {
 		}
 		if idx >= 0 {
 			w.selIdx = idx
-			w.viewport.CursorLine = w.selIdx + w.prefix
+			w.doc.CursorLine = w.selIdx + w.prefix
 		}
 	})
 	w.initKeyBindings()
-	w.rebuild()
+	w.syncPrefix()
 	return w
 }
 
@@ -98,16 +91,16 @@ func (w *AssemblyWidget) SetAppState(st *debugstate.State) {
 }
 
 func (w *AssemblyWidget) SetClipboard(io termui.ClipboardIO) {
-	if w != nil && w.viewport != nil {
-		w.viewport.SetClipboard(io)
+	if w != nil && w.doc != nil {
+		w.doc.SetClipboard(io)
 	}
 }
 
 func (w *AssemblyWidget) initKeyBindings() {
 	w.BindKeyFunc("sel-up", func(args ...any) { w.MoveSel(-1) }, "<Up>", "k")
 	w.BindKeyFunc("sel-down", func(args ...any) { w.MoveSel(1) }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>", "h")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>", "l")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.doc.ViewScrollColLeft() }, "<Left>", "h")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.doc.ViewScrollColRightFor(w.lineCount(), w.lineAt) }, "<Right>", "l")
 	w.BindKeyFunc("page-up", func(args ...any) { w.MoveSel(-w.pageRows()) }, "<PgUp>", "<C-b>")
 	w.BindKeyFunc("page-down", func(args ...any) { w.MoveSel(w.pageRows()) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("break-toggle", func(args ...any) { w.BreakAtSel() }, " ")
@@ -126,10 +119,10 @@ func (w *AssemblyWidget) pageRows() int {
 
 // VisibleRows is the last painted viewport height (0 before first Draw).
 func (w *AssemblyWidget) VisibleRows() int {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return 0
 	}
-	return w.viewport.Height()
+	return w.doc.Height()
 }
 
 // SetContext sets the stack-frame preamble painted above the disassembly and
@@ -140,9 +133,9 @@ func (w *AssemblyWidget) SetContext(lines []string) {
 		return
 	}
 	w.ctxLines = append([]string(nil), lines...)
-	w.rebuild()
-	if w.viewport != nil && len(w.items) > 0 {
-		w.viewport.CursorLine = w.selIdx + w.prefix
+	w.syncPrefix()
+	if w.doc != nil && len(w.items) > 0 {
+		w.doc.CursorLine = w.selIdx + w.prefix
 	}
 }
 
@@ -183,7 +176,7 @@ func (w *AssemblyWidget) SetItems(items []models.AsmLine, pcAddr, selAddr, dumpF
 	if w.selIdx < 0 {
 		w.selIdx = 0
 	}
-	w.rebuild()
+	w.syncPrefix()
 	w.revealSel()
 }
 
@@ -193,12 +186,12 @@ func (w *AssemblyWidget) SetItems(items []models.AsmLine, pcAddr, selAddr, dumpF
 // only EnsureCursorVisible runs so Down can roll the header off-screen.
 // Edge-browse slides restore browsePreserveRow so the blue line does not jump.
 func (w *AssemblyWidget) revealSel() {
-	if w == nil || w.viewport == nil || len(w.items) == 0 {
+	if w == nil || w.doc == nil || len(w.items) == 0 {
 		return
 	}
 	selLine := w.selIdx + w.prefix
-	w.viewport.CursorLine = selLine
-	h := w.viewport.Height()
+	w.doc.CursorLine = selLine
+	h := w.doc.Height()
 	if h < 1 {
 		h = 20
 	}
@@ -211,7 +204,7 @@ func (w *AssemblyWidget) revealSel() {
 		if top < 0 {
 			top = 0
 		}
-		w.viewport.Top = top
+		w.doc.Top = top
 		w.browsePreserveRow = -1
 		w.browseDir = 0
 		return
@@ -224,22 +217,22 @@ func (w *AssemblyWidget) revealSel() {
 	selIsPC := w.pcAddr != "" && w.selIdx >= 0 && w.selIdx < len(w.items) &&
 		normalizeAsmAddr(w.items[w.selIdx].Addr) == w.pcAddr
 	if selIsPC {
-		w.viewport.CursorLine = pcLine
+		w.doc.CursorLine = pcLine
 		if w.completeDump() && pcLine < h {
 			// Whole-function dump: keep frame/Dump header on the first page.
-			w.viewport.Top = 0
+			w.doc.Top = 0
 		} else {
 			// ?? / windowed: center $pc so code above and below is visible.
 			top := pcLine - h/2
 			if top < 0 {
 				top = 0
 			}
-			w.viewport.Top = top
+			w.doc.Top = top
 		}
-		w.viewport.CursorLine = selLine
+		w.doc.CursorLine = selLine
 		return
 	}
-	w.viewport.EnsureCursorVisible()
+	w.doc.EnsureCursorVisible(w.lineCount(), w.lineWidth)
 }
 
 // BrowseDir returns the in-flight slide direction (-1 Up, +1 Down, 0 none).
@@ -274,32 +267,32 @@ func (w *AssemblyWidget) endLine() int {
 
 // ensureEndVisible scrolls so "End of assembler dump." sits under the last insn.
 func (w *AssemblyWidget) ensureEndVisible() {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
 	el := w.endLine()
 	if el < 0 {
 		return
 	}
-	h := w.viewport.Height()
+	h := w.doc.Height()
 	if h < 1 {
 		h = 20
 	}
-	if el >= w.viewport.Top+h {
-		w.viewport.Top = el - h + 1
+	if el >= w.doc.Top+h {
+		w.doc.Top = el - h + 1
 	}
-	if w.viewport.Top < 0 {
-		w.viewport.Top = 0
+	if w.doc.Top < 0 {
+		w.doc.Top = 0
 	}
 }
 
 // ensureHeaderVisible pins Top=0 so the frame line + Dump header show again
 // when the browse line is on the first instruction of the function.
 func (w *AssemblyWidget) ensureHeaderVisible() {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.Top = 0
+	w.doc.Top = 0
 }
 
 // MoveSel moves the blue browse line by delta instructions.
@@ -319,8 +312,8 @@ func (w *AssemblyWidget) MoveSel(delta int) {
 		needBrowse = delta > 0
 	}
 	w.selIdx = next
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	w.viewport.EnsureCursorVisible()
+	w.doc.CursorLine = w.selIdx + w.prefix
+	w.doc.EnsureCursorVisible(w.lineCount(), w.lineWidth)
 
 	// Whole-function dump is finite — edge browse would re-fetch and snap the view.
 	// At the bottom show End after the last insn; at the top restore frame/Dump.
@@ -343,7 +336,7 @@ func (w *AssemblyWidget) MoveSel(delta int) {
 	} else {
 		w.browseDir = 1
 	}
-	row := w.viewport.CursorLine - w.viewport.Top
+	row := w.doc.CursorLine - w.doc.Top
 	if row < 0 {
 		row = 0
 	}
@@ -408,7 +401,7 @@ func (w *AssemblyWidget) SetBreakInfos(items []models.BreakInfo) {
 		return
 	}
 	w.bpByAddr = models.GuttersByAddr(items)
-	w.rebuild()
+	w.syncPrefix()
 }
 
 // PCAddr returns the marked program-counter address.
@@ -535,23 +528,13 @@ func (w *AssemblyWidget) addrCellStyle(norm string, st tcell.Style) tcell.Style 
 	return st.Foreground(w.mutedColor())
 }
 
-func (w *AssemblyWidget) rebuild() {
-	if w == nil || w.buf == nil {
+func (w *AssemblyWidget) syncPrefix() {
+	if w == nil {
 		return
 	}
-	w.buf.Clear()
-	w.prefix = 0
-	for _, ln := range w.ctxLines {
-		w.buf.AppendLine(ln)
-		w.prefix++
-	}
+	w.prefix = len(w.ctxLines)
 	if w.funcName != "" && len(w.items) > 0 {
-		w.buf.AppendLine(fmt.Sprintf("Dump of assembler code for function %s:", w.funcName))
 		w.prefix++
-	}
-	if len(w.items) == 0 {
-		w.buf.AppendLine("(no disassembly)")
-		return
 	}
 	w.offWidth = asmOffsetColsMin
 	if w.funcName != "" {
@@ -561,40 +544,82 @@ func (w *AssemblyWidget) rebuild() {
 			}
 		}
 	}
-	// mark + space + addr + space + "<+%*s>: " before instruction (dump mode).
+	w.syncSearchOffset()
+}
+
+func (w *AssemblyWidget) syncSearchOffset() {
+	if w.doc == nil {
+		return
+	}
 	searchOff := 3 + 1 + asmAddrCols + 1 + 2 + w.offWidth + 2 + 1
 	if w.funcName == "" {
 		searchOff = asmGutterCols
 	}
-	if w.viewport != nil {
-		w.viewport.SetSearchContentOffset(searchOff)
+	w.doc.SetSearchContentOffset(searchOff)
+}
+
+func (w *AssemblyWidget) lineCount() int {
+	n := w.prefix + len(w.items)
+	if w.funcName != "" && len(w.items) > 0 {
+		n++ // End of assembler dump.
 	}
-	for _, it := range w.items {
-		mark := asmPCGutterPad
-		norm := normalizeAsmAddr(it.Addr)
-		if norm == w.pcAddr && w.pcAddr != "" {
-			mark = asmPCMarker
-		}
-		addr := it.Addr
-		if len(addr) > asmAddrCols {
-			addr = addr[len(addr)-asmAddrCols:]
-		}
-		var line string
-		if it.Offset != "" && w.funcName != "" {
-			// Whole-function dump: CGDB `disassemble` style with <+N>:.
-			addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
-			// Right-align N so <+ 0>: / <+12>: share a column.
-			off := fmt.Sprintf("<+%*s>: ", w.offWidth, it.Offset)
-			line = fmt.Sprintf("%s %s %s%s", mark, addrPad, off, it.Inst)
-		} else {
-			// Windowed / ?? : CGDB `x/Ni $pc` style — `0xaddr:  inst`.
-			line = fmt.Sprintf("%s %s:  %s", mark, addr, it.Inst)
-		}
-		w.buf.AppendLine(line)
+	if len(w.items) == 0 && w.prefix == 0 {
+		return 1 // "(no disassembly)"
 	}
-	if w.funcName != "" {
-		w.buf.AppendLine("End of assembler dump.")
+	return n
+}
+
+func (w *AssemblyWidget) lineAt(i int) string { return w.displayLine(i) }
+
+func (w *AssemblyWidget) lineWidth(lineIdx int) int {
+	return len([]rune(w.displayLine(lineIdx)))
+}
+
+func (w *AssemblyWidget) displayLine(lineIdx int) string {
+	if w == nil {
+		return ""
 	}
+	if len(w.items) == 0 {
+		if lineIdx == 0 && w.prefix == 0 {
+			return "(no disassembly)"
+		}
+		return ""
+	}
+	if lineIdx < len(w.ctxLines) {
+		return w.ctxLines[lineIdx]
+	}
+	lineIdx -= len(w.ctxLines)
+	if w.funcName != "" && len(w.items) > 0 {
+		if lineIdx == 0 {
+			return fmt.Sprintf("Dump of assembler code for function %s:", w.funcName)
+		}
+		lineIdx--
+	}
+	if lineIdx < 0 {
+		return ""
+	}
+	if lineIdx >= len(w.items) {
+		if w.funcName != "" && lineIdx == len(w.items) {
+			return "End of assembler dump."
+		}
+		return ""
+	}
+	it := w.items[lineIdx]
+	mark := asmPCGutterPad
+	norm := normalizeAsmAddr(it.Addr)
+	if norm == w.pcAddr && w.pcAddr != "" {
+		mark = asmPCMarker
+	}
+	addr := it.Addr
+	if len(addr) > asmAddrCols {
+		addr = addr[len(addr)-asmAddrCols:]
+	}
+	if it.Offset != "" && w.funcName != "" {
+		addrPad := fmt.Sprintf("%-*s", asmAddrCols, addr)
+		off := fmt.Sprintf("<+%*s>: ", w.offWidth, it.Offset)
+		return fmt.Sprintf("%s %s %s%s", mark, addrPad, off, it.Inst)
+	}
+	return fmt.Sprintf("%s %s:  %s", mark, addr, it.Inst)
 }
 
 func (w *AssemblyWidget) Draw(c termui.Canvas) {
@@ -604,22 +629,61 @@ func (w *AssemblyWidget) Draw(c termui.Canvas) {
 	h := c.H()
 	if h > 0 && h != w.lastHeight {
 		w.lastHeight = h
-		// Refetch so the window fills the new rectangle (no caret-row preserve).
 		w.browsePreserveRow = -1
 		w.browseDir = 0
 		if len(w.items) > 0 && !w.fetching {
 			w.requestBrowse()
 		}
 	}
-	w.viewport.Draw(c)
+	w.doc.SetWindow(c.W(), c.H())
+	w.doc.SetMouseOrigin(c.ScreenX(0), c.ScreenY(0))
+	width := c.W()
+	selStyle := tcell.StyleDefault.Reverse(true)
+	lineAt := w.lineAt
+	nLines := w.lineCount()
+	for row := 0; row < h; row++ {
+		lineIdx := w.doc.Top + row
+		if lineIdx >= nLines {
+			c.ClearLine(row, tcell.StyleDefault)
+			continue
+		}
+		full := w.displayLine(lineIdx)
+		lineStyle := w.rowStyle(lineIdx, full)
+		runes := []rune(full)
+		start := w.doc.Left
+		if start < 0 {
+			start = 0
+		}
+		if start > len(runes) {
+			start = len(runes)
+		}
+		visible := runes[start:]
+		if len(visible) > width {
+			visible = visible[:width]
+		}
+		c.ClearLineRange(row, len(visible), width, lineStyle)
+		byteIdx := termui.ByteIndexAtVisibleCol(full, start)
+		for col, ch := range visible {
+			absVisCol := start + col
+			st := lineStyle
+			st = w.cellStyle(lineIdx, absVisCol, st)
+			st = w.doc.ApplySearchStyle(lineIdx, absVisCol, st, lineAt)
+			if w.doc.CellSelected(lineIdx, byteIdx) {
+				st = selStyle
+			}
+			c.SetContent(col, row, ch, st)
+			byteIdx += utf8.RuneLen(ch)
+		}
+	}
+	w.doc.DrawCursor(c, nLines, lineAt)
 }
 
 func (w *AssemblyWidget) syncSelFromViewport() {
-	if w == nil || w.viewport == nil || len(w.items) == 0 {
+	if w == nil || w.doc == nil || len(w.items) == 0 {
 		return
 	}
 	n := len(w.items)
-	idx := w.viewport.CursorLine - w.prefix
+	idx := w.doc.CursorLine - w.prefix
 	if idx < 0 {
 		idx = 0
 	}
@@ -628,7 +692,7 @@ func (w *AssemblyWidget) syncSelFromViewport() {
 	}
 	prev := w.selIdx
 	w.selIdx = idx
-	w.viewport.CursorLine = w.selIdx + w.prefix
+	w.doc.CursorLine = w.selIdx + w.prefix
 	// Click on a hard edge of a windowed view should still refetch.
 	if w.completeDump() || w.selIdx == prev {
 		return
@@ -641,7 +705,7 @@ func (w *AssemblyWidget) syncSelFromViewport() {
 	default:
 		return
 	}
-	row := w.viewport.CursorLine - w.viewport.Top
+	row := w.doc.CursorLine - w.doc.Top
 	if row < 0 {
 		row = 0
 	}
@@ -656,7 +720,6 @@ func (w *AssemblyWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
 		btns := e.Buttons()
-		// Wheel moves the blue browse line (same idea as j/k), refetching at edges.
 		if btns&tcell.WheelUp != 0 {
 			w.MoveSel(-1)
 			return
@@ -665,16 +728,13 @@ func (w *AssemblyWidget) HandleEvent(ev tcell.Event) {
 			w.MoveSel(1)
 			return
 		}
-		w.viewport.HandleEvent(e)
-		// Keep the bold blue cursor line in sync with mouse click / drag.
+		w.doc.HandleEvent(e, w.lineCount(), w.lineAt)
 		w.syncSelFromViewport()
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
-		w.viewport.HandleEvent(e)
-	default:
-		w.viewport.HandleEvent(ev)
+		w.doc.HandleEvent(e, w.lineCount(), w.lineAt)
 	}
 }
 
@@ -687,8 +747,8 @@ func (w *AssemblyWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 
 func (w *AssemblyWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	if w.viewport != nil {
-		w.viewport.SetCursorVisible(focused && len(w.items) > 0)
+	if w.doc != nil {
+		w.doc.SetCursorVisible(focused && len(w.items) > 0)
 	}
 }
 
@@ -751,55 +811,46 @@ func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
 	termui.PaintInactiveStatusBar(c, title)
 }
 
-func (w *AssemblyWidget) Viewport() *termui.Viewport {
-	if w == nil {
-		return nil
-	}
-	return w.viewport
-}
-
-// SearchHost implementation (mirrors CodeWidget).
-
 func (w *AssemblyWidget) SetSearchPattern(pattern string) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.SetSearchPattern(pattern)
+	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchPattern(pattern)
 }
 
 func (w *AssemblyWidget) CommitSearch(pattern string) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	w.viewport.CommitSearch(pattern)
+	w.doc.SetSearchColor(w.searchColor())
+	w.doc.CursorLine = w.selIdx + w.prefix
+	w.doc.CommitSearch(pattern, w.lineCount(), w.lineAt)
 }
 
 func (w *AssemblyWidget) RevertSearch() {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.RevertSearch()
+	w.doc.RevertSearch()
 }
 
 func (w *AssemblyWidget) SearchPattern() string {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return ""
 	}
-	return w.viewport.SearchPattern()
+	return w.doc.SearchPattern()
 }
 
 func (w *AssemblyWidget) SearchNext() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
-	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	ok := w.viewport.SearchNext()
+	w.doc.SetSearchColor(w.searchColor())
+	w.doc.CursorLine = w.selIdx + w.prefix
+	ok := w.doc.SearchNext(w.lineCount(), w.lineAt)
 	if ok {
-		idx := w.viewport.CursorLine - w.prefix
+		idx := w.doc.CursorLine - w.prefix
 		if idx < 0 {
 			idx = 0
 		}
@@ -808,21 +859,21 @@ func (w *AssemblyWidget) SearchNext() bool {
 		}
 		if idx >= 0 {
 			w.selIdx = idx
-			w.viewport.CursorLine = w.selIdx + w.prefix
+			w.doc.CursorLine = w.selIdx + w.prefix
 		}
 	}
 	return ok
 }
 
 func (w *AssemblyWidget) SearchPrev() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
-	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	ok := w.viewport.SearchPrev()
+	w.doc.SetSearchColor(w.searchColor())
+	w.doc.CursorLine = w.selIdx + w.prefix
+	ok := w.doc.SearchPrev(w.lineCount(), w.lineAt)
 	if ok {
-		idx := w.viewport.CursorLine - w.prefix
+		idx := w.doc.CursorLine - w.prefix
 		if idx < 0 {
 			idx = 0
 		}
@@ -831,33 +882,42 @@ func (w *AssemblyWidget) SearchPrev() bool {
 		}
 		if idx >= 0 {
 			w.selIdx = idx
-			w.viewport.CursorLine = w.selIdx + w.prefix
+			w.doc.CursorLine = w.selIdx + w.prefix
 		}
 	}
 	return ok
 }
 
 func (w *AssemblyWidget) SetSearchColor(c tcell.Color) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(c)
+	w.doc.SetSearchColor(c)
 }
 
 func (w *AssemblyWidget) WordAtCursor() string {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return ""
 	}
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	return w.viewport.WordAtCursor()
+	w.doc.CursorLine = w.selIdx + w.prefix
+	return w.doc.WordAtCursor(w.lineAt)
 }
 
 func (w *AssemblyWidget) CursorInSearchMatch() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
-	w.viewport.CursorLine = w.selIdx + w.prefix
-	return w.viewport.CursorInSearchMatch()
+	w.doc.CursorLine = w.selIdx + w.prefix
+	return w.doc.CursorInSearchMatch(w.lineAt)
+}
+
+func (w *AssemblyWidget) LinesForTest() []string {
+	n := w.lineCount()
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = w.displayLine(i)
+	}
+	return out
 }
 
 func normalizeAsmAddr(s string) string {

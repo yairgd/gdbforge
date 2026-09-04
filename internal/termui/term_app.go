@@ -48,12 +48,14 @@ type TermApp struct {
 
 	// ttyReleases counts completed Suspend/RunForeground cycles so the event
 	// loop can tell that a key handler gave the tty away and came back.
-	ttyReleases  int
-	layoutDirty  bool
-	appState     *platform.AppState
-	modeHandlers ModeKeyHandlers
-	closeOnce    sync.Once
-	suspendMu    sync.Mutex
+	ttyReleases int
+	// paintInterval is the frame budget for coalesced output; 0 means default.
+	paintInterval time.Duration
+	layoutDirty   bool
+	appState      *platform.AppState
+	modeHandlers  ModeKeyHandlers
+	closeOnce     sync.Once
+	suspendMu     sync.Mutex
 }
 
 func NewTermApp() *TermApp {
@@ -302,10 +304,16 @@ func (app *TermApp) drainPollBatch(max int) []tcell.Event {
 	return batch
 }
 
+const defaultPaintInterval = 16 * time.Millisecond
+
 func (app *TermApp) Run() {
 	defer app.Close()
 
-	paintTicker := time.NewTicker(16 * time.Millisecond)
+	interval := app.paintInterval
+	if interval <= 0 {
+		interval = defaultPaintInterval
+	}
+	paintTicker := time.NewTicker(interval)
 	defer paintTicker.Stop()
 	dirty := false
 	for !app.exit {
@@ -318,16 +326,11 @@ func (app *TermApp) Run() {
 		default:
 		}
 
-		if !app.screen.HasPendingEvent() {
-			select {
-			case <-paintTicker.C:
-				if dirty {
-					app.present()
-					dirty = false
-				}
-				continue
-			default:
-			}
+		if app.mustWaitForPaintTick(dirty) {
+			<-paintTicker.C
+			app.present()
+			dirty = false
+			continue
 		}
 
 		batch := app.pollEventBatch(96)
@@ -341,6 +344,17 @@ func (app *TermApp) Run() {
 			dirty = false
 		}
 	}
+}
+
+// mustWaitForPaintTick reports whether a pending frame has to be driven by the
+// paint ticker. pollEventBatch blocks in PollEvent until the next event, so an
+// unpainted frame with an empty queue would otherwise stay on screen-behind
+// until the user pressed another key (async output needs no further input).
+func (app *TermApp) mustWaitForPaintTick(dirty bool) bool {
+	if !dirty || app == nil || app.screen == nil {
+		return false
+	}
+	return !app.screen.HasPendingEvent()
 }
 
 // handleUIEventBatch processes keys/mouse/resize before interrupts so Ctrl-C

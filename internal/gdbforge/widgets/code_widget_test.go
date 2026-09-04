@@ -161,7 +161,7 @@ func TestCodeWidgetSyncSelFromViewportClick(t *testing.T) {
 	if err := w.ShowLocation(path, 1); err != nil {
 		t.Fatal(err)
 	}
-	w.viewport.CursorLine = 2 // 0-based → source line 3
+	w.doc.CursorLine = 2 // 0-based → source line 3
 	w.syncSelFromViewport()
 	if w.SelLine() != 3 {
 		t.Fatalf("mouse sync sel=%d want 3", w.SelLine())

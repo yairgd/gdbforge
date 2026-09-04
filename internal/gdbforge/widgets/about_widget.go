@@ -22,8 +22,8 @@ const (
 // No goroutines, timers, or background work.
 type AboutWidget struct {
 	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
+	doc *termui.ScrollDocument
+	buf *platform.Buffer
 }
 
 // NewAboutWidget caches build info once into a read-only buffer.
@@ -31,7 +31,7 @@ type AboutWidget struct {
 // "v1.0.0". Non-release builds show AboutNotForRelease.
 func NewAboutWidget(version string) *AboutWidget {
 	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
+	vp := termui.NewScrollDocument(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
 	vp.SetCursorVisible(false)
@@ -39,7 +39,7 @@ func NewAboutWidget(version string) *AboutWidget {
 
 	w := &AboutWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "About"},
-		viewport:   vp,
+		doc:   vp,
 		buf:        buf,
 	}
 	for _, line := range buildAboutLines(FormatAboutVersion(version), readVCSBuildInfo()) {
@@ -176,14 +176,14 @@ func buildAboutLines(version string, b vcsBuildInfo) []string {
 }
 
 func (w *AboutWidget) initKeyBindings() {
-	w.BindKeyFunc("scroll-up", func(args ...any) { w.viewport.ScrollLineUp() }, "<Up>", "k")
-	w.BindKeyFunc("scroll-down", func(args ...any) { w.viewport.ScrollLineDown() }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
-	w.BindKeyFunc("page-up", func(args ...any) { w.viewport.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.viewport.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
-	w.BindKeyFunc("home", func(args ...any) { w.viewport.ScrollHome() }, "<Home>", "g")
-	w.BindKeyFunc("end", func(args ...any) { w.viewport.ScrollEnd() }, "<End>", "G")
+	w.BindKeyFunc("scroll-up", func(args ...any) { w.doc.ScrollLineUp() }, "<Up>", "k")
+	w.BindKeyFunc("scroll-down", func(args ...any) { w.doc.ScrollLineDown() }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.doc.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.doc.ViewScrollColRight() }, "<Right>")
+	w.BindKeyFunc("page-up", func(args ...any) { w.doc.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.doc.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { w.doc.ScrollHome() }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { w.doc.ScrollEnd() }, "<End>", "G")
 }
 
 // HandleFocusKey enables scroll in normal mode when About is focused.
@@ -194,26 +194,26 @@ func (w *AboutWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *AboutWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		w.viewport.HandleEvent(e)
+		w.doc.HandleEvent(e)
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
-		w.viewport.HandleEvent(e)
+		w.doc.HandleEvent(e)
 	}
 }
 
 func (w *AboutWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(focused)
+	w.doc.SetCursorVisible(focused)
 }
 
 func (w *AboutWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
+	w.doc.Draw(c)
 }
 
-func (w *AboutWidget) Viewport() *termui.Viewport {
-	return w.viewport
+func (w *AboutWidget) Viewport() *termui.ScrollDocument {
+	return w.doc
 }
 
 // LinesForTest exposes buffer lines for unit tests.

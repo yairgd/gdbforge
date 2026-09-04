@@ -63,6 +63,16 @@ func (c *CompositeTerminal) scrollEnd() {
 	})
 }
 
+// AtBottom reports whether the viewport is pinned to the live tail.
+func (c *CompositeTerminal) AtBottom() bool {
+	return c.atBottom()
+}
+
+// ScrollToBottom jumps the viewport to the live tail.
+func (c *CompositeTerminal) ScrollToBottom() {
+	c.scrollEnd()
+}
+
 func (c *CompositeTerminal) atBottom() bool {
 	if c == nil || c.ctl == nil {
 		return true

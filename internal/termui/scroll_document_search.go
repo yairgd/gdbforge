@@ -8,7 +8,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/platform"
 )
 
-// SearchHost is implemented by panes that support /search (Viewport-backed).
+// SearchHost is implemented by panes that support /search (ScrollDocument-backed).
 type SearchHost interface {
 	SetSearchPattern(pattern string)
 	CommitSearch(pattern string)
@@ -21,109 +21,109 @@ type SearchHost interface {
 
 // SetSearchContentOffset skips this many visible columns when matching/highlighting
 // (e.g. CodeWidget gutter width).
-func (v *Viewport) SetSearchContentOffset(n int) {
-	if v == nil {
+func (d *ScrollDocument) SetSearchContentOffset(n int) {
+	if d == nil {
 		return
 	}
 	if n < 0 {
 		n = 0
 	}
-	v.searchContentOffset = n
+	d.searchContentOffset = n
 }
 
 // SetSearchColor sets the background used for matching substrings.
-func (v *Viewport) SetSearchColor(c tcell.Color) {
-	if v == nil {
+func (d *ScrollDocument) SetSearchColor(c tcell.Color) {
+	if d == nil {
 		return
 	}
-	v.searchColor = c
+	d.searchColor = c
 }
 
 // SetOnSearchJump registers a callback after SearchNext/Prev/Commit moves the line
 // (list panes sync their selected row here).
-func (v *Viewport) SetOnSearchJump(fn func(lineIdx int)) {
-	if v == nil {
+func (d *ScrollDocument) SetOnSearchJump(fn func(lineIdx int)) {
+	if d == nil {
 		return
 	}
-	v.onSearchJump = fn
+	d.onSearchJump = fn
 }
 
 // SetSearchPattern updates the live /search highlight (does not commit).
-func (v *Viewport) SetSearchPattern(pattern string) {
-	if v == nil {
+func (d *ScrollDocument) SetSearchPattern(pattern string) {
+	if d == nil {
 		return
 	}
-	v.searchPattern = pattern
+	d.searchPattern = pattern
 }
 
 // CommitSearch stores pattern as the lasting highlight and jumps to a match.
-func (v *Viewport) CommitSearch(pattern string) {
-	if v == nil {
+func (d *ScrollDocument) CommitSearch(pattern string) {
+	if d == nil {
 		return
 	}
-	v.searchPattern = pattern
-	v.searchCommitted = pattern
+	d.searchPattern = pattern
+	d.searchCommitted = pattern
 	if pattern == "" {
 		return
 	}
-	if v.lineMatches(v.CursorLine) {
-		v.jumpToSearchLine(v.CursorLine)
+	if d.lineMatches(d.CursorLine) {
+		d.jumpToSearchLine(d.CursorLine)
 		return
 	}
-	_ = v.SearchNext()
+	_ = d.SearchNext()
 }
 
 // RevertSearch restores the last committed pattern (Esc from /search).
-func (v *Viewport) RevertSearch() {
-	if v == nil {
+func (d *ScrollDocument) RevertSearch() {
+	if d == nil {
 		return
 	}
-	v.searchPattern = v.searchCommitted
+	d.searchPattern = d.searchCommitted
 }
 
 // SearchPattern returns the live search text.
-func (v *Viewport) SearchPattern() string {
-	if v == nil {
+func (d *ScrollDocument) SearchPattern() string {
+	if d == nil {
 		return ""
 	}
-	return v.searchPattern
+	return d.searchPattern
 }
 
 // SearchNext moves to the next matching line (wraps).
-func (v *Viewport) SearchNext() bool {
-	return v.searchJump(1)
+func (d *ScrollDocument) SearchNext() bool {
+	return d.searchJump(1)
 }
 
 // SearchPrev moves to the previous matching line (wraps).
-func (v *Viewport) SearchPrev() bool {
-	return v.searchJump(-1)
+func (d *ScrollDocument) SearchPrev() bool {
+	return d.searchJump(-1)
 }
 
 // WordAtCursor returns the identifier under the cursor on searchable content
 // (letters/digits/_). Punctuation runs like "===" are skipped so */# on a
 // banner line such as "=== sdk_cpp_demo done ===" searches sdk_cpp_demo.
-func (v *Viewport) WordAtCursor() string {
-	if v == nil || v.Buffer == nil {
+func (d *ScrollDocument) WordAtCursor() string {
+	if d == nil || d.Buffer == nil {
 		return ""
 	}
-	content := v.searchContent(v.CursorLine)
+	content := d.searchContent(d.CursorLine)
 	if content == "" {
 		return ""
 	}
-	return identAtOrNear(content, v.contentByteAtCursor())
+	return identAtOrNear(content, d.contentByteAtCursor())
 }
 
 // CursorInSearchMatch reports whether the caret sits inside a highlighted
 // match of the live search pattern (e.g. after /46 on "1052946").
-func (v *Viewport) CursorInSearchMatch() bool {
-	if v == nil || v.searchPattern == "" || v.Buffer == nil {
+func (d *ScrollDocument) CursorInSearchMatch() bool {
+	if d == nil || d.searchPattern == "" || d.Buffer == nil {
 		return false
 	}
-	content := v.searchContent(v.CursorLine)
+	content := d.searchContent(d.CursorLine)
 	if content == "" {
 		return false
 	}
-	byteAt := v.contentByteAtCursor()
+	byteAt := d.contentByteAtCursor()
 	if byteAt < 0 {
 		byteAt = 0
 	}
@@ -136,7 +136,7 @@ func (v *Viewport) CursorInSearchMatch() bool {
 	if contentCol > 0 && byteAt >= len(content) {
 		contentCol--
 	}
-	return v.runeInSearchMatch(v.CursorLine, contentCol)
+	return d.runeInSearchMatch(d.CursorLine, contentCol)
 }
 
 // identAtOrNear returns the isWordChar token at/near byte offset at.
@@ -215,28 +215,22 @@ func identBoundsAt(line string, at int) string {
 }
 
 // contentByteAtCursor maps CursorCol onto a byte offset in searchContent.
-func (v *Viewport) contentByteAtCursor() int {
-	content := v.searchContent(v.CursorLine)
+func (d *ScrollDocument) contentByteAtCursor() int {
+	content := d.searchContent(d.CursorLine)
 	if content == "" {
 		return 0
 	}
 	visCol := 0
-	if v.CursorLine >= 0 && v.CursorLine < v.Buffer.NumLines() {
-		raw := v.Buffer.Line(v.CursorLine)
+	if d.CursorLine >= 0 && d.CursorLine < d.Buffer.NumLines() {
+		raw := d.Buffer.Line(d.CursorLine)
 		switch {
-		case v.CursorCol <= 0:
+		case d.CursorCol <= 0:
 			visCol = 0
-		case v.ANSI:
-			if v.CursorCol >= len(raw) {
-				visCol = VisibleANSIWidth(raw)
-			} else {
-				visCol = VisibleANSIWidth(raw[:v.CursorCol])
-			}
 		default:
-			visCol = utf8.RuneCountInString(raw[:min(v.CursorCol, len(raw))])
+			visCol = utf8.RuneCountInString(raw[:min(d.CursorCol, len(raw))])
 		}
 	}
-	col := visCol - v.searchContentOffset
+	col := visCol - d.searchContentOffset
 	if col < 0 {
 		col = 0
 	}
@@ -250,15 +244,15 @@ func (v *Viewport) contentByteAtCursor() int {
 	return len(string(runes[:col]))
 }
 
-func (v *Viewport) searchJump(dir int) bool {
-	if v == nil || v.searchPattern == "" || v.Buffer == nil {
+func (d *ScrollDocument) searchJump(dir int) bool {
+	if d == nil || d.searchPattern == "" || d.Buffer == nil {
 		return false
 	}
-	n := v.lineLimit()
+	n := d.lineLimit()
 	if n <= 0 {
 		return false
 	}
-	start := v.CursorLine
+	start := d.CursorLine
 	if start < 0 {
 		start = 0
 	}
@@ -270,104 +264,97 @@ func (v *Viewport) searchJump(dir int) bool {
 		if idx < 0 {
 			idx += n
 		}
-		if v.lineMatches(idx) {
-			v.jumpToSearchLine(idx)
+		if d.lineMatches(idx) {
+			d.jumpToSearchLine(idx)
 			return true
 		}
 	}
 	return false
 }
 
-func (v *Viewport) jumpToSearchLine(lineIdx int) {
+func (d *ScrollDocument) jumpToSearchLine(lineIdx int) {
 	// Consoles start in follow-tail; leaving it keeps Draw from ScrollToBottom
 	// and undoing the match (IO / GDB / Exec panes).
-	v.leaveFollowTail()
-	v.CursorLine = lineIdx
-	v.placeCursorOnSearchMatch(lineIdx)
-	v.EnsureCursorVisible()
-	if v.onSearchJump != nil {
-		v.onSearchJump(lineIdx)
+	d.leaveFollowTail()
+	d.CursorLine = lineIdx
+	d.placeCursorOnSearchMatch(lineIdx)
+	d.EnsureCursorVisible()
+	if d.onSearchJump != nil {
+		d.onSearchJump(lineIdx)
 	}
 }
 
 // placeCursorOnSearchMatch puts CursorCol on the first pattern match in the line.
-func (v *Viewport) placeCursorOnSearchMatch(lineIdx int) {
-	if v.Buffer == nil || v.searchPattern == "" {
-		v.CursorCol = 0
+func (d *ScrollDocument) placeCursorOnSearchMatch(lineIdx int) {
+	if d.Buffer == nil || d.searchPattern == "" {
+		d.CursorCol = 0
 		return
 	}
-	content := v.searchContent(lineIdx)
-	rel := strings.Index(content, v.searchPattern)
+	content := d.searchContent(lineIdx)
+	rel := strings.Index(content, d.searchPattern)
 	contentCol := 0
 	if rel >= 0 {
 		contentCol = utf8.RuneCountInString(content[:rel])
 	}
-	vis := v.searchContentOffset + contentCol
-	raw := v.Buffer.Line(lineIdx)
-	if v.ANSI {
-		v.CursorCol = ANSIByteIndexAtVisible(raw, vis)
-		return
-	}
-	runes := []rune(platform.StripANSI(raw))
+	vis := d.searchContentOffset + contentCol
+	raw := d.Buffer.Line(lineIdx)
+	runes := []rune(raw)
 	if vis > len(runes) {
 		vis = len(runes)
 	}
-	v.CursorCol = len(string(runes[:vis]))
+	d.CursorCol = len(string(runes[:vis]))
 }
 
-func (v *Viewport) lineMatches(lineIdx int) bool {
-	if v.searchPattern == "" || v.Buffer == nil {
+func (d *ScrollDocument) lineMatches(lineIdx int) bool {
+	if d.searchPattern == "" || d.Buffer == nil {
 		return false
 	}
-	return strings.Contains(v.searchContent(lineIdx), v.searchPattern)
+	return strings.Contains(d.searchContent(lineIdx), d.searchPattern)
 }
 
 // searchContent returns printable line text with the gutter offset removed.
-func (v *Viewport) searchContent(lineIdx int) string {
-	if v.Buffer == nil || lineIdx < 0 || lineIdx >= v.Buffer.NumLines() {
+func (d *ScrollDocument) searchContent(lineIdx int) string {
+	if d.Buffer == nil || lineIdx < 0 || lineIdx >= d.Buffer.NumLines() {
 		return ""
 	}
-	line := v.Buffer.Line(lineIdx)
+	line := d.Buffer.Line(lineIdx)
 	plain := []rune(line)
-	if v.ANSI {
-		plain = []rune(platform.StripANSI(line))
-	}
-	off := v.searchContentOffset
+	off := d.searchContentOffset
 	if off > len(plain) {
 		return ""
 	}
 	return string(plain[off:])
 }
 
-func (v *Viewport) searchBG() tcell.Color {
-	if v.searchColor == tcell.ColorDefault {
+func (d *ScrollDocument) searchBG() tcell.Color {
+	if d.searchColor == tcell.ColorDefault {
 		return platform.DefaultSearchColor
 	}
-	return v.searchColor
+	return d.searchColor
 }
 
 // applySearchStyle paints matching substrings (content columns only).
-func (v *Viewport) applySearchStyle(lineIdx, absVisCol int, st tcell.Style) tcell.Style {
-	if v.searchPattern == "" {
+func (d *ScrollDocument) applySearchStyle(lineIdx, absVisCol int, st tcell.Style) tcell.Style {
+	if d.searchPattern == "" {
 		return st
 	}
-	contentCol := absVisCol - v.searchContentOffset
+	contentCol := absVisCol - d.searchContentOffset
 	if contentCol < 0 {
 		return st
 	}
-	if v.runeInSearchMatch(lineIdx, contentCol) {
-		bg := v.searchBG()
+	if d.runeInSearchMatch(lineIdx, contentCol) {
+		bg := d.searchBG()
 		return st.Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	return st
 }
 
-func (v *Viewport) runeInSearchMatch(lineIdx, contentCol int) bool {
-	if v.searchPattern == "" || contentCol < 0 {
+func (d *ScrollDocument) runeInSearchMatch(lineIdx, contentCol int) bool {
+	if d.searchPattern == "" || contentCol < 0 {
 		return false
 	}
-	line := v.searchContent(lineIdx)
-	pat := v.searchPattern
+	line := d.searchContent(lineIdx)
+	pat := d.searchPattern
 	if pat == "" || line == "" {
 		return false
 	}

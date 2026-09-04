@@ -8,7 +8,7 @@ import (
 )
 
 // ClipboardIO is the shared copy/paste bridge used by Viewport-backed widgets
-// and single-line editors (CmdWidget, ConsolePane input).
+// ClipboardIO is shared by scrollable panes and single-line editors (CmdWidget).
 type ClipboardIO struct {
 	Copy func(text string)
 	// Paste reads CLIPBOARD (Ctrl+V).

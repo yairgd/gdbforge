@@ -39,9 +39,7 @@ const (
 // shared breakpoint model (app owns GDB sends).
 type CodeWidget struct {
 	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
-
+	doc   *termui.DocumentView
 	state *debugstate.State
 
 	path      string
@@ -59,23 +57,15 @@ type CodeWidget struct {
 }
 
 func NewCodeWidget() *CodeWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(false)
-	vp.SetReadOnly(true)
-	vp.SetCursor(termui.NewInverseCursor())
-	vp.SetCursorVisible(false)
-	vp.ANSI = false
-
 	w := &CodeWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "Code"},
-		viewport:   vp,
-		buf:        buf,
+		doc:        termui.NewDocumentView(),
 	}
-	vp.RowStyle = w.rowStyle
-	vp.CellStyle = w.cellStyle
-	vp.SetSearchContentOffset(codeGutterCols)
-	vp.SetOnSearchJump(func(lineIdx int) {
+	w.doc.SetReadOnly(true)
+	w.doc.SetCursor(termui.NewInverseCursor())
+	w.doc.SetCursorVisible(false)
+	w.doc.SetSearchContentOffset(codeGutterCols)
+	w.doc.SetOnSearchJump(func(lineIdx int) {
 		w.selLine = lineIdx + 1
 		w.preferCol = w.contentCol()
 	})
@@ -137,93 +127,93 @@ func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 
 // SetSearchPattern updates the live /search highlight (does not commit).
 func (w *CodeWidget) SetSearchPattern(pattern string) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(w.searchColor())
-	w.viewport.SetSearchPattern(pattern)
+	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchPattern(pattern)
 }
 
 // CommitSearch stores pattern as the lasting highlight and jumps to a match.
 func (w *CodeWidget) CommitSearch(pattern string) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.searchColor())
 	// Keep viewport cursor aligned with selLine before commit jump.
 	if w.selLine >= 1 {
-		w.viewport.CursorLine = w.selLine - 1
+		w.doc.CursorLine = w.selLine - 1
 	}
-	w.viewport.CommitSearch(pattern)
+	w.doc.CommitSearch(pattern, w.lineCount(), w.lineAt)
 }
 
 // RevertSearch restores the last committed pattern (Esc from /search).
 func (w *CodeWidget) RevertSearch() {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.RevertSearch()
+	w.doc.RevertSearch()
 }
 
 // SearchPattern returns the live search text.
 func (w *CodeWidget) SearchPattern() string {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return ""
 	}
-	return w.viewport.SearchPattern()
+	return w.doc.SearchPattern()
 }
 
 // SearchNext moves the cursor to the next matching line (wraps).
 func (w *CodeWidget) SearchNext() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
-	w.viewport.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.searchColor())
 	if w.selLine >= 1 {
-		w.viewport.CursorLine = w.selLine - 1
+		w.doc.CursorLine = w.selLine - 1
 	}
-	return w.viewport.SearchNext()
+	return w.doc.SearchNext(w.lineCount(), w.lineAt)
 }
 
 // SearchPrev moves the cursor to the previous matching line (wraps).
 func (w *CodeWidget) SearchPrev() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
-	w.viewport.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.searchColor())
 	if w.selLine >= 1 {
-		w.viewport.CursorLine = w.selLine - 1
+		w.doc.CursorLine = w.selLine - 1
 	}
-	return w.viewport.SearchPrev()
+	return w.doc.SearchPrev(w.lineCount(), w.lineAt)
 }
 
 // WordAtCursor returns the identifier/token under the browse cursor.
 func (w *CodeWidget) WordAtCursor() string {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return ""
 	}
 	if w.selLine >= 1 {
-		w.viewport.CursorLine = w.selLine - 1
+		w.doc.CursorLine = w.selLine - 1
 	}
-	return w.viewport.WordAtCursor()
+	return w.doc.WordAtCursor(w.lineAt)
 }
 
 // CursorInSearchMatch reports whether the browse caret sits on a /search hit.
 func (w *CodeWidget) CursorInSearchMatch() bool {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return false
 	}
 	if w.selLine >= 1 {
-		w.viewport.CursorLine = w.selLine - 1
+		w.doc.CursorLine = w.selLine - 1
 	}
-	return w.viewport.CursorInSearchMatch()
+	return w.doc.CursorInSearchMatch(w.lineAt)
 }
 
 func (w *CodeWidget) SetSearchColor(c tcell.Color) {
-	if w == nil || w.viewport == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
-	w.viewport.SetSearchColor(c)
+	w.doc.SetSearchColor(c)
 }
 
 func (w *CodeWidget) moveSel(delta int) {
@@ -249,33 +239,33 @@ func (w *CodeWidget) moveSelTo(line int) {
 		line = n
 	}
 	w.selLine = line
-	w.viewport.CursorLine = line - 1
+	w.doc.CursorLine = line - 1
 	w.setCursorContentCol(w.preferCol)
-	w.viewport.EnsureCursorVisible()
+	w.doc.EnsureCursorVisible(w.lineCount(), w.lineWidth)
 }
 
 // MoveCol moves the caret horizontally by delta visible content cells.
 func (w *CodeWidget) MoveCol(delta int) { w.moveCol(delta) }
 
 func (w *CodeWidget) moveCol(delta int) {
-	if w == nil || w.viewport == nil || len(w.rawLines) == 0 {
+	if w == nil || w.doc == nil || len(w.rawLines) == 0 {
 		return
 	}
 	if w.selLine < 1 {
 		w.selLine = 1
-		w.viewport.CursorLine = 0
+		w.doc.CursorLine = 0
 	}
 	w.setCursorContentCol(w.contentCol() + delta)
-	w.viewport.EnsureCursorVisible()
+	w.doc.EnsureCursorVisible(w.lineCount(), w.lineWidth)
 }
 
 // contentCol is the 0-based column in source text (after the gutter).
 func (w *CodeWidget) contentCol() int {
-	if w == nil || w.viewport == nil || w.viewport.Buffer == nil {
+	if w == nil || w.doc == nil {
 		return 0
 	}
-	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
-	vis := termui.VisibleColAtByte(line, w.viewport.CursorCol)
+	line := w.displayLine(w.doc.CursorLine)
+	vis := termui.VisibleColAtByte(line, w.doc.CursorCol)
 	col := vis - codeGutterCols
 	if col < 0 {
 		return 0
@@ -285,13 +275,13 @@ func (w *CodeWidget) contentCol() int {
 
 // setCursorContentCol places the caret on a source column (0-based, past gutter).
 func (w *CodeWidget) setCursorContentCol(contentCol int) {
-	if w == nil || w.viewport == nil || w.viewport.Buffer == nil {
+	if w == nil || w.doc == nil {
 		return
 	}
 	if contentCol < 0 {
 		contentCol = 0
 	}
-	line := w.viewport.Buffer.Line(w.viewport.CursorLine)
+	line := w.displayLine(w.doc.CursorLine)
 	maxContent := utf8.RuneCountInString(line) - codeGutterCols
 	if maxContent < 0 {
 		maxContent = 0
@@ -300,7 +290,7 @@ func (w *CodeWidget) setCursorContentCol(contentCol int) {
 		contentCol = maxContent
 	}
 	w.preferCol = contentCol
-	w.viewport.CursorCol = termui.ByteIndexAtVisibleCol(line, codeGutterCols+contentCol)
+	w.doc.CursorCol = termui.ByteIndexAtVisibleCol(line, codeGutterCols+contentCol)
 }
 
 func (w *CodeWidget) breakAtSel() {
@@ -328,7 +318,7 @@ func (w *CodeWidget) ShowLocation(path string, line int) error {
 	}
 	w.pcLine = line
 	w.selLine = line
-	w.rebuildBuffer()
+	w.doc.Left = 0
 	return nil
 }
 
@@ -349,7 +339,7 @@ func (w *CodeWidget) ShowSelection(path string, line int) error {
 		w.pcLine = 0
 	}
 	w.selLine = line
-	w.rebuildBuffer()
+	w.doc.Left = 0
 	return nil
 }
 
@@ -389,15 +379,15 @@ func (w *CodeWidget) loadAndScroll(path string, line int) error {
 	if n := len(w.rawLines); n > 0 && idx >= n {
 		idx = n - 1
 	}
-	w.viewport.Left = 0
-	w.viewport.CursorLine = idx
+	w.doc.Left = 0
+	w.doc.CursorLine = idx
 	w.preferCol = 0
 	w.setCursorContentCol(0)
-	pageH := w.viewport.Height()
+	pageH := w.doc.Height()
 	if pageH <= 0 {
 		pageH = 20
 	}
-	w.viewport.Center(idx, pageH)
+	w.doc.Center(idx, pageH, len(w.rawLines))
 	return nil
 }
 
@@ -417,14 +407,13 @@ func (w *CodeWidget) Clear() {
 	w.preferCol = 0
 	w.bpByLine = nil
 	w.PaneName = "Code"
-	if w.viewport != nil {
-		w.viewport.CommitSearch("")
+	if w.doc != nil {
+		w.doc.CommitSearch("", 0, w.lineAt)
+		w.doc.Left = 0
+		w.doc.Top = 0
+		w.doc.CursorLine = 0
+		w.doc.CursorCol = 0
 	}
-	w.buf.Clear()
-	w.viewport.Left = 0
-	w.viewport.Top = 0
-	w.viewport.CursorLine = 0
-	w.viewport.CursorCol = 0
 }
 
 // ClearPC removes the ━━▶ execution mark (e.g. after kill / inferior exit).
@@ -434,9 +423,6 @@ func (w *CodeWidget) ClearPC() {
 		return
 	}
 	w.pcLine = 0
-	if !w.unavailable {
-		w.rebuildBuffer()
-	}
 }
 
 // ShowUnavailable clears source and shows a centered "not available" message
@@ -454,9 +440,8 @@ func (w *CodeWidget) ShowUnavailable(path, extra string) {
 	if path != "" {
 		w.PaneName = filepath.Base(path)
 	}
-	w.buf.Clear()
-	w.viewport.Left = 0
-	w.viewport.Top = 0
+	w.doc.Left = 0
+	w.doc.Top = 0
 }
 
 func isSharedLibPath(path string) bool {
@@ -472,9 +457,6 @@ func (w *CodeWidget) SetBreakInfos(items []models.BreakInfo) {
 		return
 	}
 	w.bpByLine = models.GuttersByLine(items)
-	if w.path != "" || len(w.rawLines) > 0 {
-		w.rebuildBuffer()
-	}
 }
 
 // SetBreakpointLines marks enabled breakpoint lines (tests / simple callers).
@@ -598,30 +580,31 @@ func mergeSyntaxStyle(base, syn tcell.Style) tcell.Style {
 	return out
 }
 
-// RebuildBuffer refreshes gutters from current AppState break colors.
-func (w *CodeWidget) RebuildBuffer() {
-	w.rebuildBuffer()
+// RebuildBuffer is a no-op; gutters paint from model on Draw.
+func (w *CodeWidget) RebuildBuffer() {}
+
+func (w *CodeWidget) lineCount() int { return len(w.rawLines) }
+
+func (w *CodeWidget) lineAt(i int) string { return w.displayLine(i) }
+
+func (w *CodeWidget) lineWidth(lineIdx int) int {
+	return utf8.RuneCountInString(w.displayLine(lineIdx))
 }
 
-func (w *CodeWidget) rebuildBuffer() {
-	if w.unavailable {
-		return
-	}
-	w.buf.Clear()
-	for i, text := range w.rawLines {
-		ln := i + 1
-		mark := pcGutterPad
-		if ln == w.pcLine {
-			mark = pcMarker
+func (w *CodeWidget) displayLine(lineIdx int) string {
+	if lineIdx < 0 || lineIdx >= len(w.rawLines) {
+		if len(w.rawLines) == 0 && lineIdx == 0 {
+			return fmt.Sprintf("%s (empty file)", pcGutterPad)
 		}
-		num := fmt.Sprintf("%4d", ln)
-		gutter := fmt.Sprintf("%s %s│ %s", mark, num, text)
-		w.buf.AppendLine(gutter)
+		return ""
 	}
-	if len(w.rawLines) == 0 {
-		w.buf.AppendLine(fmt.Sprintf("%s (empty file)", pcGutterPad))
+	ln := lineIdx + 1
+	mark := pcGutterPad
+	if ln == w.pcLine {
+		mark = pcMarker
 	}
-	w.viewport.Left = 0
+	num := fmt.Sprintf("%4d", ln)
+	return fmt.Sprintf("%s %s│ %s", mark, num, w.rawLines[lineIdx])
 }
 
 func highlightSpans(path string, lines []string) [][]styleSpan {
@@ -749,7 +732,7 @@ func (w *CodeWidget) syncSelFromViewport() {
 	if n == 0 {
 		return
 	}
-	line := w.viewport.CursorLine + 1
+	line := w.doc.CursorLine + 1
 	if line < 1 {
 		line = 1
 	}
@@ -763,26 +746,25 @@ func (w *CodeWidget) syncSelFromViewport() {
 func (w *CodeWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		w.viewport.HandleEvent(e)
-		// Keep the bold blue cursor line in sync with mouse click / drag.
+		w.doc.HandleEvent(e, w.lineCount(), w.lineAt)
 		w.syncSelFromViewport()
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
-		w.viewport.HandleEvent(e)
+		w.doc.HandleEvent(e, w.lineCount(), w.lineAt)
 	}
 }
 
 func (w *CodeWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	if w.viewport != nil {
-		w.viewport.SetCursorVisible(focused && !w.unavailable)
+	if w.doc != nil {
+		w.doc.SetCursorVisible(focused && !w.unavailable)
 	}
 }
 
 func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
+	w.doc.SetClipboard(io)
 }
 
 // statusLabel is the status-bar text: full source path when known, else PaneName.
@@ -816,7 +798,46 @@ func (w *CodeWidget) Draw(c termui.Canvas) {
 		w.drawUnavailable(c)
 		return
 	}
-	w.viewport.Draw(c)
+	w.doc.SetWindow(c.W(), c.H())
+	w.doc.SetMouseOrigin(c.ScreenX(0), c.ScreenY(0))
+	h, width := c.H(), c.W()
+	selStyle := tcell.StyleDefault.Reverse(true)
+	lineAt := w.lineAt
+	for row := 0; row < h; row++ {
+		lineIdx := w.doc.Top + row
+		if lineIdx >= len(w.rawLines) {
+			c.ClearLine(row, tcell.StyleDefault)
+			continue
+		}
+		full := w.displayLine(lineIdx)
+		lineStyle := w.rowStyle(lineIdx, full)
+		runes := []rune(full)
+		start := w.doc.Left
+		if start < 0 {
+			start = 0
+		}
+		if start > len(runes) {
+			start = len(runes)
+		}
+		visible := runes[start:]
+		if len(visible) > width {
+			visible = visible[:width]
+		}
+		c.ClearLineRange(row, len(visible), width, lineStyle)
+		byteIdx := termui.ByteIndexAtVisibleCol(full, start)
+		for col, ch := range visible {
+			absVisCol := start + col
+			st := lineStyle
+			st = w.cellStyle(lineIdx, absVisCol, st)
+			st = w.doc.ApplySearchStyle(lineIdx, absVisCol, st, lineAt)
+			if w.doc.CellSelected(lineIdx, byteIdx) {
+				st = selStyle
+			}
+			c.SetContent(col, row, ch, st)
+			byteIdx += utf8.RuneLen(ch)
+		}
+	}
+	w.doc.DrawCursor(c, w.lineCount(), lineAt)
 }
 
 func (w *CodeWidget) drawUnavailable(c termui.Canvas) {
@@ -866,8 +887,19 @@ func drawCentered(c termui.Canvas, y, width int, text string, st tcell.Style) {
 	}
 }
 
-func (w *CodeWidget) Viewport() *termui.Viewport {
-	return w.viewport
+func (w *CodeWidget) LinesForTest() []string {
+	if w.unavailable {
+		return nil
+	}
+	n := len(w.rawLines)
+	if n == 0 {
+		return []string{w.displayLine(0)}
+	}
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = w.displayLine(i)
+	}
+	return out
 }
 
 func (w *CodeWidget) Path() string { return w.path }
@@ -875,12 +907,4 @@ func (w *CodeWidget) PCLine() int  { return w.pcLine }
 func (w *CodeWidget) SelLine() int { return w.selLine }
 func (w *CodeWidget) Unavailable() bool {
 	return w.unavailable
-}
-func (w *CodeWidget) LinesForTest() []string {
-	n := w.buf.NumLines()
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		out[i] = w.buf.Line(i)
-	}
-	return out
 }

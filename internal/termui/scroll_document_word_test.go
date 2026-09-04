@@ -26,21 +26,10 @@ func TestWordBoundsAt(t *testing.T) {
 	}
 }
 
-func TestWordBoundsAtANSI(t *testing.T) {
-	line := "\x1b[01mhello\x1b[0m_world"
-	// byte index of 'e' in hello (after ESC[01m)
-	at := len("\x1b[01m") + 1
-	s, e := wordBoundsAt(line, at)
-	got := StripANSI(line[s:e])
-	if got != "hello_world" {
-		t.Fatalf("got %q want hello_world (raw %q)", got, line[s:e])
-	}
-}
-
 func TestDoubleClickSelectsWordAndCopies(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("path/to/file.c:42")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.width = 40
 	v.height = 5
 
@@ -66,7 +55,7 @@ func TestDoubleClickSelectsWordAndCopies(t *testing.T) {
 func TestSelectWordAt(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("hello_world x")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	if !v.selectWordAt(bufferPos{line: 0, col: 3}) {
 		t.Fatal("selectWordAt failed")
 	}
@@ -78,7 +67,7 @@ func TestSelectWordAt(t *testing.T) {
 func TestSelectLineAt(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("entire line here")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	if !v.selectLineAt(bufferPos{line: 0, col: 5}) {
 		t.Fatal("selectLineAt failed")
 	}

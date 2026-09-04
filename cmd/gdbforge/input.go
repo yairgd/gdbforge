@@ -248,6 +248,18 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 		a.comp.leaveMode()
 		return true
 	}
+	// Typing can narrow the wildmenu to 0/1 candidates while ModeCompletion
+	// stays on (so further edits keep refreshing). Enter must still submit the
+	// line it was typed into rather than being eaten closing an empty menu.
+	if isEnterKey(ev) && !a.comp.active() {
+		forConsole := a.comp.isForGDB() || a.comp.isForLua()
+		a.comp.leaveMode()
+		if forConsole {
+			a.Tab().HandleEvent(ev)
+			a.RequestFrame()
+		}
+		return true
+	}
 	if a.tryKeyBindings(a.completionKeys, ev) {
 		return true
 	}
@@ -301,6 +313,18 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	}
 	a.RequestFrame()
 	return true
+}
+
+func isEnterKey(ev *tcell.EventKey) bool {
+	if ev == nil {
+		return false
+	}
+	switch ev.Key() {
+	case tcell.KeyEnter, tcell.KeyCtrlM, tcell.KeyCtrlJ:
+		return true
+	default:
+		return false
+	}
 }
 
 func isCopyKey(ev *tcell.EventKey) bool {

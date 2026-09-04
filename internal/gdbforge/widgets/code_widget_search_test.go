@@ -11,10 +11,9 @@ func TestCodeWidgetSearchJump(t *testing.T) {
 		"foo again",
 		"omega",
 	}
-	// Rebuild buffer so Viewport search sees gutter+text lines.
-	w.rebuildBuffer()
+	// Model lines only; displayLine builds gutter at draw/search time.
 	w.selLine = 1
-	w.viewport.CursorLine = 0
+	w.doc.CursorLine = 0
 
 	w.CommitSearch("foo")
 	if w.SearchPattern() != "foo" {
@@ -47,9 +46,8 @@ func TestCodeWidgetWordAtCursor(t *testing.T) {
 		"int hello_world = 1;",
 		"  return hello_world;",
 	}
-	w.rebuildBuffer()
 	w.selLine = 1
-	w.viewport.CursorLine = 0
+	w.doc.CursorLine = 0
 	w.setCursorContentCol(0)
 	if got := w.WordAtCursor(); got != "int" {
 		t.Fatalf("WordAtCursor=%q want int", got)

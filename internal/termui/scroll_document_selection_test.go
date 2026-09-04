@@ -12,7 +12,7 @@ func TestHitContentLineIgnoresEmptyBelow(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		buf.AppendLine(fmt.Sprintf("frame %d", i))
 	}
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.width = 40
 	v.height = 20
 	v.screenX = 0
@@ -39,7 +39,7 @@ func TestSelectionSurvivesScroll(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		buf.AppendLine(fmt.Sprintf("line %d", i))
 	}
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.width = 80
 	v.height = 10
 	v.ScrollToBottom()
@@ -66,7 +66,7 @@ func TestDragScrollExtendsSelection(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		buf.AppendLine(fmt.Sprintf("line %d", i))
 	}
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.width = 80
 	v.height = 10
 	v.ScrollToBottom()
@@ -89,7 +89,7 @@ func TestDragScrollExtendsSelection(t *testing.T) {
 func TestClipboardCopyShared(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("hello world")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	var got string
 	v.SetClipboard(ClipboardIO{
 		Copy: func(s string) { got = s },
@@ -107,7 +107,7 @@ func TestFollowTailPadsShortBufferToBottom(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("a")
 	buf.AppendLine("b")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.width = 40
 	v.height = 10
 	v.SetFollowTail(true)

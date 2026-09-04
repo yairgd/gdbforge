@@ -13,7 +13,7 @@ func TestViewportSearchSubstring(t *testing.T) {
 	buf.AppendLine("beta foo")
 	buf.AppendLine("gamma")
 	buf.AppendLine("foo again")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.SetSearchContentOffset(0)
 	v.CursorLine = 0
 
@@ -38,7 +38,7 @@ func TestViewportWordAtCursor(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("  hello_world  next")
 	buf.AppendLine("foo bar")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.SetSearchContentOffset(0)
 	v.CursorLine = 0
 	v.CursorCol = 4 // on 'l' of hello
@@ -55,7 +55,7 @@ func TestViewportWordAtCursorSkipsPunctBanner(t *testing.T) {
 	buf := platform.NewBuffer()
 	buf.AppendLine("=== sdk_cpp_demo done ===")
 	buf.AppendLine("call sdk_cpp_demo()")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.SetSearchContentOffset(0)
 	v.CursorLine = 0
 	v.CursorCol = 0
@@ -74,7 +74,7 @@ func TestViewportCursorInSearchMatchKeepsSubstring(t *testing.T) {
 	buf.AppendLine("hello, gdbforge 1052945")
 	buf.AppendLine("hello, gdbforge 1052946")
 	buf.AppendLine("hello, gdbforge 1052947")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.SetSearchContentOffset(0)
 	v.CursorLine = 0
 	v.CommitSearch("46")
@@ -103,7 +103,7 @@ func TestViewportSearchLeavesFollowTail(t *testing.T) {
 	}
 	buf.AppendLine("needle here")
 	buf.AppendLine("tail")
-	v := NewViewport(buf)
+	v := NewScrollDocument(buf)
 	v.SetFollowTail(true)
 	v.width = 40
 	v.height = 10
@@ -127,19 +127,20 @@ func TestViewportSearchLeavesFollowTail(t *testing.T) {
 	}
 }
 
-func TestConsoleFollowTailAndScrollRespectsLeave(t *testing.T) {
-	p := NewConsolePane("IO")
+func TestScrollDocumentFollowTailAndScrollRespectsLeave(t *testing.T) {
+	buf := platform.NewBuffer()
+	doc := NewScrollDocument(buf)
+	doc.SetFollowTail(true)
 	for i := 0; i < 20; i++ {
-		p.Buffer().AppendLine("line")
+		buf.AppendLine("line")
 	}
-	p.ForceFollowTailAndScroll()
-	p.Viewport().CommitSearch("line")
-	if p.Viewport().FollowTail() {
+	doc.ScrollToBottom()
+	doc.CommitSearch("line")
+	if doc.FollowTail() {
 		t.Fatal("search should leave follow-tail")
 	}
-	p.Buffer().AppendLine("new")
-	p.FollowTailAndScroll()
-	if p.Viewport().FollowTail() {
+	buf.AppendLine("new")
+	if doc.FollowTail() {
 		t.Fatal("append must not re-arm follow-tail after search")
 	}
 }

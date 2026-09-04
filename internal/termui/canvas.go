@@ -119,6 +119,19 @@ func (c Canvas) DrawHorizontalLocal(
 	)
 }
 
+func (c Canvas) ClearLineRange(localY, x1, x2 int, style tcell.Style) {
+	if x1 < 0 {
+		x1 = 0
+	}
+	if x2 > c.W() {
+		x2 = c.W()
+	}
+
+	for x := x1; x < x2; x++ {
+		c.SetContent(x, localY, ' ', style)
+	}
+}
+
 func (c Canvas) ClearLine(localY int, style tcell.Style) {
 	// Only clear this canvas's columns — a full-grid clear would wipe sibling
 	// panes after :vs / nested splits.

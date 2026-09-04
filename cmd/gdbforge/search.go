@@ -196,11 +196,11 @@ func (c *searchCtl) clearSelection(host termui.SearchHost) {
 	}
 }
 
-func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.Viewport {
+func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.ScrollDocument {
 	switch t := host.(type) {
-	case *termui.Viewport:
+	case *termui.ScrollDocument:
 		return t
-	case interface{ Viewport() *termui.Viewport }:
+	case interface{ Viewport() *termui.ScrollDocument }:
 		return t.Viewport()
 	default:
 		return nil
@@ -248,7 +248,7 @@ func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
 		return t.Viewport()
 	case *termui.LoggerWidget:
 		return t.Viewport()
-	case interface{ Viewport() *termui.Viewport }:
+	case interface{ Viewport() *termui.ScrollDocument }:
 		return t.Viewport()
 	}
 	return nil

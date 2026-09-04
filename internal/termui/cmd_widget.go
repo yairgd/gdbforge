@@ -106,7 +106,7 @@ func (c *CmdWidget) ExecuteParsed() error {
 	return c.parser.Execute()
 }
 
-// SetClipboard wires the shared copy/paste bridge (same as Viewport / ConsolePane).
+// SetClipboard wires the shared copy/paste bridge (same as ScrollDocument).
 func (c *CmdWidget) SetClipboard(io ClipboardIO) {
 	c.clipboard = io
 }

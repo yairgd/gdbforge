@@ -74,6 +74,11 @@ func (c *luaCtl) onJobDone(msg luaJobDoneMsg) {
 	if h == nil {
 		return
 	}
+	// REPL eval errors are shown in the Lua pane only; do not mirror to IO.
+	if msg.name == "repl" {
+		h.RequestFrame()
+		return
+	}
 	if msg.err != nil {
 		errMsg := msg.err.Error()
 		if !errors.Is(msg.err, luahost.ErrJobCancelled) &&
@@ -260,8 +265,15 @@ func (c *luaCtl) onReplSubmit(raw string) {
 	if w == nil {
 		return
 	}
-	cmd := strings.TrimSpace(raw)
+	trimmed := strings.TrimSpace(raw)
+	cmd := sanitizeReplLine(raw)
 	if cmd == "" {
+		if trimmed != "" {
+			w.ClearInput()
+			w.EnsureLivePrompt()
+			h.RequestFrame()
+			return
+		}
 		cmd = w.LastHistory()
 		if cmd == "" {
 			return
@@ -270,7 +282,6 @@ func (c *luaCtl) onReplSubmit(raw string) {
 	w.PushHistory(cmd)
 	w.EchoSubmit(cmd)
 	w.ClearInput()
-	w.EnsureLivePrompt()
 	w.ForceFollowTailAndScroll()
 	c.startReplEval(c.ensureRepl(), cmd)
 }
@@ -278,10 +289,6 @@ func (c *luaCtl) onReplSubmit(raw string) {
 func (c *luaCtl) onReplInterrupt() {
 	h := c.host
 	if w := h.LuaConsoleWidget(); w != nil {
-		if w.Viewport() != nil && w.Viewport().HasSelection() {
-			w.Viewport().CopySelection()
-			return
-		}
 		w.ClearInput()
 	}
 	if !c.cancelJob() && h.AppLog() != nil {
@@ -363,8 +370,8 @@ func (c *luaCtl) startReplEval(rt *luahost.Runtime, line string) {
 	rt.SetJobContext(ctx)
 	go func() {
 		c.onWorker.Store(true)
+		defer c.onWorker.Store(false)
 		err := rt.EvalLine(line)
-		c.onWorker.Store(false)
 
 		c.jobMu.Lock()
 		c.jobCancel = nil
@@ -381,10 +388,8 @@ func (c *luaCtl) startReplEval(rt *luahost.Runtime, line string) {
 				w.EnsureLivePrompt()
 				w.ForceFollowTailAndScroll()
 			}
+			h.RequestFrame()
 		})
-		if scr := h.Screen(); scr != nil {
-			_ = scr.PostEvent(tcell.NewEventInterrupt(luaJobDoneMsg{name: "repl", err: err}))
-		}
 	}()
 	h.RequestFrame()
 }
@@ -486,6 +491,15 @@ func (c *luaCtl) callOnUI(fn func()) {
 }
 
 // isLuaHelpRequest is true for a sole rest arg help / -h / --help.
+// sanitizeReplLine strips accidental prompt fragments from a submitted REPL line.
+func sanitizeReplLine(raw string) string {
+	s := strings.TrimSpace(raw)
+	for strings.HasPrefix(s, "lua>") {
+		s = strings.TrimSpace(s[len("lua>"):])
+	}
+	return s
+}
+
 func isLuaHelpRequest(strArgs []string) bool {
 	if len(strArgs) != 1 {
 		return false

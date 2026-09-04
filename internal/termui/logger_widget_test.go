@@ -14,33 +14,33 @@ func TestLoggerWidgetBindKeyMovesCursorBeforeScroll(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		_ = w.Write(platform.LogEntry{Text: fmt.Sprintf("line %d", i)})
 	}
-	w.viewport.width = 80
-	w.viewport.height = 10
-	w.viewport.ScrollToBottom()
-	startTop := w.viewport.Top
-	startCur := w.viewport.CursorLine
+	w.doc.width = 80
+	w.doc.height = 10
+	w.doc.ScrollToBottom()
+	startTop := w.doc.Top
+	startCur := w.doc.CursorLine
 
 	if !w.HandleBoundKey(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone)) {
 		t.Fatal("expected 'k' binding to handle")
 	}
-	if w.viewport.FollowTail() {
+	if w.doc.FollowTail() {
 		t.Fatal("scroll-up should leave follow-tail")
 	}
 	// First Up: caret moves within the view; Top stays put.
-	if w.viewport.Top != startTop {
-		t.Fatalf("Top should stay %d until caret hits top edge; got %d", startTop, w.viewport.Top)
+	if w.doc.Top != startTop {
+		t.Fatalf("Top should stay %d until caret hits top edge; got %d", startTop, w.doc.Top)
 	}
-	if w.viewport.CursorLine != startCur-1 {
-		t.Fatalf("CursorLine: got %d want %d", w.viewport.CursorLine, startCur-1)
+	if w.doc.CursorLine != startCur-1 {
+		t.Fatalf("CursorLine: got %d want %d", w.doc.CursorLine, startCur-1)
 	}
 
 	// Walk cursor to the top edge of the view, then one more to scroll.
-	for w.viewport.CursorLine > w.viewport.Top {
+	for w.doc.CursorLine > w.doc.Top {
 		w.HandleBoundKey(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone))
 	}
 	w.HandleBoundKey(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone))
-	if w.viewport.Top >= startTop {
-		t.Fatalf("expected Top to decrease after caret hits edge: start=%d now=%d", startTop, w.viewport.Top)
+	if w.doc.Top >= startTop {
+		t.Fatalf("expected Top to decrease after caret hits edge: start=%d now=%d", startTop, w.doc.Top)
 	}
 }
 
@@ -50,20 +50,20 @@ func TestLoggerWidgetArrowMovesCursorBeforeScroll(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		_ = w.Write(platform.LogEntry{Text: fmt.Sprintf("line %d", i)})
 	}
-	w.viewport.width = 80
-	w.viewport.height = 10
-	w.viewport.ScrollToBottom()
-	startTop := w.viewport.Top
-	startCur := w.viewport.CursorLine
+	w.doc.width = 80
+	w.doc.height = 10
+	w.doc.ScrollToBottom()
+	startTop := w.doc.Top
+	startCur := w.doc.CursorLine
 
 	w.HandleEvent(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone))
-	if w.viewport.FollowTail() {
+	if w.doc.FollowTail() {
 		t.Fatal("arrow up should leave follow-tail")
 	}
-	if w.viewport.Top != startTop {
-		t.Fatalf("Top should stay %d on first arrow; got %d", startTop, w.viewport.Top)
+	if w.doc.Top != startTop {
+		t.Fatalf("Top should stay %d on first arrow; got %d", startTop, w.doc.Top)
 	}
-	if w.viewport.CursorLine != startCur-1 {
-		t.Fatalf("CursorLine: got %d want %d", w.viewport.CursorLine, startCur-1)
+	if w.doc.CursorLine != startCur-1 {
+		t.Fatalf("CursorLine: got %d want %d", w.doc.CursorLine, startCur-1)
 	}
 }

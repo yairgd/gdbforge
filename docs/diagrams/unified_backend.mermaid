@@ -1,0 +1,40 @@
+flowchart TB
+  subgraph ui ["Controllers — protocol-agnostic"]
+    breakCtl[breakCtl]
+    debugInfoCtl[debugInfoCtl]
+    consoleCtl[consoleCtl]
+    stopped[stopped / code_nav]
+    inferiorIO[inferiorIOCtl]
+  end
+
+  subgraph shared ["Shared domain"]
+    models["models.* · BreakInfo StackFrame ThreadInfo"]
+    debuggerPkg["debugger.* · StopInfo ConsoleUpdate InferiorIO"]
+  end
+
+  subgraph api ["Backend interface"]
+    BackendIface[backend.Backend]
+    Capabilities["Capabilities · NavigationAsync WireCLILineTap DeferBreakpointRefresh …"]
+    SemanticOps["Semantic ops · InsertBreakpoint SelectFrame Exec FetchStackList …"]
+  end
+
+  subgraph gdb_impl ["GDBBackend"]
+    GdbCLI["CLI PTY → GDBWidget"]
+    GdbMI["MI PTY → GdbInputState"]
+    GdbOps["MI strings inside backend only"]
+  end
+
+  subgraph dlv_impl ["DLVBackend"]
+    DlvCLI["dlv connect PTY → human console"]
+    DlvRPC["go-delve rpc2 → machine ops"]
+    DlvParse["dlv.InputState → ConsoleUpdate"]
+  end
+
+  ui --> BackendIface
+  ui --> models
+  ui --> debuggerPkg
+  BackendIface --> Capabilities
+  BackendIface --> SemanticOps
+  BackendIface --> gdb_impl
+  BackendIface --> dlv_impl
+  inferiorIO --> debuggerPkg
