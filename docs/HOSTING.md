@@ -8,10 +8,11 @@ The documentation site is built with [MkDocs Material](https://squidfunk.github.
 
 ## Local development
 
-Install the documentation dependency:
+On Gentoo and other **externally-managed** Python installs (PEP 668), use a project venv instead of `pip install` system-wide:
 
 ```bash
-python3 -m pip install -r requirements-docs.txt
+./docs/setup-docs-venv.sh          # creates .venv-docs/ (uses python3 by default)
+PYTHON=python3.14 ./docs/setup-docs-venv.sh   # pin Python 3.14
 ```
 
 Start the development server:
@@ -35,7 +36,10 @@ Only expose the development server on trusted networks.
 ## Build the static site
 
 ```bash
-python3 -m mkdocs build --clean
+go run ./cmd/flowdoc --generate   # flows.json via `go tool callgraph` (x/tools)
+go run ./cmd/flowdoc --check
+./docs/setup-docs-venv.sh
+.venv-docs/bin/python -m mkdocs build --clean
 # or
 task docs:export
 ```

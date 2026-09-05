@@ -782,7 +782,7 @@ flowchart LR
 
 **Interactive yes/no:** After the inferior exits, Delve may ask `Set a suspended breakpoint … [Y/n]?`. gdbforge detects that prompt (including when it arrives without a trailing newline), paints it as a live host (same idea as GDB quit confirm), and answers with the next console submit. While confirming, breakpoint `Query("breakpoints")` is deferred so the query line cannot be consumed as `y`/`n`. Ctrl-C at a yes/no prompt sends `n` (cancel); SIGINT/`^C` is only used when the inferior is actually running.
 
-**Tab completion:** GDB console Tab uses MI `-complete`. Under Delve, Tab completes **command names** from a static list, and for `break`/`b`/`trace`/… locspecs it runs `funcs ^<prefix>` (e.g. `b main.` → `main.main`). Symbol completion is prefix-based via Delve’s `funcs` regex — not a full MI-style completer. File:`line` locspecs are not completed yet.
+**Tab completion:** GDB console Tab uses MI `-complete`. Under Delve, Tab completes **command names** from a static list, and for `break`/`b`/`trace`/… locspecs it calls **rpc2 `ListFunctions`** with a regex filter via `ListFunctionsFilter` (e.g. `b main.` → `main.main`) — not the Delve connect CLI `funcs` command on the PTY. Symbol completion is prefix-based; file:`line` locspecs are not completed yet. See the [Flow browser](flows/browser.md#dlv-console-tab) for the full call path.
 
 Examples:
 

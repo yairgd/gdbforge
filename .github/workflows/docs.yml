@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'cmd/flowdoc/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
       - '.github/workflows/docs.yml'
@@ -27,6 +30,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Analysis is done by golang.org/x/tools/cmd/callgraph (pinned via the
+      # `tool` directive in go.mod); flowdoc renders its edges into flows.json.
+      - name: Generate code flows catalog (x/tools callgraph)
+        run: go run ./cmd/flowdoc --generate
+
+      - name: Validate code flows catalog
+        run: go run ./cmd/flowdoc --check
 
       - uses: actions/setup-python@v5
         with:

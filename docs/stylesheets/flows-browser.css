@@ -1,0 +1,168 @@
+.flow-browser {
+  margin: 1.5rem 0 2rem;
+}
+
+.flow-browser__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.flow-browser__search {
+  width: 100%;
+  max-width: 36rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.35rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+}
+
+.flow-browser__search:focus {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 1px;
+}
+
+.flow-browser__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.flow-browser__filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.flow-browser__results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 52rem;
+}
+
+.flow-browser__result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.35rem;
+  background: var(--md-code-bg-color);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.flow-browser__result:hover,
+.flow-browser__result.is-selected {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0 1px var(--md-accent-fg-color);
+}
+
+.flow-browser__result-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.flow-browser__result-meta {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.flow-browser__detail {
+  margin-top: 1.5rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+  background: var(--md-code-bg-color);
+  max-width: 52rem;
+}
+
+/* When anchored under its row, the panel reads as an expansion of that row. */
+.flow-browser__results > .flow-browser__detail {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  max-width: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-left: 2px solid var(--md-accent-fg-color);
+}
+
+.flow-browser__result:has(+ .flow-browser__detail:not([hidden])) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.flow-browser__detail h3 {
+  margin-top: 0;
+}
+
+.flow-browser__trigger {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.9rem;
+}
+
+.flow-browser__tree {
+  font-family: var(--md-code-font, ui-monospace, monospace);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+  border-radius: 0.35rem;
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.flow-browser__tree a {
+  color: var(--md-typeset-a-color);
+  text-decoration: none;
+}
+
+.flow-browser__tree a:hover {
+  text-decoration: underline;
+}
+
+.flow-browser__bps {
+  margin-top: 1rem;
+}
+
+.flow-browser__bps code {
+  display: block;
+  margin: 0.25rem 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.flow-browser__badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  margin-right: 0.25rem;
+  border-radius: 0.2rem;
+  background: var(--md-default-fg-color--lightest);
+  opacity: 0.9;
+  vertical-align: middle;
+}
+
+.flow-browser__count {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.flow-browser__empty {
+  opacity: 0.75;
+  font-style: italic;
+  padding: 0.5rem 0;
+}

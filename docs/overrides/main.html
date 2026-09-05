@@ -64,3 +64,14 @@
     <meta name="robots" content="noindex, follow">
   {% endif %}
 {% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  {% if page and page.meta and page.meta.get('flow_browser') %}
+  <script>
+    window.__FLOW_CATALOG_PATH__ = "flows/flows.json";
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="{{ 'javascripts/flows-browser.js' | url }}"></script>
+  {% endif %}
+{% endblock %}

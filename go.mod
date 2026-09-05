@@ -12,7 +12,8 @@ require (
 	github.com/yuin/gopher-lua v1.1.2
 	go.bug.st/serial v1.6.4
 	golang.design/x/clipboard v0.9.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.47.0
+	golang.org/x/tools v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -32,7 +33,11 @@ require (
 	golang.org/x/exp/shiny v0.0.0-20250606033433-dcc06ee1d476 // indirect
 	golang.org/x/image v0.28.0 // indirect
 	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
-	golang.org/x/telemetry v0.0.0-20241106142447-58a1122356f5 // indirect
+	golang.org/x/mod v0.39.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
+
+tool golang.org/x/tools/cmd/callgraph

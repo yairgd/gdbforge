@@ -57,6 +57,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
 | **[DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)** | Backend contributors | GDB MI2, unified `backend.Backend`, `ptyx` mux, `:AI` / GdbMcpService — see also [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |
+| **[Flow browser](flows/browser.md)** | Contributors | Curated call trees (Tab, Ctrl-C, stop pipeline) — **separate search** from this site’s header search |
 | ↳ [Unified backend API](DEBUGGER_INTEGRATION.md#unified-backend-api) | Backend contributors | Protocol-agnostic controllers → semantic ops; GDB MI / Delve rpc2 inside backend only |
 | ↳ [Delve backend (peer of GDB)](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb) | Backend contributors | `-g dlv`, same MVC as GDB; inferior I/O via `--tty` (spawn-only) — [dual PTY details](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) |
 | ↳ [Delve inferior I/O (dual PTY)](DEBUGGER_INTEGRATION.md#delve-inferior-io-dual-pty) | Backend contributors | `dlv exec --tty` → `:b io` or external terminal; `:set inferior-tty` restarts Delve; Go TUIs → `:lua dlv_port` |
