@@ -432,10 +432,15 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(upd debugger.ConsoleUpdate) {
 	// Space only paints the UI and never installs the BP in GDB.
 	// *stopped alone sets State=Done, so prompt/stop still clear the flag (Ctrl-Z).
 	if h.State() != nil {
+		dlvCLI := h.Backend() != nil && h.Backend().WireCLILineTap()
 		switch {
 		case state == debugger.StateRunning:
 			h.Debug().SetInferiorRunning(true)
-		case promptReady || stopped != nil:
+		case stopped != nil || inferiorExited:
+			h.Debug().SetInferiorRunning(false)
+		case promptReady && !dlvCLI:
+			// GDB MI/CLI: prompt means ready for commands. Delve reprints (dlv)
+			// immediately after continue while the target is still running.
 			h.Debug().SetInferiorRunning(false)
 		}
 	}

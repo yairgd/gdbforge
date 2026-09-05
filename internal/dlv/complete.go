@@ -1,11 +1,9 @@
 package dlv
 
 import (
-	"context"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/yairgd/gdbforge/internal/core"
@@ -14,9 +12,6 @@ import (
 )
 
 const (
-	completeIdle   = 80 * time.Millisecond
-	completeMax    = 1500 * time.Millisecond
-	completeDrain  = 20 * time.Millisecond
 	maxFuncMatches = 200
 	// Avoid dumping the whole binary on a bare "break " Tab.
 	minLocspecToken = 1
@@ -68,8 +63,14 @@ var Commands = []string{
 	"whatis",
 }
 
+// FuncLister lists function names matching a regex filter (rpc2 ListFunctions).
+// Implemented by *Client; keeps completion off the interactive CLI PTY.
+type FuncLister interface {
+	ListFunctionsFilter(filter string) ([]string, error)
+}
+
 // Complete runs Delve console Tab completion: command names, or function
-// locspecs for break/b/trace/… via `funcs <regex>`.
+// locspecs for break/b/trace/… via rpc2 ListFunctions.
 func Complete(sess core.Session, state *platform.AppState, prefix string) gdb.CompleteResult {
 	base := gdb.CompletionBase(prefix)
 	if base == "" {
@@ -86,15 +87,16 @@ func Complete(sess core.Session, state *platform.AppState, prefix string) gdb.Co
 	if len(token) < minLocspecToken {
 		return gdb.CompleteResult{}
 	}
-	if sess == nil {
+	_ = state
+	lister, ok := sess.(FuncLister)
+	if !ok {
 		return gdb.CompleteResult{}
 	}
-	raw, err := querySilent(sess, state, "funcs "+funcsRegex(token))
-	if err != nil || raw == "" {
+	raw, err := lister.ListFunctionsFilter(funcsRegex(token))
+	if err != nil {
 		return gdb.CompleteResult{}
 	}
-	names := ParseFuncs(raw)
-	names = filterPrefix(names, token)
+	names := filterPrefix(CleanFuncNames(raw), token)
 	if len(names) > maxFuncMatches {
 		names = names[:maxFuncMatches]
 	}
@@ -181,6 +183,26 @@ func funcsRegex(token string) string {
 	return "^" + regexp.QuoteMeta(token)
 }
 
+// CleanFuncNames sorts and de-duplicates rpc2 ListFunctions results, dropping
+// anything that is not a bare function name.
+func CleanFuncNames(names []string) []string {
+	var out []string
+	seen := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" || strings.ContainsAny(n, " \t") {
+			continue
+		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // ParseFuncs extracts function names from `funcs` CLI output.
 func ParseFuncs(raw string) []string {
 	var out []string
@@ -239,79 +261,4 @@ func longestCommonPrefix(ss []string) string {
 		}
 	}
 	return p
-}
-
-func querySilent(sess core.Session, state *platform.AppState, command string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), completeMax)
-	defer cancel()
-
-	ch, unsub := sess.Subscribe()
-	defer unsub()
-	drainComplete(ch, completeDrain)
-
-	var out strings.Builder
-	run := func() error {
-		return sess.WithWrite(ctx, func(w core.PTYWriter) error {
-			if err := w.Send(command); err != nil {
-				return err
-			}
-			captureComplete(ctx, ch, &out, completeIdle, completeMax)
-			return nil
-		})
-	}
-	var err error
-	if state != nil {
-		state.WithPTYOwner(platform.PTYOwnerApp, func() {
-			err = run()
-		})
-	} else {
-		err = run()
-	}
-	return out.String(), err
-}
-
-func drainComplete(ch <-chan core.PtyOutputMsg, wait time.Duration) {
-	core.Drain(ch, wait)
-}
-
-func captureComplete(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration) {
-	deadline := time.NewTimer(max)
-	defer deadline.Stop()
-	idleT := time.NewTimer(idle)
-	defer idleT.Stop()
-
-	resetIdle := func() {
-		if !idleT.Stop() {
-			select {
-			case <-idleT.C:
-			default:
-			}
-		}
-		idleT.Reset(idle)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-deadline.C:
-			return
-		case <-idleT.C:
-			return
-		case msg, ok := <-ch:
-			if !ok {
-				return
-			}
-			if msg.Err != nil {
-				return
-			}
-			if msg.Data != "" {
-				out.WriteString(msg.Data)
-				if strings.Contains(msg.Data, PromptToken) {
-					return
-				}
-				resetIdle()
-			}
-		}
-	}
 }

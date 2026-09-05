@@ -113,6 +113,34 @@ func TestInputStateYesNoPromptWithNewline(t *testing.T) {
 	}
 }
 
+func TestInputStatePauseQuitPrompt(t *testing.T) {
+	st := NewInputState()
+	q := "Would you like to [p]ause the target (returning to Delve's prompt) or [q]uit this client (leaving the target running) [p/q]?"
+	u := st.PushRaw(q)
+	if !u.ConfirmReady {
+		t.Fatal("expected ConfirmReady for [p/q]?")
+	}
+	if u.ConfirmKind != ConfirmPauseQuit {
+		t.Fatalf("kind: got %v want ConfirmPauseQuit", u.ConfirmKind)
+	}
+	if !strings.Contains(u.ConfirmHost, "[p/q]?") {
+		t.Fatalf("host: %q", u.ConfirmHost)
+	}
+}
+
+func TestConfirmGateObservePauseQuit(t *testing.T) {
+	var g ConfirmGate
+	host := "Would you like to [p]ause … [p/q]? "
+	g.Observe(Update{ConfirmReady: true, ConfirmHost: host, ConfirmKind: ConfirmPauseQuit})
+	if !g.Confirming() || g.Kind() != ConfirmPauseQuit {
+		t.Fatalf("confirming=%v kind=%v", g.Confirming(), g.Kind())
+	}
+	g.Observe(Update{PromptReady: true, PromptLine: PromptToken})
+	if g.Confirming() {
+		t.Fatal("prompt should clear confirming")
+	}
+}
+
 func TestConfirmGateObserve(t *testing.T) {
 	var g ConfirmGate
 	g.Observe(Update{ConfirmReady: true, ConfirmHost: "Quit? [Y/n]? "})

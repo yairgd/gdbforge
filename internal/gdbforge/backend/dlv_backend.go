@@ -120,7 +120,12 @@ func (b *DLVBackend) Interrupt(inferiorRunning, confirming bool) error {
 		return nil
 	}
 	if confirming {
-		return c.Send("n")
+		switch b.Confirm.Kind() {
+		case dlv.ConfirmPauseQuit:
+			return c.Send("p")
+		default:
+			return c.Send("n")
+		}
 	}
 	if !inferiorRunning {
 		return nil

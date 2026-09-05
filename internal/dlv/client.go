@@ -20,6 +20,11 @@ const (
 	PromptLiveHost = PromptToken + " "
 
 	startupPromptWait = 30 * time.Second
+
+	// Initial `dlv connect` winsize. Delve's liner needs a non-zero column
+	// count at startup to enable its line editor.
+	connectPTYRows = 24
+	connectPTYCols = 80
 )
 
 // Client is an interactive Delve session: CLI PTY (`dlv connect`) for human
@@ -136,7 +141,14 @@ func headlessExecArgv(dlvPath, listenAddr, ttyPath string, dlvArgs []string) []s
 
 func startConnectPTY(dlvPath, addr string, env []string) (*ptyx.TTY, error) {
 	addr = normalizeConnectAddr(addr)
-	dlvPty, err := ptyx.Start([]string{dlvPath, "connect", addr}, ptyx.Options{Env: env})
+	// Rows/Cols must be set before exec: Delve's liner reads the winsize once at
+	// startup, and a 0-column PTY makes every Prompt fall back to its "too narrow"
+	// dumb reader (no arrow keys, history, or Tab). The pane resizes it on paint.
+	dlvPty, err := ptyx.Start([]string{dlvPath, "connect", addr}, ptyx.Options{
+		Env:  env,
+		Rows: connectPTYRows,
+		Cols: connectPTYCols,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -314,12 +326,25 @@ func filterEnv(env []string, drop ...string) []string {
 	return out
 }
 
+// ListFunctionsFilter returns function names matching a regex filter via rpc2.
+// Completion must never write `funcs …` to the CLI PTY: that PTY carries the
+// user's half-typed line, so the query text would be appended to it.
+func (c *Client) ListFunctionsFilter(filter string) ([]string, error) {
+	if c == nil || c.RPC == nil {
+		return nil, fmt.Errorf("dlv: no rpc2 client")
+	}
+	return c.RPC.ListFunctions(filter, 0)
+}
+
 func (c *Client) Interrupt() error {
 	if c == nil {
 		return nil
 	}
+	// Headless multiclient: halt via rpc2 only. Sending ^C to the connect CLI
+	// triggers Delve's [p/q]? gate instead of returning to (dlv).
 	if c.RPC != nil {
-		go func() { _, _ = c.RPC.Halt() }()
+		_, err := c.RPC.Halt()
+		return err
 	}
 	err := c.SignalInterrupt()
 	_ = c.SendRaw("\x03")
