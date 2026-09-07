@@ -1,5 +1,5 @@
 ---
-description: Learn how to install, configure, navigate, and debug programs with the gdbforge terminal debugger.
+description: Full manual for the gdbforge terminal debugger — modes, keys, colon commands, layouts, breakpoints, threads, call stack, and program I/O under GDB and Delve.
 ---
 
 # User guide
@@ -12,7 +12,7 @@ Browse this file on GitHub or via `./docs/serve.sh`. For Lua scripting details s
 
 ### Overview
 
-gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger for GDB and Delve (`-g gdb|dlv`). The screen is a multi-pane workspace: Code (or logo / Assembly), debugger console, IO, Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
+gdbforge (gdbforge: Extreme Tooling Suite) is a Vim-inspired terminal debugger for GDB and Delve (`-g gdb|dlv`). The screen is a multi-pane workspace: Code (or logo / Assembly), debugger console, IO (the program's own stdin/stdout), Threads, Call Stack, Breakpoints, plus a global `:` command line at the bottom.
 
 **Status line colors:**
 
@@ -288,3 +288,5 @@ Space / BP pane may interrupt GDB via `-exec-interrupt` on the MI channel, send 
 - [LUA_API.md](LUA_API.md) — Lua / `gdbforge.*` reference
 - [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) — how GDB/Delve PTYs, `:b io`, and external terminals connect
 - [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — installable Lua workflows
+- [FAQ.md](FAQ.md) — setup questions and comparisons
+- Target guides: [EMBEDDED_LINUX_DEBUG.md](EMBEDDED_LINUX_DEBUG.md) (gdbserver), [STM32_DEBUG.md](STM32_DEBUG.md) (ST-Link / J-Link), [MPSOC_DEBUG.md](MPSOC_DEBUG.md), [KERNEL_KGDB.md](KERNEL_KGDB.md) (kgdb)

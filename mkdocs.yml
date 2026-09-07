@@ -1,5 +1,5 @@
 site_name: gdbforge
-site_description: Vim-inspired multi-pane terminal front-end for GDB and Delve
+site_description: Vim-inspired multi-pane terminal debugger for GDB and Delve, with workflows for local, remote, embedded, and kernel debugging
 site_url: https://yairgd.github.io/gdbforge/
 repo_url: https://github.com/yairgd/gdbforge
 repo_name: yairgd/gdbforge
@@ -43,6 +43,7 @@ nav:
   - Home: README.md
   - User guide:
       - User Guide: USER_GUIDE.md
+      - FAQ: FAQ.md
       - Embedded Linux debug: EMBEDDED_LINUX_DEBUG.md
       - MPSoC debug: MPSOC_DEBUG.md
       - STM32 debug: STM32_DEBUG.md

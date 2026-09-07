@@ -1,10 +1,10 @@
 ---
-description: Documentation for gdbforge, a Vim-inspired multi-pane terminal front-end for debugging with GDB and Delve.
+description: Documentation for gdbforge, a Vim-inspired multi-pane terminal debugger for GDB and Delve, including embedded, remote, and Linux kernel workflows.
 ---
 
 # gdbforge Documentation
 
-**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The debugger app (`-g gdb|dlv`) is the first application on the framework. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
+**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The debugger app (`-g gdb|dlv`) is the first application on the framework: source, debugger console, program I/O, threads, call stack, and breakpoints in one keyboard-driven workspace, with Lua workflows for remote and embedded targets. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
 
 The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` embeds **`LayoutShell`** and **`DebugSession`**, domain lives on host-backed `*Ctl` controllers, widgets are views, and UI events flow **`PostInterrupt` → EventBus → controller handlers**. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
@@ -42,9 +42,10 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 |----------|----------|----------|
 | **[README.md](README.md)** (this file) | Everyone | Index, quick links, how to view docs |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | Users | Full user manual (twin of in-app `:help`) |
+| **[FAQ.md](FAQ.md)** | Users | Setup questions — comparisons, program I/O, supported targets and probes |
 | **[EMBEDDED_LINUX_DEBUG.md](EMBEDDED_LINUX_DEBUG.md)** | Users / embedded | User-space apps — `:lua remotegdb`, internal `:b io` vs external terminal |
 | **[MPSOC_DEBUG.md](MPSOC_DEBUG.md)** | Users / embedded | Zynq MPSoC — Cortex-A53/R5 J-Link and OpenOCD Lua workflows |
-| **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32 board catalog (**#1 Nucleo F429ZI**, **#2 STM32F405**; extensible) — ST-Link, J-Link, Zephyr |
+| **[STM32_DEBUG.md](STM32_DEBUG.md)** | Users / embedded | STM32 board catalog (**#1 Nucleo F429ZI**, **#2 STM32F405**; extensible) — ST-Link, J-Link, Zephyr, FreeRTOS |
 | **[KERNEL_KGDB.md](KERNEL_KGDB.md)** | Users / embedded | Kernel kgdb: **`kgdb_kdmx` demo**, two UARTs (manual), one-UART mux, kdmx, Ethernet |
 | **[LUA_API.md](LUA_API.md)** | Script authors | `gdbforge.*` Lua API reference |
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
@@ -84,7 +85,7 @@ Requires a terminal with UTF-8 support. Optional for `:AI`: set `ANTHROPIC_API_K
 
 ```bash
 go run ./cmd/gdbforge -- ./hello
-# then in cgdb:  :AI what breakpoints are set?
+# then in gdbforge:  :AI what breakpoints are set?
 ```
 
 The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords**, **`:!` exec panes**, **`:AI` in-app LLM**, and an event bus that dispatches domain events through `HandleCoreEvents`.

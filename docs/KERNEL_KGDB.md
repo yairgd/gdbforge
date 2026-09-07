@@ -1,13 +1,12 @@
 ---
-description: Kernel and module debugging with gdbforge via kgdb (UART+kdmx or Ethernet) using Lua workflows.
-meta:
-  - name: keywords
-    content: Linux kernel debugger, kgdb GDB, kgdb UART, kdmx kernel debug, kgdboe Ethernet, kernel module debug, lx-symbols, gdbforge
+description: Debug the Linux kernel and loadable modules with gdbforge and kgdb over two UARTs, a shared serial link with kdmx, an in-process mux, or Ethernet.
 ---
 
 # Kernel / module debugging (kgdb)
 
 gdbforge treats **kernel and module debug** as a first-class workflow. **v1** is implemented as **Lua extensions** that orchestrate existing tools; the UI stays the normal GDB MI console (`:b gdb`). A future option is an in-process UART mux that replaces external `kdmx` without changing the user command.
+
+Whether the kernel talks to GDB over a dedicated UART, one shared UART, or Ethernet, breakpoints stop the whole kernel — to debug a normal process on the same board instead, see [Embedded Linux app debug](EMBEDDED_LINUX_DEBUG.md).
 
 | Piece | Role (v1) |
 |-------|-----------|
@@ -28,7 +27,7 @@ Scripts (catalog under [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua
 
 See **[Path 0 — Two UARTs (manual)](#path-0--two-uarts-manual-recommended)** when the board has separate console and kgdb cables (**no mux, no Lua script**) — includes a [two-UART screencast](#path-0--two-uarts-manual-recommended).
 
-See **[Path 1 — UART + kdmx (`kgdb_uart`)](#path-1--uart--kdmx)** for the [main kernel demo screencast](../README.md#demo) — one UART, kdmx split, **~2 s break-in**, `lx-symbols`, driver read breakpoint.
+See **[Path 1 — UART + kdmx (`kgdb_uart`)](#path-1--uart--kdmx)** for the [main kernel demo screencast](README.md#demos) — one UART, kdmx split, **~2 s break-in**, `lx-symbols`, driver read breakpoint.
 
 See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic)** for the in-process alternative (`:lua kgdb_serial` / `:lua kgdb_trigger`).
 
@@ -393,7 +392,7 @@ export GDBFORGE_KGDB_KDMX=$HOME/agent-proxy/kdmx/kdmx
 |------|--------|
 | Upstream repo | `https://git.kernel.org/pub/scm/utils/kernel/kgdb/agent-proxy.git` |
 | **Checkout** | **`468fe4c31e6c62c9bbb328b06ba71eaf7be0b76a`** (not `master`) |
-| gdbforge patch | [`tools/kdmx-gdbforge.patch`](../tools/kdmx-gdbforge.patch) (required after checkout) |
+| gdbforge patch | [`tools/kdmx-gdbforge.patch`](https://github.com/yairgd/gdbforge/blob/main/tools/kdmx-gdbforge.patch) (required after checkout) |
 | Expected `kdmx -v` | `kdmx 141210a-gdbforge1` |
 
 If you already have agent-proxy checked out elsewhere (e.g. `~/agent-proxy`), `git checkout 468fe4c`, apply the patch, and `make` in `kdmx/`. `kgdb_uart` also looks for `./bin/kdmx` next to the gdbforge binary when `GDBFORGE_KGDB_KDMX` is unset.
@@ -689,4 +688,4 @@ Fallback: pass addresses / use SSH sysfs + `add-symbol-file` (see `kgdb_common`)
 
 Kernel bring-up stays a **Lua recipe** (like `remotegdb` / Cortex-R5 scripts): gdbforge core stays the debugger UI + session. In-process UART mux is optional later; document and keep the same `:lua kgdb_uart` entry point.
 
-See also: [LUA_API.md](LUA_API.md), [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md), [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (kernel section).
+See also: [LUA_API.md](LUA_API.md), [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md), [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) (kernel section). For a JTAG alternative on Zynq UltraScale+ — attach to a running kernel with `vmlinux` and `lx-symbols`, no kgdboc — see [MPSoC debug](MPSOC_DEBUG.md).

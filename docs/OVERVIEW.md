@@ -1,12 +1,12 @@
 ---
-description: Discover the goals, capabilities, use cases, and design direction of the gdbforge terminal debugging environment.
+description: Goals, motivation, and design direction of gdbforge, including how it compares to cgdb and the GDB TUI.
 ---
 
 # Project Overview
 
-**gdbforge** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI with a modular architecture that supports multiple debugger backends and long-term extensibility.
+**gdbforge** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI — source, console, breakpoints, threads, and call stack on one screen — with a modular architecture that supports multiple debugger backends and long-term extensibility.
 
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
+**Companion docs:** [USER_GUIDE.md](USER_GUIDE.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
 
 ---
 
@@ -86,6 +86,8 @@ The gdbforge stack (`internal/termui`) is intentionally lower-level than Bubble 
 
 ## Comparison to cgdb and gdb TUI
 
+gdbforge is an external front-end: GDB remains the debugger, and MI keeps the source view and list panes in step with it without filling the console with navigation commands.
+
 | Aspect | **cgdb** | **gdb TUI** (`layout src`) | **gdbforge** (target) |
 |--------|----------|----------------------------|----------------------|
 | **UI toolkit** | ncurses | readline + ANSI (limited layout) | tcell + custom Grid |
@@ -155,6 +157,8 @@ See [ROADMAP.md](ROADMAP.md) for phased delivery plans.
 
 ## Next steps
 
+- Commands and everyday debugging: [USER_GUIDE.md](USER_GUIDE.md)
+- Common setup questions: [FAQ.md](FAQ.md)
 - Architecture deep dive: [ARCHITECTURE.md](ARCHITECTURE.md)
 - UI internals: [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
 - Onboarding: [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
