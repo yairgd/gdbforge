@@ -13,11 +13,3 @@ type PtyOutputMsg struct {
 }
 
 func (PtyOutputMsg) Type() string { return "PtyOutputMsg" }
-
-// ExecOutputMsg is a UI-routed exec/shell PTY chunk (EventInterrupt → ExecWidget).
-type ExecOutputMsg struct {
-	Data string
-	Err  error
-}
-
-func (ExecOutputMsg) Type() string { return "ExecOutputMsg" }

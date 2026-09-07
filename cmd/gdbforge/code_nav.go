@@ -1,10 +1,7 @@
 package main
 
 import (
-	"context"
-	"time"
-
-	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 )
@@ -52,19 +49,9 @@ func (a *DebuggerApp) sendGdbExec(cmd string) {
 	if a.gdbWidget == nil || cmd == "" || a.backend == nil {
 		return
 	}
-	sess := a.GDB()
-	if sess == nil {
-		return
-	}
-	sendCmd, marksRunning := a.backend.MapExec(cmd)
-	if marksRunning && a.State() != nil {
-		a.Debug().SetInferiorRunning(true)
-	}
-	a.State().WithPTYOwner(platform.PTYOwnerUI, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
-			return pw.Send(sendCmd)
-		})
-	})
+	a.backend.ExecUI(backend.CommandEnv{
+		Session:  a.GDB(),
+		App:      a.State(),
+		Inferior: a.Debug(),
+	}, cmd)
 }

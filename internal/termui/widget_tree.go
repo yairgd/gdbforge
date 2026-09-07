@@ -314,22 +314,45 @@ func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 		if l.handleMouse(me) {
 			return
 		}
+		mx, my := me.Position()
 		// Wheel / middle-click: deliver to the leaf under the pointer
 		// (not only the focused one). Middle-click paste is Linux-terminal style.
 		if me.Buttons()&(tcell.WheelUp|tcell.WheelDown|tcell.ButtonMiddle) != 0 {
-			mx, my := me.Position()
-			for _, n := range CollectLeaves(l.root) {
-				if l.leafRect(n).Contains(mx, my) {
-					n.Widget.HandleEvent(ev)
-					return
-				}
+			if n := l.leafAtPoint(mx, my); n != nil {
+				l.deliverMouse(n, ev)
 			}
+			return
 		}
+		// Primary drag/release: focused pane owns text selection (v1.1.0).
+		// Routing release to the leaf under the pointer breaks copy when the
+		// button comes up over an adjacent pane.
+		if l.focus != nil && l.focus.Type == NodeLeaf {
+			l.deliverMouse(l.focus, ev)
+		}
+		return
 	}
 
 	if l.focus != nil && l.focus.Type == NodeLeaf {
 		l.focus.Widget.HandleEvent(ev)
 	}
+}
+
+func (l *WidgetTree) deliverMouse(n *Node, ev tcell.Event) {
+	if mol, ok := n.Widget.(MouseOriginLeaf); ok {
+		r := l.leafRect(n)
+		mol.SetMouseOrigin(r.X(), r.Y())
+	}
+	n.Widget.HandleEvent(ev)
+}
+
+func (l *WidgetTree) leafAtPoint(x, y int) *Node {
+	for _, n := range CollectLeaves(l.root) {
+		r := l.leafRect(n)
+		if r.Contains(x, y) || statusBandContains(r, x, y) {
+			return n
+		}
+	}
+	return nil
 }
 
 func (l *WidgetTree) handleMouse(me *tcell.EventMouse) bool {
@@ -533,12 +556,9 @@ func (l *WidgetTree) IsDraggingSeparator() bool {
 }
 
 func (t *WidgetTree) FocusAt(x, y int) bool {
-	for _, n := range CollectLeaves(t.root) {
-		r := t.leafRect(n)
-		if r.Contains(x, y) || statusBandContains(r, x, y) {
-			t.focus = n
-			return true
-		}
+	if n := t.leafAtPoint(x, y); n != nil {
+		t.focus = n
+		return true
 	}
 	return false
 }
@@ -824,7 +844,7 @@ func (l *WidgetTree) redrawGrid(node *Node, c Canvas) {
 
 func verticalSplitRects(node *Node, c Canvas) (leftW, rightW int, r1, r2 Rect) {
 	avail := c.W() - 1
-	if avail < 1 {
+	if avail < 2*minPaneCells {
 		return 0, 0, c.Rect(), c.Rect()
 	}
 
@@ -844,7 +864,7 @@ func verticalSplitRects(node *Node, c Canvas) (leftW, rightW int, r1, r2 Rect) {
 
 func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect) {
 	avail := c.H() - 1
-	if avail < 1 {
+	if avail < 2*minPaneCells {
 		return 0, 0, c.Rect(), c.Rect()
 	}
 
@@ -864,6 +884,14 @@ func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect)
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
 	// Ratios are applied as-is; equalalways rebalances only on Split/DeleteFocus.
+	// Skip rebuild on a degenerate canvas (can happen for one frame after job-control
+	// resume); rebuilding would corrupt split ratios permanently.
+	if c.W() < 2*minPaneCells || c.H() < 2*minPaneCells {
+		if len(l.geom) > 0 {
+			l.grid = c.grid
+			return
+		}
+	}
 	l.grid = c.grid
 	l.geom = make(map[*Node]layoutGeom)
 	l.buildLayout(l.root, c)
@@ -881,9 +909,9 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 
 	switch node.Dir {
 	case Vertical:
-		leftW, _, r1, r2 := verticalSplitRects(node, c)
+		leftW, rightW, r1, r2 := verticalSplitRects(node, c)
 		avail := c.W() - 1
-		if avail < 1 {
+		if avail < 2*minPaneCells || leftW < minPaneCells || rightW < minPaneCells {
 			return
 		}
 		node.Ratio = float64(leftW) / float64(avail)
@@ -896,9 +924,9 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 		l.buildLayout(node.Second, c.WithRect(r2))
 
 	case Horizontal:
-		topH, _, r1, r2 := horizontalSplitRects(node, c)
+		topH, bottomH, r1, r2 := horizontalSplitRects(node, c)
 		avail := c.H() - 1
-		if avail < 1 {
+		if avail < 2*minPaneCells || topH < minPaneCells || bottomH < minPaneCells {
 			return
 		}
 		node.Ratio = float64(topH) / float64(avail)

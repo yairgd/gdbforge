@@ -168,7 +168,7 @@ func QuitRepromptLines() []string {
 	return []string{"Please answer y or n."}
 }
 
-// ApplyQuitAction performs the PTY write for a sending QuitAction.
+// ApplyQuitAction performs the PTY write for a sending QuitAction on a Session.
 func ApplyQuitAction(d core.Debugger, a QuitAction) error {
 	if d == nil || !a.Sends() {
 		return nil
@@ -180,6 +180,25 @@ func ApplyQuitAction(d core.Debugger, a QuitAction) error {
 		return d.Send("quit")
 	case QuitSendEmpty:
 		return d.Send("")
+	default:
+		return nil
+	}
+}
+
+// ApplyQuitActionCLI writes quit bytes to the GDB console PTY (PTY #1).
+func ApplyQuitActionCLI(cli interface {
+	Send(string) error
+}, a QuitAction) error {
+	if cli == nil || !a.Sends() {
+		return nil
+	}
+	switch a {
+	case QuitSendQ:
+		return cli.Send("q")
+	case QuitSendQuit:
+		return cli.Send("quit")
+	case QuitSendEmpty:
+		return cli.Send("")
 	default:
 		return nil
 	}

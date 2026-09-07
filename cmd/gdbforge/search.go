@@ -180,6 +180,9 @@ func (c *searchCtl) selectionAt(host termui.SearchHost) string {
 	if host == nil {
 		return ""
 	}
+	if s, ok := host.(interface{ SelectedText() string }); ok {
+		return strings.TrimSpace(s.SelectedText())
+	}
 	vp := c.viewportOf(host)
 	if vp == nil || !vp.HasSelection() {
 		return ""
@@ -193,11 +196,11 @@ func (c *searchCtl) clearSelection(host termui.SearchHost) {
 	}
 }
 
-func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.Viewport {
+func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.ScrollDocument {
 	switch t := host.(type) {
-	case *termui.Viewport:
+	case *termui.ScrollDocument:
 		return t
-	case interface{ Viewport() *termui.Viewport }:
+	case interface{ Viewport() *termui.ScrollDocument }:
 		return t.Viewport()
 	default:
 		return nil
@@ -234,22 +237,18 @@ func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
 	case *widgets.AssemblyWidget:
 		return t
 	case *widgets.BreakpointWidget:
-		return t.Viewport()
+		return t
 	case *widgets.ThreadWidget:
-		return t.Viewport()
+		return t
 	case *widgets.CallStackWidget:
-		return t.Viewport()
+		return t
 	case *widgets.FileListWidget:
-		return t.Viewport()
+		return t
 	case *widgets.HelpWidget:
-		return t.Viewport()
-	case *widgets.GDBWidget:
-		return t.Viewport()
-	case *widgets.OutputWidget:
 		return t.Viewport()
 	case *termui.LoggerWidget:
 		return t.Viewport()
-	case interface{ Viewport() *termui.Viewport }:
+	case interface{ Viewport() *termui.ScrollDocument }:
 		return t.Viewport()
 	}
 	return nil

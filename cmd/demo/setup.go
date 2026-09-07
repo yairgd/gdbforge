@@ -9,16 +9,15 @@ import (
 func (a *DemoApp) Init() error {
 	a.ctx = platform.NewAppContext()
 
-	a.mainPane = termui.NewConsolePane("main")
+	a.mainPane = demo.NewScrollPane("main", "demo — host showcase. Press :help.")
 	a.mainPane.SetClipboard(a.ClipboardIO())
-	a.mainPane.SetInputEnabled(true)
-	a.mainPane.Buffer().AppendLine("demo — host showcase. Press :help or type in this pane (i).")
 	a.builtins["main"] = a.mainPane
 
-	a.sidePane = termui.NewConsolePane("side")
-	a.sidePane.SetInputEnabled(false)
-	a.sidePane.Buffer().AppendLine("side pane — :b side")
-	a.sidePane.Buffer().AppendLine("status / notes go here")
+	a.sidePane = demo.NewScrollPane("side",
+		"side pane — :b side",
+		"status / notes go here",
+	)
+	a.sidePane.SetClipboard(a.ClipboardIO())
 	a.builtins["side"] = a.sidePane
 
 	a.logPane = termui.NewLoggerWidget(a.ctx)
@@ -33,7 +32,6 @@ func (a *DemoApp) Init() error {
 	})
 	a.tab.SetStatusClipboard(a.ClipboardIO())
 	a.tab.FocusWidget(a.mainPane)
-	a.EnterInsertMode()
 	a.tab.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
 	a.tab.SetEqualAlways(true)

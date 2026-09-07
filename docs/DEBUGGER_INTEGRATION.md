@@ -4,7 +4,7 @@ description: Technical guide to gdbforge debugger integration with GDB MI2, Delv
 
 # Debugger Integration
 
-gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB MI2** (`gdb.GDBClient`) and **Delve** (`dlv.Client`) via `-g gdb|dlv`. One PTY for the debugger, plus a **separate inferior PTY** for the debugged program’s stdin/stdout (`ptyx.TTY`). The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP; program I/O is controlled by the app and painted in the IO console (`:b io`).
+gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB** (`gdb.GDBClient`, **3 PTYs**: CLI + MI + inferior) and **Delve** (`dlv.Client`, headless **rpc2** + `dlv connect` CLI PTY + inferior `--tty`) via `-g gdb|dlv`. Controllers call **semantic backend ops** (breakpoints, frame/thread select, exec) — not raw MI or Delve CLI strings. The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP. Program I/O is wired to the IO pane (`:b io`) via `CompositeTerminal` + `WireTTY`.
 
 **Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
@@ -13,6 +13,7 @@ gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbf
 ## Table of contents
 
 - [Integration overview](#integration-overview)
+- [Unified backend API](#unified-backend-api)
 - [Debugger interface](#debugger-interface)
 - [PTY mux](#pty-mux)
 - [Inferior I/O (dual PTY)](#inferior-io-dual-pty)
@@ -38,13 +39,18 @@ Application data flows **Service → Controller → Model → Widget** ([MVC](AR
 ```mermaid
 flowchart TB
     subgraph UI["UI · views"]
-        GDBW["GDBWidget · paint + OnSubmit"]
-        Cons["ConsolePane"]
-        IOW["OutputWidget · paint + OnSubmit"]
+        GDBW["GDBWidget · CompositeTerminal"]
+        IOW["OutputWidget · CompositeTerminal"]
+        ExecW["ExecWidget · CompositeTerminal"]
+    end
+
+    subgraph TermUI["termui bridge"]
+        Wire["WireTTY · xterm emulator"]
     end
 
     subgraph App["Application · cmd/gdbforge"]
-        Ctrl["Controllers · gdb_console / io_console / breakpoints"]
+        Ctrl["consoleCtl · MI bridge + quit"]
+        InfCtl["inferiorIOCtl · wire/unwire IO"]
         Models["models · BreakpointList ThreadList CallStack"]
         AI[":AI OnAI"]
         MCP["GdbMcpService"]
@@ -53,43 +59,45 @@ flowchart TB
     subgraph Domain["Domain · core"]
         SessIF["Session / Debugger / PTYWriter"]
         PtyMsg["PtyOutputMsg"]
-        UIMsg["GdbOutputMsg · ExecOutputMsg · InferiorOutputMsg"]
+        UIMsg["GdbOutputMsg · WireTTY"]
     end
 
-    subgraph PTYLayer["PTY · ptyx"]
-        Pty["ptyx.Client · GDB MI"]
-        Inf["ptyx.TTY · inferior stdio"]
+    subgraph Ptyx["PTY · ptyx.TTY"]
+        CLI["CLI PTY · GDB console"]
+        MI["MI PTY · backend Session"]
+        Inf["Inferior PTY · program stdio"]
     end
 
     subgraph BackendPkg["backend.Backend"]
-        Client["GDBClient or dlv.Client · owned via Backend"]
-        MI["InputState · MiUpdate / Delve parse"]
+        Client["GDBClient or dlv.Client"]
+        Parser["InputState · MiUpdate / Delve parse"]
     end
 
     subgraph External["External"]
-        GDB["GDB --interpreter=mi2 · or dlv"]
+        GDB["GDB · new-ui mi2"]
         Prog["Debugged program"]
         LLM["Claude / OpenAI API"]
     end
 
-    GDBW --> Cons
+    GDBW --> Wire --> CLI
+    IOW --> Wire --> Inf
+    ExecW --> Wire
     Ctrl -->|"owns Backend"| Client
-    Ctrl -->|"SetItems / Paint"| GDBW
-    Ctrl -->|"Paint"| IOW
-    Ctrl --> Models
-    Client --> Pty
-    Client -->|"inferior tty"| Inf
-    Ctrl -->|"Send / Subscribe"| Inf
+    Ctrl -->|"MI Subscribe only"| MI
+    Client --> CLI
+    Client --> MI
+    Client --> Inf
     Inf <--> Prog
-    MCP -->|"Session only"| SessIF
+    MCP -->|"Session = MI PTY"| SessIF
     AI --> MCP
     AI --> LLM
     SessIF --> Client
-    Pty -->|"Subscribe fan-out"| PtyMsg
-    PtyMsg -->|"UI bridge"| UIMsg
+    MI -->|"Subscribe fan-out"| PtyMsg
+    PtyMsg -->|"coalesce"| UIMsg
     UIMsg --> Ctrl
-    Pty --> GDB
-    Ctrl --> MI
+    CLI --> GDB
+    MI --> GDB
+    Ctrl --> Parser
 ```
 
 **Dependency rules:**
@@ -97,8 +105,105 @@ flowchart TB
 - `internal/gdb`, `internal/dlv`, and `internal/ptyx` must not import `internal/termui`
 - `DebuggerApp` owns `backend.Backend` (concrete GDB or Delve client); views never hold `Session`
 - External APIs use `app.GDB() core.Session` (works for `-g dlv` too)
-- Prefer `Backend` methods over new `isDLV()` branches
+- Controllers use **`Backend` semantic ops** (`InsertBreakpoint`, `SelectFrame`, `Exec`, …) and **capability flags** (`NavigationAsync`, `WireCLILineTap`, `DeferBreakpointRefresh`, …) — not `isDLV()` / `isGDB()` branches or MI string literals in `cmd/gdbforge/`
 - Never `Close()` the session from MCP/AI — the app owns lifetime
+
+---
+
+## Unified backend API
+
+Controllers (`breakCtl`, `debugInfoCtl`, `consoleCtl`, stop pipeline / `code_nav`, `inferiorIOCtl`) are **protocol-agnostic**. They talk to shared domain types and a single **`backend.Backend`** interface; GDB MI and Delve rpc2/CLI details stay inside `GDBBackend` and `DLVBackend`.
+
+```mermaid
+flowchart TB
+  subgraph ui ["Controllers — protocol-agnostic"]
+    breakCtl[breakCtl]
+    debugInfoCtl[debugInfoCtl]
+    consoleCtl[consoleCtl]
+    stopped[stopped / code_nav]
+    inferiorIO[inferiorIOCtl]
+  end
+
+  subgraph shared ["Shared domain"]
+    models["models.* · BreakInfo StackFrame ThreadInfo"]
+    debuggerPkg["debugger.* · StopInfo ConsoleUpdate InferiorIO"]
+  end
+
+  subgraph api ["Backend interface"]
+    BackendIface[backend.Backend]
+    Capabilities["Capabilities · NavigationAsync WireCLILineTap DeferBreakpointRefresh …"]
+    SemanticOps["Semantic ops · InsertBreakpoint SelectFrame Exec FetchStackList …"]
+  end
+
+  subgraph gdb_impl ["GDBBackend"]
+    GdbCLI["CLI PTY → GDBWidget"]
+    GdbMI["MI PTY → GdbInputState"]
+    GdbOps["MI strings inside backend only"]
+  end
+
+  subgraph dlv_impl ["DLVBackend"]
+    DlvCLI["dlv connect PTY → human console"]
+    DlvRPC["go-delve rpc2 → machine ops"]
+    DlvParse["dlv.InputState → ConsoleUpdate"]
+  end
+
+  ui --> BackendIface
+  ui --> models
+  ui --> debuggerPkg
+  BackendIface --> Capabilities
+  BackendIface --> SemanticOps
+  BackendIface --> gdb_impl
+  BackendIface --> dlv_impl
+  inferiorIO --> debuggerPkg
+```
+
+Source: [`docs/diagrams/unified_backend.mermaid`](diagrams/unified_backend.mermaid).
+
+### Shared domain (`internal/gdbforge/models`, `internal/gdbforge/debugger`)
+
+| Package | Types | Used by |
+|---------|-------|---------|
+| `models` | `BreakInfo`, `StackFrame`, `ThreadInfo`, list merge helpers | Controllers, widgets, MCP parsers |
+| `debugger` | `StopInfo`, `FrameInfo`, `ConsoleUpdate` | Stop pipeline, `consoleCtl`, inferior routing (`InferiorIO`) |
+
+Controllers **merge snapshots** into `models.*` lists and paint widgets. The stop pipeline builds `debugger.StopInfo` from backend console updates — widgets never parse MI or Delve text.
+
+### `backend.Backend` surface
+
+**Semantic ops** (controllers call these instead of crafting MI / CLI):
+
+| Op | Purpose |
+|----|---------|
+| `InsertBreakpoint` / `ClearBreakpointAt` / `DisableBreakpoint` / … | Breakpoint intents from Code, BP pane, Space |
+| `SelectFrame` / `SelectThread` | Call stack / thread pane navigation |
+| `Exec` / `ExecUI` | `-exec-*` or Delve CLI equivalents |
+| `FetchStackList` / `RefreshThreadsAndStack` / `FetchBreakpoints` | Pane refresh queries |
+| `PushConsoleOutput` | PTY chunk → `debugger.ConsoleUpdate` |
+
+**Capability flags** (replace scattered `isDLV()` routing):
+
+| Flag | GDB | Delve |
+|------|-----|-------|
+| `NavigationAsync()` | false — MI frame select is synchronous | true — rpc2 + deferred code refresh |
+| `WireCLILineTap()` | false | true — Delve CLI line buffer for run/stack side effects |
+| `DeferBreakpointRefresh()` | false | true — defer `breakpoints` query during `[Y/n]?` |
+| `BreakRefreshImmediate()` | true — `=breakpoint-*` triggers refresh | false |
+| `RequiresInferiorTTYRestart()` | false — live `-inferior-tty-set` | true — `--tty` fixed at spawn |
+| `PaintTargetInConsole()` | false | true — mirror inferior stdout in debugger pane |
+
+Implementation files: `backend/gdb_backend.go`, `backend/dlv_backend.go`, `backend/ops.go`, `backend/break_cmds.go`, `backend/dlv_rpc.go`.
+
+### GDB vs Delve implementation split
+
+| Layer | GDB | Delve |
+|-------|-----|-------|
+| Human console | CLI PTY #1 → `GDBWidget` | `dlv connect` PTY → `GDBWidget` |
+| Machine control | MI PTY #2 → `GdbInputState` | **go-delve `rpc2`** (`Client.RPC`) |
+| Inferior stdio | PTY #3 or external `-inferior-tty-set` | `--tty` slave (restart to switch) |
+| Protocol strings | `-break-insert`, `-stack-select-frame`, … **only in backend** | rpc2 methods + CLI fallback scrape |
+
+Lua extensions (`gdbforge.gdb`, `set_inferior_tty`, probe spawn scripts) remain unchanged — they orchestrate external tools and call the same host APIs; they do not import `backend` directly.
+
 ---
 ## Debugger interface
 
@@ -142,16 +247,24 @@ These will emit `core.Event` updates rather than synchronous returns.
 
 ## PTY mux
 
-gdbforge uses **two** PTY roles for a debug session:
+gdbforge uses **one unified type** — `*ptyx.TTY` (`Start` / `Open` / `AttachPath`) — for all PTY roles.
 
-| PTY | Type | Role |
-|-----|------|------|
-| **GDB / MI** | `ptyx.Client` | GDB process (`--interpreter=mi2`); commands and MI records |
-| **Inferior / program** | `ptyx.TTY` | Debugged program stdin/stdout; wired with `-inferior-tty-set` |
+### GDB (3 PTYs)
 
-### GDB PTY (`ptyx.Client`)
+| PTY | Created | Role | UI |
+|-----|---------|------|-----|
+| **#1 CLI** | `ptyx.Start(gdb …)` — **no** `--interpreter=mi2` | Native GDB console (readline) | `:b gdb` via `WireCLI` → `CompositeTerminal` |
+| **#2 MI** | `ptyx.Open()` + `new-ui mi2 /dev/pts/N` | Backend `core.Session`; MI parser | No widget — `consoleCtl` bridge only |
+| **#3 Inferior** | `ptyx.Open()` or `AttachPath` | Program stdin/stdout | `:b io` via `WireInferior` → `CompositeTerminal` |
 
-One `ptmx` for GDB. Two rules:
+### Delve (2 PTYs)
+
+| PTY | Role | UI |
+|-----|------|-----|
+| **#1 CLI** | `dlv exec` / `dlv connect` — parser on same stream | `:b gdb` via `WireCLI` |
+| **#2 Inferior** | `dlv exec --tty` | `:b io` via `WireInferior` |
+
+### Write / read rules (MI PTY and Delve CLI PTY)
 
 | Direction | Rule |
 |-----------|------|
@@ -162,9 +275,9 @@ Writers (`PTYOwner` on `AppState`):
 
 | Owner | Who | Console paint |
 |-------|-----|---------------|
-| `ui` | GDB / Exec / IO console submit (app controller) | Yes (always) |
-| `mcp` | `:AI` / `GdbCommand` | Painted by default; `:set nogdblistenprint` to silence |
-| `app` | Silent MI / App writes: `-break-list`, file list, breakpoint toggle/delete, stop-driven thread/stack Query | Painted by default; `:set nogdblistenprint` to silence |
+| `ui` | GDB / Exec / IO console (keys → PTY via `WireTTY`) | Yes (xterm emulator) |
+| `mcp` | `:AI` / `GdbCommand` | MI stream only; optional mirror via `GdbTargetPrint` |
+| `app` | Silent MI / App writes: `-break-list`, file list, breakpoint toggle/delete, stop-driven thread/stack Query | MI stream only |
 
 ```mermaid
 flowchart LR
@@ -175,61 +288,65 @@ flowchart LR
   UI --> Lock
   MCP --> Lock
   App --> Lock
-  Lock --> PTMX["GDB ptmx"]
-  PTMX --> Fan["broadcast"]
-  Fan --> ChUI["UI Subscribe"]
+  Lock --> MIPTY["MI ptmx"]
+  MIPTY --> Fan["broadcast"]
+  Fan --> ChUI["consoleCtl Subscribe"]
   Fan --> ChMCP["MCP Subscribe"]
 ```
 
-GDB and exec (`:!`) both use `*ptyx.Client` owned by the app. UI bridges convert `PtyOutputMsg` → `GdbOutputMsg` / `ExecOutputMsg` / `InferiorOutputMsg` for interrupt routing.
+GDB CLI and exec (`:!`) use separate `*ptyx.TTY` instances wired with `WireTTY`. The MI bridge coalesces `PtyOutputMsg` → `GdbOutputMsg` for the parser only — **not** for GDB pane paint (CLI bytes paint via `WireTTY` on PTY #1).
 
-## Inferior I/O (dual PTY)
+## Inferior I/O (dual / triple PTY)
 
 > **Architecture overview (master/slave, Delve TCP, external terminal diagrams):** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md).
 
-There is **no** GDB MI command that writes program stdin. gdbforge allocates a bare PTY (`ptyx.OpenTTY`), keeps the **master** in-process, and tells GDB to attach the inferior to the **slave**:
+There is **no** GDB MI command that writes program stdin. gdbforge allocates a bare PTY (`ptyx.Open`), keeps the **master** in-process, and tells GDB to attach the inferior to the **slave**:
 
 ```text
-gdbforge
- ├── PTY #1 master  ←→  gdb (MI / CLI)
- └── PTY #2 master  ←→  program stdin/stdout   ← IO console (:b io)
+gdbforge (GDB session)
+ ├── PTY #1 CLI master  ←→  gdb console (user types here in :b gdb)
+ ├── PTY #2 MI master   ←→  gdb MI backend (Send/Subscribe for app/MCP)
+ └── PTY #3 master      ←→  program stdin/stdout   ← IO pane (:b io)
          │
-         └── slave path → GDB: -inferior-tty-set /dev/pts/N
+         └── slave path → GDB: -inferior-tty-set /dev/pts/N (via MI PTY)
 ```
 
 | Side | Who holds it | Purpose |
 |------|----------------|---------|
-| Master (PTY #2) | gdbforge (`ptyx.TTY`) | Read program stdout; write program stdin |
-| Slave (PTY #2) | inferior (via GDB) | Program’s terminal |
+| Master (PTY #3) | gdbforge (`*ptyx.TTY`) | Read program stdout; write program stdin via `WireTTY` |
+| Slave (PTY #3) | inferior (via GDB) | Program’s terminal |
 
-**Startup** (`gdb.NewGDBClient`):
+**Startup** (`gdb.NewGDBClientOpts`):
 
-1. Start GDB on PTY #1 (`ptyx.New`) with `--interpreter=mi2` and `-iex set pagination off` (unless the user already disabled pagination)
-2. Wait up to **90s** for the first `(gdb)` prompt so `-x` / `-ex` scripts (`target remote`, `load`, …) can finish before app MI
-3. Capture startup PTY bytes for replay into the GDB pane
-4. `ptyx.OpenTTY()` → PTY #2
-5. Send `-inferior-tty-set <slaveName>` only after the first prompt
+1. Start GDB in **console mode** on PTY #1 (`ptyx.Start`) — **no** `--interpreter=mi2`
+2. Wait up to **90s** for the first `(gdb)` prompt on CLI PTY
+3. `ptyx.Open()` → PTY #2 (MI); send `new-ui mi2 <slave path>` on CLI PTY
+4. Wait for MI ready on PTY #2
+5. Send **`-gdb-set mi-async on`** on MI PTY — required so GDB keeps reading MI while the target runs ([details](PTY_ARCHITECTURE.md#three-channels-working-together-and-why-new-ui-needs-extra-setup))
+6. `ptyx.Open()` or `AttachPath` → PTY #3 (inferior)
+7. Send `-inferior-tty-set <slaveName>` on **MI PTY** only after MI is ready
+8. Wire CLI PTY → `GDBWidget`; inferior PTY → `OutputWidget` via `WireTTY`
 
 Pass GDB options after `--`: `gdbforge -- -nx -x script.gdb elf`. `gdb.HasInitScript` detects `-x`/`-ex` so the app skips default `break main` when an init script is present.
 
 ### External terminal stdio (TUI targets)
 
-The IO pane is a **line console**, not a full VT emulator. For TUI inferiors (gdbforge itself, htop, games, …) **or** programs that flood stdout, route stdio to a **real terminal** instead.
+For TUI inferiors (htop, games, …) or programs that need a **real** terminal emulator, route stdio externally instead of the in-app IO pane.
 
 **`:b io` vs `:set inferior-tty`**
 
 | | `:b io` (internal) | `:set inferior-tty` (external) |
 |--|--------------------|--------------------------------|
-| Best for | Normal debug prints, short interactive prompts | TUI/curses, high-rate `printf`, anything that needs a real VT |
-| Smoothness under flood | Interruptible (Ctrl-C / backpressure), paint less smooth than a dedicated emulator — **known GUI limit** | Emulator owns display; typically smooth like “native GDB + xterm” |
-| Who holds PTY master | gdbforge (`ptyx.TTY`) → UI event loop | `GDBFORGE_TERMINAL` (mate-terminal, kitty, …) |
+| Best for | Normal debug prints, interactive shells in-pane | Full-screen TUI/curses, dedicated emulator |
+| Rendering | `CompositeTerminal` (xterm in tcell) | External emulator owns display |
+| Who holds PTY master | gdbforge (`*ptyx.TTY`) → `WireTTY` | `GDBFORGE_TERMINAL` (kitty, xterm, …) |
 
 **Advantages of `:set inferior-tty`:** smooth high-volume output, real VT features, program I/O does not compete with gdbforge’s debugger panes for redraw, live attach on GDB (`-inferior-tty-set` without restart).
 
 | Mode | How | IO pane |
 |------|-----|---------|
 | **internal** (default) | Internal PTY + wire `:b io` | Program stdin/stdout |
-| **external** | `:set inferior-tty` (opens terminal), `GDBFORGE_INFERIOR_TTY`, Lua `open_external_tty` / `set_inferior_tty` | Note only — no subscribe |
+| **external** | `:set inferior-tty` or `:set inferior-tty external` (opens terminal), `GDBFORGE_INFERIOR_TTY`, Lua `open_external_tty` / `set_inferior_tty("external")` | Note only — no subscribe |
 
 | | **GDB** | **Delve (`-g dlv`)** |
 |--|---------|----------------------|
@@ -256,13 +373,14 @@ Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an
 
 | Action | Path |
 |--------|------|
-| Program prints | App `Subscribe` → `InferiorOutputMsg` → `AppendInferior` |
-| User types + Enter | View `OnSubmit` → app `TTY.Send(line)` |
-| Ctrl-C / Ctrl-D | View intents → app `SendRaw` to **inferior** (not GDB) |
-| Ctrl-Z | Global / IO: `SuspendInferior` — prefer `^Z` (`\x1a`) on the inferior PTY; else `kill(SIGTSTP)` |
-| Pane resize | View `SetSizeFunc` → app `TTY.SetSize` |
+| Program prints | `WireTTY` → `CompositeTerminal` (xterm paint) |
+| User keys | `CompositeTerminal.HandleKey` → `WireTTYInput` → `tty.SendRaw` |
+| Host lines (`[lua] …`) | `WriteHostLine` / `AppendHostLine` (inject-only, not a PTY) |
+| Ctrl-C / Ctrl-D / Ctrl-Z | Raw bytes to **inferior** PTY via xterm key trie |
+| Pane resize | `CompositeTerminal.Resize` → `tty.SetSize` |
+| Serial kgdb console | `:terminal` wires `serialmux.TermTTY()` to IO pane (or `GDBFORGE_EXTERNAL_SERIAL=1` for minicom) |
 
-The widget does **not** hold `*ptyx.TTY`; wiring lives in `cmd/gdbforge/io_console.go`.
+Wiring policy lives in `cmd/gdbforge/io_console.go` (`inferiorIOCtl`); the widget holds `CompositeTerminal` only.
 
 **Separation rules:**
 
@@ -274,16 +392,18 @@ The widget does **not** hold `*ptyx.TTY`; wiring lives in `cmd/gdbforge/io_conso
 ```mermaid
 flowchart LR
   subgraph gdbforge
-    GDBPane["GDB pane"]
-    IOPane["IO pane"]
-    M1["PTY#1 master"]
-    M2["PTY#2 master"]
+    GDBPane["GDB pane · CLI PTY"]
+    IOPane["IO pane · inferior PTY"]
+    M1["PTY#1 CLI"]
+    M2["PTY#2 MI"]
+    M3["PTY#3 inferior"]
   end
   GDBPane --> M1
-  IOPane --> M2
-  M1 --> GDB["gdb"]
-  M2 --> PROG["program"]
-  GDB -.->|"-inferior-tty-set slave"| PROG
+  IOPane --> M3
+  M1 --> GDB["gdb console"]
+  M2 --> GDB
+  GDB -.->|"-inferior-tty-set"| M3
+  M3 --> PROG["program"]
 ```
 
 **Session model on AppState:** `SourceFiles` (refreshed from `-file-list-exec-source-files` on stop / `:edit`), `StopFile` / `StopLine` (**StopLocation** — real PC from `*stopped`, drives ━━▶), `CurrentFile` / `CurrentLine` (browse / frame selection — blue cursor), theme colors (`MarkColor`, `MarkDimColor`, `BreakColor`, `BreakDisabledColor`, `BreakCondColor`, `PCColor`, `StackBreakColor`, `CodeSelColor`, `MutedColor`; see `:set`), `EscToCode` (Esc focuses CodeWidget; `:set esctocode` / `:set noesctocode`; default **on**), `BreakMain` (insert `break main` on GDB session start; skipped when restoring `./.gdbforge/breakpoints.yaml` or when `HasInitScript`; `:set breakmain` / `:set nobreakmain`; default **on**), `GdbListenPrint` (paint App/MCP replies in GDB console; `:set gdblistenprint` / `:set nogdblistenprint`; default **on**), `ContinueAfterClear`. Each open source file has its own CodeWidget (`:edit name`); `:b filename` switches among open file buffers and builtins. `:edit` opens a FileListWidget of project sources. When source is missing and the backend supports assembly, `asmCtl.autoAsm` swaps the location leaf to Assembly and reclaims Code when a readable frame returns. Breakpoint gutters sync via `=breakpoint-*` / Space hooks → coalesced `-break-list` into `BreakGutter` maps (line and addr).
@@ -296,16 +416,20 @@ Breakpoints are coordinated across the debugger console, CodeWidget, AssemblyWid
 
 ## Breakpoints while the inferior is running
 
-While the program is in `continue` / `^running`, sync GDB does not process a queued `break` until the target stops. Space (and BreakpointWidget e/`d`) therefore:
+While the program is in `continue` / `^running`, GDB will not process a queued `break` until the target stops. Space (and BreakpointWidget e/`d`) go through `backend` → `gdb.SendCmd`, which:
 
-1. Send Ctrl-C (`\x03`) to interrupt
-2. Send `break` / `clear` / `-break-delete`
-3. On **insert** (`break` / `tbreak` / `-break-insert`): send `continue` so execution can hit the new breakpoint
-4. On **remove** (`clear` / `-break-delete`): send `continue` only if `:set continueafterclear` (default **off** — stay stopped)
+1. Sends **`-exec-interrupt`** on the **MI PTY** (`gdb.MIExecInterrupt`) via `sendDebuggerCmdGDB` — not `\x03` on the MI pty ([why](PTY_ARCHITECTURE.md#three-channels-working-together-and-why-new-ui-needs-extra-setup))
+2. Sends `break` / `clear` / `-break-delete`
+3. On **insert**: sends `continue` so execution can hit the new breakpoint
+4. On **remove**: sends `continue` only if `:set continueafterclear` (default **off**)
 
-Other App PTY commands (`-stack-select-frame`, `-thread-select`, …) also interrupt when running, but **do not** auto-`continue` — a surprise resume was resuming the inferior after call-stack / thread clicks.
+Requires **`-gdb-set mi-async on`** at GDB startup (`miAsyncOn` in `gdb_client.go`).
 
-`AppState.InferiorRunning` tracks `^running` → `*stopped` for this path. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
+**UI Ctrl-C:** `GDBBackend.Interrupt` → `GDBClient.Interrupt()` → `-exec-interrupt` when running; `InterruptIdle()` at idle prompt.
+
+Other App commands (`-stack-select-frame`, `-thread-select`, …) also interrupt via the same MI path but **do not** auto-`continue`.
+
+`AppState.InferiorRunning` tracks `^running` → `*stopped`. `AppState.ContinueAfterClear` is toggled with `:set continueafterclear` / `:set nocontinueafterclear`.
 
 ### Builtins and keys
 
@@ -443,27 +567,38 @@ Run gdbforge from the project/build dir so the YAML matches the sources you debu
 
 ### Client startup
 
-`gdb.NewGDBClient()` wraps `ptyx.Client` (`gdb_client.go` / `ptyx/client.go`):
+`gdb.NewGDBClientOpts()` (`gdb_client.go`):
 
-1. Builds `gdb --interpreter=mi2` argv; injects `-iex set pagination off` unless already set.
+1. Builds GDB argv in **console mode** (no `--interpreter=mi2`); injects `-iex set pagination off` unless already set.
 2. Appends user `gdbArgs` after `--` (e.g. `-nx -x script.gdb elf`).
-3. `ptyx.New` — PTY, raw mode, reader fan-out.
-4. Waits for the first `(gdb)` (up to 90s); captures startup output for the GDB pane.
-5. Opens inferior PTY and sends `-inferior-tty-set` only after that prompt.
+3. `ptyx.Start` → **CLI PTY** (#1); `ptyx.Open` → **MI PTY** (#2) and **inferior PTY** (#3).
+4. Waits for `(gdb)` on CLI PTY (up to 90s); captures startup bytes for `WriteBoot`.
+5. Sends `new-ui mi2 <MI slave path>` on CLI PTY; waits for MI ready on PTY #2.
+6. Sends `-gdb-set mi-async on` on MI PTY (constant `miAsyncOn`).
+7. Sends `-inferior-tty-set <inferior slave path>` on MI PTY.
 
 ```go
-argv := []string{"gdb", "--interpreter=mi2", "-iex", "set pagination off", "hello"}
-pty, err := ptyx.New(argv, ptyx.Options{})
+cli, _ := ptyx.Start([]string{"gdb", "-iex", "set pagination off", "hello"}, ptyx.Options{})
+mi, _ := ptyx.Open()
+// cli.Send("new-ui mi2 " + mi.SlaveName())
+// mi.Send("-gdb-set mi-async on")
+// mi.Send("-inferior-tty-set " + inf.SlaveName())
 ```
 
-**Current limitation:** reply correlation (tokenized MI → waiter) is not built yet — `GdbCommand` uses idle/max window capture on the raw stream.
+`GDBClient` embeds `*ptyx.TTY` as the **MI** session (`core.Session`). `CLITTY()` returns PTY #1 for the GDB pane.
+
+**Quit / exit:** typing `q`/`quit` in the GDB pane goes to the CLI PTY. When GDB exits, `WireCLI` `OnExit` and/or the MI bridge posts `"gdb-exit"` → `app.Exit()` (cgdb-like).
+
+**Current limitation:** reply correlation (tokenized MI → waiter) is not built yet — `GdbCommand` uses idle/max window capture on the MI stream.
 
 ### Send paths
 
 | Method | Use |
 |--------|-----|
 | `Send(cmd)` | Append `\n`, send CLI/MI command (takes write lock) |
-| `SendRaw(raw)` | Send raw bytes (SIGINT, …) under write lock |
+| `SendRaw(raw)` | Send raw bytes under write lock (Delve inline `^C`; inferior PTY) |
+| `Interrupt()` | Stop running inferior: `-exec-interrupt` on MI PTY |
+| `InterruptIdle()` | Idle GDB prompt: SIGINT + `^C` on CLI PTY (`Quit`) |
 | `SuspendInferior()` | SIGTSTP like terminal Ctrl-Z (`^Z` on inferior PTY or `kill`) |
 | `WithWrite(ctx, fn)` | Hold write lock for multi-step MCP capture |
 | `CLIExecToMI(cmd)` | Map CLI `next`/`step`/`continue`/… → `-exec-*` so console/`n`/`s`/`c` do not dump source into the GDB pane; Code follows `*stopped` |
@@ -478,7 +613,7 @@ for msg := range ch {
 }
 ```
 
-`Close()` (or `cancel`) closes subscription channels → `GDBWidget` receives `"gdb-exit"` when its subscription ends.
+`Close()` (or `cancel`) closes subscription channels. When the debugger process exits, the MI bridge posts `"gdb-exit"`; CLI `WireTTY` `OnExit` does the same — `HandleInterrupt` calls `app.Exit()`.
 
 ---
 
@@ -567,101 +702,87 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 
 ---
 
-## GDB console bridge (MVC)
+## GDB console bridge
 
-`GDBWidget` is a **display-only** console view. The app owns the session and MI policy (`cmd/gdbforge/gdb_console.go`):
+`GDBWidget` is a **dumb terminal view** (`CompositeTerminal` + `WireCLI`). The app owns MI policy on PTY #2 (`cmd/gdbforge/gdb_console.go`):
 
 ```text
-InputLine  →  ConsolePane  →  GDBWidget (view)
-(edit/hist)   (scrollback)      ↑ paint / OnSubmit
-                              DebuggerApp controller
-                                → GDBClient → ptyx
+User keys  →  CompositeTerminal.HandleKey  →  WireTTYInput  →  CLI PTY
+CLI bytes  →  WireTTY  →  xterm emulator  →  GDBWidget.Draw
+MI bytes   →  consoleCtl bridge  →  GdbInputState  →  models / stop pipeline
 ```
 
-`initBuiltins` creates `gdb.NewGDBClient`; `startGdbConsoleBridge` coalesces `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB). Presentation is a **native GDB session** (`(gdb) b main` then raw console output, including `make`/`shell` text and ANSI when present). GDB console ANSI is enabled (`SetANSI(true)`).
+`initBuiltins` creates `gdb.NewGDBClientOpts`; `wireCLI` attaches CLI PTY with `OnExit`; `startGdbConsoleBridge` coalesces **MI** `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB) for parsing only — **not** GDB pane paint.
 
-**Job control (Ctrl-Z):** `onGdbConsoleSuspend` — if `InferiorRunning`, `SuspendInferior`; otherwise `TermApp.Suspend` uses tcell `Screen.Suspend`/`Resume` (not `Fini`/`Init`, which break on the second suspend with “already engaged”). Bound globally via `withGlobalKeys` in every mode — see [INPUT.md](INPUT.md).
+**Job control (Ctrl-Z):** `onGdbConsoleSuspend` — if `InferiorRunning`, `SuspendInferior`; otherwise `TermApp.Suspend`. Bound globally — see [INPUT.md](INPUT.md).
 
 ```mermaid
 sequenceDiagram
     participant User
     participant GDBW as GDBWidget
-    participant Cons as ConsolePane
-    participant Ctrl as DebuggerApp
-    participant State as GdbInputState
-    participant Client as GDBClient
+    participant Term as CompositeTerminal
+    participant CLI as CLI PTY
+    participant Ctrl as consoleCtl
+    participant MI as MI PTY
     participant GDB as GDB
 
-    User->>Cons: type / Enter
-    Cons->>Ctrl: OnSubmit(cmd)
-    Ctrl->>GDBW: EchoSubmit / ClearInput
-    Ctrl->>Client: Send(cmd)
-    Client->>GDB: PTY write
-    GDB-->>Client: MI output chunk
-    Client-->>Ctrl: EventInterrupt GdbOutputMsg
-    Ctrl->>State: PushRaw(chunk)
-    State-->>Ctrl: MiUpdate
-    Ctrl->>GDBW: PaintMiDisplay
+    User->>Term: type / Enter
+    Term->>CLI: SendRaw
+    CLI->>GDB: console input
+    GDB-->>CLI: console output
+    CLI-->>Term: WireTTY → xterm paint
+    GDB-->>MI: MI records
+    MI-->>Ctrl: GdbOutputMsg
+    Ctrl->>Ctrl: PushRaw → MiUpdate
 ```
 
 | Component | File | Role |
 |-----------|------|------|
-| `InputLine` | `termui/input_line.go` | Text, cursor, readline history/editing |
-| `ConsolePane` | `termui/console_pane.go` | Scrollback Viewport, walking prompt, `EchoSubmit` |
-| `GDBWidget` | `widgets/gdb_widget.go` | View — `SetOnSubmit` / paint APIs only |
-| Controller | `cmd/gdbforge/gdb_console.go` | Owns client bridge, MI, quit gate, Send |
-| `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` |
-| `ptyx.Client` | `ptyx/client.go` | Shared PTY mux |
+| `CompositeTerminal` | `termui/composite_terminal.go` | xterm emulator + key trie + `WireTTY` |
+| `WireTTY` | `termui/wire_tty.go` | PTY bytes ↔ terminal controller |
+| `GDBWidget` | `widgets/gdb_widget.go` | View — `WireCLI`, `Draw`, focus cursor |
+| `consoleCtl` | `cmd/gdbforge/gdb_console.go` | MI bridge, quit, `OnExit`, Send on MI PTY |
+| `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` (MI PTY only) |
+| `ptyx.TTY` | `internal/ptyx/tty.go` | Unified PTY: `Start` / `Open` / `AttachPath` |
 
-### Console layout (walking prompt)
+### Console layout
 
-Terminal-style after `Ctrl+L` (clear / screen reset) — owned by `termui.ConsolePane`:
+The GDB pane uses a full **xterm emulator** (scrollback, ANSI, cursor at emulator position). GDB’s native readline draws `(gdb)` prompts and echo — gdbforge does not synthesize a walking prompt on top.
 
-1. Empty scrollback → `(gdb)` + caret at **top-left**.
-2. Each new output line → prompt moves **one row down**.
-3. While free rows remain → leave blank space below; do **not** jump the prompt to the bottom.
-4. When the pane is full → pin prompt to the last row and scroll the viewport (`followTail`).
-
-While the user scrolls history (`followTail` off), the prompt stays on the bottom row.
-
-Echo is `prompt+cmd` only (native GDB session, not chat labels).
-
-Draw highlights:
-
-- Lines starting with `>>>` — teal bold (future: stop reason).
-- Echoed / prompt text with `(gdb)` — yellow.
+**Lua REPL** still uses `ConsolePane` + `InputLine` (line-based REPL, not a raw tty).
 
 ---
 
 ## Delve backend (peer of GDB)
 
-Delve plugs into the **same** architecture as GDB — no new control plane:
+Delve plugs into the **same** unified backend as GDB:
 
 | Piece | Role |
 |-------|------|
 | CLI | `gdbforge -g dlv [-d dlv] prog [args…]` |
-| `backend.DLVBackend` | Policy wrapper; `DebuggerApp.backend` |
-| `internal/dlv.Client` | Implements `core.Session` over `ptyx` (`dlv exec -- prog…`) |
-| `dlv.InputState` | Peer of `GdbInputState` — parse `(dlv)` prompt, `[Y/n]?` confirms, `> file:line` stops, BP lines |
+| `backend.DLVBackend` | Semantic ops + capabilities; `DebuggerApp.backend` |
+| `internal/dlv.Client` | Headless `dlv exec --headless --accept-multiclient` + **rpc2** dial + `dlv connect` CLI PTY |
+| `Client.RPC` | `go-delve/delve/service/rpc2` — breakpoints, threads, stack, exec, halt |
+| `dlv.InputState` | CLI PTY parser → `debugger.ConsoleUpdate` (prompt, confirms, display lines) |
 | Console | Same `GDBWidget` + `consoleCtl`; prompt token `(dlv)` |
-| Pane refresh | Via `Backend` + local branches in `stopped.go` / `breakpoints.go`: `breakpoints`, `stack`, `goroutines` |
+| Pane refresh | `Backend.FetchStackList`, `RefreshThreadsAndStack`, `FetchBreakpoints` (rpc2-first) |
 
 ```mermaid
 flowchart LR
   CLI["gdbforge -g gdb|dlv"] --> App["DebuggerApp"]
   App --> BE["backend.Backend"]
-  BE --> GDB["gdb.GDBClient"]
-  BE --> DLV["dlv.Client"]
-  GDB --> Sess["core.Session"]
-  DLV --> Sess
-  Sess --> PTY["ptyx"]
+  BE --> GDB["GDBBackend · gdb.GDBClient"]
+  BE --> DLV["DLVBackend · dlv.Client"]
+  GDB --> Sess["core.Session + MI"]
+  DLV --> RPC["rpc2 machine"]
+  DLV --> PTY["dlv connect PTY"]
 ```
 
-**MVP limits:** Delve CLI output parsing is less structured than MI (known debt). `:edit` source-file list from `-file-list-exec-source-files` is skipped under Delve. MCP/`:AI` tools remain GDB-oriented; the shared `Query` helper still drives pane refreshes with prompt token `(dlv)`.
+**MVP limits:** Delve CLI output parsing remains for human-console edge cases; rpc2 covers machine queries. `:edit` source-file list from `-file-list-exec-source-files` is GDB-only (`SupportsSourceFileList()`). MCP/`:AI` tools remain GDB-oriented; shared `Query` uses prompt token `(dlv)` when on Delve.
 
 **Interactive yes/no:** After the inferior exits, Delve may ask `Set a suspended breakpoint … [Y/n]?`. gdbforge detects that prompt (including when it arrives without a trailing newline), paints it as a live host (same idea as GDB quit confirm), and answers with the next console submit. While confirming, breakpoint `Query("breakpoints")` is deferred so the query line cannot be consumed as `y`/`n`. Ctrl-C at a yes/no prompt sends `n` (cancel); SIGINT/`^C` is only used when the inferior is actually running.
 
-**Tab completion:** GDB console Tab uses MI `-complete`. Under Delve, Tab completes **command names** from a static list, and for `break`/`b`/`trace`/… locspecs it runs `funcs ^<prefix>` (e.g. `b main.` → `main.main`). Symbol completion is prefix-based via Delve’s `funcs` regex — not a full MI-style completer. File:`line` locspecs are not completed yet.
+**Tab completion:** GDB console Tab uses MI `-complete`. Under Delve, Tab completes **command names** from a static list, and for `break`/`b`/`trace`/… locspecs it calls **rpc2 `ListFunctions`** with a regex filter via `ListFunctionsFilter` (e.g. `b main.` → `main.main`) — not the Delve connect CLI `funcs` command on the PTY. Symbol completion is prefix-based; file:`line` locspecs are not completed yet. See the [Flow browser](flows/browser.md#dlv-console-tab) for the full call path.
 
 Examples:
 

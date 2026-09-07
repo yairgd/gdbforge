@@ -79,17 +79,21 @@ tasks:
   docs:
     desc: Serve the MkDocs site locally
     cmds:
-      - python3 -m mkdocs serve --dev-addr 127.0.0.1:8765
+      - ./docs/serve.sh
 
   docs:export:
     desc: Build the static MkDocs site
     cmds:
-      - python3 -m mkdocs build --clean
+      - go run ./cmd/flowdoc --generate
+      - go run ./cmd/flowdoc --check
+      - ./docs/setup-docs-venv.sh
+      - .venv-docs/bin/python -m mkdocs build --clean
 
   docs:preview:
     desc: Preview the production MkDocs build locally
     cmds:
-      - python3 -m mkdocs serve --dev-addr 127.0.0.1:8766 --clean
+      - ./docs/setup-docs-venv.sh
+      - .venv-docs/bin/python -m mkdocs serve --dev-addr 127.0.0.1:8766 --clean
 
   build-linux:
     desc: Cross-compile gdbforge for Linux

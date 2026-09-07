@@ -180,6 +180,12 @@ Inside the app: open `:help`, step with `n` / `s` / `c`, quit with Ctrl-D or `:q
 
 More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./stack_demo`.
 
+## Developers
+
+Full documentation (architecture, debugger integration, input/completion): **[gdbforge docs](https://yairgd.github.io/gdbforge/)** — local preview: `./docs/serve.sh` → <http://127.0.0.1:8765/gdbforge/>.
+
+**Code flows** — searchable call trees (Tab completion, Ctrl-C, stop pipeline, `:gdb continue`, …) with GitHub file:line links: **[Flow browser](https://yairgd.github.io/gdbforge/flows/browser/)**. Analysis uses the official [`x/tools/cmd/callgraph`](https://pkg.go.dev/golang.org/x/tools/cmd/callgraph) (`go tool callgraph -algo vta`); curated triggers live in [`docs/flows/flows.spec.yaml`](docs/flows/flows.spec.yaml) and CI regenerates the catalog with `go run ./cmd/flowdoc --generate`. See also [DEBUGGER_INTEGRATION.md](docs/DEBUGGER_INTEGRATION.md) and [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md).
+
 ## Documentation
 
 | Doc | Contents |

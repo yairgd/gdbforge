@@ -6,7 +6,14 @@ type CellCursor interface {
 	Paint(c Canvas, x, y int, under rune)
 }
 
-// CursorPainter paints a Viewport's logical caret (line/col → local cell).
+// DocCursorHost supplies caret geometry for CursorPainter implementations.
+type DocCursorHost interface {
+	CursorDrawPos() (localX, localY int, under rune, ok bool)
+	HasSelection() bool
+	CursorVisible() bool
+}
+
+// CursorPainter paints a document caret (line/col → local cell).
 type CursorPainter interface {
-	Draw(c Canvas, vp *Viewport)
+	Draw(c Canvas, host DocCursorHost)
 }

@@ -35,3 +35,16 @@ game/effects/lua.junk/
 game/lua-5.2.4/
 game/lua-5.4.6/src/lua
 game/lua-5.4.6/src/luac
+# build artifacts / scratch
+/gdbforge
+/hello
+/hello-go
+/test
+/png
+/output_8.mp4
+/del_relase.txt
+*.junk
+*.mp4.1
+# per-user session state
+.gdbforge/breakpoints.yaml
+.gdbforge/cmdline_history.yaml

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/commands"
+	"github.com/yairgd/gdbforge/internal/demo"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/termui"
 )
@@ -17,8 +18,8 @@ type DemoApp struct {
 	cmdWidget *termui.CmdWidget
 	ctx       platform.AppContext
 
-	mainPane *termui.ConsolePane
-	sidePane *termui.ConsolePane
+	mainPane *demo.ScrollPane
+	sidePane *demo.ScrollPane
 	logPane  *termui.LoggerWidget
 	builtins map[string]termui.Widget
 }

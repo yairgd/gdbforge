@@ -7,7 +7,7 @@ import (
 
 // BreakpointList is the shared breakpoint model for GUI and MCP/AI.
 // It keeps disabled rows that are absent from GDB. Controllers send the
-// returned MI/CLI commands; views only display Items().
+// returned BreakIntent to the backend; views only display Items().
 type BreakpointList struct {
 	items []BreakInfo
 }
@@ -121,7 +121,7 @@ func breakKey(it BreakInfo) string {
 	return fmt.Sprintf("num:%d", it.Number)
 }
 
-// BreakLoc formats a location for GDB break/clear.
+// BreakLoc formats a location for display (not a debugger command).
 func BreakLoc(it BreakInfo) string {
 	if it.File != "" && it.Line > 0 {
 		file := it.File
@@ -133,52 +133,55 @@ func BreakLoc(it BreakInfo) string {
 	return "?"
 }
 
+func breakIntentClear(it BreakInfo) BreakIntent {
+	if it.Number > 0 {
+		return BreakIntent{Kind: IntentDeleteByNumber, Number: it.Number, File: it.File, Line: it.Line, Addr: it.Addr}
+	}
+	return BreakIntent{Kind: IntentClear, File: it.File, Line: it.Line, Addr: it.Addr}
+}
+
+func breakIntentInsert(it BreakInfo) BreakIntent {
+	return BreakIntent{Kind: IntentInsert, File: it.File, Line: it.Line, Addr: it.Addr}
+}
+
 // ToggleEnableAt disables (delete from GDB, keep row) or re-enables (break).
-// Returns the command to send, or "" if nothing to do.
-func (b *BreakpointList) ToggleEnableAt(index int) (cmd string, ok bool) {
+// Returns the semantic intent to send, or false if nothing to do.
+func (b *BreakpointList) ToggleEnableAt(index int) (intent BreakIntent, ok bool) {
 	if b == nil || index < 0 || index >= len(b.items) {
-		return "", false
+		return BreakIntent{}, false
 	}
 	it := b.items[index]
-	loc := BreakLoc(it)
 	if it.Enabled {
-		if it.Number > 0 {
-			cmd = fmt.Sprintf("-break-delete %d", it.Number)
-		} else {
-			cmd = "clear " + loc
-		}
+		intent = breakIntentClear(it)
 		it.Enabled = false
 		it.Number = 0
 		b.items[index] = it
-		return cmd, true
+		return intent, true
 	}
 	it.Enabled = true
 	b.items[index] = it
-	return "break " + loc, true
+	return breakIntentInsert(it), true
 }
 
-// DeleteAt removes the row and returns a GDB delete/clear command when enabled.
-func (b *BreakpointList) DeleteAt(index int) (cmd string, ok bool) {
+// DeleteAt removes the row and returns a delete/clear intent when enabled.
+func (b *BreakpointList) DeleteAt(index int) (intent BreakIntent, ok bool) {
 	if b == nil || index < 0 || index >= len(b.items) {
-		return "", false
+		return BreakIntent{}, false
 	}
 	it := b.items[index]
+	var out BreakIntent
 	if it.Enabled {
-		if it.Number > 0 {
-			cmd = fmt.Sprintf("-break-delete %d", it.Number)
-		} else {
-			cmd = "clear " + BreakLoc(it)
-		}
+		out = breakIntentClear(it)
 	}
 	b.items = append(b.items[:index], b.items[index+1:]...)
-	return cmd, true
+	return out, true
 }
 
 // ToggleEnableAtFileLine is BreakpointWidget "e" at file:line (for Code e).
 // If codeHasEnabled and there is no row yet, inserts an enabled stub then disables.
-func (b *BreakpointList) ToggleEnableAtFileLine(file string, line int, codeHasEnabled bool) (cmd string, index int, ok bool) {
+func (b *BreakpointList) ToggleEnableAtFileLine(file string, line int, codeHasEnabled bool) (intent BreakIntent, index int, ok bool) {
 	if b == nil || file == "" || line < 1 {
-		return "", -1, false
+		return BreakIntent{}, -1, false
 	}
 	base := filepath.Base(file)
 	idx := -1
@@ -193,7 +196,7 @@ func (b *BreakpointList) ToggleEnableAtFileLine(file string, line int, codeHasEn
 	}
 	if idx < 0 {
 		if !codeHasEnabled {
-			return "", -1, false
+			return BreakIntent{}, -1, false
 		}
 		b.items = append(b.items, BreakInfo{
 			File:    file,
@@ -202,55 +205,49 @@ func (b *BreakpointList) ToggleEnableAtFileLine(file string, line int, codeHasEn
 		})
 		idx = len(b.items) - 1
 	}
-	cmd, ok = b.ToggleEnableAt(idx)
-	return cmd, idx, ok
+	intent, ok = b.ToggleEnableAt(idx)
+	return intent, idx, ok
 }
 
 // ToggleInsertClear is Code Space: clear if enabled at location, else break.
 // Updates the model optimistically; controller should still refresh from GDB.
-func (b *BreakpointList) ToggleInsertClear(file string, line int) (cmd string, ok bool) {
+func (b *BreakpointList) ToggleInsertClear(file string, line int) (intent BreakIntent, ok bool) {
 	if b == nil || file == "" || line < 1 {
-		return "", false
+		return BreakIntent{}, false
 	}
-	loc := fmt.Sprintf("%s:%d", filepath.Base(file), line)
 	if b.HasEnabledAt(file, line) {
 		b.removeAtFileLine(file, line)
-		return "clear " + loc, true
+		return BreakIntent{Kind: IntentClear, File: file, Line: line}, true
 	}
 	b.items = append(b.items, BreakInfo{
 		File:    file,
 		Line:    line,
 		Enabled: true,
 	})
-	return "break " + loc, true
+	return BreakIntent{Kind: IntentInsert, File: file, Line: line}, true
 }
 
 // ToggleInsertClearAddr is Assembly Space: clear if enabled at addr, else break *addr.
-func (b *BreakpointList) ToggleInsertClearAddr(addr string) (cmd string, ok bool) {
+func (b *BreakpointList) ToggleInsertClearAddr(addr string) (intent BreakIntent, ok bool) {
 	if b == nil || addr == "" {
-		return "", false
+		return BreakIntent{}, false
 	}
-	loc := "*" + addr
 	if idx := b.IndexOfAddr(addr); idx >= 0 {
 		it := b.items[idx]
 		if it.Enabled {
-			if it.Number > 0 {
-				cmd = fmt.Sprintf("-break-delete %d", it.Number)
-			} else {
-				cmd = "clear " + loc
-			}
+			intent = breakIntentClear(it)
 			b.items = append(b.items[:idx], b.items[idx+1:]...)
-			return cmd, true
+			return intent, true
 		}
 		it.Enabled = true
 		b.items[idx] = it
-		return "break " + loc, true
+		return breakIntentInsert(it), true
 	}
 	b.items = append(b.items, BreakInfo{
 		Addr:    addr,
 		Enabled: true,
 	})
-	return "break " + loc, true
+	return BreakIntent{Kind: IntentInsert, Addr: addr}, true
 }
 
 // HasEnabledAtAddr reports an enabled breakpoint at the given address.
@@ -321,14 +318,14 @@ func (b *BreakpointList) IndexOfAddr(addr string) int {
 }
 
 // ToggleEnableAtAddr is Assembly "e" at the browse address.
-func (b *BreakpointList) ToggleEnableAtAddr(addr string, hasEnabled bool) (cmd string, index int, ok bool) {
+func (b *BreakpointList) ToggleEnableAtAddr(addr string, hasEnabled bool) (intent BreakIntent, index int, ok bool) {
 	if b == nil || addr == "" {
-		return "", -1, false
+		return BreakIntent{}, -1, false
 	}
 	idx := b.IndexOfAddr(addr)
 	if idx < 0 {
 		if !hasEnabled {
-			return "", -1, false
+			return BreakIntent{}, -1, false
 		}
 		b.items = append(b.items, BreakInfo{
 			Addr:    addr,
@@ -336,8 +333,8 @@ func (b *BreakpointList) ToggleEnableAtAddr(addr string, hasEnabled bool) (cmd s
 		})
 		idx = len(b.items) - 1
 	}
-	cmd, ok = b.ToggleEnableAt(idx)
-	return cmd, idx, ok
+	intent, ok = b.ToggleEnableAt(idx)
+	return intent, idx, ok
 }
 
 func (b *BreakpointList) removeAtFileLine(file string, line int) {

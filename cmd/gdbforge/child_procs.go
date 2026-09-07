@@ -67,6 +67,30 @@ func processAlive(pid int) bool {
 	return syscall.Kill(pid, 0) == nil
 }
 
+func (c *childProcCtl) KillTracked(pid int) {
+	if pid <= 0 {
+		return
+	}
+	c.mu.Lock()
+	killGroup, ok := c.groups[pid]
+	if ok {
+		delete(c.groups, pid)
+	}
+	c.mu.Unlock()
+	if !ok {
+		killGroup = true
+	}
+	signalProcess(pid, killGroup, syscall.SIGTERM)
+	time.Sleep(300 * time.Millisecond)
+	if processAlive(pid) {
+		signalProcess(pid, killGroup, syscall.SIGKILL)
+	}
+}
+
+func (c *childProcCtl) KillOne(pid int) {
+	c.KillTracked(pid)
+}
+
 func (a *DebuggerApp) trackStartedCmd(cmd *exec.Cmd, killGroup bool) {
 	if a == nil || cmd == nil || cmd.Process == nil {
 		return

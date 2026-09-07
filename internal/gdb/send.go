@@ -19,15 +19,33 @@ type InferiorCtl interface {
 	NoteTransientStopSuppress()
 }
 
+// SendOpts controls how SendCmd interrupts a running inferior.
+type SendOpts struct {
+	// InterruptCmd stops the running inferior over the command channel itself
+	// (MIExecInterrupt for GDB). It is required whenever that channel is not the
+	// debugger's own terminal: the new-ui MI PTY has no foreground process group,
+	// so a \x03 byte written there is swallowed by the line discipline instead of
+	// becoming SIGINT. Empty means write an inline ^C, which is correct for Delve
+	// and single-PTY GDB.
+	InterruptCmd string
+}
+
+// MIExecInterrupt is the MI command that stops a running inferior.
+const MIExecInterrupt = "-exec-interrupt"
+
+// interruptSettle gives GDB time to report the stop before the break/clear that
+// follows, which it would otherwise reject while the target still runs.
+const interruptSettle = 30 * time.Millisecond
+
 // SendCmd writes a GDB CLI/MI command on the shared PTY.
 //
-// While the inferior is running, sync GDB will not process break/clear until
-// interrupted — so we send Ctrl-C, then the command. Auto-resume with
+// While the inferior is running, GDB will not process break/clear until
+// interrupted — so we interrupt first, then send the command. Auto-resume with
 // continue applies only to breakpoint insert (so the new break can be hit)
 // and, optionally, to remove when InferiorCtl.ContinueAfterClear is set.
 // Other commands (frame, thread, …) stay stopped after the interrupt —
 // never send a surprise continue.
-func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd string) {
+func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd string, opts SendOpts) {
 	if sess == nil || cmd == "" {
 		return
 	}
@@ -44,13 +62,16 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 				case IsBreakRemoveCmd(cmd) && ctl.ContinueAfterClear():
 					willResume = true
 				}
-				// Arm before Ctrl-C so a fast *stopped cannot race past an
+				// Arm before the interrupt so a fast *stopped cannot race past an
 				// unarmed suppress and later eat the real breakpoint-hit UI.
 				if willResume {
 					ctl.NoteTransientStopSuppress()
 				}
-				if err := pw.SendRaw("\x03"); err != nil {
+				if err := interruptInferior(pw, opts); err != nil {
 					return err
+				}
+				if opts.InterruptCmd != "" {
+					time.Sleep(interruptSettle)
 				}
 			}
 			if err := pw.Send(cmd); err != nil {
@@ -67,6 +88,15 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 	} else {
 		send()
 	}
+}
+
+// interruptInferior stops the target on the command channel, so the interrupt
+// cannot be reordered against the break/clear that follows it.
+func interruptInferior(pw core.PTYWriter, opts SendOpts) error {
+	if opts.InterruptCmd != "" {
+		return pw.Send(opts.InterruptCmd)
+	}
+	return pw.SendRaw("\x03")
 }
 
 // IsBreakRemoveCmd reports clear / -break-delete style commands.

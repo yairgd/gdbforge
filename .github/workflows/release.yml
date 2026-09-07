@@ -157,6 +157,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate code flows catalog (x/tools callgraph)
+        run: go run ./cmd/flowdoc --generate
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'

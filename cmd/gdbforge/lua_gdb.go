@@ -22,8 +22,7 @@ func (c *luaCtl) echoGdbWidget(h luaHost, cmd string) {
 		return
 	}
 	fn := func() {
-		h.GDBWidget().EchoSubmit(cmd)
-		h.GDBWidget().ForceFollowTailAndScroll()
+		h.GDBWidget().AppendHostLine(">>> " + cmd)
 		h.MaybeEnableRemoteMode(cmd)
 		h.RequestFrame()
 	}

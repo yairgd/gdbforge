@@ -44,7 +44,6 @@ Commands:
 
 Keys (Normal):
   :                command line
-  i                insert (console input)
   Esc              normal mode
   Ctrl-W h/j/k/l   focus
   Ctrl-D           quit

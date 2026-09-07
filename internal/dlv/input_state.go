@@ -23,9 +23,10 @@ type Update struct {
 	DisplayLines []string
 	PromptReady  bool
 	PromptLine   string
-	// ConfirmReady is set when Delve waits for a yes/no answer (not a bare (dlv) prompt).
+	// ConfirmReady is set when Delve waits for an interactive answer (not a bare (dlv) prompt).
 	ConfirmReady       bool
 	ConfirmHost        string
+	ConfirmKind        ConfirmKind
 	State              State
 	ErrorMsg           string
 	Stopped            *gdb.MiStopMsg
@@ -77,10 +78,11 @@ func (m *InputState) PushRaw(data string) Update {
 		out.PromptLine = PromptToken
 		m.state = Done
 		out.State = Done
-	} else if LooksLikeYesNoPrompt(plainBuf) {
+	} else if kind, ok := LooksLikeConfirmPrompt(plainBuf); ok {
 		m.lineBuf = ""
 		out.ConfirmReady = true
 		out.ConfirmHost = ConfirmLiveHost(plainBuf)
+		out.ConfirmKind = kind
 		m.state = Done
 		out.State = Done
 	}
@@ -101,13 +103,7 @@ func (m *InputState) consumeLine(line string, out *Update) {
 		m.state = Done
 		out.State = Done
 
-	case LooksLikeYesNoPrompt(plain):
-		// Delve sometimes ends the question with a newline; treat as confirm host,
-		// not scrollback-only (so the UI can attach a live caret).
-		out.ConfirmReady = true
-		out.ConfirmHost = ConfirmLiveHost(plain)
-		m.state = Done
-		out.State = Done
+	case applyConfirmLine(m, plain, out):
 
 	case strings.HasPrefix(plain, "> "):
 		// > [Breakpoint 1] main.main() ./hello.go:23 (hits goroutine(1):1 total:1) (PC: 0x…)
@@ -145,6 +141,21 @@ func (m *InputState) consumeLine(line string, out *Update) {
 		}
 		out.DisplayLines = append(out.DisplayLines, raw)
 	}
+}
+
+func applyConfirmLine(m *InputState, plain string, out *Update) bool {
+	kind, ok := LooksLikeConfirmPrompt(plain)
+	if !ok {
+		return false
+	}
+	// Delve sometimes ends the question with a newline; treat as confirm host,
+	// not scrollback-only (so the UI can attach a live caret).
+	out.ConfirmReady = true
+	out.ConfirmHost = ConfirmLiveHost(plain)
+	out.ConfirmKind = kind
+	m.state = Done
+	out.State = Done
+	return true
 }
 
 func isPagerChrome(plain string) bool {

@@ -1,3 +1,4 @@
+// Package ptyx provides PTY sessions for debugger CLIs, inferior I/O, and exec.
 package ptyx
 
 import (
@@ -5,80 +6,188 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
 	"github.com/yairgd/gdbforge/internal/core"
 )
 
-// TTY is a bare PTY pair (no child process). gdbforge holds the master for
-// read/write; the slave path is given to GDB via -inferior-tty-set so the
-// debugged program's stdin/stdout attach there.
+const (
+	readBufSize    = 32 * 1024
+	outputChanSize = 64
+)
+
+type subscriber struct {
+	ch        chan core.PtyOutputMsg
+	done      chan struct{}
+	closeOnce sync.Once
+}
+
+func (sub *subscriber) closeDone() {
+	sub.closeOnce.Do(func() { close(sub.done) })
+}
+
+// Options configure Start.
+type Options struct {
+	// Rows/Cols set the initial winsize (0 = leave default / unset).
+	Rows, Cols uint16
+	// Env replaces the child environment when non-nil (like exec.Cmd.Env).
+	// When nil, the child inherits the parent environment.
+	Env []string
+}
+
+// TTY holds a PTY master (when present), optional child process, and fan-out
+// readers. Create with Start (process), Open (new pair), or AttachPath (external
+// slave path only — metadata for -inferior-tty-set / --tty).
 type TTY struct {
 	master    *os.File
-	slave     *os.File // kept open so the pts node stays valid
+	slave     *os.File // kept open in Open mode so the pts node stays valid
 	slaveName string
+	cmd       *exec.Cmd // non-nil for Start mode
 
 	writeMu sync.Mutex
 
 	subMu  sync.Mutex
-	subs   map[chan core.PtyOutputMsg]struct{}
+	subs   map[*subscriber]struct{}
 	closed bool
 
 	closeOnce sync.Once
 }
 
-var _ core.Debugger = (*TTY)(nil)
+var _ core.Session = (*TTY)(nil)
 
-// OpenTTY allocates a master/slave PTY for inferior I/O.
+// Open allocates a master/slave PTY pair for inferior or MI I/O.
+func Open() (*TTY, error) {
+	return openPair()
+}
+
+// OpenTTY is deprecated; use Open.
 func OpenTTY() (*TTY, error) {
+	return Open()
+}
+
+func openPair() (*TTY, error) {
 	master, slave, err := pty.Open()
 	if err != nil {
-		return nil, fmt.Errorf("open inferior pty: %w", err)
+		return nil, fmt.Errorf("open pty: %w", err)
 	}
 	name := slave.Name()
 	if name == "" {
 		_ = master.Close()
 		_ = slave.Close()
-		return nil, fmt.Errorf("inferior pty: empty slave name")
+		return nil, fmt.Errorf("pty: empty slave name")
 	}
 	t := &TTY{
 		master:    master,
 		slave:     slave,
 		slaveName: name,
-		subs:      make(map[chan core.PtyOutputMsg]struct{}),
+		subs:      make(map[*subscriber]struct{}),
 	}
 	t.startReader()
 	return t, nil
 }
 
-// SlaveName is the path passed to -inferior-tty-set (e.g. /dev/pts/5).
+// AttachPath records an external device path (e.g. /dev/pts/N) without opening
+// it in-process. HasMaster is false; Subscribe delivers nothing.
+func AttachPath(path string) *TTY {
+	path = strings.TrimSpace(path)
+	return &TTY{
+		slaveName: path,
+		subs:      make(map[*subscriber]struct{}),
+	}
+}
+
+// Start runs argv on a PTY and begins the reader goroutine.
+func Start(argv []string, opt Options) (*TTY, error) {
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("command is required")
+	}
+	name := argv[0]
+	if _, err := exec.LookPath(name); err != nil {
+		return nil, fmt.Errorf("find %s: %w", name, err)
+	}
+
+	cmd := exec.Command(name, argv[1:]...)
+	if opt.Env != nil {
+		cmd.Env = opt.Env
+	}
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("start %s: %w", name, err)
+	}
+	if opt.Rows > 0 || opt.Cols > 0 {
+		rows, cols := opt.Rows, opt.Cols
+		if rows == 0 {
+			rows = 24
+		}
+		if cols == 0 {
+			cols = 80
+		}
+		_ = pty.Setsize(ptmx, &pty.Winsize{Rows: rows, Cols: cols})
+	}
+
+	t := &TTY{
+		master:    ptmx,
+		slaveName: "", // process PTY — no separate slave fd kept
+		cmd:       cmd,
+		subs:      make(map[*subscriber]struct{}),
+	}
+	t.startReader()
+	return t, nil
+}
+
+// HasMaster reports whether this TTY holds an in-process master fd.
+func (t *TTY) HasMaster() bool {
+	return t != nil && t.master != nil
+}
+
+// IsExternal reports a path-only TTY (external terminal / TUI debug target).
+func (t *TTY) IsExternal() bool {
+	return t != nil && t.master == nil && t.slaveName != ""
+}
+
+// SlaveName is the path for -inferior-tty-set or dlv exec --tty.
 func (t *TTY) SlaveName() string {
+	if t == nil {
+		return ""
+	}
 	return t.slaveName
 }
 
-// Subscribe fans out raw bytes from the inferior (program stdout/stderr).
+// Master returns the in-process PTY master fd (nil for AttachPath-only TTYs).
+func (t *TTY) Master() *os.File {
+	if t == nil {
+		return nil
+	}
+	return t.master
+}
+
 func (t *TTY) Subscribe() (<-chan core.PtyOutputMsg, func()) {
 	ch := make(chan core.PtyOutputMsg, outputChanSize)
 
 	t.subMu.Lock()
-	if t.closed {
+	if t.closed || !t.HasMaster() {
 		t.subMu.Unlock()
 		close(ch)
 		return ch, func() {}
 	}
-	t.subs[ch] = struct{}{}
+
+	sub := &subscriber{
+		ch:   ch,
+		done: make(chan struct{}),
+	}
+	t.subs[sub] = struct{}{}
 	t.subMu.Unlock()
 
 	var once sync.Once
 	cancel := func() {
 		once.Do(func() {
 			t.subMu.Lock()
-			if _, ok := t.subs[ch]; ok {
-				delete(t.subs, ch)
-				close(ch)
-			}
+			delete(t.subs, sub)
 			t.subMu.Unlock()
+			sub.closeDone()
 		})
 	}
 	return ch, cancel
@@ -86,24 +195,24 @@ func (t *TTY) Subscribe() (<-chan core.PtyOutputMsg, func()) {
 
 func (t *TTY) broadcast(msg core.PtyOutputMsg) {
 	t.subMu.Lock()
-	subs := make([]chan core.PtyOutputMsg, 0, len(t.subs))
-	for ch := range t.subs {
-		subs = append(subs, ch)
+	subs := make([]*subscriber, 0, len(t.subs))
+	for sub := range t.subs {
+		subs = append(subs, sub)
 	}
 	t.subMu.Unlock()
-	for _, ch := range subs {
-		// Blocking send applies backpressure: when the UI/coalescer is behind,
-		// the master reader stalls, the kernel PTY buffer fills, and the
-		// inferior's printf blocks — like a real terminal.
-		// Recover if cancel closed the channel mid-send.
-		func() {
-			defer func() { _ = recover() }()
-			ch <- msg
-		}()
+
+	for _, sub := range subs {
+		select {
+		case sub.ch <- msg:
+		case <-sub.done:
+		}
 	}
 }
 
 func (t *TTY) startReader() {
+	if !t.HasMaster() {
+		return
+	}
 	master := t.master
 	go func() {
 		defer t.dropSubs()
@@ -126,13 +235,12 @@ func (t *TTY) startReader() {
 func (t *TTY) dropSubs() {
 	t.subMu.Lock()
 	defer t.subMu.Unlock()
-	if t.closed {
-		return
+
+	for sub := range t.subs {
+		sub.closeDone()
+		close(sub.ch)
 	}
-	for ch := range t.subs {
-		close(ch)
-	}
-	t.subs = make(map[chan core.PtyOutputMsg]struct{})
+	t.subs = make(map[*subscriber]struct{})
 }
 
 type ttyWriteGate struct{ t *TTY }
@@ -146,7 +254,7 @@ func (g ttyWriteGate) SendRaw(s string) error {
 }
 
 func (t *TTY) writeRawUnlocked(s string) error {
-	if t.master == nil {
+	if t == nil || t.master == nil {
 		return io.ErrClosedPipe
 	}
 	_, err := t.master.Write([]byte(s))
@@ -178,7 +286,24 @@ func (t *TTY) SendRaw(s string) error {
 	})
 }
 
-// SetSize updates the inferior PTY window size.
+// SignalInterrupt delivers SIGINT to the child process (Start mode only).
+func (t *TTY) SignalInterrupt() error {
+	if t == nil {
+		return io.ErrClosedPipe
+	}
+	t.writeMu.Lock()
+	var proc *os.Process
+	if t.cmd != nil {
+		proc = t.cmd.Process
+	}
+	t.writeMu.Unlock()
+	if proc == nil {
+		return io.ErrClosedPipe
+	}
+	return proc.Signal(os.Interrupt)
+}
+
+// SetSize updates the PTY window size.
 func (t *TTY) SetSize(rows, cols uint16) error {
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
@@ -194,7 +319,18 @@ func (t *TTY) SetSize(rows, cols uint16) error {
 	return pty.Setsize(t.master, &pty.Winsize{Rows: rows, Cols: cols})
 }
 
+// Pid returns the child process ID for Start mode, or 0.
+func (t *TTY) Pid() int {
+	if t == nil || t.cmd == nil || t.cmd.Process == nil {
+		return 0
+	}
+	return t.cmd.Process.Pid
+}
+
 func (t *TTY) Close() {
+	if t == nil {
+		return
+	}
 	t.closeOnce.Do(func() {
 		t.writeMu.Lock()
 		if t.master != nil {
@@ -207,10 +343,17 @@ func (t *TTY) Close() {
 		}
 		t.writeMu.Unlock()
 
+		if t.cmd != nil && t.cmd.Process != nil {
+			_ = t.cmd.Process.Kill()
+			_, _ = t.cmd.Process.Wait()
+			t.cmd = nil
+		}
+
 		t.subMu.Lock()
 		t.closed = true
-		for ch := range t.subs {
-			close(ch)
+		for sub := range t.subs {
+			sub.closeDone()
+			close(sub.ch)
 		}
 		t.subs = nil
 		t.subMu.Unlock()

@@ -20,12 +20,12 @@ func (n *InverseCursor) Paint(c Canvas, x, y int, under rune) {
 	c.SetContent(x, y, under, style)
 }
 
-func (n *InverseCursor) Draw(c Canvas, v *Viewport) {
-	if v == nil || v.hasSel || !v.cursorVisible {
+func (n *InverseCursor) Draw(c Canvas, host DocCursorHost) {
+	if host == nil || host.HasSelection() || !host.CursorVisible() {
 		return
 	}
 
-	localX, localY, under, ok := v.cursorDrawPos()
+	localX, localY, under, ok := host.CursorDrawPos()
 	if !ok {
 		return
 	}

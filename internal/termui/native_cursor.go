@@ -26,15 +26,15 @@ func (n *NativeCursor) Paint(c Canvas, x, y int, _ rune) {
 	c.ShowNativeCursorStyle(x, y, n.style())
 }
 
-// Draw implements CursorPainter for Viewport-backed panes.
-func (n *NativeCursor) Draw(c Canvas, v *Viewport) {
-	if v == nil || v.hasSel || !v.cursorVisible {
+// Draw implements CursorPainter for ScrollDocument-backed panes.
+func (n *NativeCursor) Draw(c Canvas, host DocCursorHost) {
+	if host == nil || host.HasSelection() || !host.CursorVisible() {
 		return
 	}
 
-	localX, localY, under, ok := v.cursorDrawPos()
+	localX, localY, _, ok := host.CursorDrawPos()
 	if !ok {
 		return
 	}
-	n.Paint(c, localX, localY, under)
+	n.Paint(c, localX, localY, ' ')
 }

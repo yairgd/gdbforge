@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 )
@@ -14,7 +14,7 @@ type dlvHost interface {
 	ScheduleStackRefresh()
 	DebugInfoSelectLevel(level int)
 	DebugInfoSyncCallStackViews()
-	UpdateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget
+	UpdateCodeAfterStop(stop *debugger.StopInfo) *widgets.CodeWidget
 	PaintBreakpointMarks()
 	ShowFrameSource(fr models.StackFrame)
 	PresentLocation(codeW *widgets.CodeWidget, fr *models.StackFrame)
@@ -51,7 +51,7 @@ func (a *DebuggerApp) DebugInfoSyncCallStackViews() {
 	}
 }
 
-func (a *DebuggerApp) UpdateCodeAfterStop(stop *gdb.MiStopMsg) *widgets.CodeWidget {
+func (a *DebuggerApp) UpdateCodeAfterStop(stop *debugger.StopInfo) *widgets.CodeWidget {
 	return a.updateCodeAfterStop(stop)
 }
 

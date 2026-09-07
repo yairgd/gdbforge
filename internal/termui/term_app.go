@@ -5,10 +5,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -19,6 +17,8 @@ type AppApi interface {
 	HandleMouse(ev *tcell.EventMouse)
 	HandleResize()
 	HandleInterrupt(ev *tcell.EventInterrupt)
+	// HandleTTYResume runs after Suspend/Resume or RunForeground; reset in-pane terminals.
+	HandleTTYResume()
 }
 
 type WidgetNode struct {
@@ -40,17 +40,19 @@ type TermApp struct {
 	// widgets draw here all the time
 	// last frame that was actually displayed
 	frontBuffer *Grid
-	uiEvents    chan tcell.Event
 	canvas      Canvas
 
 	mouseActive bool
 	mouseX      int
 	mouseY      int
 
-	layoutDirty  bool
-	appState     *platform.AppState
-	modeHandlers ModeKeyHandlers
-	closeOnce    sync.Once
+	// paintInterval is the frame budget for coalesced output; 0 means default.
+	paintInterval time.Duration
+	layoutDirty   bool
+	appState      *platform.AppState
+	modeHandlers  ModeKeyHandlers
+	closeOnce     sync.Once
+	suspendMu     sync.Mutex
 }
 
 func NewTermApp() *TermApp {
@@ -69,7 +71,6 @@ func NewTermApp() *TermApp {
 	return &TermApp{
 		screen:       screen,
 		exit:         false,
-		uiEvents:     make(chan tcell.Event, 100),
 		modeHandlers: make(ModeKeyHandlers),
 		appState:     platform.NewAppState(),
 	}
@@ -108,6 +109,7 @@ func (app *TermApp) Close() {
 		return
 	}
 	app.closeOnce.Do(func() {
+		app.exit = true
 		if app.screen == nil {
 			return
 		}
@@ -120,6 +122,107 @@ func (app *TermApp) Close() {
 	})
 }
 
+func (app *TermApp) drainTcellEventQueue() {
+	if app == nil || app.screen == nil {
+		return
+	}
+	for app.screen.HasPendingEvent() {
+		if ev := app.screen.PollEvent(); ev == nil {
+			return
+		}
+	}
+}
+
+func isAlreadyEngaged(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "already engaged")
+}
+
+func (app *TermApp) syncTerminalDimensions() (w, h int) {
+	if app == nil || app.screen == nil {
+		return 80, 24
+	}
+	app.screen.Sync()
+	w, h = app.screen.Size()
+	if tty, ok := app.screen.Tty(); ok {
+		if ws, err := tty.WindowSize(); err == nil && ws.Width > 0 && ws.Height > 0 {
+			w, h = ws.Width, ws.Height
+		}
+	}
+	if w < 8 || h < 4 {
+		time.Sleep(10 * time.Millisecond)
+		app.screen.Sync()
+		w, h = app.screen.Size()
+	}
+	if w < 8 {
+		w = 80
+	}
+	if h < 4 {
+		h = 24
+	}
+	return w, h
+}
+
+func (app *TermApp) restoreAfterResume() {
+	if app == nil || app.screen == nil {
+		return
+	}
+	flushControllingTTYInput()
+	app.screen.EnableMouse(tcell.MouseMotionEvents)
+	app.screen.EnablePaste()
+	app.screen.Clear()
+	app.screen.Sync()
+	_, _ = app.syncTerminalDimensions()
+	_ = app.UpdateCanvas()
+	app.layoutDirty = true
+	if app.Api != nil {
+		app.Api.HandleResize()
+		app.Api.HandleTTYResume()
+	}
+	app.drainTcellEventQueue()
+	app.present()
+}
+
+func (app *TermApp) resumeAfterSuspend() error {
+	if err := app.screen.Resume(); err != nil {
+		if isAlreadyEngaged(err) {
+			// Stopped mid-disengage on a prior cycle — force clean re-engage.
+			_ = app.screen.Suspend()
+			if err2 := app.screen.Resume(); err2 != nil && !isAlreadyEngaged(err2) {
+				return err2
+			}
+		} else {
+			return err
+		}
+	}
+	app.restoreAfterResume()
+	return nil
+}
+
+// withTTYReleased disengages tcell, runs fn on the real tty, then re-engages.
+// PollEvent runs only on the UI thread — no background poll goroutine — so
+// Suspend/Resume cannot race with a second PollEvent caller.
+func (app *TermApp) withTTYReleased(fn func() error) error {
+	if app == nil || app.screen == nil {
+		return fmt.Errorf("no screen")
+	}
+	app.drainTcellEventQueue()
+
+	if err := app.screen.Suspend(); err != nil {
+		return fmt.Errorf("suspend: %w", err)
+	}
+
+	runErr := fn()
+	if err := app.resumeAfterSuspend(); err != nil {
+		app.restoreAfterResume()
+		if runErr == nil {
+			return err
+		}
+		return fmt.Errorf("%v (resume: %v)", runErr, err)
+	}
+	app.drainTcellEventQueue()
+	return runErr
+}
+
 // Suspend restores the terminal and stops this process with SIGTSTP (job
 // control), like Ctrl-Z in GDB/vim. Resumes on SIGCONT / shell `fg`.
 //
@@ -129,39 +232,12 @@ func (app *TermApp) Suspend() {
 	if app == nil || app.screen == nil {
 		return
 	}
-	if err := app.screen.Suspend(); err != nil {
+	app.suspendMu.Lock()
+	defer app.suspendMu.Unlock()
+
+	if err := app.withTTYReleased(stopForShellJobControl); err != nil {
 		log.Printf("suspend: %v", err)
-		return
 	}
-
-	signal.Reset(syscall.SIGTSTP)
-	p, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		_ = app.resumeAfterSuspend()
-		return
-	}
-	_ = p.Signal(syscall.SIGTSTP)
-	// Continues here after fg / SIGCONT.
-	if err := app.resumeAfterSuspend(); err != nil {
-		log.Printf("suspend resume: %v", err)
-		app.exit = true
-	}
-}
-
-func (app *TermApp) resumeAfterSuspend() error {
-	if err := app.screen.Resume(); err != nil {
-		return err
-	}
-	app.screen.EnableMouse(tcell.MouseMotionEvents)
-	app.screen.EnablePaste()
-	app.screen.Clear()
-	app.screen.Sync()
-	_ = app.UpdateCanvas()
-	app.layoutDirty = true
-	if app.Api != nil {
-		app.Api.HandleResize()
-	}
-	return nil
 }
 
 // RunForeground suspends the tcell screen, runs argv on the real stdin/stdout
@@ -173,21 +249,16 @@ func (app *TermApp) RunForeground(argv []string) error {
 	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
 		return fmt.Errorf("empty command")
 	}
-	if err := app.screen.Suspend(); err != nil {
-		return err
-	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	runErr := cmd.Run()
-	if err := app.resumeAfterSuspend(); err != nil {
-		if runErr == nil {
-			return err
-		}
-		return fmt.Errorf("%v (resume: %v)", runErr, err)
-	}
-	return runErr
+	app.suspendMu.Lock()
+	defer app.suspendMu.Unlock()
+
+	return app.withTTYReleased(func() error {
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	})
 }
 
 func (app *TermApp) AddWidget(w Widget) {
@@ -196,52 +267,90 @@ func (app *TermApp) AddWidget(w Widget) {
 	})
 }
 
+func (app *TermApp) pollEventBatch(max int) []tcell.Event {
+	if app == nil || app.screen == nil {
+		return nil
+	}
+	if max < 1 {
+		max = 1
+	}
+	if app.screen.HasPendingEvent() {
+		return app.drainPollBatch(max)
+	}
+	ev := app.screen.PollEvent()
+	if ev == nil {
+		return nil
+	}
+	batch := []tcell.Event{ev}
+	if len(batch) < max && app.screen.HasPendingEvent() {
+		batch = append(batch, app.drainPollBatch(max-len(batch))...)
+	}
+	return batch
+}
+
+func (app *TermApp) drainPollBatch(max int) []tcell.Event {
+	batch := make([]tcell.Event, 0, max)
+	for len(batch) < max && app.screen.HasPendingEvent() {
+		if ev := app.screen.PollEvent(); ev != nil {
+			batch = append(batch, ev)
+		} else {
+			break
+		}
+	}
+	return batch
+}
+
+const defaultPaintInterval = 16 * time.Millisecond
+
 func (app *TermApp) Run() {
 	defer app.Close()
-	// UI event source — PollEvent blocks; run off the main loop goroutine.
-	go func() {
-		for {
-			app.uiEvents <- app.screen.PollEvent()
-		}
-	}()
-	paintTicker := time.NewTicker(16 * time.Millisecond)
+
+	interval := app.paintInterval
+	if interval <= 0 {
+		interval = defaultPaintInterval
+	}
+	paintTicker := time.NewTicker(interval)
 	defer paintTicker.Stop()
 	dirty := false
 	for !app.exit {
 		select {
-		case ev := <-app.uiEvents:
-			batch := drainUIEvents(app.uiEvents, ev, 96)
-			urgent := app.handleUIEventBatch(batch)
-			dirty = true
-			if urgent {
-				app.present()
-				dirty = false
-			}
 		case <-paintTicker.C:
 			if dirty {
 				app.present()
 				dirty = false
 			}
+		default:
+		}
+
+		if app.mustWaitForPaintTick(dirty) {
+			<-paintTicker.C
+			app.present()
+			dirty = false
+			continue
+		}
+
+		batch := app.pollEventBatch(96)
+		if len(batch) == 0 {
+			continue
+		}
+		urgent := app.handleUIEventBatch(batch)
+		dirty = true
+		if urgent {
+			app.present()
+			dirty = false
 		}
 	}
 }
 
-// drainUIEvents takes first plus any events already queued (up to max).
-func drainUIEvents(ch <-chan tcell.Event, first tcell.Event, max int) []tcell.Event {
-	if max < 1 {
-		max = 1
+// mustWaitForPaintTick reports whether a pending frame has to be driven by the
+// paint ticker. pollEventBatch blocks in PollEvent until the next event, so an
+// unpainted frame with an empty queue would otherwise stay on screen-behind
+// until the user pressed another key (async output needs no further input).
+func (app *TermApp) mustWaitForPaintTick(dirty bool) bool {
+	if !dirty || app == nil || app.screen == nil {
+		return false
 	}
-	batch := make([]tcell.Event, 0, max)
-	batch = append(batch, first)
-	for len(batch) < max {
-		select {
-		case ev := <-ch:
-			batch = append(batch, ev)
-		default:
-			return batch
-		}
-	}
-	return batch
+	return !app.screen.HasPendingEvent()
 }
 
 // handleUIEventBatch processes keys/mouse/resize before interrupts so Ctrl-C
@@ -299,11 +408,9 @@ func (app *TermApp) present() {
 func (app *TermApp) UpdateCanvas() Canvas {
 	app.screen.Sync()
 	w, h := app.screen.Size()
-	//	app.backBuffer = NewGrid(w, h)
 	app.frontBuffer = NewGrid(w, h)
 	app.canvas = Canvas{rect: NewRect(0, 0, w, h), grid: app.frontBuffer}
 	return app.canvas
-
 }
 
 func (app *TermApp) MarkLayoutDirty() {
@@ -343,7 +450,7 @@ func (app *TermApp) RequestFrame() {
 	app.screen.PostEvent(tcell.NewEventInterrupt(frameInterrupt))
 }
 
-// PostInterrupt queues payload on the UI event loop (worker-safe via tcell).
+// PostInterrupt queues payload on the UI thread (worker-safe via tcell).
 func (app *TermApp) PostInterrupt(payload any) {
 	if app == nil || app.screen == nil {
 		return
@@ -445,4 +552,3 @@ func (app *TermApp) ClipboardIO() ClipboardIO {
 		PastePrimary: app.PasteFromPrimary,
 	}
 }
-

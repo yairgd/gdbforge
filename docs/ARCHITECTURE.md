@@ -34,7 +34,7 @@ flowchart TB
     end
 
     subgraph events ["UI thread events"]
-        UI["uiEvents loop"]
+        Poll["PollEvent batch"]
         HI["HandleInterrupt"]
         Bus["platform.EventBus"]
     end
@@ -58,7 +58,7 @@ flowchart TB
     MCP --> Surf
 
     GUI -->|"Register Subscribe"| Bus
-    UI --> HI
+    Poll --> HI
     HI -->|"typed payload"| Bus
     Bus --> GUI
     Dom --> W
@@ -113,7 +113,6 @@ LayoutShell ──uses──▶ layoutHost ◀──implements──  DebuggerAp
 | `bufferCtl` | `bufferHost` | `Shell()` (layout), `placeCodeInSlot`, buffer widgets |
 | `asmCtl` | `asmHost` | `Shell()`, assembly widget, `Workspace` tab ops |
 | `inferiorIOCtl` | `inferiorHost` | `OutputWidget()`, inferior PTY routing |
-| `execIOCtl` | `execHost` | `ExecWidget()` only |
 | `searchCtl` | `searchHost` | `CmdWidget()`, `ActiveCodeWidget()`, `State()` |
 | `luaCtl` | `luaHost` | UI + debug + serial surface for scripts (~40 methods) |
 | `dlvCtl` | `dlvHost` | Code refresh, frame sync, debug-info peers |
@@ -124,7 +123,7 @@ Compile-time checks in `controllers.go` (`var _ breakHost = (*DebuggerApp)(nil)`
 
 **List widgets** (threads, breakpoints, call stack) still take `*DebuggerApp` as a **widget host** (`BreakpointHost`, `ThreadHost`, …) for activation intents — separate from controller hosts, same idea: narrow surface, app forwards into `*Ctl`.
 
-Consoles use `WireConsole` + `SetOn*` callbacks into `consoleCtl` / `luaCtl`.
+Consoles use `WireCLI` / `WireInferior` / `WireExec` on `CompositeTerminal`. Lua REPL still uses `ConsolePane` + `InputLine`.
 
 | Controller | Domain | Notes |
 |------------|--------|-------|
@@ -132,9 +131,8 @@ Consoles use `WireConsole` + `SetOn*` callbacks into `consoleCtl` / `luaCtl`.
 | `asmCtl` | Assembly list/widget, `preferAsm` / `autoAsm` | `:b asm`, missing-source swap |
 | `bufferCtl` | Per-path `CodeWidget` map | `:b` / `:edit` |
 | `debugInfoCtl` | Threads / call stack | Stop refresh |
-| `consoleCtl` | GDB **or** Delve console | Submit / paint / interrupt |
-| `inferiorIOCtl` | Inferior PTY → IO pane | |
-| `execIOCtl` | `ExecOutputMsg` → ExecWidget | |
+| `consoleCtl` | MI bridge on PTY #2; CLI `WireCLI` lifecycle | Submit / parse / gdb-exit |
+| `inferiorIOCtl` | Inferior or serial console → IO pane | `WireInferior` policy |
 | `completionCtl` / `searchCtl` / `luaCtl` / `dlvCtl` / `cmdCtl` | Completion, `/` search, Lua, Delve sync, cmdline | All use host interfaces |
 
 ### Composition layers (`LayoutShell` · `DebugSession`)
@@ -167,18 +165,19 @@ Background work (GDB PTY, Lua jobs, exec) must not call widgets directly. Everyt
 flowchart LR
     Worker["Worker goroutine"]
     Post["TermApp.PostInterrupt"]
-    UI["uiEvents loop"]
+    Screen["tcell.PostEvent"]
+    Poll["PollEvent · UI thread"]
     HI["HandleInterrupt"]
     Str["string · gdb-exit / widget forward"]
     Bus["platform.EventBus.Dispatch"]
     Ctl["*Ctl Register handlers"]
 
-    Worker --> Post --> UI --> HI
+    Worker --> Post --> Screen --> Poll --> HI
     HI --> Str
     HI --> Bus --> Ctl
 ```
 
-1. **`PostInterrupt(payload)`** — thread-safe enqueue (replaces the old `events chan` + `HandleCoreEvents` switch).
+1. **`PostInterrupt(payload)`** — thread-safe enqueue via `screen.PostEvent(EventInterrupt)` (replaces the old `events chan` + `HandleCoreEvents` switch and the removed `uiEvents` channel).
 2. **`HandleInterrupt`** — thin app shell: string session exits + `Bus.Dispatch(data)`.
 3. **`Register` on each `*Ctl`** — typed handler per message (`GdbOutputMsg`, `codeRefreshMsg`, `SubmitMsg`, …).
 
@@ -270,7 +269,39 @@ flowchart LR
     GDB -.->|"inferior tty"| Target
 ```
 
-GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty).
+GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty). Unified controller/backend layering: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#unified-backend-api).
+
+```mermaid
+flowchart TB
+  subgraph ui ["Controllers — protocol-agnostic"]
+    breakCtl[breakCtl]
+    debugInfoCtl[debugInfoCtl]
+    consoleCtl[consoleCtl]
+    stopped[stopped / code_nav]
+    inferiorIO[inferiorIOCtl]
+  end
+
+  subgraph shared ["Shared domain"]
+    models["models.*"]
+    debuggerPkg["debugger.* StopInfo ConsoleUpdate"]
+  end
+
+  subgraph api ["backend.Backend"]
+    SemanticOps["Semantic ops + capabilities"]
+  end
+
+  subgraph impl ["Implementations"]
+    GDB["GDBBackend · MI"]
+    DLV["DLVBackend · rpc2 + CLI"]
+  end
+
+  ui --> api
+  ui --> shared
+  api --> GDB
+  api --> DLV
+```
+
+(Full diagram: [`docs/diagrams/unified_backend.mermaid`](diagrams/unified_backend.mermaid).)
 
 ---
 
@@ -405,7 +436,7 @@ Models are **application-specific** (`BreakpointModel`, `OrdersModel`, `MSPV2Inf
 ```text
 TextWidget   →  TextModel
 GraphWidget  →  GraphModel
-TableWidget  →  TableModel
+TableWidget  →  TableModel   (aspirational — debugger lists use SetFill adapters today)
 TreeWidget   →  TreeModel
 ```
 
@@ -421,11 +452,11 @@ Widgets are **views**. A widget should contain little or no business logic. It r
 |--------|------|
 | `LoggerWidget` | Scrollable log output |
 | `GraphWidget` | Time series, histograms, scatter plots |
-| `TableWidget` | Tabular data |
+| `TableWidget` | Tabular data (implemented in `internal/termui`; BP/threads/callstack embed it) |
 | `TreeWidget` | Hierarchical data |
 | `TextWidget` | Line-oriented text |
 
-Widgets should be **reusable across applications** whenever possible. The same `TableWidget` can display breakpoints in a debugger, orders in a trading app, or MSP telemetry in a monitoring app — as long as the bound model implements `TableModel`.
+Widgets should be **reusable across applications** whenever possible. **`TableWidget`** is implemented (`RectViewport`, `CellBuffer`, columns, `SetFill`); gdbforge debugger list panes embed it with thin adapters. A future generic `TableModel` interface remains aspirational.
 
 ---
 
@@ -566,7 +597,8 @@ Platform components do not import terminal or widget packages. Today many of the
 |-----------|------|
 | **Canvas** | Local-coordinate drawing context |
 | **Grid** | Off-screen cell framebuffer |
-| **Viewport** | Scroll window, cursor visibility, visible region over a model |
+| **Viewport** | Scroll window over line `Buffer`; cursor, selection, ANSI path |
+| **TableWidget** | Columnar grid over `CellBuffer` + `RectViewport`; row selection, `/search` |
 | **Widget** | View interface (`Draw`, `DrawStatusLine`, `HandleEvent`) |
 | **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
@@ -638,7 +670,8 @@ flowchart TB
 | **Widget layer** | `termui.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
 | **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
-| **Text model (legacy)** | `core.Buffer`, `core.Viewport` | Scrollable line storage — used today by console/source widgets; target is explicit domain models per pane |
+| **Text model (legacy)** | `platform.Buffer`, `Viewport` | Line storage — Code/Asm/Help/FileList; **list panes BP/threads/stack use `TableWidget`** |
+| Generic `TableModel` | — | Not yet — widgets use `SetFill` + typed `SetItems` |
 | **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
 | **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
@@ -697,31 +730,25 @@ sequenceDiagram
 
 ### Debugger output → UI
 
-GDB output arrives asynchronously on a `ptyx` reader goroutine, is **fan-out** via `Subscribe`, posted into the tcell event loop as `EventInterrupt(GdbOutputMsg)`, and handled by the **app controller** (`gdb_console.go`), which paints the GDB view.
+GDB **MI** output arrives on the MI PTY reader, is fan-out via `Subscribe`, posted as `EventInterrupt(GdbOutputMsg)`, and parsed by `consoleCtl` for app state. **CLI** output paints via `WireCLI` → `CompositeTerminal` (not the MI bridge).
 
 ```mermaid
 sequenceDiagram
     participant GDB as GDB process
-    participant PTY as ptyx reader
-    participant Fan as Subscribe fan-out
-    participant Screen as tcell.Screen
-    participant Ctrl as DebuggerApp controller
-    participant Widget as GDBWidget
-    participant Cons as ConsolePane
+    participant CLI as CLI PTY
+    participant MI as MI PTY
+    participant GDBW as GDBWidget
+    participant Ctrl as consoleCtl
 
-    GDB-->>PTY: MI output chunk
-    PTY->>Fan: PtyOutputMsg
-    Fan->>Screen: PostEvent GdbOutputMsg
-    Screen->>HI: HandleInterrupt
-    HI->>Bus: Dispatch(GdbOutputMsg)
-    Bus->>Ctrl: consoleCtl.onOutput
-    Ctrl->>Widget: PaintMiDisplay / AppendLines
-    Widget->>Cons: Draw on next frame
+    GDB-->>CLI: console bytes
+    CLI-->>GDBW: WireTTY → xterm
+    GDB-->>MI: MI records
+    MI-->>Ctrl: GdbOutputMsg → PushRaw
 ```
 
 *Source: [`diagrams/debugger_integration.mermaid`](diagrams/debugger_integration.mermaid)*
 
-Layering: `InputLine` (edit) → `ConsolePane` (REPL shell) → `GDBWidget` (view) ← controller owns MI + `Session`.
+Layering: `CompositeTerminal` + `WireTTY` (GDB/IO/exec panes) ← `*ptyx.TTY`. `ConsolePane` + `InputLine` remains for **Lua REPL** only. Controller owns MI `Session` on PTY #2.
 
 ### End-to-end data flow
 
@@ -863,7 +890,7 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
 
 - **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` PTY / UI events** — `PtyOutputMsg`, `GdbOutputMsg`, `ExecOutputMsg`, `InferiorOutputMsg` (`internal/core/events.go`).
+- **`core` PTY events** — `PtyOutputMsg` (`internal/core/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
 - **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/gdbforge`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termui`).
@@ -871,11 +898,11 @@ See [Platform layer](#platform-layer). Today `internal/core` holds platform prim
 
 ### Infrastructure (`internal/ptyx`, `internal/gdb`, `internal/mcp`)
 
-- **`ptyx.Client`** — process PTY (GDB / exec): exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
-- **`ptyx.TTY`** — bare master/slave PTY for inferior stdin/stdout (`OpenTTY`, `SlaveName`).
-- **`gdb.GDBClient`** — embeds `*ptyx.Client`, owns `*ptyx.TTY`, sends `-inferior-tty-set` at startup.
-- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on `core.Session`.
-- MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb`.
+- **`ptyx.TTY`** — unified PTY type: `Start` (process), `Open` (pair), `AttachPath` (external slave path). Exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
+- **`gdb.GDBClient`** — **3 PTYs**: CLI (`CLITTY`), MI (`core.Session` embed), inferior; bootstrap via `new-ui mi2`.
+- **`termui.CompositeTerminal` + `WireTTY`** — xterm bridge for GDB/IO/exec panes.
+- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on MI `core.Session`.
+- MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb` (MI PTY stream only).
 
 **Dependency rule:** `termui` → `core` ← `gdb` / `ptyx` / `mcp`. Never `gdb` → `termui`.
 
@@ -895,7 +922,8 @@ flowchart TB
     end
 
     subgraph Loop["TermApp.Run · UI thread"]
-        UI["uiEvents channel"]
+        Poll["pollEventBatch · PollEvent"]
+        Batch["handleUIEventBatch"]
         HI["DebuggerApp.HandleInterrupt"]
         Bus["platform.EventBus.Dispatch"]
     end
@@ -907,11 +935,12 @@ flowchart TB
         Other["asm · debugInfo · dlv · execIO · cmd …"]
     end
 
-    PTY -->|"PostInterrupt(GdbOutputMsg)"| UI
-    CmdW --> UI
-    Lua --> UI
-    Exec --> UI
-    UI --> HI
+    PTY -->|"PostInterrupt(GdbOutputMsg)"| Poll
+    CmdW --> Poll
+    Lua --> Poll
+    Exec --> Poll
+    Poll --> Batch
+    Batch -->|"EventInterrupt"| HI
     HI -->|"string exits"| HI
     HI --> Bus
     Bus --> Console
@@ -924,26 +953,26 @@ flowchart TB
 
 - Domain reactions live on **controllers**, not in a giant `switch` on `DebuggerApp`.
 - **`EventBus`** is for typed app notifications that can also be published synchronously (e.g. `BreakpointsChangedMsg`, `CompletionMsg`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md#tab-completion-via-eventbus).
-- **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output).
+- **`PostInterrupt`** is for cross-thread wakeups into the tcell loop (GDB chunks, Lua UI jobs, exec output). Workers call `PostEvent(EventInterrupt)`; the UI thread receives them through the same `PollEvent` batch as keyboard input.
 
-GDB output sequence (unchanged intent, updated dispatch):
+GDB output sequence (MI path only — CLI paints via `WireCLI`):
 
 ```mermaid
 sequenceDiagram
-    participant GDB as GDB process
-    participant PTY as ptyx reader
+    participant GDB as GDB MI PTY
+    participant Post as PostInterrupt
     participant Screen as tcell.Screen
+    participant Poll as PollEvent
     participant HI as HandleInterrupt
     participant Bus as EventBus
     participant Ctrl as consoleCtl
-    participant Widget as GDBWidget
 
-    GDB-->>PTY: MI output chunk
-    PTY->>Screen: PostInterrupt GdbOutputMsg
-    Screen->>HI: uiEvents
+    GDB-->>Post: GdbOutputMsg
+    Post->>Screen: PostEvent(EventInterrupt)
+    Screen->>Poll: PollEvent · EventInterrupt
+    Poll->>HI: HandleInterrupt
     HI->>Bus: Dispatch(GdbOutputMsg)
-    Bus->>Ctrl: onOutput
-    Ctrl->>Widget: PaintMiDisplay / AppendLines
+    Bus->>Ctrl: onOutput → PushRaw → app state
 ```
 
 Mode and key-sequence routing happen in **`DebuggerApp.HandleKey`** before widgets see terminal keys — see [INPUT.md](INPUT.md#interaction-modes).
@@ -1000,9 +1029,8 @@ classDiagram
 | `Event` | Base domain event — identified by `Type() string` |
 | `CommandEvent` | Events carrying a resolved `CommandID` (e.g. after `:` command entry) |
 | `SubmitMsg` | CmdLine submitted — `Text`, `CmdID`, `Args` |
-| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB/exec/MCP) |
-| `GdbOutputMsg` | UI-routed GDB chunk (`EventInterrupt` → GDBWidget) |
-| `InferiorOutputMsg` | UI-routed inferior PTY chunk (`EventInterrupt` → IO / OutputWidget) |
+| `PtyOutputMsg` | Raw PTY chunk from `Session.Subscribe` (GDB MI, MCP) |
+| `GdbOutputMsg` | MI PTY chunk routed to `consoleCtl` (`EventInterrupt` → parser) |
 
 ### Command IDs and colon commands
 
@@ -1045,7 +1073,8 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Backend → controller → model → view | Debugger events update models; widgets paint snapshots | **Done** — `backend.Backend` + `*Ctl`; views are hosts / `Set*` |
 | Composition root | Thin app + embedded layers | **Done** — `LayoutShell` + `DebugSession` + host adapters |
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
-| Viewport ownership | Viewport in TermUI; Buffer in Platform | Partial — both migrating |
+| Viewport ownership | Viewport in TermUI; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
+| TableWidget | Columnar lists off Viewport | **Done** — `internal/termui/table_*.go`; BP/threads/callstack adapters |
 | Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |

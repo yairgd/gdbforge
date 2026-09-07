@@ -5,6 +5,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
@@ -20,6 +21,8 @@ type Backend interface {
 	TakeStartupOutput() string
 	InferiorTTY() *ptyx.TTY
 	ConfigureInferiorTTY() error
+	// SetInferiorTTYPath switches inferior stdio ("internal" / empty → IO pane).
+	SetInferiorTTYPath(path string) error
 	PromptToken() string
 	// SetGdbTargetPrint is true when program stdout should also paint in the debugger console (Delve).
 	PaintTargetInConsole() bool
@@ -53,14 +56,40 @@ type Backend interface {
 	SendLine(cmd string) error
 
 	// PushConsoleOutput feeds PTY text into the backend input parser.
-	PushConsoleOutput(data string) ConsoleEvent
-}
+	PushConsoleOutput(data string) debugger.ConsoleUpdate
 
-// ConsoleEvent is a unified paint signal from PushConsoleOutput.
-type ConsoleEvent struct {
-	Kind Kind
-	GDB  *gdb.MiUpdate
-	DLV  any // *dlv.Update — typed in dlv_backend to avoid cycles in docs; use AsDLVUpdate
+	// Confirming is true while a y/n quit or Delve confirm gate is open.
+	Confirming() bool
+
+	// InferiorTTYPath returns the inferior stdio path when external, else "".
+	InferiorTTYPath() string
+	// UsesExternalInferiorTTY reports whether program stdio is on an external tty.
+	UsesExternalInferiorTTY() bool
+	// RequiresInferiorTTYRestart reports whether :set inferior-tty needs a session restart.
+	RequiresInferiorTTYRestart() bool
+
+	// --- Semantic debugger commands (controllers use these instead of MI strings) ---
+
+	SendMappedBreak(env CommandEnv, cmd string)
+	InsertBreakpoint(env CommandEnv, file string, line int)
+	ClearBreakpointAt(env CommandEnv, file string, line int, number int)
+	ClearBreakpointAddr(env CommandEnv, addr string, number int)
+	DisableBreakpoint(env CommandEnv, number int)
+	SetBreakpointCondition(env CommandEnv, number int, cond string)
+	InsertBreakpointAddr(env CommandEnv, addr string)
+	InsertDefaultBreakMain(env CommandEnv)
+	SelectFrame(env CommandEnv, level int, opts NavigationOpts)
+	SelectThread(env CommandEnv, id string, opts NavigationOpts)
+	Exec(env CommandEnv, cmd string)
+	ExecUI(env CommandEnv, cmd string)
+	CurrentFrame(ctx context.Context, q Querier) (models.StackFrame, bool)
+	FetchStackList(ctx context.Context, q Querier, longCapture bool) ([]models.StackFrame, bool)
+	ListSourceFiles(ctx context.Context, q Querier) ([]string, bool)
+
+	NavigationAsync() bool
+	ConsoleEOFCommand() string
+	WireCLILineTap() bool
+	DeferBreakpointRefresh() bool
 }
 
 // ErrNotSupported is returned for capability-gated ops (e.g. SuspendInferior on Delve).

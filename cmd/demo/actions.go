@@ -71,17 +71,15 @@ func (a *DemoApp) EnterInsertMode(args ...any) {
 }
 
 func (a *DemoApp) SplitVertical(args ...any) {
-	p := termui.NewConsolePane("split")
+	p := demo.NewScrollPane("split", "[split]")
 	p.SetClipboard(a.ClipboardIO())
-	p.Buffer().AppendLine("[split]")
 	a.tab.VerticalSplit(p)
 	a.RequestRedraw()
 }
 
 func (a *DemoApp) SplitHorizontal(args ...any) {
-	p := termui.NewConsolePane("split")
+	p := demo.NewScrollPane("split", "[split]")
 	p.SetClipboard(a.ClipboardIO())
-	p.Buffer().AppendLine("[split]")
 	a.tab.HorizontalSplit(p)
 	a.RequestRedraw()
 }

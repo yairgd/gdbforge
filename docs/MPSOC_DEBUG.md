@@ -1,8 +1,5 @@
 ---
 description: MPSoC debug with gdbforge — automate Zynq UltraScale+ Cortex-A53 and Cortex-R5 GDB sessions over J-Link or Digilent OpenOCD from a terminal debugger UI.
-meta:
-  - name: keywords
-    content: MPSoC debug, ZynqMP debugger, Zynq UltraScale+ GDB, Xilinx embedded debug, Cortex-A53 debugger, Cortex-R5 debugger, J-Link ZynqMP, OpenOCD Zynq, bare-metal MPSoC, OpenAMP remoteproc, gdbforge
 ---
 
 # MPSoC debug (Zynq UltraScale+)
@@ -18,7 +15,7 @@ Scripts live in two folders (copy what you need into `.gdbforge/lua/`):
 
 ## Demo — Cortex-R5 / J-Link
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](../examples/stack_demo.c). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
 ![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
 
@@ -38,7 +35,7 @@ export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
 |--------|-------|---------|
 | `a53_baremetal_jlink` | J-Link | A53 bare-metal load + break main |
 | `a53_baremetal_openocd_digilent` | OpenOCD | A53 bare-metal (Digilent HS2) |
-| `a53_kernel_jlink` | J-Link | A53 Linux kernel (kgdb attach) |
+| `a53_kernel_jlink` | J-Link | A53 Linux kernel — JTAG attach, `vmlinux` + `lx-symbols` |
 | `a53_kernel_openocd_digilent` | OpenOCD | A53 Linux kernel (Digilent HS2) |
 | `r5_baremetal_jlink` | J-Link | R5 bare-metal load + break main |
 | `r5_baremetal_openocd_digilent` | OpenOCD | R5 bare-metal (Digilent HS2) |
@@ -59,5 +56,7 @@ export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
 | `GDBFORGE_OPENOCD_PORT` | GDB port (`3333`) |
 
 Edit defaults at the top of any script, or export before running. Each script implements `help()` — run `:lua <name>` and check the Lua pane output.
+
+The A53 kernel scripts stop the CPU through JTAG; for day-to-day kernel work over a serial line or Ethernet, [kgdb](KERNEL_KGDB.md) is usually easier.
 
 See also: [Lua catalog — MPSoC](https://github.com/yairgd/gdbforge/blob/main/lua/mpsoc/README.md) · [User Guide — Lua](USER_GUIDE.md)

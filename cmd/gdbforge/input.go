@@ -40,9 +40,17 @@ func (a *DebuggerApp) tryGlobalSuspend(ev *tcell.EventKey) bool {
 }
 
 // tryGlobalInterrupt handles Ctrl-C in any mode/focus via Activity (+ Confirm).
+// When a terminal pane has a text selection, copy instead of interrupting.
 func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	if !isCtrlC(ev) {
 		return false
+	}
+	if w := a.focusedWidget(); w != nil {
+		if ts, ok := w.(termui.TerminalSelectionPane); ok && ts.HasTerminalSelection() {
+			a.Tab().HandleEvent(ev)
+			a.RequestFrame()
+			return true
+		}
 	}
 	a.onActivityCtrlC()
 	return true
@@ -187,11 +195,14 @@ func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {
 	// Cmdline owns completion — never keep a prior GDB wildmenu session.
 	a.comp.setForGDB(false)
 	a.cmdWidget.HandleEvent(ev)
-	if ev.Key() == tcell.KeyTAB && a.comp.active() {
-		a.comp.setForGDB(false)
-		a.SetMode(platform.ModeCompletion)
-		a.RequestFrame()
-		return true
+	if ev.Key() == tcell.KeyTAB {
+		if a.comp.active() || (a.cmdWidget != nil && len(a.cmdWidget.CompletionNames()) > 1) {
+			a.comp.setForGDB(false)
+			a.comp.setForLua(false)
+			a.SetMode(platform.ModeCompletion)
+			a.RequestFrame()
+			return true
+		}
 	}
 	if ev.Key() == tcell.KeyEnter {
 		a.comp.clear()
@@ -238,6 +249,18 @@ func (a *DebuggerApp) trySearchOrGdbNext() bool {
 func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	if !a.comp.hasMenu() {
 		a.comp.leaveMode()
+		return true
+	}
+	// Typing can narrow the wildmenu to 0/1 candidates while ModeCompletion
+	// stays on (so further edits keep refreshing). Enter must still submit the
+	// line it was typed into rather than being eaten closing an empty menu.
+	if isEnterKey(ev) && !a.comp.active() {
+		forConsole := a.comp.isForGDB() || a.comp.isForLua()
+		a.comp.leaveMode()
+		if forConsole {
+			a.Tab().HandleEvent(ev)
+			a.RequestFrame()
+		}
 		return true
 	}
 	if a.tryKeyBindings(a.completionKeys, ev) {
@@ -295,6 +318,18 @@ func (a *DebuggerApp) handleCompletionKey(ev *tcell.EventKey) bool {
 	return true
 }
 
+func isEnterKey(ev *tcell.EventKey) bool {
+	if ev == nil {
+		return false
+	}
+	switch ev.Key() {
+	case tcell.KeyEnter, tcell.KeyCtrlM, tcell.KeyCtrlJ:
+		return true
+	default:
+		return false
+	}
+}
+
 func isCopyKey(ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyCtrlC || ev.Key() == tcell.KeyCtrlX || ev.Key() == tcell.KeyCtrlV {
 		return true
@@ -313,11 +348,12 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	x, y := ev.Position()
 	primary := ev.Buttons()&tcell.ButtonPrimary != 0
 	wheel := ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0
+	middle := ev.Buttons()&tcell.ButtonMiddle != 0
 	inCmd := a.cmdLineContains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeSearch || a.Mode() == platform.ModeCompletion {
 		// Middle-click paste into the cmdline (Linux terminal convention).
-		if a.cmdWidget != nil && ev.Buttons()&tcell.ButtonMiddle != 0 {
+		if a.cmdWidget != nil && middle {
 			a.cmdWidget.HandleEvent(ev)
 			a.RequestFrame()
 			return
@@ -341,20 +377,11 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 		return
 	}
 
-	if primary {
+	// Any pane interaction makes the pane under the pointer active. In
+	// particular, middle-click must focus the GDB pane before pasting.
+	if primary || wheel || middle {
 		// FocusAt includes the status band; IsSeparatorAt ignores status rows
 		// that share a horizontal gutter so Code status clicks still focus.
-		if a.Tab().FocusAt(x, y) {
-			a.rememberCodeLeafFromFocus()
-			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
-				a.lua.enterMode(lw)
-			} else {
-				a.EnterInsertMode()
-			}
-		}
-	}
-
-	if wheel {
 		if a.Tab().FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
@@ -476,8 +503,32 @@ func (a *DebuggerApp) HandleResize() {
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
+func (a *DebuggerApp) HandleTTYResume() {
+	if a.gdbWidget != nil {
+		a.gdbWidget.ResetTerminalInput()
+	}
+	if a.outputWidget != nil {
+		a.outputWidget.ResetTerminalInput()
+	}
+	if a.execWidget != nil {
+		a.execWidget.ResetTerminalInput()
+	}
+}
+
 func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	data := ev.Data()
+	if msg, ok := data.(inferiorTTYSetMsg); ok {
+		if err := a.SetInferiorTTY(msg.path); err != nil {
+			if a.outputWidget != nil {
+				a.outputWidget.AppendHostLine("inferior-tty: " + err.Error())
+			}
+			if a.ctx.Log != nil {
+				a.ctx.Log.Named("set").Error(err.Error())
+			}
+		}
+		a.RequestFrame()
+		return
+	}
 	if s, ok := data.(string); ok {
 		if s == "gdb-exit" {
 			a.Exit()

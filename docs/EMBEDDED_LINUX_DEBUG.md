@@ -1,13 +1,10 @@
 ---
-description: Debug embedded Linux applications with gdbforge — remotegdb, internal IO pane vs external terminal, gdbserver local and remote attach.
-meta:
-  - name: keywords
-    content: embedded Linux debugger, gdbserver remote debug, inferior tty, external terminal debug, GDB IO pane, ARM Linux GDB, gdbforge, remote target debug
+description: Debug embedded Linux user-space applications with gdbforge using remote gdbserver over SSH, or run local programs with an internal IO pane or external terminal.
 ---
 
 # Embedded Linux app debug
 
-**gdbforge** is a Vim-inspired **GDB terminal UI** for **user-space** programs — on an **embedded Linux board** or **on the host**. This guide covers **remote deploy + gdbserver** (`:lua remotegdb`) and **where program stdin/stdout goes**.
+**gdbforge** is a Vim-inspired **GDB terminal UI** for **user-space** programs — on an **embedded Linux board** or **on the host**. This guide covers **deploy + gdbserver over SSH** (`:lua remotegdb`) and **where program stdin/stdout goes**. For the kernel or a loadable module, where a breakpoint stops the whole system, see [KERNEL_KGDB.md](KERNEL_KGDB.md).
 
 ## Demo — Linux app I/O
 

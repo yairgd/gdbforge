@@ -10,7 +10,7 @@ type KeyBinder interface {
 }
 
 // InputLine is a reusable single-line editor with readline-style history.
-// It does not own layout or scrollback — ConsolePane (or CmdWidget) does.
+// It does not own layout or scrollback — CmdWidget (or a terminal pane) does.
 type InputLine struct {
 	text      string
 	cursor    int

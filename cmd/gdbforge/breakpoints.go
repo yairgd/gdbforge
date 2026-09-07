@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
@@ -67,20 +64,68 @@ func (c *breakCtl) syncViews() {
 // syncBreakpointViews is the historical name used by callers outside this file.
 func (c *breakCtl) syncBreakpointViews() { c.syncViews() }
 
-func (c *breakCtl) sendBreakpointCmd(cmd string) {
+func (c *breakCtl) cmdEnv() backend.CommandEnv {
 	h := c.host
-	if h == nil || cmd == "" || h.Backend() == nil {
+	if h == nil {
+		return backend.CommandEnv{}
+	}
+	return backend.CommandEnv{
+		Session:  h.Session(),
+		App:      h.State(),
+		Inferior: h.Debug(),
+	}
+}
+
+func (c *breakCtl) applyBreakIntent(intent models.BreakIntent) {
+	h := c.host
+	if h == nil || h.Backend() == nil {
 		return
 	}
-	cmd = h.Backend().MapBreak(cmd)
-	gdb.SendCmd(h.Session(), h.State(), h.Debug(), cmd)
-	if h.Backend().BreakRefreshImmediate() {
+	be := h.Backend()
+	env := c.cmdEnv()
+	switch intent.Kind {
+	case models.IntentInsert:
+		if intent.Addr != "" {
+			be.InsertBreakpointAddr(env, intent.Addr)
+		} else {
+			be.InsertBreakpoint(env, intent.File, intent.Line)
+		}
+	case models.IntentClear:
+		if intent.Addr != "" {
+			be.ClearBreakpointAddr(env, intent.Addr, intent.Number)
+		} else {
+			be.ClearBreakpointAt(env, intent.File, intent.Line, intent.Number)
+		}
+	case models.IntentDeleteByNumber:
+		if intent.Addr != "" {
+			be.ClearBreakpointAddr(env, intent.Addr, intent.Number)
+		} else {
+			be.ClearBreakpointAt(env, intent.File, intent.Line, intent.Number)
+		}
+	default:
+		return
+	}
+	if be.BreakRefreshImmediate() {
 		c.onChanged()
 		return
 	}
 	// Do not Query("breakpoints") immediately — after exit Delve may ask
 	// [Y/n]? and the query line would be consumed as the answer.
-	h.DeferDLVBPRefresh()
+	h.DeferBPRefresh()
+}
+
+// sendBreakpointCmd applies a legacy MI/CLI string (prefer applyBreakIntent).
+func (c *breakCtl) sendBreakpointCmd(cmd string) {
+	h := c.host
+	if h == nil || cmd == "" || h.Backend() == nil {
+		return
+	}
+	h.Backend().SendMappedBreak(c.cmdEnv(), cmd)
+	if h.Backend().BreakRefreshImmediate() {
+		c.onChanged()
+		return
+	}
+	h.DeferBPRefresh()
 }
 
 // restoreSaved reloads ./.gdbforge/breakpoints.yaml into GDB + UI.
@@ -90,10 +135,10 @@ func (c *breakCtl) restoreSaved(saved []models.BreakInfo) {
 		return
 	}
 	c.ensureList()
-	sess := h.Session()
-	if sess == nil {
+	if h.Backend() == nil {
 		return
 	}
+	env := c.cmdEnv()
 
 	// Merge current GDB BPs first (e.g. from -x) so we do not duplicate.
 	if items, ok := c.fetchInfos(); ok {
@@ -107,7 +152,7 @@ func (c *breakCtl) restoreSaved(saved []models.BreakInfo) {
 		if c.list.IndexOfFileLine(it.File, it.Line) >= 0 {
 			continue
 		}
-		gdb.SendCmd(sess, h.State(), h.Debug(), breakInsertCmd(it.File, it.Line))
+		h.Backend().InsertBreakpoint(env, it.File, it.Line)
 	}
 
 	items, ok := c.fetchInfos()
@@ -131,7 +176,7 @@ func (c *breakCtl) restoreSaved(saved []models.BreakInfo) {
 		if !ok || !cur.Enabled || cur.Number < 1 {
 			continue
 		}
-		gdb.SendCmd(sess, h.State(), h.Debug(), fmt.Sprintf("disable %d", cur.Number))
+		h.Backend().DisableBreakpoint(env, cur.Number)
 	}
 
 	// Re-apply conditions from the saved file (after numbers are known).
@@ -154,18 +199,9 @@ func (c *breakCtl) restoreSaved(saved []models.BreakInfo) {
 		if cur.Condition == want.Condition {
 			continue
 		}
-		gdb.SendCmd(sess, h.State(), h.Debug(), fmt.Sprintf("condition %d %s", cur.Number, want.Condition))
+		h.Backend().SetBreakpointCondition(env, cur.Number, want.Condition)
 	}
 	c.onChanged()
-}
-
-func breakInsertCmd(file string, line int) string {
-	loc := fmt.Sprintf("%s:%d", file, line)
-	if strings.ContainsAny(file, " \t\"") {
-		base := filepath.Base(file)
-		loc = fmt.Sprintf("%s:%d", base, line)
-	}
-	return "break " + loc
 }
 
 // Toggle enable/disable at the BreakpointWidget selection index.
@@ -176,7 +212,7 @@ func (c *breakCtl) Toggle(index int) {
 	h := c.host
 	prev, _ := c.list.At(index)
 	cond := prev.Condition
-	cmd, ok := c.list.ToggleEnableAt(index)
+	intent, ok := c.list.ToggleEnableAt(index)
 	if !ok {
 		return
 	}
@@ -184,12 +220,12 @@ func (c *breakCtl) Toggle(index int) {
 	if h != nil && h.BPWidget() != nil {
 		h.BPWidget().SelectIndex(index)
 	}
-	c.sendBreakpointCmd(cmd)
+	c.applyBreakIntent(intent)
 	// Re-enable only inserts the break; restore condition after GDB assigns a number.
-	if strings.HasPrefix(cmd, "break ") && cond != "" {
+	if intent.Kind == models.IntentInsert && cond != "" {
 		it, ok := c.list.At(index)
 		if ok {
-			c.reapplyConditionAfterEnable(cmd, it.File, it.Line, it.Addr, cond)
+			c.reapplyConditionAfterEnable(true, it.File, it.Line, it.Addr, cond)
 		}
 	}
 }
@@ -198,24 +234,24 @@ func (c *breakCtl) Delete(index int) {
 	if c.list == nil {
 		return
 	}
-	cmd, ok := c.list.DeleteAt(index)
+	intent, ok := c.list.DeleteAt(index)
 	if !ok {
 		return
 	}
 	c.syncViews()
-	c.sendBreakpointCmd(cmd)
+	c.applyBreakIntent(intent)
 }
 
 func (c *breakCtl) onCodeBreakToggle(path string, line int) {
 	if c.list == nil || path == "" || line < 1 {
 		return
 	}
-	cmd, ok := c.list.ToggleInsertClear(path, line)
+	intent, ok := c.list.ToggleInsertClear(path, line)
 	if !ok {
 		return
 	}
 	c.syncViews()
-	c.sendBreakpointCmd(cmd)
+	c.applyBreakIntent(intent)
 }
 
 func (c *breakCtl) ToggleAsm(addr string) {
@@ -226,12 +262,12 @@ func (c *breakCtl) ToggleAsm(addr string) {
 	if addr == "" {
 		return
 	}
-	cmd, ok := c.list.ToggleInsertClearAddr(addr)
+	intent, ok := c.list.ToggleInsertClearAddr(addr)
 	if !ok {
 		return
 	}
 	c.syncViews()
-	c.sendBreakpointCmd(cmd)
+	c.applyBreakIntent(intent)
 }
 
 func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
@@ -250,7 +286,7 @@ func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 			prevCond = it.Condition
 		}
 	}
-	cmd, idx, ok := c.list.ToggleEnableAtFileLine(path, line, cw.HasEnabledBreak(line))
+	intent, idx, ok := c.list.ToggleEnableAtFileLine(path, line, cw.HasEnabledBreak(line))
 	if !ok {
 		return
 	}
@@ -258,8 +294,8 @@ func (c *breakCtl) toggleCodeBreakEnableOn(cw *widgets.CodeWidget) {
 	if h != nil && h.BPWidget() != nil && idx >= 0 {
 		h.BPWidget().SelectIndex(idx)
 	}
-	c.sendBreakpointCmd(cmd)
-	c.reapplyConditionAfterEnable(cmd, path, line, "", prevCond)
+	c.applyBreakIntent(intent)
+	c.reapplyConditionAfterEnable(intent.Kind == models.IntentInsert, path, line, "", prevCond)
 }
 
 func (c *breakCtl) ToggleAsmEnable() {
@@ -278,7 +314,7 @@ func (c *breakCtl) ToggleAsmEnable() {
 			prevCond = it.Condition
 		}
 	}
-	cmd, idx, ok := c.list.ToggleEnableAtAddr(addr, aw.HasEnabledBreak(addr))
+	intent, idx, ok := c.list.ToggleEnableAtAddr(addr, aw.HasEnabledBreak(addr))
 	if !ok {
 		return
 	}
@@ -286,13 +322,13 @@ func (c *breakCtl) ToggleAsmEnable() {
 	if h.BPWidget() != nil && idx >= 0 {
 		h.BPWidget().SelectIndex(idx)
 	}
-	c.sendBreakpointCmd(cmd)
-	c.reapplyConditionAfterEnable(cmd, "", 0, addr, prevCond)
+	c.applyBreakIntent(intent)
+	c.reapplyConditionAfterEnable(intent.Kind == models.IntentInsert, "", 0, addr, prevCond)
 }
 
 // reapplyConditionAfterEnable sends condition N expr after a re-enable break insert.
-func (c *breakCtl) reapplyConditionAfterEnable(cmd, file string, line int, addr, cond string) {
-	if !strings.HasPrefix(cmd, "break ") || cond == "" || c.list == nil {
+func (c *breakCtl) reapplyConditionAfterEnable(wasInsert bool, file string, line int, addr, cond string) {
+	if !wasInsert || cond == "" || c.list == nil {
 		return
 	}
 	var cur models.BreakInfo
@@ -316,7 +352,11 @@ func (c *breakCtl) reapplyConditionAfterEnable(cmd, file string, line int, addr,
 	if !ok || cur.Number < 1 {
 		return
 	}
-	c.sendBreakpointCmd(fmt.Sprintf("condition %d %s", cur.Number, cond))
+	h := c.host
+	if h == nil || h.Backend() == nil {
+		return
+	}
+	h.Backend().SetBreakpointCondition(c.cmdEnv(), cur.Number, cond)
 }
 
 // applyBreakInfos merges GDB -break-list into the shared model and syncs views.
@@ -451,8 +491,8 @@ func (c *breakCtl) onChanged() {
 
 func (c *breakCtl) onChangedMsg(_ BreakpointsChangedMsg) {
 	h := c.host
-	if h != nil && h.IsDLVConfirming() {
-		h.DeferDLVBPRefresh()
+	if h != nil && h.IsConfirming() {
+		h.DeferBPRefresh()
 		return
 	}
 	c.coalesce.Schedule(c.runRefresh)
@@ -544,18 +584,10 @@ func (c *breakCtl) onBreakpointsUI(_ breakpointsUIMsg) {
 // maybeBreakMain inserts a default entry breakpoint when AppState.BreakMain is set.
 func (c *breakCtl) maybeBreakMain() {
 	h := c.host
-	if h == nil || h.GDBWidget() == nil || !h.Debug().BreakMain() {
+	if h == nil || h.GDBWidget() == nil || !h.Debug().BreakMain() || h.Backend() == nil {
 		return
 	}
-	sess := h.Session()
-	if sess == nil {
-		return
-	}
-	cmd := "break main"
-	if h.Backend() != nil {
-		cmd = h.Backend().DefaultBreakMain()
-	}
-	gdb.SendCmd(sess, h.State(), h.Debug(), cmd)
+	h.Backend().InsertDefaultBreakMain(c.cmdEnv())
 }
 
 // reapplyAfterDlvConnect sets break main (if enabled) and re-inserts BPs.
@@ -568,7 +600,7 @@ func (c *breakCtl) reapplyAfterDlvConnect() {
 		if it.File == "" || it.Line < 1 {
 			continue
 		}
-		c.sendBreakpointCmd(breakInsertCmd(it.File, it.Line))
+		c.applyBreakIntent(models.BreakIntent{Kind: models.IntentInsert, File: it.File, Line: it.Line})
 	}
 	c.onChanged()
 }

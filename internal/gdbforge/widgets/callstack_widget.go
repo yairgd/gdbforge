@@ -19,71 +19,48 @@ import (
 //	wheel / click — same (browse only; do not steal focus)
 //	Enter — ActivateCallStack then FocusCode (status line → Code)
 type CallStackWidget struct {
-	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
-	state    *debugstate.State
+	*termui.TableWidget
+	state *debugstate.State
 
-	items    []models.StackFrame
-	selected int
+	items []models.StackFrame
 
-	// mouseDown tracks primary-button press so we activate on release, not on
-	// every drag sample (which flooded GDB with `frame N` console noise).
 	mouseDown     bool
-	pressOnRow    bool // false when press was in blank padding below the list
+	pressOnRow    bool
 	pressSelected int
 	lastActLevel  int
 	lastActTime   time.Time
 }
 
 func NewCallStackWidget() *CallStackWidget {
-	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
-	vp.SetFollowTail(false)
-	vp.SetReadOnly(true)
-	vp.SetCursorVisible(false)
+	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw.PaneName = "Call Stack"
+	tbl := tw.Table()
+	tbl.SetShowHeader(false)
+	tbl.SetGutter(2)
+	tbl.AddColumn("#")
+	tbl.AddColumn("Func")
+	tbl.AddColumn("Loc")
 
-	w := &CallStackWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Call Stack"},
-		viewport:   vp,
-		buf:        buf,
-	}
-	vp.RowStyle = w.rowStyle
-	vp.SetOnSearchJump(func(lineIdx int) {
-		w.viewport.CursorLine = lineIdx
-		w.syncSelectedFromViewport()
-	})
+	w := &CallStackWidget{TableWidget: tw}
+	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
+	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
-	w.rebuild()
 	return w
 }
 
-// SetAppState wires mark / mark-dim colors for the selection row.
-func (w *CallStackWidget) SetAppState(st *debugstate.State) {
-	w.state = st
-}
+func (w *CallStackWidget) SetAppState(st *debugstate.State) { w.state = st }
 
 func (w *CallStackWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1); w.activateSelected(false) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1); w.activateSelected(false) }, "<Down>", "j")
-	w.BindKeyFunc("page-up", func(args ...any) { w.move(-w.pageRows()); w.activateSelected(false) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.move(w.pageRows()); w.activateSelected(false) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("page-up", func(args ...any) { w.move(-w.PageRows()); w.activateSelected(false) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.move(w.PageRows()); w.activateSelected(false) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("home", func(args ...any) { w.moveTo(0); w.activateSelected(false) }, "<Home>", "g")
 	w.BindKeyFunc("end", func(args ...any) { w.moveTo(len(w.items) - 1); w.activateSelected(false) }, "<End>", "G")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.PanLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.PanRight() }, "<Right>")
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected(true) }, "<Enter>", "<C-m>")
-}
-
-func (w *CallStackWidget) pageRows() int {
-	h := 0
-	if w.viewport != nil {
-		h = w.viewport.Height()
-	}
-	if h < 1 {
-		return 10
-	}
-	return h
 }
 
 func (w *CallStackWidget) moveTo(idx int) {
@@ -97,10 +74,8 @@ func (w *CallStackWidget) moveTo(idx int) {
 	if idx >= n {
 		idx = n - 1
 	}
-	w.selected = idx
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureLineVisible()
+	w.SetSelectedRow(idx)
+	w.EnsureRowVisible()
 }
 
 func (w *CallStackWidget) markColor() tcell.Color {
@@ -117,13 +92,6 @@ func (w *CallStackWidget) markDimColor() tcell.Color {
 	return platform.DefaultMarkDimColor
 }
 
-func (w *CallStackWidget) pcColor() tcell.Color {
-	if w.state != nil {
-		return w.state.PCColor()
-	}
-	return platform.DefaultPCColor
-}
-
 func (w *CallStackWidget) stackBreakColor() tcell.Color {
 	if w.state != nil {
 		return w.state.StackBreakColor()
@@ -138,26 +106,22 @@ func (w *CallStackWidget) mutedColor() tcell.Color {
 	return platform.DefaultMutedColor
 }
 
-func (w *CallStackWidget) rowStyle(lineIdx int, line string) tcell.Style {
+func (w *CallStackWidget) rowStyle(lineIdx int, _ string) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
 		return st.Foreground(w.mutedColor())
 	}
-	if lineIdx == w.selected {
+	if lineIdx == w.SelectedRow() {
 		bg := w.markDimColor()
 		if w.Focused() {
 			bg = w.markColor()
 		}
-		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	// Green only for frame 0 when ━━▶ points at that frame.
 	if w.isFrameZero(lineIdx) && w.atProgramPoint(lineIdx) {
 		bg := w.stackBreakColor()
-		_ = line
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
-	_ = line
 	return st
 }
 
@@ -166,8 +130,6 @@ func (w *CallStackWidget) atProgramPoint(lineIdx int) bool {
 		return false
 	}
 	it := w.items[lineIdx]
-	// Use stop PC (frame 0), not browsed CurrentLocation — mouse frame
-	// clicks must not clear the green mark on #0.
 	return sameSourceLoc(it.File, it.Line, w.state.StopFile(), w.state.StopLine())
 }
 
@@ -179,41 +141,36 @@ func (w *CallStackWidget) isFrameZero(lineIdx int) bool {
 }
 
 func (w *CallStackWidget) move(delta int) {
-	n := len(w.items)
-	if n == 0 {
+	if len(w.items) == 0 {
 		return
 	}
-	w.selected = (w.selected + delta%n + n) % n
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureLineVisible()
+	w.MoveSelection(delta)
 }
 
-// syncSelectedFromViewport moves the bold blue selection to the mouse-clicked row.
 func (w *CallStackWidget) syncSelectedFromViewport() {
 	n := len(w.items)
 	if n == 0 {
 		return
 	}
-	line := w.viewport.CursorLine
-	if line < 0 {
-		line = 0
+	row := w.SelectedRow()
+	if row < 0 {
+		row = 0
 	}
-	if line >= n {
-		line = n - 1
+	if row >= n {
+		row = n - 1
 	}
-	w.selected = line
-	w.viewport.CursorLine = line
+	w.SetSelectedRow(row)
 }
 
 func (w *CallStackWidget) activateSelected(commitFocus bool) {
 	if len(w.items) == 0 {
 		return
 	}
-	if w.selected < 0 || w.selected >= len(w.items) {
+	row := w.SelectedRow()
+	if row < 0 || row >= len(w.items) {
 		return
 	}
-	fr := w.items[w.selected]
+	fr := w.items[row]
 	now := time.Now()
 	if fr.Level != w.lastActLevel || now.Sub(w.lastActTime) >= 300*time.Millisecond {
 		w.lastActLevel = fr.Level
@@ -224,51 +181,46 @@ func (w *CallStackWidget) activateSelected(commitFocus bool) {
 	}
 }
 
-// SetItems replaces the frame list and rebuilds the viewport.
-// Preserves the selected GDB frame level when still present.
 func (w *CallStackWidget) SetItems(items []models.StackFrame) {
 	prevLevel := -1
-	if w.selected >= 0 && w.selected < len(w.items) {
-		prevLevel = w.items[w.selected].Level
+	row := w.SelectedRow()
+	if row >= 0 && row < len(w.items) {
+		prevLevel = w.items[row].Level
 	}
 	w.items = append([]models.StackFrame(nil), items...)
-	w.selected = 0
+	w.RectViewport().Origin.X = 0
+	sel := 0
 	if prevLevel >= 0 {
 		for i, it := range w.items {
 			if it.Level == prevLevel {
-				w.selected = i
+				sel = i
 				break
 			}
 		}
 	}
-	if w.selected >= len(w.items) {
-		w.selected = len(w.items) - 1
+	if sel >= len(w.items) && len(w.items) > 0 {
+		sel = len(w.items) - 1
 	}
-	if w.selected < 0 {
-		w.selected = 0
+	if sel < 0 {
+		sel = 0
 	}
-	w.rebuild()
+	w.SetSelectedRow(sel)
+	w.EnsureRowVisible()
 }
 
-// SelectLevel highlights the frame with the given GDB level (no ActivateCallStack).
 func (w *CallStackWidget) SelectLevel(level int) {
 	for i, it := range w.items {
 		if it.Level == level {
-			w.selected = i
-			w.viewport.CursorLine = i
-			w.viewport.CursorCol = 0
-			w.viewport.EnsureLineVisible()
+			w.SetSelectedRow(i)
+			w.EnsureRowVisible()
 			return
 		}
 	}
 }
 
-func (w *CallStackWidget) rebuild() {
-	w.buf.Clear()
-	w.viewport.Left = 0
+func (w *CallStackWidget) fillTable(t *termui.Table) {
 	if len(w.items) == 0 {
-		w.buf.AppendLine("no frames")
-		w.viewport.CursorLine = 0
+		t.AddRow("no frames")
 		return
 	}
 	for _, it := range w.items {
@@ -280,22 +232,17 @@ func (w *CallStackWidget) rebuild() {
 		if it.File != "" && it.Line > 0 {
 			loc = fmt.Sprintf("%s:%d", filepath.Base(it.File), it.Line)
 		}
-		w.buf.AppendLine(fmt.Sprintf("%d  %s  %s", it.Level, fn, loc))
+		t.AddRow(fmt.Sprintf("%d", it.Level), fn, loc)
 	}
-	w.viewport.CursorLine = w.selected
-	w.viewport.CursorCol = 0
-	w.viewport.EnsureCursorVisible()
-}
-
-func (w *CallStackWidget) HandleFocusKey(ev *tcell.EventKey) bool {
-	return w.HandleBoundKey(ev)
 }
 
 func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
+		if w.TryDoubleClickWord(e) {
+			return
+		}
 		btns := e.Buttons()
-		// Wheel moves selection and activates so Code follows the frame.
 		if btns&tcell.WheelUp != 0 {
 			w.move(-1)
 			w.activateSelected(false)
@@ -307,34 +254,24 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 			return
 		}
 		mx, my := e.Position()
-		hitLine, onRow := w.viewport.HitContentLine(mx, my)
-		w.viewport.HandleEvent(e)
+		hitRow, onRow := w.HitDataRow(mx, my)
 		if btns&tcell.ButtonPrimary != 0 {
 			if onRow {
-				// Prefer the hit line — viewport can clamp empty-area clicks to
-				// the last frame after the list is scrolled.
-				w.selected = hitLine
-				w.viewport.CursorLine = hitLine
+				w.SetSelectedRow(hitRow)
 				if !w.mouseDown {
 					w.mouseDown = true
 					w.pressOnRow = true
-					w.pressSelected = w.selected
+					w.pressSelected = w.SelectedRow()
 				}
 			} else if !w.mouseDown {
-				// Blank padding below the last frame: do not jump to #last.
-				w.viewport.CursorLine = w.selected
 				w.pressOnRow = false
 			}
 			return
 		}
-		// Activate on release when the press landed on a real row.
 		if w.mouseDown {
 			w.mouseDown = false
 			if onRow {
-				w.selected = hitLine
-				w.viewport.CursorLine = hitLine
-			} else {
-				w.viewport.CursorLine = w.selected
+				w.SetSelectedRow(hitRow)
 			}
 			if w.pressOnRow {
 				w.activateSelected(false)
@@ -342,44 +279,26 @@ func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 			w.pressOnRow = false
 		}
 	case *tcell.EventKey:
-		if w.HandleBoundKey(e) {
-			return
-		}
-		// Horizontal scroll only — do not let PgUp/Home desync selected vs Top.
-		w.viewport.HandleEvent(e)
-		w.syncSelectedFromViewport()
+		w.HandleFocusKey(e)
 	}
 }
 
 func (w *CallStackWidget) SetFocused(focused bool) {
-	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
+	w.TableWidget.SetFocused(focused)
 	if !focused {
 		w.mouseDown = false
 		w.pressOnRow = false
 	}
 }
 
-func (w *CallStackWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
-}
+func (w *CallStackWidget) Selected() int { return w.SelectedRow() }
 
-func (w *CallStackWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
-}
-
-func (w *CallStackWidget) Viewport() *termui.Viewport {
-	return w.viewport
-}
-
-func (w *CallStackWidget) Selected() int { return w.selected }
-
-// SelectedFrame returns the highlighted stack frame, or false if none.
 func (w *CallStackWidget) SelectedFrame() (models.StackFrame, bool) {
-	if w.selected < 0 || w.selected >= len(w.items) {
+	row := w.SelectedRow()
+	if row < 0 || row >= len(w.items) {
 		return models.StackFrame{}, false
 	}
-	return w.items[w.selected], true
+	return w.items[row], true
 }
 
 func (w *CallStackWidget) Items() []models.StackFrame {
@@ -387,10 +306,15 @@ func (w *CallStackWidget) Items() []models.StackFrame {
 }
 
 func (w *CallStackWidget) LinesForTest() []string {
-	n := w.buf.NumLines()
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		out[i] = w.buf.Line(i)
+	tbl := w.Table()
+	tbl.ClearRows()
+	w.fillTable(tbl)
+	if len(w.items) == 0 {
+		return []string{"no frames"}
+	}
+	out := make([]string, tbl.NumRows())
+	for i := 0; i < tbl.NumRows(); i++ {
+		out[i] = tbl.RowDisplayLine(i)
 	}
 	return out
 }

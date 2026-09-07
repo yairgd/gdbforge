@@ -6,16 +6,10 @@ package main
 
 // confirming is true while GDB QuitGate or Delve ConfirmGate awaits y/n.
 func (a *DebuggerApp) confirming() bool {
-	if a == nil {
+	if a == nil || a.backend == nil {
 		return false
 	}
-	if a.isDLV() {
-		return a.dlv.confirm.Confirming()
-	}
-	if gb := a.gdbBackend(); gb != nil && gb.Client != nil {
-		return gb.Client.Quit.Confirming()
-	}
-	return false
+	return a.backend.Confirming()
 }
 
 // onConfirmCtrlD starts quit (may open Confirm Asking).

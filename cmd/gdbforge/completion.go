@@ -24,7 +24,7 @@ type completionHost interface {
 	State() *platform.AppState
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
-	IsDLVConfirming() bool
+	IsConfirming() bool
 	PublishCompletion(msg termui.CompletionMsg)
 	RequestFrame()
 }
@@ -62,6 +62,35 @@ func (c *completionCtl) onMsg(msg termui.CompletionMsg) {
 	}
 	c.menu.Set(msg.Names)
 	c.syncView()
+	c.maybeEnterCommandCompletionMode(len(msg.Names))
+}
+
+// maybeEnterCommandCompletionMode switches to ModeCompletion when the cmdline
+// wildmenu has multiple candidates. CmdWidget posts CompletionMsg via
+// PostInterrupt, so handleCommandKey often runs before the menu exists; enter
+// completion mode here when the async delivery lands.
+func (c *completionCtl) maybeEnterCommandCompletionMode(n int) {
+	if n <= 1 {
+		return
+	}
+	h := c.host
+	if h == nil {
+		return
+	}
+	cmd := h.CmdWidget()
+	if cmd == nil || !cmd.Active() {
+		return
+	}
+	mode := h.Mode()
+	if mode != platform.ModeCommand && mode != platform.ModeCompletion {
+		return
+	}
+	c.forGDB = false
+	c.forLua = false
+	if mode != platform.ModeCompletion {
+		h.SetMode(platform.ModeCompletion)
+		h.RequestFrame()
+	}
 }
 
 func (c *completionCtl) syncView() {
@@ -143,7 +172,8 @@ func (c *completionCtl) applySelected() {
 	}
 	if c.useGDBInput() {
 		cur := h.GDBWidget().InputText()
-		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name)))
+		full := gdb.WithCompletionSpace(gdb.ApplyMenuChoice(cur, name))
+		h.GDBWidget().ApplyCompletionFrom(cur, full)
 		return
 	}
 	if c.useLuaInput() {
@@ -251,14 +281,14 @@ func (c *completionCtl) gdbTabComplete() {
 	if h.Backend() == nil {
 		return
 	}
-	if h.IsDLVConfirming() {
+	if h.IsConfirming() {
 		return
 	}
 	res := h.Backend().Complete(h.Session(), h.State(), text)
 
 	// Expand to longest common prefix when it grows the line.
 	if res.Completion != "" && res.Completion != text {
-		h.GDBWidget().ApplyCompletion(res.Completion)
+		h.GDBWidget().ApplyCompletionFrom(text, res.Completion)
 		text = res.Completion
 	}
 
@@ -273,7 +303,7 @@ func (c *completionCtl) gdbTabComplete() {
 		// nothing
 	case 1:
 		// Unique match — no further completions for this word; add a trailing space.
-		h.GDBWidget().ApplyCompletion(gdb.WithCompletionSpace(names[0]))
+		h.GDBWidget().ApplyCompletionFrom(text, gdb.WithCompletionSpace(names[0]))
 		c.clear()
 	default:
 		c.forGDB = true
@@ -305,7 +335,7 @@ func (c *completionCtl) refreshGDBMenu() {
 		c.leaveMode()
 		return
 	}
-	if h.IsDLVConfirming() {
+	if h.IsConfirming() {
 		c.leaveMode()
 		return
 	}

@@ -166,7 +166,9 @@ flowchart TB
 
 ## Viewport: two paint paths (PTY ANSI vs native Canvas)
 
-Every scrollable pane uses **`termui.Viewport`** over a **`platform.Buffer`**. At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
+**Line-based panes** use **`termui.Viewport`** over a **`platform.Buffer`**. **Tabular list panes** (Breakpoints, Threads, Call Stack) use **`TableWidget`** → `CellBuffer` + `RectViewport` instead — see [TableWidget paint path](#tablewidget-paint-path) below.
+
+At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
 
 ```mermaid
 flowchart TB
@@ -186,15 +188,20 @@ flowchart TB
 | Path | `Viewport.ANSI` | Buffer contents | Paint API | gdbforge panes |
 |------|-----------------|-----------------|-------------|----------------|
 | **PTY / foreign** | `true` | May contain `\x1b[…m` from terminal tools | `Canvas.DrawANSIText` parses SGR → `SetContent` | GDB console, Output (`:b io`), Exec (`:!`) |
-| **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Call Stack, Breakpoints, Help, … |
+| **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Assembly, Code, Help, FileList, … |
+| **Table lists** | N/A (no Viewport) | Column cells in `Table` | `CellBuffer` blit → `Canvas` | Breakpoints, Threads, Call Stack, FileList (`:edit`) |
 
-**Path 1 — data from TTY / PTY**
+**Path 1 — data from TTY / PTY (CompositeTerminal panes)**
 
 - GDB, gcc, make, bash send **already-colored** bytes.
-- App keeps ESC in the buffer (`OutputWidget` preserves `\x1b`).
-- Pane calls `ConsolePane.SetANSI(true)` → `Viewport.ANSI = true`.
-- `DrawANSIText` walks the string: escapes update `tcell.Style`; printable runes become cells.
-- `RowStyle` / `CellStyle` still apply (search highlights, line chrome) via the `decorate` callback.
+- `WireTTY` feeds bytes into the xterm emulator (`CompositeTerminal`).
+- `Paint` copies xterm cells (with SGR already resolved) onto the tcell canvas.
+- Used by GDB console (`:b gdb`), IO (`:b io`), and Exec (`:!`) panes.
+
+**Path 1b — Viewport ANSI panes (Lua REPL, legacy)**
+
+- `ConsolePane.SetANSI(true)` → `Viewport.ANSI = true` → `DrawANSIText` parses SGR in-buffer.
+- Only for line-based REPL scrollback, not the xterm terminal panes above.
 
 **Path 2 — data gdbforge builds (no ANSI in buffer)**
 
@@ -205,7 +212,28 @@ flowchart TB
 
 **Rule:** do not embed `\x1b` in buffers you paint with path 2. Do not set `ANSI=true` on panes whose buffer is plain text.
 
-Implementation: `internal/termui/viewport.go` (`Draw`, `ANSI` field), `internal/termui/utf.go` (`DrawANSIText`), `internal/gdbforge/widgets/assembly_widget.go` / `code_widget.go` (native example).
+Implementation: `internal/termui/viewport.go` (`Draw`, `ANSI` field), `internal/termui/utf.go` (`DrawANSIText`), `internal/gdbforge/widgets/assembly_widget.go` / `code_widget.go` (native Viewport example).
+
+---
+
+## TableWidget paint path
+
+Tabular debugger lists do **not** use `platform.Buffer` / `Viewport`. Paint stack:
+
+```text
+SetFill(model) → Table layout → RectViewport (origin) → CellBuffer (window) → Canvas → Grid
+```
+
+| Piece | Role |
+|-------|------|
+| `Table` | Columns, rows, auto column width, sticky title/header |
+| `RectViewport` | Pan when contentW/contentH exceeds pane; `EnsureRowVisible` scrolls Y only |
+| `CellBuffer` | Off-screen rune+style grid for visible slice |
+| `TablePaintState` | `RowStyleFunc` + `/search` highlight spans |
+
+Row colors (selection, PC mark, BP gutter) come from app widget `SetRowStyleFunc`, not embedded `\x1b` sequences.
+
+Implementation: `internal/termui/table.go`, `table_widget.go`, `table_paint.go`; adapters in `widgets/breakpoint_widget.go`, `thread_widget.go`, `callstack_widget.go`.
 
 ---
 
@@ -221,7 +249,8 @@ func (c Canvas) DrawANSIText(localX, localY int, text string, baseStyle tcell.St
 
 - Uses `utf8.DecodeRuneInString` for correct wide-character iteration.
 - Clips at canvas width.
-- **PTY path only:** ANSI/SGR parsing when `Viewport.ANSI` is true (`ConsolePane.SetANSI` / `GDBWidget.SetANSI`) so `make`/gcc colors and Delve listings render correctly. Native panes (`ANSI=false`) use plain UTF-8 + `CellStyle` instead — see [Viewport: two paint paths](#viewport-two-paint-paths-pty-ansi-vs-native-canvas). Copy selection strips ANSI to plain text.
+- **PTY terminal panes:** xterm emulator in `CompositeTerminal` resolves ANSI/SGR before paint — GDB, IO, Exec colors render correctly.
+- **Viewport ANSI path:** SGR parsing when `Viewport.ANSI` is true (`ConsolePane.SetANSI` for Lua REPL). Native panes (`ANSI=false`) use plain UTF-8 + `CellStyle` instead — see [Viewport: two paint paths](#viewport-two-paint-paths-pty-ansi-vs-native-canvas). Copy selection strips ANSI to plain text.
 
 **Gap:** no grapheme cluster / East Asian width handling yet. For debugger source code (mostly ASCII), this is acceptable short-term. Source view will need `runewidth` or equivalent before internationalized code display.
 

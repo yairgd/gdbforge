@@ -81,7 +81,7 @@ Widget (view)
   └── host intents / SetOn*  → app → *Ctl
 
 Async path:
-  PTY reader → PostInterrupt(msg) → uiEvents → HandleInterrupt → EventBus → *Ctl → paint
+  PTY reader → PostInterrupt(msg) → EventInterrupt → PollEvent → HandleInterrupt → EventBus → *Ctl → paint
 ```
 
 **Rules:**
@@ -106,7 +106,9 @@ Async path:
 | **Widget host** | List widget intents (`BreakpointHost`, …); app forwards to `*Ctl` |
 | **Model** | Domain state on `*Ctl` / `internal/gdbforge/models` (e.g. `BreakpointList`) |
 | **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; host intents / callbacks only; no `Send` |
-| **Backend** | `gdbforge/backend.Backend` — GDB vs Delve policy surface |
+| **Backend** | `gdbforge/backend.Backend` — semantic debugger ops + capability flags; `GDBBackend` / `DLVBackend` |
+| **ConsoleUpdate** | `debugger.ConsoleUpdate` — unified console/stop delta from `PushConsoleOutput` |
+| **StopInfo** | `debugger.StopInfo` — normalized stop event for the stop pipeline |
 | **Service** | External-system adapter (`ptyx` / `GDBClient` / `dlv.Client` / `GdbMcpService`); never imports UI |
 | **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; via `app.GDB()`; MCP/AI external API |
 | **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |
@@ -129,7 +131,8 @@ Async path:
 | **BreakGutter** | Per-line/addr BP view (`Numbers`, `Enabled`, `Condition`) for Code/Asm |
 | **autoAsm** | Swap location leaf to Assembly when source is missing; reclaim Code when it returns |
 | **InputLine** | Shared readline editor (text, cursor, history) |
-| **ConsolePane** | Shared natural REPL shell (scrollback + walking prompt) |
+| **ConsolePane** | Lua REPL shell (scrollback + walking prompt) — not GDB/IO/exec |
+| **CompositeTerminal** | xterm emulator + `WireTTY` for GDB / IO / exec panes |
 
 ---
 
@@ -178,14 +181,15 @@ sequenceDiagram
     Main->>App: NewTermApp()
     App->>Screen: Init, EnableMouse
     Main->>App: InitB · AddWidget · HandleResize()
-    loop until Ctrl+D
-        App->>Screen: select: termui.Event OR PollEvent
-        alt termui.Event
-            App->>App: HandleCoreEvents
-        else tcell
-            App->>App: HandleEvent · HandleKey / HandleResize
-            App->>App: Draw + grid flush + Show
+    loop until exit
+        App->>Screen: pollEventBatch (PollEvent)
+        App->>App: handleUIEventBatch
+        alt EventInterrupt
+            App->>App: HandleInterrupt → EventBus
+        else EventKey / Mouse / Resize
+            App->>App: HandleEvent → HandleKey / HandleResize
         end
+        App->>App: present when dirty
     end
     App->>Screen: Fini
 ```
@@ -314,22 +318,27 @@ Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](R
 
 ## GDB output path
 
+**Two paths after the 3-PTY refactor:**
+
+1. **CLI console (`:b gdb`)** — PTY #1 bytes → `WireCLI` → `CompositeTerminal` (xterm paint). No MI parser.
+2. **MI control (PTY #2)** — `Subscribe` → `GdbOutputMsg` → `consoleCtl` → `GdbInputState.PushRaw` → app state (breakpoints, threads, etc.).
+
 ```mermaid
 flowchart LR
-    PTY["ptyx reader"]
-    Fan["Subscribe fan-out"]
-    Bridge["UI bridge · PostEvent"]
-    Widget["GDBWidget.HandleEvent"]
+    CLI["CLI PTY #1"]
+    MI["MI PTY #2"]
+    Wire["WireCLI"]
+    Term["CompositeTerminal"]
+    Bridge["GdbOutputMsg bridge"]
     State["GdbInputState.PushRaw"]
-    Upd["MiUpdate"]
-    Cons["ConsolePane.AppendLines"]
 
-    PTY --> Fan --> Bridge --> Widget --> State --> Upd --> Cons
+    CLI --> Wire --> Term
+    MI --> Bridge --> State
 ```
 
-**Do not** read from a GDB channel in `Draw`. **Do not** call widget methods from the reader or bridge goroutine — only `PostEvent`.
+**Do not** read from a PTY in `Draw`. **Do not** call widget methods from reader or bridge goroutines — only `PostEvent`.
 
-`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. Console editing/layout lives in `InputLine` / `ConsolePane`; the app controller owns MI and `Session.Send`.
+`PushRaw` streams complete MI lines (`MiUpdate`); incomplete lines stay in `lineBuf` until the next chunk. GDB pane keys are raw tty bytes via `CompositeTerminal.HandleKey`; the app controller owns MI `Session.Send` on PTY #2.
 
 In-app AI: `:AI …` → `GdbMcpService.Ask` → `GdbCommand` (write lock + capture). See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md).
 
@@ -416,7 +425,9 @@ Always update docs when changing architecture-visible behavior.
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command / search line | `cmd_widget.go` (`CmdKindCommand` / `CmdKindSearch`), `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
-| Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `cmd/gdbforge/input.go` — [INPUT.md](INPUT.md) / [USER_GUIDE.md](USER_GUIDE.md) |
+| Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `cmd/gdbforge/search.go` — [INPUT.md](INPUT.md) |
+| TableWidget lists | `table_widget.go`, `table_search.go`; BP/threads/callstack embed; `/search` via `SearchHost` |
+| Table paint stack | `rect_viewport.go`, `cell_buffer.go`, `table.go`, `table_paint.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
 | Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |

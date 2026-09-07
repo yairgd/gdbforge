@@ -9,11 +9,9 @@ import (
 
 	"os/exec"
 	"path/filepath"
-
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 )
 
-// Simulates the app bridge: Subscribe -> collect InferiorOutputMsg payloads.
+// Simulates subscribing to inferior PTY stdout from a Delve session.
 func TestBridgeLikeSubscribeGetsStdout(t *testing.T) {
 	if _, err := exec.LookPath("dlv"); err != nil {
 		t.Skip("no dlv")
@@ -44,7 +42,6 @@ func TestBridgeLikeSubscribeGetsStdout(t *testing.T) {
 	go func() {
 		defer close(done)
 		for msg := range ch {
-			_ = events.InferiorOutputMsg{Data: msg.Data, Err: msg.Err}
 			mu.Lock()
 			got.WriteString(msg.Data)
 			s := got.String()

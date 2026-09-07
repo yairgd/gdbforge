@@ -42,14 +42,17 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | Working | `:b breakpoint`; internal list; `e`/`d`; syncs with GDB + CodeWidget |
-| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; refreshed on GDB stop |
+| `BreakpointWidget` | Working | `:b breakpoint`; `TableWidget` (3 cols); `e`/`d`; syncs with GDB + CodeWidget |
+| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; `TableWidget` lists; refreshed on GDB stop |
+| `TableWidget` (termui) | Working | `RectViewport` + `CellBuffer`; selection, search, copy; used by BP/threads/stack |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
-| `GDBWidget` | Working | Pure console view; app owns `GDBClient`/MI; ANSI; raw make/shell lines |
-| `ExecWidget` / `:!` | Working | PTY exec panes via `ptyx`; ANSI; jump list `<C-o>` |
-| `InputLine` / `ConsolePane` | Working | Shared readline + walking-prompt transcript; Ctrl-Z OnSuspend |
-| `ptyx.Client` / `ptyx.TTY` | Working | GDB PTY mux + inferior stdio PTY (`-inferior-tty-set`) |
-| `GDBClient` | Working | Thin MI wrapper over `ptyx`; CLI prog/args; `SuspendInferior` |
+| `GDBWidget` | Working | `CompositeTerminal` + `WireCLI`; app owns MI on PTY #2 |
+| `ExecWidget` / `:!` | Working | `CompositeTerminal` + `WireExec`; PTY via `ptyx.Start` |
+| `OutputWidget` / `:b io` | Working | `CompositeTerminal` + `WireInferior`; serial mux optional |
+| `InputLine` / `ConsolePane` | Working | Lua REPL only; shared readline + walking prompt |
+| `ptyx.TTY` | Working | Unified PTY: `Start` / `Open` / `AttachPath`; GDB 3-PTY + DLV 2-PTY |
+| `CompositeTerminal` / `WireTTY` | Working | xterm bridge for GDB / IO / exec panes |
+| `GDBClient` | Working | CLI + MI + inferior `*ptyx.TTY`; `new-ui mi2` bootstrap |
 | `dlv.Client` | Working | `-g dlv` backend; inferior PTY IO |
 | `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
@@ -58,7 +61,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Mouse support | Working | Focus, scroll, select, word/line click, list activate on release, PRIMARY paste |
 | Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/**/*.lua` from [`scripts/`](https://github.com/yairgd/gdbforge/tree/main/scripts) — [PLUGINS.md](PLUGINS.md) |
 | OpenOCD / JTAG | Not started | Design in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
-| Documentation | In progress | This docs tree + `cmd/docserve` |
+| Documentation | Updated | Reflects 3-PTY, `CompositeTerminal`, `WireTTY`; see `cmd/docserve` |
 
 ### Runnable today
 

@@ -53,7 +53,7 @@ func TestThreadWidgetActivateEnter(t *testing.T) {
 		{ID: "1", State: "stopped", Current: true},
 		{ID: "2", State: "running"},
 	})
-	w.selected = 1
+	w.SetSelectedRow(1)
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -74,7 +74,7 @@ func TestCallStackWidgetActivateEnter(t *testing.T) {
 		{Level: 0, Func: "main", File: "a.c", Line: 1},
 		{Level: 1, Func: "foo", File: "b.c", Line: 2},
 	})
-	w.selected = 1
+	w.SetSelectedRow(1)
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
 		t.Fatal("enter")
 	}
@@ -279,7 +279,7 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 		{Number: 1, Enabled: true, File: "a.c", Line: 1},
 		{Number: 2, Enabled: true, File: "a.c", Line: 2},
 	})
-	bp.viewport.CursorLine = 1
+	bp.SetSelectedRow(1)
 	bp.syncSelectedFromViewport()
 	if bp.Selected() != 1 {
 		t.Fatalf("bp selected=%d", bp.Selected())
@@ -291,10 +291,10 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 		{ID: "1", State: "stopped"},
 		{ID: "2", State: "running"},
 	})
-	th.viewport.CursorLine = 1
+	th.SetSelectedRow(1)
 	th.syncSelectedFromViewport()
-	if th.selected != 1 {
-		t.Fatalf("thread selected=%d", th.selected)
+	if th.Selected() != 1 {
+		t.Fatalf("thread selected=%d", th.Selected())
 	}
 
 	cs := NewCallStackWidget()
@@ -303,10 +303,10 @@ func TestListWidgetsMouseSyncSelection(t *testing.T) {
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "start"},
 	})
-	cs.viewport.CursorLine = 1
+	cs.SetSelectedRow(1)
 	cs.syncSelectedFromViewport()
-	if cs.selected != 1 {
-		t.Fatalf("callstack selected=%d", cs.selected)
+	if cs.Selected() != 1 {
+		t.Fatalf("callstack selected=%d", cs.Selected())
 	}
 }
 

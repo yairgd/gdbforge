@@ -32,6 +32,8 @@ func (a *DemoApp) HandleResize() {
 	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
+func (a *DemoApp) HandleTTYResume() {}
+
 func (a *DemoApp) handleNormalKey(ev *tcell.EventKey) bool {
 	if a.tryKeyBindings(a.keyBindings, ev) {
 		return true

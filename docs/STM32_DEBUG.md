@@ -1,13 +1,10 @@
 ---
-description: STM32 bare-metal debug with gdbforge — Nucleo F429ZI and STM32F405 (boards 1–2 in an extensible catalog). ST-Link OpenOCD and J-Link SWD; more boards under lua/stm32/<board>/.
-meta:
-  - name: keywords
-    content: STM32 debugger, Nucleo F429ZI, STM32F405, ST-Link debug, J-Link STM32 SWD, Cortex-M4 flash debug, OpenOCD STM32, Zephyr GDB, embedded GDB terminal, bare-metal STM32, gdbforge
+description: Debug STM32 bare-metal, Zephyr, and FreeRTOS firmware with gdbforge using ST-Link and OpenOCD or J-Link SWD.
 ---
 
 # STM32 debug
 
-**gdbforge** is a Vim-inspired **GDB terminal UI** for **STM32 bare-metal** (and Zephyr) development. Lua scripts under [`lua/stm32/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32) spawn **ST-Link + OpenOCD** or **J-Link GDB Server**, attach GDB, flash your ELF, and stop at `main`.
+**gdbforge** is a Vim-inspired **GDB terminal UI** for STM32 bare-metal, Zephyr, and FreeRTOS development. Lua scripts under [`lua/stm32/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32) spawn **ST-Link + OpenOCD** or **J-Link GDB Server** over SWD, attach GDB, and stop at `main` — the ST-Link scripts with `monitor reset halt`, the J-Link script after `load`.
 
 ## Demo — Nucleo F429ZI (Zephyr)
 
@@ -114,11 +111,11 @@ Scripts are grouped by board folder: **`lua/stm32/<board>/`**. The list below is
 
 | # | Board folder | MCU / kit | `:lua` scripts | Probe |
 |---|--------------|-----------|----------------|-------|
-| **1** | [`nucleo_f429zi/`](../lua/stm32/nucleo_f429zi/) | STM32F429ZI (Nucleo-F429ZI) | `nucleo_f429zi`, `nucleo_f429zi_stlink` | On-board ST-Link + OpenOCD |
-| **2** | [`stm32f405/`](../lua/stm32/stm32f405/) | STM32F405 | `stm32f405_stlink`, `stm32f405_jlink` | ST-Link + OpenOCD or J-Link SWD |
+| **1** | [`nucleo_f429zi/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32/nucleo_f429zi) | STM32F429ZI (Nucleo-F429ZI) | `nucleo_f429zi`, `nucleo_f429zi_stlink` | On-board ST-Link + OpenOCD |
+| **2** | [`stm32f405/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32/stm32f405) | STM32F405 | `stm32f405_stlink`, `stm32f405_jlink` | ST-Link + OpenOCD or J-Link SWD |
 | _3+_ | `<board>/` | _(future)_ | `<board>_stlink`, … | per board |
 
-**Adding board #3:** create `lua/stm32/<board>/` with at least one `*.lua` (`:lua` command = basename) and optional `*_openocd.cfg`. Copy [`nucleo_f429zi/`](../lua/stm32/nucleo_f429zi/) for ST-Link + Zephyr/OpenOCD, or [`stm32f405/`](../lua/stm32/stm32f405/) for a generic F4 + J-Link variant. Update this table and [`lua/stm32/README.md`](../lua/stm32/README.md).
+**Adding board #3:** create `lua/stm32/<board>/` with at least one `*.lua` (`:lua` command = basename) and optional `*_openocd.cfg`. Copy [`nucleo_f429zi/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32/nucleo_f429zi) for ST-Link + Zephyr/OpenOCD, or [`stm32f405/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32/stm32f405) for a generic F4 + J-Link variant. Update this table and [`lua/stm32/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/stm32/README.md).
 
 Install scripts into the project (no gdbforge rebuild):
 
@@ -199,9 +196,9 @@ Spawns J-Link, `target remote`, `load`, `break main`.
 
 | # | Board | `:lua` | Probe | Purpose |
 |---|-------|--------|-------|---------|
-| 1 | Nucleo F429ZI | `nucleo_f429zi` | ST-Link + OpenOCD | OpenOCD + GDB attach (Zephyr-friendly) |
+| 1 | Nucleo F429ZI | `nucleo_f429zi` | ST-Link + OpenOCD | Bare-metal, Zephyr, or FreeRTOS profile |
 | 1 | | `nucleo_f429zi_stlink` | _(alias)_ | same |
-| 2 | STM32F405 | `stm32f405_stlink` | ST-Link + OpenOCD | same OpenOCD flow as board 1 |
+| 2 | STM32F405 | `stm32f405_stlink` | ST-Link + OpenOCD | Bare-metal, Zephyr, or FreeRTOS profile |
 | 2 | | `stm32f405_jlink` | J-Link SWD | J-Link + load + break main |
 
 ---
@@ -217,6 +214,17 @@ gdbforge does **not** embed Zephyr-specific logic. Use standard GDB setup:
 | OpenOCD board cfg | derived from `$ZEPHYR_BASE/boards/arm/<board>/support/openocd.cfg` |
 | **`info threads` (Zephyr RTOS)** | `CONFIG_DEBUG_THREAD_INFO=y` **and** `:lua … zephyr` **and** `ZEPHYR_BASE` set |
 
+## FreeRTOS awareness
+
+The ST-Link scripts accept a **`freertos`** profile alongside `baremetal` and `zephyr`. It configures the OpenOCD target with `-rtos FreeRTOS` and then runs the same attach sequence as `baremetal`:
+
+```text
+:lua nucleo_f429zi freertos
+:lua stm32f405_stlink freertos
+```
+
+Unlike `zephyr`, this profile needs no `ZEPHYR_BASE` and adds no GDB source directories; OpenOCD scripts are taken from the bundled board cfg plus the system scripts directory (`GDBFORGE_OPENOCD_SCRIPTS` if it is elsewhere). Task awareness comes from OpenOCD's FreeRTOS support and requires the usual kernel symbols in the ELF — when it works, tasks appear as GDB threads in `info threads` and in the Threads pane.
+
 ---
 
 ## Environment variables (ST-Link scripts)
@@ -230,4 +238,4 @@ gdbforge does **not** embed Zephyr-specific logic. Use standard GDB setup:
 
 J-Link (`stm32f405_jlink` only): `GDBFORGE_JLINK`, `GDBFORGE_JLINK_DEVICE` (`STM32F405RG`), `GDBFORGE_JLINK_PORT` (`2334`).
 
-See also: [Lua catalog — STM32](../lua/stm32/README.md) · [User Guide — Lua](USER_GUIDE.md)
+See also: [Lua catalog — STM32](https://github.com/yairgd/gdbforge/blob/main/lua/stm32/README.md) · [User Guide — Lua](USER_GUIDE.md) · [FAQ — choosing a profile](FAQ.md#which-stm32-profile-should-i-use--baremetal-zephyr-or-freertos)

@@ -2,16 +2,33 @@ package dlv
 
 import "strings"
 
-// ConfirmGate tracks Delve CLI yes/no prompts (e.g. suspended breakpoint after exit).
-// Peer of gdb.QuitGate for interactive confirmations that are not a bare (dlv) prompt.
+// ConfirmKind is the kind of interactive answer Delve waits for on the CLI PTY.
+type ConfirmKind int
+
+const (
+	ConfirmYesNo ConfirmKind = iota
+	ConfirmPauseQuit
+)
+
+// ConfirmGate tracks Delve CLI interactive prompts (e.g. [Y/n]? after exit,
+// [p/q]? after SIGINT in multiclient mode). Peer of gdb.QuitGate.
 type ConfirmGate struct {
 	confirming bool
 	host       string
+	kind       ConfirmKind
 }
 
-// Confirming is true while waiting for a y/n answer on the Delve PTY.
+// Confirming is true while waiting for an interactive answer on the Delve PTY.
 func (g *ConfirmGate) Confirming() bool {
 	return g != nil && g.confirming
+}
+
+// Kind is the active confirm prompt kind (ConfirmYesNo when unset).
+func (g *ConfirmGate) Kind() ConfirmKind {
+	if g == nil || !g.confirming {
+		return ConfirmYesNo
+	}
+	return g.kind
 }
 
 // Host is the live input line text for the confirm question (may be empty).
@@ -38,6 +55,7 @@ func (g *ConfirmGate) Clear() {
 	}
 	g.confirming = false
 	g.host = ""
+	g.kind = ConfirmYesNo
 }
 
 // Observe updates confirm state from a parsed Delve update.
@@ -50,21 +68,35 @@ func (g *ConfirmGate) Observe(u Update) {
 		if u.ConfirmHost != "" {
 			g.host = u.ConfirmHost
 		}
+		g.kind = u.ConfirmKind
 	}
 	if u.PromptReady {
 		g.confirming = false
 		g.host = ""
+		g.kind = ConfirmYesNo
 	}
 }
 
 // LooksLikeYesNoPrompt reports Delve interactive [Y/n]? / [y/n]? questions.
 func LooksLikeYesNoPrompt(s string) bool {
+	kind, ok := LooksLikeConfirmPrompt(s)
+	return ok && kind == ConfirmYesNo
+}
+
+// LooksLikeConfirmPrompt reports Delve [Y/n]? or multiclient SIGINT [p/q]? prompts.
+func LooksLikeConfirmPrompt(s string) (ConfirmKind, bool) {
 	plain := strings.TrimSpace(s)
 	if plain == "" {
-		return false
+		return 0, false
 	}
 	lower := strings.ToLower(plain)
-	return strings.Contains(lower, "[y/n]?")
+	if strings.Contains(lower, "[p/q]?") {
+		return ConfirmPauseQuit, true
+	}
+	if strings.Contains(lower, "[y/n]?") {
+		return ConfirmYesNo, true
+	}
+	return 0, false
 }
 
 // ConfirmLiveHost returns a walking-prompt host string with one trailing space.

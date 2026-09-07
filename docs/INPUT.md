@@ -26,34 +26,37 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 ## Input overview
 
 ```text
-Keyboard / Mouse
+Keyboard / Mouse / async workers
         ↓
-TermApp (select loop)
-        ├── PostInterrupt / uiEvents  → HandleInterrupt → EventBus → *Ctl
-        └── tcell.Event               → TermApp.HandleEvent
-                                ├── EventResize → UpdateCanvas, AppApi.HandleResize
-                                └── EventKey    → AppApi.HandleKey
-                                      ├── mode router (AppState)
-                                      ├── Trie (key sequences)
-                                      └── TabWidget / CmdWidget HandleEvent → redraw
+TermApp.Run (UI thread · pollEventBatch)
+        ├── PollEvent → tcell.Event
+        │     ├── EventKey / EventMouse / EventResize → TermApp.HandleEvent
+        │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
+        │     │       └── EventKey → AppApi.HandleKey → mode router / Trie / widgets
+        │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
+        └── paint ticker (16ms) when dirty
 ```
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
+    participant Worker as Worker goroutine
     participant App as TermApp
+    participant Screen as tcell.Screen
     participant Dbg as DebuggerApp
     participant Widget as Widget
-    participant UI as uiEvents
     participant HI as HandleInterrupt
     participant Bus as EventBus
     participant Ctl as *Ctl handler
 
-    Input ->> App: PollEvent · tcell.Event
+    Input ->> Screen: terminal bytes
+    Screen ->> App: PollEvent · tcell.Event
     App ->> Dbg: HandleKey(ev)
     Dbg ->> Widget: HandleEvent(ev)
-    Note over App,UI: Async: PostInterrupt(payload)
-    UI ->> HI: HandleInterrupt
+    Note over Worker,Screen: Async: PostInterrupt(payload)
+    Worker ->> Screen: PostEvent(EventInterrupt)
+    Screen ->> App: PollEvent · EventInterrupt
+    App ->> HI: HandleInterrupt
     HI ->> Bus: Dispatch(typed msg)
     Bus ->> Ctl: Register handler
     App ->> App: Draw → Grid → Screen
@@ -61,8 +64,8 @@ sequenceDiagram
 
 **Design principles:**
 
-1. One thread owns input and rendering.
-2. Async sources post **`PostInterrupt`** — never call widget methods from reader goroutines.
+1. One thread owns input and rendering (`TermApp.Run` polls tcell directly — no background `PollEvent` goroutine).
+2. Async sources post **`PostInterrupt`** → `screen.PostEvent(EventInterrupt)` — never call widget methods from reader goroutines.
 3. Typed reactions live on **`*Ctl` handlers** registered on **`EventBus`**, not in a giant app `switch`.
 4. **Mode-aware routing** lives in `DebuggerApp`, not `TermApp`.
 
@@ -86,8 +89,8 @@ sequenceDiagram
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
      - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
-     - **Activity** — [`activity.go`](../cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`TermApp.Suspend`).
-     - **Confirm** — [`confirm_router.go`](../cmd/gdbforge/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
+     - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`TermApp.Suspend`).
+     - **Confirm** — [`confirm_router.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
      Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
@@ -98,18 +101,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    Select["TermApp.Run select loop"]
-    Poll["PollEvent · tcell"]
+    Select["TermApp.Run · UI thread"]
+    Poll["pollEventBatch · PollEvent"]
+    Batch["handleUIEventBatch"]
     TermHandler["TermApp.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
     HandleResize["AppApi.HandleResize"]
+    HandleInt["HandleInterrupt → EventBus"]
     Router["DebuggerApp · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
     Comp["CompletionBarWidget"]
 
-    Poll --> TermHandler
+    Select --> Poll --> Batch
+    Batch -->|"EventKey / Mouse / Resize"| TermHandler
+    Batch -->|"EventInterrupt"| HandleInt
     TermHandler -->|"EventKey"| HandleKey --> Router
     TermHandler -->|"EventResize"| HandleResize
     Router -->|"ModeNormal"| Trie
@@ -168,6 +175,8 @@ Example: `CmdWidget` (`cmd_widget.go`) — uses the same `ClipboardIO` bridge as
 | `Up` / `Down` | History navigation |
 | `Tab` | Complete command name |
 | `Backspace` on lone `:` | Deactivate widget (app should reset mode — see gap below) |
+| `Ctrl+A` / `Ctrl+E` | Move caret to start / end of editable text (after `:` or `/`) |
+| `Ctrl+U` | Kill from caret to start of editable text (keeps prefix) |
 | `Ctrl+V` / middle-click | Paste into the cmdline (CLIPBOARD / PRIMARY; first line only; middle-click rising-edge) |
 | `Ctrl+C` / `Ctrl+X` | Copy / cut text after `:` |
 | Rune / editing keys | Insert, move cursor |
@@ -350,22 +359,26 @@ The `:buffer <name>` command displays an application model, not a file. Each `<n
 
 ## Async input from debugger
 
-GDB output is **not keyboard input** but arrives through the same event loop so it stays ordered with keys and draw:
+GDB **MI** output is **not keyboard input** but arrives through the same event loop so it stays ordered with keys and draw:
 
 ```go
-screen.PostEvent(tcell.NewEventInterrupt(msg))  // core.GdbOutputMsg
+screen.PostEvent(tcell.NewEventInterrupt(msg))  // events.GdbOutputMsg (MI PTY only)
 screen.PostEvent(tcell.NewEventInterrupt("gdb-exit"))
 ```
 
-Bridge path:
+**CLI console bytes** paint directly via `WireCLI` → `CompositeTerminal` (no `GdbOutputMsg` for pane display).
 
-1. `ptyx` reader → `Subscribe` fan-out → UI bridge `PostEvent(GdbOutputMsg)` (bridge only calls `PostEvent`, never widgets)
-2. UI thread `HandleInterrupt` / `GDBWidget.HandleEvent` → `GdbInputState.PushRaw`
-3. Each complete MI line → `MiUpdate` → `ConsolePane.AppendLines` / prompt attach
+MI bridge path:
 
-Incomplete lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+1. MI PTY reader → `Subscribe` fan-out → UI bridge `PostEvent(GdbOutputMsg)` (bridge only calls `PostEvent`, never widgets)
+2. UI thread `HandleInterrupt` → `consoleCtl.onOutput` → `GdbInputState.PushRaw`
+3. Each complete MI line → `MiUpdate` → app state refresh (breakpoints, threads, source, …)
 
-See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for dual-PTY layout (GDB vs inferior), `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
+Inferior / exec bytes use **`WireTTY`** on their PTY masters.
+
+Incomplete MI lines stay in `GdbInputState.lineBuf` until the next `\n`. There is **no debounce timer**.
+
+See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) for 3-PTY layout (CLI + MI + inferior), `:AI`, and EventBus-driven breakpoint refresh (`BreakpointsChangedMsg`).
 
 **Design rationale:** MI chunks may split mid-line; newline splitting is enough. Streaming per complete record keeps the console snappy while all UI mutation stays on the tcell event loop.
 

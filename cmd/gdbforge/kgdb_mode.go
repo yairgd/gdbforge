@@ -68,8 +68,8 @@ func (a *DebuggerApp) maybeSwitchSerialConsoleOnRunning(running bool) {
 		a.printHostLine("serial-switch: " + err.Error())
 		return
 	}
-	a.printHostLine("serial-switch: console (kernel running)")
-	if con, _ := a.serial.TerminalPTY(); con != "" {
-		a.printHostLine("  minicom -D " + con)
+	a.printHostLine("serial-switch: console (kernel running) — use IO pane")
+	if err := a.wireSerialConsole(); err != nil {
+		a.printHostLine("serial-switch: wire IO: " + err.Error())
 	}
 }

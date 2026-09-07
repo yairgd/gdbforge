@@ -12,14 +12,14 @@ import (
 // HelpWidget is a scrollable Viewport user manual (:help / :b help).
 type HelpWidget struct {
 	termui.BaseWidget
-	viewport *termui.Viewport
-	buf      *platform.Buffer
+	doc *termui.ScrollDocument
+	buf *platform.Buffer
 }
 
 // NewHelpWidget caches the guide text into a read-only Viewport buffer.
 func NewHelpWidget() *HelpWidget {
 	buf := platform.NewBuffer()
-	vp := termui.NewViewport(buf)
+	vp := termui.NewScrollDocument(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
 	vp.SetCursorVisible(false)
@@ -27,7 +27,7 @@ func NewHelpWidget() *HelpWidget {
 
 	w := &HelpWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "Help"},
-		viewport:   vp,
+		doc:   vp,
 		buf:        buf,
 	}
 	for _, line := range buildHelpLines() {
@@ -70,14 +70,14 @@ func buildHelpLines() []string {
 }
 
 func (w *HelpWidget) initKeyBindings() {
-	w.BindKeyFunc("scroll-up", func(args ...any) { w.viewport.ScrollLineUp() }, "<Up>", "k")
-	w.BindKeyFunc("scroll-down", func(args ...any) { w.viewport.ScrollLineDown() }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.viewport.ViewScrollColLeft() }, "<Left>")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.viewport.ViewScrollColRight() }, "<Right>")
-	w.BindKeyFunc("page-up", func(args ...any) { w.viewport.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.viewport.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
-	w.BindKeyFunc("home", func(args ...any) { w.viewport.ScrollHome() }, "<Home>", "g")
-	w.BindKeyFunc("end", func(args ...any) { w.viewport.ScrollEnd() }, "<End>", "G")
+	w.BindKeyFunc("scroll-up", func(args ...any) { w.doc.ScrollLineUp() }, "<Up>", "k")
+	w.BindKeyFunc("scroll-down", func(args ...any) { w.doc.ScrollLineDown() }, "<Down>", "j")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.doc.ViewScrollColLeft() }, "<Left>")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.doc.ViewScrollColRight() }, "<Right>")
+	w.BindKeyFunc("page-up", func(args ...any) { w.doc.ScrollPageUp(10) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.doc.ScrollPageDown(10) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { w.doc.ScrollHome() }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { w.doc.ScrollEnd() }, "<End>", "G")
 }
 
 func (w *HelpWidget) HandleFocusKey(ev *tcell.EventKey) bool {
@@ -87,30 +87,30 @@ func (w *HelpWidget) HandleFocusKey(ev *tcell.EventKey) bool {
 func (w *HelpWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		w.viewport.HandleEvent(e)
+		w.doc.HandleEvent(e)
 	case *tcell.EventKey:
 		if w.HandleBoundKey(e) {
 			return
 		}
-		w.viewport.HandleEvent(e)
+		w.doc.HandleEvent(e)
 	}
 }
 
 func (w *HelpWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
-	w.viewport.SetCursorVisible(false)
+	w.doc.SetCursorVisible(false)
 }
 
 func (w *HelpWidget) SetClipboard(io termui.ClipboardIO) {
-	w.viewport.SetClipboard(io)
+	w.doc.SetClipboard(io)
 }
 
 func (w *HelpWidget) Draw(c termui.Canvas) {
-	w.viewport.Draw(c)
+	w.doc.Draw(c)
 }
 
-func (w *HelpWidget) Viewport() *termui.Viewport {
-	return w.viewport
+func (w *HelpWidget) Viewport() *termui.ScrollDocument {
+	return w.doc
 }
 
 func (w *HelpWidget) LinesForTest() []string {
