@@ -7,6 +7,32 @@ import (
 	xterm "github.com/gitpod-io/xterm-go"
 )
 
+func TestOnGDBConsolePromptLine(t *testing.T) {
+	c := NewTerminalController(80, 24, 100)
+	defer c.Close()
+
+	if err := c.WriteString("(gdb) info b"); err != nil {
+		t.Fatal(err)
+	}
+	if !OnGDBConsolePromptLine(c) {
+		t.Fatal("expected gdb prompt line")
+	}
+
+	if err := c.WriteString("\r\n(dlv) b main."); err != nil {
+		t.Fatal(err)
+	}
+	if !OnGDBConsolePromptLine(c) {
+		t.Fatal("expected dlv prompt line")
+	}
+
+	if err := c.WriteString("\r\nlua> print(1)"); err != nil {
+		t.Fatal(err)
+	}
+	if OnGDBConsolePromptLine(c) {
+		t.Fatal("lua prompt must not match gdb console")
+	}
+}
+
 func TestInputLineTextStripsDelvePrompt(t *testing.T) {
 	c := NewTerminalController(80, 24, 100)
 	defer c.Close()

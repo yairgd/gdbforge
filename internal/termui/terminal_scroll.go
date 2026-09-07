@@ -17,9 +17,17 @@ func (c *CompositeTerminal) handleScrollKey(ev *tcell.EventKey) bool {
 		c.scrollPageDown()
 		return true
 	case tcell.KeyHome:
+		if c.atBottom() && OnGDBConsolePromptLine(c.ctl) {
+			_ = c.ctl.SendInput([]byte("\x01")) // readline beginning-of-line (Ctrl-A)
+			return true
+		}
 		c.scrollHome()
 		return true
 	case tcell.KeyEnd:
+		if c.atBottom() && OnGDBConsolePromptLine(c.ctl) {
+			_ = c.ctl.SendInput([]byte("\x05")) // readline end-of-line (Ctrl-E)
+			return true
+		}
 		c.scrollEnd()
 		return true
 	default:

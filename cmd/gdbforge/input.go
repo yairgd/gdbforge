@@ -348,11 +348,12 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	x, y := ev.Position()
 	primary := ev.Buttons()&tcell.ButtonPrimary != 0
 	wheel := ev.Buttons()&(tcell.WheelUp|tcell.WheelDown) != 0
+	middle := ev.Buttons()&tcell.ButtonMiddle != 0
 	inCmd := a.cmdLineContains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeSearch || a.Mode() == platform.ModeCompletion {
 		// Middle-click paste into the cmdline (Linux terminal convention).
-		if a.cmdWidget != nil && ev.Buttons()&tcell.ButtonMiddle != 0 {
+		if a.cmdWidget != nil && middle {
 			a.cmdWidget.HandleEvent(ev)
 			a.RequestFrame()
 			return
@@ -376,20 +377,11 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 		return
 	}
 
-	if primary {
+	// Any pane interaction makes the pane under the pointer active. In
+	// particular, middle-click must focus the GDB pane before pasting.
+	if primary || wheel || middle {
 		// FocusAt includes the status band; IsSeparatorAt ignores status rows
 		// that share a horizontal gutter so Code status clicks still focus.
-		if a.Tab().FocusAt(x, y) {
-			a.rememberCodeLeafFromFocus()
-			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
-				a.lua.enterMode(lw)
-			} else {
-				a.EnterInsertMode()
-			}
-		}
-	}
-
-	if wheel {
 		if a.Tab().FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {

@@ -365,6 +365,18 @@ func (m *LuaConsoleWidget) handleKey(ev *tcell.EventKey) bool {
 	case tcell.KeyDelete:
 		m.deleteAtCursor()
 		return true
+	case tcell.KeyHome:
+		if !m.term.AtBottom() {
+			return m.term.HandleKey(ev)
+		}
+		m.cursorHome()
+		return true
+	case tcell.KeyEnd:
+		if !m.term.AtBottom() {
+			return m.term.HandleKey(ev)
+		}
+		m.cursorEnd()
+		return true
 	}
 	if isLuaCtrlC(ev) {
 		if m.term.HasSelection() {

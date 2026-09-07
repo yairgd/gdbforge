@@ -154,6 +154,41 @@ func TestCompositeTerminalScrollKeys(t *testing.T) {
 	}
 }
 
+func TestCompositeTerminalHomeEndOnDebuggerPrompt(t *testing.T) {
+	c := NewCompositeTerminal(40, 5, 100)
+	for i := 0; i < 30; i++ {
+		_ = c.ctl.WriteString("line\r\n")
+	}
+	_ = c.ctl.WriteString("(gdb) hello")
+
+	var sent []byte
+	c.ctl.SetInputHandler(func(b []byte) error {
+		sent = append(sent, b...)
+		return nil
+	})
+
+	c.HandleKey(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone))
+	if string(sent) != "\x01" {
+		t.Fatalf("Home at prompt: got %q want \\x01", sent)
+	}
+
+	sent = nil
+	c.HandleKey(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone))
+	if string(sent) != "\x05" {
+		t.Fatalf("End at prompt: got %q want \\x05", sent)
+	}
+
+	sent = nil
+	c.HandleKey(tcell.NewEventKey(tcell.KeyPgUp, 0, tcell.ModNone))
+	c.HandleKey(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone))
+	if len(sent) != 0 {
+		t.Fatalf("Home while scrolled up: sent %q to PTY", sent)
+	}
+	if c.viewDisp() != 0 {
+		t.Fatalf("Home while scrolled up: YDisp=%d want 0", c.viewDisp())
+	}
+}
+
 func TestCompositeTerminalEnterScrollsToBottom(t *testing.T) {
 	c := NewCompositeTerminal(10, 5, 100)
 	for i := 0; i < 30; i++ {

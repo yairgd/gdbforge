@@ -99,6 +99,21 @@ func TestLuaConsoleInsertMidLineShiftsTail(t *testing.T) {
 	}
 }
 
+func TestLuaConsoleHomeEndMovesCursor(t *testing.T) {
+	w := NewLuaConsoleWidget()
+	typeLua(t, w, "hello")
+
+	w.HandleFocusKey(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone))
+	if _, cur := luaLine(w); cur != 0 {
+		t.Fatalf("Home cursor=%d want 0", cur)
+	}
+
+	w.HandleFocusKey(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone))
+	if _, cur := luaLine(w); cur != len("hello") {
+		t.Fatalf("End cursor=%d want %d", cur, len("hello"))
+	}
+}
+
 func TestLuaConsoleBackspaceThenRetype(t *testing.T) {
 	w := NewLuaConsoleWidget()
 	typeLua(t, w, "prinf")

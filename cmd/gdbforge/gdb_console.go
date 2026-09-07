@@ -251,6 +251,16 @@ func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(events.GdbOutputMs
 	})
 }
 
+func (c *consoleCtl) scrollGdbConsoleToBottom() {
+	h := c.host
+	if h == nil {
+		return
+	}
+	if gw := h.GDBWidget(); gw != nil {
+		gw.ScrollToBottom()
+	}
+}
+
 func (c *consoleCtl) onGdbConsoleInterrupt() {
 	h := c.host
 	if h == nil {
@@ -259,6 +269,7 @@ func (c *consoleCtl) onGdbConsoleInterrupt() {
 	if h.Backend() == nil {
 		return
 	}
+	c.scrollGdbConsoleToBottom()
 	// Interrupt must not wait on PTY-owner bookkeeping: GDB/Delve only leave
 	// continue via ^C/SIGINT (typed commands sit unread until the prompt returns).
 	// Confirming-interrupt policy lives on Confirm (onConfirmingInterrupt).
@@ -278,6 +289,7 @@ func (c *consoleCtl) onConfirmingInterrupt() {
 	}
 	running := h.State() != nil && h.Debug().InferiorRunning()
 	confirming := h.Backend().Confirming()
+	c.scrollGdbConsoleToBottom()
 	c.withGdbUIOwner(func() { _ = h.Backend().Interrupt(running, confirming) })
 	h.RequestFrame()
 }

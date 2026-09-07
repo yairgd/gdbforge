@@ -16,6 +16,24 @@ var debuggerPrompts = []string{
 	"lua> ",
 }
 
+// gdbConsolePrompts are PTY-backed debugger CLI prompts (GDB/Delve console).
+var gdbConsolePrompts = []string{"(gdb) ", "(dlv) "}
+
+// OnGDBConsolePromptLine reports whether the cursor is on a GDB or Delve CLI
+// prompt row (used for Home/End line editing vs scrollback navigation).
+func OnGDBConsolePromptLine(c *TerminalController) bool {
+	if c == nil {
+		return false
+	}
+	for _, p := range gdbConsolePrompts {
+		if OnPromptLine(c, p) {
+			return true
+		}
+	}
+	full := promptLineRaw(c)
+	return strings.HasPrefix(full, "(gdb)") || strings.HasPrefix(full, "(dlv)")
+}
+
 // InputLineText returns the editable portion of the current xterm line up to the
 // cursor (debugger prompt stripped). Used for GDB/Delve Tab completion.
 func InputLineText(c *TerminalController) string {

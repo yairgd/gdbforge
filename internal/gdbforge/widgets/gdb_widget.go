@@ -161,3 +161,10 @@ func (w *GDBWidget) ResetTerminalInput() {
 		w.term.AfterHostResume()
 	}
 }
+
+// ScrollToBottom pins the viewport to the live tail (new PTY output visible).
+func (w *GDBWidget) ScrollToBottom() {
+	if w != nil && w.term != nil {
+		w.term.ScrollToBottom()
+	}
+}
