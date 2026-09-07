@@ -61,6 +61,7 @@ Watch **Actions → Release**; the GitHub Release page fills in with notes + bin
 
 ## Notes
 
+- Record what shipped in the [changelog](CHANGELOG.md) — the GitHub Release body is auto-generated from commits, so the changelog is the human-written history.
 - Do **not** put auto-release on every push to `main` — tags keep history clean.
 - Day-to-day docs still deploy via [docs.yml](https://github.com/yairgd/gdbforge/blob/main/.github/workflows/docs.yml) (`push` to `main` under `docs/`). A release **also** redeploys Pages so the site matches the tagged tree.
 - Pages needs **Settings → Pages → Source = GitHub Actions**. Private repos need a plan that allows private Pages (or make the repo public).

@@ -67,6 +67,7 @@ nav:
       - Flow browser: flows/browser.md
   - Development:
       - Developer Guide: DEVELOPER_GUIDE.md
+      - Changelog: CHANGELOG.md
       - Roadmap: ROADMAP.md
       - Releasing: RELEASING.md
       - Hosting: HOSTING.md
