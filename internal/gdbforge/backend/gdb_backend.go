@@ -146,6 +146,10 @@ func (b *GDBBackend) Interrupt(inferiorRunning, confirming bool) error {
 	return c.InterruptIdle()
 }
 
+// TargetRunning is unanswerable for GDB: MI has no run-state query, so the
+// caller keeps using its own InferiorRunning bookkeeping.
+func (b *GDBBackend) TargetRunning() (bool, bool) { return false, false }
+
 func (b *GDBBackend) SuspendInferior() error {
 	if c := b.client(); c != nil {
 		return c.SuspendInferior()

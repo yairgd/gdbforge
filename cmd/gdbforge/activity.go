@@ -23,9 +23,26 @@ func (a *DebuggerApp) activitySnapshot() activitySnap {
 	}
 	if a.Debug() != nil {
 		s.InferiorRunning = a.Debug().InferiorRunning()
+		if !s.InferiorRunning && a.backendSaysRunning() {
+			s.InferiorRunning = true
+			a.Debug().SetInferiorRunning(true)
+		}
 	}
 	s.LuaJob = a.lua.JobBusy()
 	return s
+}
+
+// backendSaysRunning asks the debugger itself whether the target is executing.
+// InferiorRunning is armed from run-control commands gdbforge can see, and
+// Delve's line editor hides some of them: recalling `continue` from history or
+// completing it with Tab sends arrow/Tab bytes, not the command text. Without
+// this check Ctrl-C and Ctrl-Z are silently dropped while the program runs.
+func (a *DebuggerApp) backendSaysRunning() bool {
+	if a == nil || a.backend == nil {
+		return false
+	}
+	running, ok := a.backend.TargetRunning()
+	return ok && running
 }
 
 // forCtrlC: LuaJob wins over inferior (cancel script first).

@@ -128,9 +128,22 @@ func (b *DLVBackend) Interrupt(inferiorRunning, confirming bool) error {
 		}
 	}
 	if !inferiorRunning {
-		return nil
+		// The tracked flag misses resumes that never spelled "continue" in the
+		// typed bytes (Delve history recall, Tab completion), so confirm with
+		// the server before dropping the interrupt.
+		if running, ok := b.TargetRunning(); !ok || !running {
+			return nil
+		}
 	}
 	return c.Interrupt()
+}
+
+func (b *DLVBackend) TargetRunning() (bool, bool) {
+	c := b.client()
+	if c == nil {
+		return false, false
+	}
+	return c.TargetRunning()
 }
 
 func (b *DLVBackend) SuspendInferior() error { return ErrNotSupported }

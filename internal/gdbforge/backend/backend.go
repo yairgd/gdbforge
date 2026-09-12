@@ -50,6 +50,9 @@ type Backend interface {
 
 	// Interrupt sends SIGINT / cancel-confirm according to backend rules.
 	Interrupt(inferiorRunning, confirming bool) error
+	// TargetRunning asks the debugger whether the target is executing right now.
+	// ok is false when the backend cannot answer (GDB MI has no such query).
+	TargetRunning() (running, ok bool)
 	// SuspendInferior is GDB-only (SIGTSTP); DLV returns ErrNotSupported.
 	SuspendInferior() error
 	// SendLine writes a console line (UI owner must wrap if needed).

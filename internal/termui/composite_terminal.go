@@ -221,6 +221,11 @@ func (c *CompositeTerminal) HandleKey(ev *tcell.EventKey) bool {
 	}
 	if isCopyCutKey(ev) && c.hasSel {
 		c.copySelection()
+		// Consume the selection so the next Ctrl-C reaches the debugger. A mark
+		// left by an earlier double-click or drag survives until the next click
+		// in this pane, and once live output scrolls it out of view it hijacks
+		// every later Ctrl-C with nothing on screen to explain why.
+		c.clearSelection()
 		return true
 	}
 	if isPasteKey(ev) {

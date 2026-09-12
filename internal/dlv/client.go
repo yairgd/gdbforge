@@ -336,6 +336,23 @@ func (c *Client) ListFunctionsFilter(filter string) ([]string, error) {
 	return c.RPC.ListFunctions(filter, 0)
 }
 
+// TargetRunning asks the headless server whether the target is executing.
+// ok is false when there is no rpc2 client or the query failed.
+//
+// Delve's own CLI asks the same question on SIGINT (sigintGuard). gdbforge
+// cannot rely on its keystroke tap alone: resuming through Delve's line editor
+// (history recall, Tab completion) never spells "continue" in the typed bytes.
+func (c *Client) TargetRunning() (running, ok bool) {
+	if c == nil || c.RPC == nil {
+		return false, false
+	}
+	st, err := c.RPC.GetStateNonBlocking()
+	if err != nil || st == nil {
+		return false, false
+	}
+	return st.Running, true
+}
+
 func (c *Client) Interrupt() error {
 	if c == nil {
 		return nil

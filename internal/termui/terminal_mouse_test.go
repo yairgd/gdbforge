@@ -239,3 +239,43 @@ func TestCompositeTerminalSelectWordAt(t *testing.T) {
 		t.Fatalf("copied %q want foo_bar", copied)
 	}
 }
+
+// TestCtrlCConsumesSelection: a mark left by an earlier double-click or drag
+// survives until the next click in the pane, and DebuggerApp routes Ctrl-C to
+// the pane instead of the debugger whenever HasTerminalSelection reports true.
+// Copying must therefore clear the mark, or the target can never be halted from
+// a pane the user once selected text in.
+func TestCtrlCConsumesSelection(t *testing.T) {
+	c := NewCompositeTerminal(20, 3, 100)
+	var copied string
+	c.SetClipboard(ClipboardIO{Copy: func(s string) { copied = s }})
+	_ = c.ctl.WriteString("foo_bar baz\r\n")
+
+	var absLine int
+	c.ctl.WithTerminal(func(term *xterm.Terminal) {
+		absLine = term.Buffer().YDisp
+	})
+	if !c.selectWordAt(termPos{line: absLine, col: 4}) {
+		t.Fatal("selectWordAt failed")
+	}
+	if !c.HasSelection() {
+		t.Fatal("expected a selection after double-click")
+	}
+
+	if !c.HandleKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone)) {
+		t.Fatal("Ctrl-C with a selection should be consumed as copy")
+	}
+	if copied != "foo_bar" {
+		t.Fatalf("copied %q want foo_bar", copied)
+	}
+	if c.HasSelection() {
+		t.Fatal("selection must be cleared so the next Ctrl-C reaches the debugger")
+	}
+
+	// Second Ctrl-C is no longer a copy, so the app-level interrupt runs.
+	copied = ""
+	c.HandleKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone))
+	if copied != "" {
+		t.Fatalf("second Ctrl-C copied %q, want no copy", copied)
+	}
+}
