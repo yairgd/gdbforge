@@ -53,9 +53,9 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -88,7 +88,7 @@ jobs:
         working-directory: dist
         run: sha256sum "${{ env.artifact }}" | tee "${{ env.artifact }}.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gdbforge-${{ steps.ver.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -103,7 +103,7 @@ jobs:
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve version / prerelease
         id: meta
@@ -120,7 +120,7 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: gdbforge-${{ steps.meta.outputs.version }}-*
@@ -130,7 +130,7 @@ jobs:
         run: ls -la dist
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.version }}
           name: gdbforge ${{ steps.meta.outputs.version }}
@@ -155,16 +155,16 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
       - name: Generate code flows catalog (x/tools callgraph)
         run: go run ./cmd/flowdoc --generate
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
           cache: pip
@@ -176,9 +176,9 @@ jobs:
       - name: Build MkDocs site
         run: python -m mkdocs build --clean
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
