@@ -12,9 +12,9 @@ type batchTestAPI struct {
 	events []string
 }
 
-func (m *batchTestAPI) HandleMouse(*tcell.EventMouse)  {}
-func (m *batchTestAPI) HandleResize()                  {}
-func (m *batchTestAPI) HandleTTYResume()               {}
+func (m *batchTestAPI) HandleMouse(*tcell.EventMouse) {}
+func (m *batchTestAPI) HandleResize()                 {}
+func (m *batchTestAPI) HandleTTYResume()              {}
 func (m *batchTestAPI) HandleInterrupt(ev *tcell.EventInterrupt) {
 	m.events = append(m.events, "i:"+fmt.Sprint(ev.Data()))
 }

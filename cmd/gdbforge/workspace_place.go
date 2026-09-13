@@ -6,9 +6,9 @@ import (
 )
 
 func (w *LayoutShell) placeCodeInSlot(cw *widgets.CodeWidget) {
-	tab := w.Tab()
+	lay := w.Layout()
 	h := w.host
-	if cw == nil || tab == nil || h == nil {
+	if cw == nil || lay == nil || h == nil {
 		return
 	}
 	h.BufsSetPrimary(cw)
@@ -16,21 +16,21 @@ func (w *LayoutShell) placeCodeInSlot(cw *widgets.CodeWidget) {
 		return
 	}
 	if h.AsmHasSplit() {
-		asm := tab.LeafMark(leafMarkAsm)
+		asm := lay.LeafMark(leafMarkAsm)
 		if asm != nil && w.focusedLeaf() == asm {
 			if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) && leaf != asm {
 				if isAssemblyWidget(leaf.GetWidget()) && h.AsmPreferAsm() {
 					return
 				}
 				leaf.SetWidget(cw)
-				tab.SetLeafMark(leafMarkCode, leaf)
+				lay.SetLeafMark(leafMarkCode, leaf)
 			}
 			return
 		}
 		if isAssemblyWidget(h.FocusedWidget()) {
 			if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) && !isAssemblyWidget(leaf.GetWidget()) {
 				leaf.SetWidget(cw)
-				tab.SetLeafMark(leafMarkCode, leaf)
+				lay.SetLeafMark(leafMarkCode, leaf)
 			}
 			return
 		}
@@ -38,47 +38,47 @@ func (w *LayoutShell) placeCodeInSlot(cw *widgets.CodeWidget) {
 	if !w.isGdbLeaf(w.focusedLeaf()) {
 		if isAssemblyWidget(h.FocusedWidget()) {
 			if h.FocusedWidget() != cw {
-				_ = tab.ReplaceFocusedWidget(cw)
+				_ = lay.ReplaceFocusedWidget(cw)
 			}
 			w.rememberCodeLeafFromFocus()
 			return
 		}
 		if focused := h.focusedCode(); focused != nil {
 			if focused != cw {
-				_ = tab.ReplaceFocusedWidget(cw)
+				_ = lay.ReplaceFocusedWidget(cw)
 			}
 			w.rememberCodeLeafFromFocus()
 			return
 		}
 		if _, ok := h.FocusedWidget().(*widgets.LogoWidget); ok {
-			_ = tab.ReplaceFocusedWidget(cw)
+			_ = lay.ReplaceFocusedWidget(cw)
 			w.rememberCodeLeafFromFocus()
 			return
 		}
 	}
 	if leaf := w.findCodeLeaf(); leaf != nil && !w.isGdbLeaf(leaf) {
-		if h.AsmHasSplit() && tab.LeafMark(leafMarkAsm) == leaf {
+		if h.AsmHasSplit() && lay.LeafMark(leafMarkAsm) == leaf {
 			return
 		}
 		if isAssemblyWidget(leaf.GetWidget()) && h.AsmPreferAsm() {
 			return
 		}
 		leaf.SetWidget(cw)
-		tab.SetLeafMark(leafMarkCode, leaf)
-		if tab.LeafMark(leafMarkAsm) == leaf {
-			tab.SetLeafMark(leafMarkAsm, nil)
+		lay.SetLeafMark(leafMarkCode, leaf)
+		if lay.LeafMark(leafMarkAsm) == leaf {
+			lay.SetLeafMark(leafMarkAsm, nil)
 		}
 		return
 	}
-	if tab.ReplaceMatchingLeafWidget(cw, isSourceCodeSlot) {
-		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isSourceCodeSlot))
+	if lay.ReplaceMatchingLeafWidget(cw, isSourceCodeSlot) {
+		lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isSourceCodeSlot))
 	}
 }
 
 func (w *LayoutShell) placeLogoInCodeSlot() {
-	tab := w.Tab()
+	lay := w.Layout()
 	h := w.host
-	if tab == nil || h == nil {
+	if lay == nil || h == nil {
 		return
 	}
 	logo := h.LogoWidget()
@@ -87,19 +87,19 @@ func (w *LayoutShell) placeLogoInCodeSlot() {
 		h.SetLogoWidget(logo)
 	}
 	if _, ok := h.FocusedWidget().(*widgets.CodeWidget); ok && !w.isGdbLeaf(w.focusedLeaf()) {
-		_ = tab.ReplaceFocusedWidget(logo)
-		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
+		_ = lay.ReplaceFocusedWidget(logo)
+		lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
 		return
 	}
-	if tab.ReplaceMatchingLeafWidget(logo, isCodeSlot) {
-		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
+	if lay.ReplaceMatchingLeafWidget(logo, isCodeSlot) {
+		lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
 	}
 }
 
 func (w *LayoutShell) swapFocusedWidget(wid termui.Widget) bool {
-	tab := w.Tab()
+	lay := w.Layout()
 	h := w.host
-	if tab == nil || wid == nil || h == nil {
+	if lay == nil || wid == nil || h == nil {
 		return false
 	}
 	if w.isGdbLeaf(w.focusedLeaf()) && wid != h.GDBWidget() {
@@ -109,7 +109,7 @@ func (w *LayoutShell) swapFocusedWidget(wid termui.Widget) bool {
 	if prev == wid {
 		return false
 	}
-	if !tab.ReplaceFocusedWidget(wid) {
+	if !lay.ReplaceFocusedWidget(wid) {
 		return false
 	}
 	if prev != nil {
@@ -133,9 +133,9 @@ func (w *LayoutShell) pushWidgetJump(wid termui.Widget) {
 }
 
 func (w *LayoutShell) JumpBack(args ...any) {
-	tab := w.Tab()
+	lay := w.Layout()
 	h := w.host
-	if tab == nil || h == nil || len(w.widgetJump) == 0 {
+	if lay == nil || h == nil || len(w.widgetJump) == 0 {
 		return
 	}
 	prev := w.widgetJump[len(w.widgetJump)-1]
@@ -143,7 +143,7 @@ func (w *LayoutShell) JumpBack(args ...any) {
 		return
 	}
 	w.widgetJump = w.widgetJump[:len(w.widgetJump)-1]
-	if tab.ReplaceFocusedWidget(prev) {
+	if lay.ReplaceFocusedWidget(prev) {
 		h.RequestFrame()
 	}
 }

@@ -380,9 +380,10 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 	// Any pane interaction makes the pane under the pointer active. In
 	// particular, middle-click must focus the GDB pane before pasting.
 	if primary || wheel || middle {
-		// FocusAt includes the status band; IsSeparatorAt ignores status rows
-		// that share a horizontal gutter so Code status clicks still focus.
-		if a.Tab().FocusAt(x, y) {
+		// FocusAt includes the status band, while separator hit-testing ignores
+		// status rows that share a horizontal gutter, so Code status clicks
+		// still focus rather than starting a drag.
+		if lay := a.Layout(); lay != nil && lay.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)
@@ -403,8 +404,8 @@ func (a *DebuggerApp) enterCommandMode() {
 	a.lua.leaveMode()
 	a.comp.setForGDB(false)
 	a.comp.clear()
-	if a.Tab() != nil {
-		a.Tab().SetInsertActive(false)
+	if lay := a.Layout(); lay != nil {
+		lay.SetInsertActive(false)
 	}
 	a.search.clearTarget()
 	if a.cmdWidget != nil && !a.cmdWidget.Active() {
@@ -420,8 +421,8 @@ func (a *DebuggerApp) enterSearchMode() {
 	a.lua.leaveMode()
 	a.comp.setForGDB(false)
 	a.comp.clear()
-	if a.Tab() != nil {
-		a.Tab().SetInsertActive(false)
+	if lay := a.Layout(); lay != nil {
+		lay.SetInsertActive(false)
 	}
 	a.search.captureFocused()
 	if a.cmdWidget != nil {
@@ -589,8 +590,3 @@ func parseGotoLineCmd(text string) (line int, ok bool) {
 	}
 	return n, true
 }
-
-
-
-
-

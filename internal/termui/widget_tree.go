@@ -904,6 +904,11 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 
 	if node.Type == NodeLeaf {
 		l.geom[node] = layoutGeom{canvas: c}
+		// A leaf may itself be a Layout (nested arrangement inside one pane),
+		// which needs its canvas before Draw.
+		if nested, ok := node.Widget.(Layout); ok {
+			nested.BuildLayout(c)
+		}
 		return
 	}
 

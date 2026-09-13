@@ -8,16 +8,15 @@ import (
 // Tab model
 //
 
-// Tab is chrome for one tab entry (title + content).
+// Tab is chrome for one tab entry: a title plus a Layout.
 //
-// Today content is a *WidgetTree. Long-term Tab should host a generic view
-// (any Widget / container): forms, text viewers, alternate window managers,
-// or whole apps — not only a split tree. Do not add new Tab APIs that assume
-// WidgetTree; prefer forwarding through the Widget interface when extending.
-// A content redesign is deferred; the tree field is the known coupling point.
+// Tab is a generic container. It hosts any Layout — the split tree today, any
+// future layout tomorrow — and deliberately exposes no operation of its own on
+// that content. Callers needing layout-specific behaviour take the Layout (or
+// the concrete layout type they built) and work on it directly.
 type Tab struct {
-	Title string
-	tree  *WidgetTree // TODO: generalize to content Widget (not always WidgetTree)
+	Title   string
+	Content Layout
 }
 
 //
@@ -25,276 +24,87 @@ type Tab struct {
 //
 
 // TabWidget manages a list of Tabs and forwards Draw/HandleEvent to the active
-// tab's content.
+// tab's Layout.
 //
 // Current implementation is intentionally degenerate:
 //   - Always exactly one tab
 //   - No tab switching
 //   - No tab header rendering
-//   - Content is still *WidgetTree (see Tab)
 //
-// Tree-specific methods (ActiveTree, Split, LeafMark, …) are transitional
-// convenience forwarders — not the long-term Tab surface.
+// Do not add methods here that forward into the Layout. Hand out the Layout
+// and let the caller drive it.
 type TabWidget struct {
 	Widget
 
-	tabs       []Tab
-	active     int
-	statusClip ClipboardIO
-}
-
-// SetStatusClipboard wires status-band mouse copy for all tab trees.
-func (t *TabWidget) SetStatusClipboard(io ClipboardIO) {
-	if t == nil {
-		return
-	}
-	t.statusClip = io
-	for i := range t.tabs {
-		if t.tabs[i].tree != nil {
-			t.tabs[i].tree.SetStatusClipboard(io)
-		}
-	}
+	tabs   []Tab
+	active int
 }
 
 //
-// Constructor
+// Constructors
 //
 
-// NewTabWidget creates a TabWidget with a single tab whose content is tree.
-// Prefer this over inventing more tree-specific constructors; when Tab content
-// generalizes, a NewTabWidgetFrom(Widget) (or similar) can sit beside this.
-func NewTabWidget(
-	title string,
-	tree *WidgetTree,
-) *TabWidget {
+// NewTabWidget creates a TabWidget with a single tab showing content.
+func NewTabWidget(title string, content Layout) *TabWidget {
 	return &TabWidget{
 		tabs: []Tab{
 			{
-				Title: title,
-				tree:  tree,
+				Title:   title,
+				Content: content,
 			},
 		},
 		active: 0,
 	}
-}
-
-// HandleEvent forwards the event to the active tab tree.
-func (t *TabWidget) HandleEvent(ev tcell.Event) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.SetStatusClipboard(t.statusClip)
-		tree.HandleEvent(ev)
-	}
-}
-
-func (t *TabWidget) FocusAt(x, y int) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.FocusAt(x, y)
-	}
-	return false
-}
-
-func (t *TabWidget) IsSeparatorAt(x, y int) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.findSeparator(x, y) != nil
-	}
-	return false
-}
-
-// Draw forwards the draw call to the active tab tree using the full assigned
-// rect. Apps own chrome banding (cmdline / wildmenu) via HandleResize.
-func (t *TabWidget) Draw(c Canvas) {
-	tree := t.ActiveTree()
-	if tree == nil {
-		return
-	}
-	tree.BuildLayout(c)
-	tree.Draw(c)
-}
-
-func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}
-
-//
-// Helper
-//
-
-// ActiveTree returns the WidgetTree of the currently selected tab.
-// WidgetTree-centric: valid only while Tab content is a split tree.
-func (t *TabWidget) ActiveTree() *WidgetTree {
-	if len(t.tabs) == 0 {
-		return nil
-	}
-	return t.tabs[t.active].tree
-}
-
-// SetActiveTree replaces the WidgetTree of the currently selected tab.
-// WidgetTree-centric: layout apply / remount path for split-tree tabs only.
-func (t *TabWidget) SetActiveTree(tree *WidgetTree) {
-	if len(t.tabs) == 0 || tree == nil {
-		return
-	}
-	t.tabs[t.active].tree = tree
-	tree.SetStatusClipboard(t.statusClip)
-}
-
-// FocusedWidget returns the focused leaf widget in the active tab.
-func (t *TabWidget) FocusedWidget() Widget {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.FocusedWidget()
-	}
-	return nil
-}
-
-// FocusWidget focuses the leaf showing w (safe before first layout).
-func (t *TabWidget) FocusWidget(w Widget) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.FocusWidget(w)
-	}
-	return false
-}
-
-// FocusLeaf focuses a leaf node in the active tree.
-func (t *TabWidget) FocusLeaf(leaf *Node) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.FocusLeaf(leaf)
-	}
-	return false
-}
-
-// FindLeaf returns the first active-tree leaf matching match.
-func (t *TabWidget) FindLeaf(match func(Widget) bool) *Node {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.FindLeaf(match)
-	}
-	return nil
-}
-
-// SetLeafMark bookmarks a leaf on the active tree (see WidgetTree.SetLeafMark).
-func (t *TabWidget) SetLeafMark(name string, leaf *Node) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.SetLeafMark(name, leaf)
-	}
-}
-
-// LeafMark returns a named leaf bookmark from the active tree.
-func (t *TabWidget) LeafMark(name string) *Node {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.LeafMark(name)
-	}
-	return nil
-}
-
-// TopLeftLeaf returns the top-left leaf of the active tree.
-func (t *TabWidget) TopLeftLeaf() *Node {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.TopLeftLeaf()
-	}
-	return nil
-}
-
-// ReplaceFocusedWidget replaces the widget shown in the focused window.
-// Does not split, create panes, or change tree geometry.
-func (t *TabWidget) ReplaceFocusedWidget(w Widget) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.ReplaceFocusedWidget(w)
-	}
-	return false
-}
-
-// ReplaceMatchingLeafWidget replaces a non-focused leaf matching match (see WidgetTree).
-func (t *TabWidget) ReplaceMatchingLeafWidget(w Widget, match func(Widget) bool) bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.ReplaceMatchingLeafWidget(w, match)
-	}
-	return false
-}
-
-func (t *TabWidget) SetEqualAlways(v bool) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.SetEqualAlways(v)
-	}
-}
-
-func (t *TabWidget) EqualAlways() bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.EqualAlways()
-	}
-	return false
-}
-
-func (t *TabWidget) SetOnResize(fn func()) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.SetOnResize(fn)
-	}
-}
-
-func (t *TabWidget) SetInsertActive(active bool) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.SetInsertActive(active)
-	}
-}
-
-func (t *TabWidget) VerticalSplit(w Widget) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.Split(Vertical, w)
-	}
-}
-
-func (t *TabWidget) HorizontalSplit(w Widget) {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.Split(Horizontal, w)
-	}
-}
-
-func (t *TabWidget) FocusLeft() {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.FocusLeft()
-	}
-}
-
-func (t *TabWidget) FocusRight() {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.FocusRight()
-	}
-}
-
-func (t *TabWidget) FocusUp() {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.FocusUp()
-	}
-}
-
-func (t *TabWidget) FocusDown() {
-	if tree := t.ActiveTree(); tree != nil {
-		tree.FocusDown()
-	}
-}
-
-func (t *TabWidget) DeleteFocus() bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.DeleteFocus()
-	}
-	return false
-}
-
-// OnlyFocus keeps only the focused pane (Vim Ctrl-W o / :only).
-func (t *TabWidget) OnlyFocus() bool {
-	if tree := t.ActiveTree(); tree != nil {
-		return tree.OnlyFocus()
-	}
-	return false
 }
 
 // NewTabTwoHozSplitWins creates a tab with a horizontal split: top over bottom.
 func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
-	tree := NewWidgetTree(top)
-	tree.Split(Horizontal, bottom)
-	return &TabWidget{
-		tabs: []Tab{
-			{
-				Title: title,
-				tree:  tree,
-			},
-		},
-		active: 0,
+	lay := NewSplitLayout(top)
+	lay.Split(Horizontal, bottom)
+	return NewTabWidget(title, lay)
+}
+
+//
+// Content access
+//
+
+// Layout returns the active tab's content. Callers that need arrangement
+// specific operations keep the concrete layout they built, or type-assert.
+func (t *TabWidget) Layout() Layout {
+	if t == nil || len(t.tabs) == 0 {
+		return nil
+	}
+	return t.tabs[t.active].Content
+}
+
+// SetLayout replaces the active tab's content (layout apply / remount).
+func (t *TabWidget) SetLayout(content Layout) {
+	if t == nil || len(t.tabs) == 0 || content == nil {
+		return
+	}
+	t.tabs[t.active].Content = content
+}
+
+//
+// Widget
+//
+
+// HandleEvent forwards the event to the active tab's layout.
+func (t *TabWidget) HandleEvent(ev tcell.Event) {
+	if l := t.Layout(); l != nil {
+		l.HandleEvent(ev)
 	}
 }
+
+// Draw lays out and paints the active tab's layout using the full assigned
+// rect. Apps own chrome banding (cmdline / wildmenu) via HandleResize.
+func (t *TabWidget) Draw(c Canvas) {
+	l := t.Layout()
+	if l == nil {
+		return
+	}
+	l.BuildLayout(c)
+	l.Draw(c)
+}
+
+func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}

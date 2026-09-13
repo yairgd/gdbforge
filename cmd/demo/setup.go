@@ -25,16 +25,17 @@ func (a *DemoApp) Init() error {
 	a.builtins["log"] = a.logPane
 	a.ctx.Log.Named("demo").Info("demo started")
 
-	a.tab = demo.BuildDefault("demo", demo.Panes{
+	a.layout = demo.BuildDefault(demo.Panes{
 		Main: a.mainPane,
 		Side: a.sidePane,
 		Log:  a.logPane,
 	})
-	a.tab.SetStatusClipboard(a.ClipboardIO())
-	a.tab.FocusWidget(a.mainPane)
-	a.tab.SetOnResize(a.RequestFrame)
+	a.tab = termui.NewTabWidget("demo", a.layout)
+	a.layout.SetStatusClipboard(a.ClipboardIO())
+	a.layout.FocusWidget(a.mainPane)
+	a.layout.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
-	a.tab.SetEqualAlways(true)
+	a.layout.SetEqualAlways(true)
 	a.AddWidget(a.tab)
 
 	a.AddWidget(termui.NewCompletionBarWidget(a.ctx))

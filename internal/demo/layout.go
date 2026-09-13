@@ -12,8 +12,8 @@ type Panes struct {
 }
 
 // BuildDefault builds Main|Side over Log (gdbforge-like multi-pane chrome).
-func BuildDefault(title string, p Panes) *termui.TabWidget {
-	tree := termui.NewWidgetTree(p.Main)
+func BuildDefault(p Panes) *termui.SplitLayout {
+	tree := termui.NewSplitLayout(p.Main)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Horizontal, p.Log)
 	tree.FocusWidget(p.Main)
@@ -26,7 +26,7 @@ func BuildDefault(title string, p Panes) *termui.TabWidget {
 	}
 	tree.SetEqualAlways(false)
 	tree.FocusWidget(p.Main)
-	return termui.NewTabWidget(title, tree)
+	return tree
 }
 
 // HelpText is shown by :help in the main pane.

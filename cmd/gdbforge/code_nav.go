@@ -35,8 +35,8 @@ func (a *DebuggerApp) onEscape() {
 		a.activateLastOrCodePane()
 		return
 	}
-	if tab := a.Tab(); tab != nil {
-		tab.SetInsertActive(false)
+	if lay := a.Layout(); lay != nil {
+		lay.SetInsertActive(false)
 	}
 	a.SetMode(platform.ModeNormal)
 	a.RequestRedraw()

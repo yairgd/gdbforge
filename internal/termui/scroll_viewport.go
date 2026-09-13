@@ -6,10 +6,10 @@ import "unicode/utf8"
 // Widgets own model data and paint visible rows; the viewport only tracks
 // where to look (Top/Left) and the logical caret (CursorLine/CursorCol).
 type ScrollViewport struct {
-	Top, Left int
+	Top, Left             int
 	CursorLine, CursorCol int
 
-	width, height int
+	width, height    int
 	screenX, screenY int
 
 	// dragAutoScroll enables edge auto-scroll while dragging a selection

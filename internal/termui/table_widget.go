@@ -130,7 +130,7 @@ func (w *TableWidget) MoveSelection(delta int) {
 	if n == 0 {
 		return
 	}
-	w.selectedRow = (w.selectedRow+delta%n + n) % n
+	w.selectedRow = (w.selectedRow + delta%n + n) % n
 	w.ensureRowVisible()
 }
 

@@ -5,7 +5,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// ApplyLayout rebuilds the active tab tree for a registered layout name.
+// ApplyLayout remounts the active tab with a freshly built named layout.
 func (w *LayoutShell) ApplyLayout(name string) {
 	h := w.host
 	if w == nil || h == nil || w.Tab() == nil || !h.State().HasLayout(name) {
@@ -16,18 +16,18 @@ func (w *LayoutShell) ApplyLayout(name string) {
 		}
 		return
 	}
-	tree := w.buildLayoutTree(name)
-	if tree == nil {
+	lay := w.buildLayout(name)
+	if lay == nil {
 		if log := h.LogNamed("layout"); log != nil {
 			log.Error("layout not implemented: " + name)
 		}
 		return
 	}
-	w.Tab().SetActiveTree(tree)
+	w.Tab().SetLayout(lay)
 	w.finishLayoutApply(name)
 }
 
-func (w *LayoutShell) buildLayoutTree(name string) *termui.WidgetTree {
+func (w *LayoutShell) buildLayout(name string) *termui.SplitLayout {
 	h := w.host
 	code := h.LayoutCodePane()
 	panes := h.DebugPanes(code)
@@ -47,13 +47,18 @@ func (w *LayoutShell) buildLayoutTree(name string) *termui.WidgetTree {
 
 func (w *LayoutShell) finishLayoutApply(name string) {
 	h := w.host
-	tab := w.Tab()
+	lay := w.Layout()
 	h.State().SetCurrentLayout(name)
 	h.State().SetEqualAlways(true)
-	tab.SetEqualAlways(true)
-	tab.FocusWidget(h.GDBWidget())
-	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
-	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(wid termui.Widget) bool { return wid == h.GDBWidget() }))
+	// A freshly built layout carries none of the wiring done at startup, so
+	// re-apply it here. Missing the resize hook left separator drags unable to
+	// request a frame after the first :layout switch.
+	lay.SetStatusClipboard(h.ClipboardIO())
+	lay.SetOnResize(h.RequestFrame)
+	lay.SetEqualAlways(true)
+	lay.FocusWidget(h.GDBWidget())
+	lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
+	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(wid termui.Widget) bool { return wid == h.GDBWidget() }))
 	h.EnterInsertMode()
 	h.RequestFrame()
 }

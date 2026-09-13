@@ -378,4 +378,3 @@ func (a *DebuggerApp) clearCodePane() {
 	}
 	a.placeLogoInCodeSlot()
 }
-

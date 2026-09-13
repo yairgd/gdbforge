@@ -1,0 +1,21 @@
+flowchart TD
+    TermApp["TermApp frame loop"]
+    TabW["TabWidget"]
+    Tab["Tab: Title, Content Layout"]
+    Iface["Layout interface<br/>Widget + BuildLayout"]
+    SL["SplitLayout<br/>embeds *WidgetTree"]
+    WT["WidgetTree"]
+    FutureA["future layout"]
+    FutureB["future layout"]
+    Shell["LayoutShell.Layout()<br/>returns *SplitLayout"]
+    AppCode["cmd/gdbforge pane, focus<br/>and mark call sites"]
+
+    TermApp -->|"Draw"| TabW
+    TabW --> Tab
+    Tab --> Iface
+    Iface --> SL
+    Iface --> FutureA
+    Iface --> FutureB
+    SL --> WT
+    AppCode --> Shell
+    Shell --> SL

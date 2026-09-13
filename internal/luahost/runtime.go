@@ -47,8 +47,8 @@ type Runtime struct {
 	openExternalTTY OpenExternalTTYFunc
 	spawnTerminal   SpawnTerminalFunc
 	trackChild      TrackChildFunc // host-only; not exposed to Lua scripts
-	scriptDir       string // directory of the loaded user script (lua_dir())
-	scriptPath      string // full path of the loaded user script (empty for embedded)
+	scriptDir       string         // directory of the loaded user script (lua_dir())
+	scriptPath      string         // full path of the loaded user script (empty for embedded)
 	lastErr         string
 	// jobCtx is set for the duration of an async CallNamed (sleep/wait_port/system + L.SetContext).
 	jobCtx context.Context

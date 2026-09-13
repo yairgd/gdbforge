@@ -20,10 +20,10 @@ type DocumentView struct {
 	searchContentOffset int
 	onSearchJump        func(lineIdx int)
 
-	selAnchor    docPos
-	selCursor    docPos
-	selActive    bool
-	hasSel       bool
+	selAnchor     docPos
+	selCursor     docPos
+	selActive     bool
+	hasSel        bool
 	lastClickTime time.Time
 	lastClickPos  docPos
 	clickCount    int

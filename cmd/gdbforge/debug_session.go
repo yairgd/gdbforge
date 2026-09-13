@@ -18,20 +18,20 @@ import (
 // controllers (console bridge, breakpoints, threads/stack, stop pipeline).
 // DebuggerApp embeds it and wires host interfaces at initControllers.
 type DebugSession struct {
-	backend    backend.Backend
-	debug      *debugstate.State
-	miLog      *platform.NamedLogger
-	gdbWidget  *widgets.GDBWidget
-	gdbMcp     *mcp.GdbMcpService
-	breaks     breakCtl
-	asm        asmCtl
-	bufs       bufferCtl
-	debugInfo  debugInfoCtl
-	console    consoleCtl
-	inferiorIO inferiorIOCtl
-	dlv        dlvCtl
-	bpWidget   *widgets.BreakpointWidget
-	outputWidget *widgets.OutputWidget
+	backend          backend.Backend
+	debug            *debugstate.State
+	miLog            *platform.NamedLogger
+	gdbWidget        *widgets.GDBWidget
+	gdbMcp           *mcp.GdbMcpService
+	breaks           breakCtl
+	asm              asmCtl
+	bufs             bufferCtl
+	debugInfo        debugInfoCtl
+	console          consoleCtl
+	inferiorIO       inferiorIOCtl
+	dlv              dlvCtl
+	bpWidget         *widgets.BreakpointWidget
+	outputWidget     *widgets.OutputWidget
 	luaConsoleWidget *widgets.LuaConsoleWidget
 	fileListWidget   *widgets.FileListWidget
 }

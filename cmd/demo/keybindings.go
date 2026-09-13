@@ -53,16 +53,16 @@ func (a *DemoApp) onEscape() {
 		a.leaveCommandMode()
 		return
 	}
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if a.layout != nil {
+		a.layout.SetInsertActive(false)
 	}
 	a.SetMode(platform.ModeNormal)
 	a.RequestFrame()
 }
 
 func (a *DemoApp) enterCommandMode() {
-	if a.tab != nil {
-		a.tab.SetInsertActive(false)
+	if a.layout != nil {
+		a.layout.SetInsertActive(false)
 	}
 	if a.cmdWidget != nil && !a.cmdWidget.Active() {
 		a.cmdWidget.Activate()

@@ -15,11 +15,11 @@ type TableSearchHit struct {
 
 // TablePaintState controls row styling and search highlights during paint.
 type TablePaintState struct {
-	RowStyle      func(row int) tcell.Style
-	SearchColor   tcell.Color
-	SearchHits    []TableSearchHit
-	SelectHit     *TableSearchHit
-	SelectColor   tcell.Color
+	RowStyle    func(row int) tcell.Style
+	SearchColor tcell.Color
+	SearchHits  []TableSearchHit
+	SelectHit   *TableSearchHit
+	SelectColor tcell.Color
 }
 
 func (ps TablePaintState) cellStyle(row, col, runeOff int, base tcell.Style) tcell.Style {

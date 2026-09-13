@@ -5,7 +5,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/termui"
 )
 
-// Named leaf marks on the active WidgetTree (workspace role names).
+// Named leaf marks on the active SplitLayout (workspace role names).
 const (
 	leafMarkCode = "code"
 	leafMarkGDB  = "gdb"
@@ -18,16 +18,17 @@ const (
 
 const widgetJumpMax = 32
 
-// LayoutShell owns gdbforge workspace policy above a termui.TabWidget:
+// LayoutShell owns gdbforge workspace policy above a termui.SplitLayout:
 // pane marks, placement, focus activation (Code/GDB/last), layout apply, and
 // focused-pane widget swap / jump-back.
 //
 // It does not own debugger domain state (breakpoints, stops, threads, …).
-// Generic tree operations stay on TabWidget — callers use Tab().
+// Generic pane operations stay on the layout — callers use Layout(), which
+// returns it concretely so nothing here forwards.
 //
-// Assumption (current): the Tab hosts a WidgetTree. If Tab later hosts other
-// content types, gdbforge LayoutShell stays the split-tree policy layer; other
-// tab contents would use different app policy, not these mark/slot APIs.
+// LayoutShell is the split-tree policy layer specifically. A tab hosting some
+// other termui.Layout needs its own policy, not these mark and slot APIs;
+// Layout() returns nil in that case.
 type LayoutShell struct {
 	tab        *termui.TabWidget
 	host       layoutHost
@@ -42,13 +43,29 @@ func initLayoutShell(app *DebuggerApp, tab *termui.TabWidget) {
 	app.host = app
 }
 
-// Tab returns the underlying generic TabWidget for tree operations
-// (focus navigation, splits, HandleEvent, …).
+// Tab returns the tab container. It only hosts the layout — use Layout for
+// pane, focus and mark operations.
 func (w *LayoutShell) Tab() *termui.TabWidget {
 	if w == nil {
 		return nil
 	}
 	return w.tab
+}
+
+// Layout returns the active split layout for direct pane, focus and mark
+// operations. Typed concretely so callers need no assertion and Tab needs no
+// forwarding methods.
+//
+// Returns nil before the shell is wired and when the tab hosts a non-split
+// Layout. Callers must nil-check: SplitLayout embeds *WidgetTree, so calling a
+// promoted method on a nil *SplitLayout panics when the embedded field is read,
+// before any nil receiver check inside WidgetTree can run.
+func (w *LayoutShell) Layout() *termui.SplitLayout {
+	if w == nil || w.tab == nil {
+		return nil
+	}
+	lay, _ := w.tab.Layout().(*termui.SplitLayout)
+	return lay
 }
 
 // Widget returns the TabWidget as a termui.Widget for TermApp.AddWidget.

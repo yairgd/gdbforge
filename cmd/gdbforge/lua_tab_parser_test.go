@@ -34,8 +34,8 @@ func TestLuaTabCompletionViaCommandParser(t *testing.T) {
 
 	p := commands.NewCommandParser(a.commandReg)
 	cases := []struct {
-		line string
-		want int
+		line  string
+		want  int
 		check func([]string) bool
 	}{
 		{"lua stm32-stlink ", 10, nil},

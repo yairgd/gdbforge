@@ -38,33 +38,33 @@ func (a *DemoApp) bufferCompletions(prefix string, _ bool) []string {
 }
 
 func (a *DemoApp) OnFocusLeft(args ...any) {
-	if a.tab != nil {
-		a.tab.FocusLeft()
+	if a.layout != nil {
+		a.layout.FocusLeft()
 		a.RequestFrame()
 	}
 }
 func (a *DemoApp) OnFocusRight(args ...any) {
-	if a.tab != nil {
-		a.tab.FocusRight()
+	if a.layout != nil {
+		a.layout.FocusRight()
 		a.RequestFrame()
 	}
 }
 func (a *DemoApp) OnFocusUp(args ...any) {
-	if a.tab != nil {
-		a.tab.FocusUp()
+	if a.layout != nil {
+		a.layout.FocusUp()
 		a.RequestFrame()
 	}
 }
 func (a *DemoApp) OnFocusDown(args ...any) {
-	if a.tab != nil {
-		a.tab.FocusDown()
+	if a.layout != nil {
+		a.layout.FocusDown()
 		a.RequestFrame()
 	}
 }
 
 func (a *DemoApp) EnterInsertMode(args ...any) {
-	if a.tab != nil {
-		a.tab.SetInsertActive(true)
+	if a.layout != nil {
+		a.layout.SetInsertActive(true)
 	}
 	a.SetMode(platform.ModeInsert)
 	a.RequestRedraw()
@@ -73,14 +73,14 @@ func (a *DemoApp) EnterInsertMode(args ...any) {
 func (a *DemoApp) SplitVertical(args ...any) {
 	p := demo.NewScrollPane("split", "[split]")
 	p.SetClipboard(a.ClipboardIO())
-	a.tab.VerticalSplit(p)
+	a.layout.Split(termui.Vertical, p)
 	a.RequestRedraw()
 }
 
 func (a *DemoApp) SplitHorizontal(args ...any) {
 	p := demo.NewScrollPane("split", "[split]")
 	p.SetClipboard(a.ClipboardIO())
-	a.tab.HorizontalSplit(p)
+	a.layout.Split(termui.Horizontal, p)
 	a.RequestRedraw()
 }
 
@@ -100,7 +100,7 @@ func (a *DemoApp) OnHelp(args ...any) {
 	for _, line := range strings.Split(demo.HelpText, "\n") {
 		a.mainPane.Buffer().AppendLine(line)
 	}
-	a.tab.FocusWidget(a.mainPane)
+	a.layout.FocusWidget(a.mainPane)
 	a.RequestFrame()
 }
 
@@ -116,16 +116,16 @@ func (a *DemoApp) OnBuffer(args ...any) {
 		return
 	}
 	w, ok := a.builtins[name]
-	if !ok || a.tab == nil {
+	if !ok || a.layout == nil {
 		a.ctx.Log.Named("demo").Warn("unknown buffer: " + name)
 		return
 	}
-	a.tab.FocusWidget(w)
+	a.layout.FocusWidget(w)
 	a.RequestFrame()
 }
 
 func (a *DemoApp) Quit(args ...any) {
-	if a.tab != nil && a.tab.DeleteFocus() {
+	if a.layout != nil && a.layout.DeleteFocus() {
 		a.Exit()
 	} else {
 		a.Exit()

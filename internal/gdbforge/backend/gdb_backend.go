@@ -16,8 +16,8 @@ import (
 
 // GDBBackend is the MI/GDB implementation of Backend.
 type GDBBackend struct {
-	Client *gdb.GDBClient
-	Input  *gdb.GdbInputState
+	Client  *gdb.GDBClient
+	Input   *gdb.GdbInputState
 	cliExec bool // CLI next/step/continue instead of MI -exec-* (kgdb serial)
 }
 

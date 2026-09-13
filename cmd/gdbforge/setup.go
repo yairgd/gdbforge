@@ -29,15 +29,15 @@ func (a *DebuggerApp) InitB() error {
 	}
 	initLayoutShell(a, a.newStartupTab(logo))
 
-	tab := a.Tab()
-	tab.SetStatusClipboard(a.ClipboardIO())
-	tab.FocusWidget(a.gdbWidget)
-	tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
-	tab.SetLeafMark(leafMarkGDB, tab.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
+	lay := a.Layout()
+	lay.SetStatusClipboard(a.ClipboardIO())
+	lay.FocusWidget(a.gdbWidget)
+	lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
+	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
-	tab.SetOnResize(a.RequestFrame)
+	lay.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
-	tab.SetEqualAlways(true)
+	lay.SetEqualAlways(true)
 	a.AddWidget(a.Widget())
 
 	bar := termui.NewCompletionBarWidget(a.ctx)

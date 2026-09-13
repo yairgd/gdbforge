@@ -34,12 +34,12 @@ type DebuggerApp struct {
 	cfg       SessionConfig
 	fileLog   *platform.FileSink
 
-	comp     completionCtl
-	cmd      cmdCtl
-	search   searchCtl
-	lua      luaCtl
-	serial   serialCtl
-	children childProcCtl
+	comp            completionCtl
+	cmd             cmdCtl
+	search          searchCtl
+	lua             luaCtl
+	serial          serialCtl
+	children        childProcCtl
 	extInferiorHold *externalInferiorHold
 
 	execClient *execcli.ExecClient

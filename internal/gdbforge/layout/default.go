@@ -13,18 +13,18 @@ type DefaultSpec struct {
 
 func (s DefaultSpec) Name() string { return Default }
 
-func (s DefaultSpec) Build(panes Panes) *termui.WidgetTree {
+func (s DefaultSpec) Build(panes Panes) *termui.SplitLayout {
 	return BuildDefault(panes, s.Ratios)
 }
 
 // BuildDefault builds:
 //
 //	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
-func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termui.WidgetTree {
+func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termui.SplitLayout {
 	ratios.Left = clampRatio(ratios.Left)
 	ratios.Output = clampRatio(ratios.Output)
 	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
-	tree := termui.NewWidgetTree(panes.Code)
+	tree := termui.NewSplitLayout(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Vertical, panes.Output)
 	tree.FocusWidget(panes.Code)

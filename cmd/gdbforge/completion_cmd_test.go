@@ -20,14 +20,14 @@ func (h *completionTestHost) GDBWidget() *widgets.GDBWidget                 { re
 func (h *completionTestHost) LuaConsoleWidget() *widgets.LuaConsoleWidget   { return nil }
 func (h *completionTestHost) LuaGdbforgeComplete(string) (string, []string) { return "", nil }
 func (h *completionTestHost) CmdWidget() *termui.CmdWidget                  { return h.cmd }
-func (h *completionTestHost) Backend() backend.Backend                        { return nil }
-func (h *completionTestHost) Session() core.Session                           { return nil }
-func (h *completionTestHost) State() *platform.AppState                       { return nil }
-func (h *completionTestHost) Mode() platform.Mode                             { return h.mode }
-func (h *completionTestHost) SetMode(m platform.Mode)                         { h.mode = m }
-func (h *completionTestHost) IsConfirming() bool                              { return false }
-func (h *completionTestHost) PublishCompletion(termui.CompletionMsg)          {}
-func (h *completionTestHost) RequestFrame()                                   {}
+func (h *completionTestHost) Backend() backend.Backend                      { return nil }
+func (h *completionTestHost) Session() core.Session                         { return nil }
+func (h *completionTestHost) State() *platform.AppState                     { return nil }
+func (h *completionTestHost) Mode() platform.Mode                           { return h.mode }
+func (h *completionTestHost) SetMode(m platform.Mode)                       { h.mode = m }
+func (h *completionTestHost) IsConfirming() bool                            { return false }
+func (h *completionTestHost) PublishCompletion(termui.CompletionMsg)        {}
+func (h *completionTestHost) RequestFrame()                                 {}
 
 func TestMaybeEnterCommandCompletionMode(t *testing.T) {
 	cmd := termui.NewCmdWidget(commands.NewCommandRegistry())

@@ -227,11 +227,11 @@ func (b *DLVBackend) ConsoleEOFCommand() string { return "quit" }
 
 // WireCLILineTap reports whether CLI keystroke line tap is needed for side effects.
 func (b *GDBBackend) WireCLILineTap() bool { return false }
-func (b *DLVBackend) WireCLILineTap() bool  { return true }
+func (b *DLVBackend) WireCLILineTap() bool { return true }
 
 // DeferBreakpointRefresh reports whether BP refresh should defer during confirm.
 func (b *GDBBackend) DeferBreakpointRefresh() bool { return false }
-func (b *DLVBackend) DeferBreakpointRefresh() bool  { return true }
+func (b *DLVBackend) DeferBreakpointRefresh() bool { return true }
 
 // StackNavIsStackNavCmd reports CLI commands that change frame without a new stop.
 func StackNavIsStackNavCmd(cmd string) bool {

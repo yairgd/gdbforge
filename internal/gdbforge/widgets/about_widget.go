@@ -39,7 +39,7 @@ func NewAboutWidget(version string) *AboutWidget {
 
 	w := &AboutWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "About"},
-		doc:   vp,
+		doc:        vp,
 		buf:        buf,
 	}
 	for _, line := range buildAboutLines(FormatAboutVersion(version), readVCSBuildInfo()) {

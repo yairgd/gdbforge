@@ -17,7 +17,7 @@ type WideSpec struct{}
 
 func (WideSpec) Name() string { return Wide }
 
-func (WideSpec) Build(panes Panes) *termui.WidgetTree {
+func (WideSpec) Build(panes Panes) *termui.SplitLayout {
 	return BuildWide(panes)
 }
 
@@ -25,8 +25,8 @@ func (WideSpec) Build(panes Panes) *termui.WidgetTree {
 //
 //	Horizontal: top = Code | Output; bottom = GDB | side.
 //	Side: (Threads | Callstack) over Breakpoints — top pair 2/3, BP 1/3.
-func BuildWide(panes Panes) *termui.WidgetTree {
-	tree := termui.NewWidgetTree(panes.Code)
+func BuildWide(panes Panes) *termui.SplitLayout {
+	tree := termui.NewSplitLayout(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Horizontal, panes.GDB)
 	tree.FocusWidget(panes.Code)

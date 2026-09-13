@@ -15,10 +15,10 @@ import (
 // GDBClient owns three PTYs: CLI (user console), MI (backend), and inferior
 // (program stdio). Session I/O uses the MI PTY after bootstrap via new-ui.
 type GDBClient struct {
-	*ptyx.TTY // MI PTY — core.Session
-	CLI       *ptyx.TTY
-	inferior  *ptyx.TTY
-	Quit      QuitGate
+	*ptyx.TTY  // MI PTY — core.Session
+	CLI        *ptyx.TTY
+	inferior   *ptyx.TTY
+	Quit       QuitGate
 	startupOut string
 }
 

@@ -11,6 +11,7 @@ import (
 type layoutHost interface {
 	State() *platform.AppState
 	LogNamed(name string) *platform.NamedLogger
+	ClipboardIO() termui.ClipboardIO
 	RequestFrame()
 	RequestRedraw()
 	SetMode(mode platform.Mode)
@@ -36,10 +37,10 @@ func (a *DebuggerApp) LogNamed(name string) *platform.NamedLogger {
 	return a.ctx.Log.Named(name)
 }
 
-func (a *DebuggerApp) LayoutCodePane() termui.Widget  { return a.layoutCodePane() }
+func (a *DebuggerApp) LayoutCodePane() termui.Widget              { return a.layoutCodePane() }
 func (a *DebuggerApp) DebugPanes(code termui.Widget) layout.Panes { return a.debugPanes(code) }
-func (a *DebuggerApp) AsmPreferAsm() bool             { return a.asm.PreferAsm() }
-func (a *DebuggerApp) AsmHasSplit() bool              { return a.asm.hasSplit() }
-func (a *DebuggerApp) AsmWidget() *widgets.AssemblyWidget { return a.asm.Widget() }
-func (a *DebuggerApp) BufsSetPrimary(w *widgets.CodeWidget) { a.bufs.setPrimary(w) }
-func (a *DebuggerApp) SetLogoWidget(w *widgets.LogoWidget)  { a.logoWidget = w }
+func (a *DebuggerApp) AsmPreferAsm() bool                         { return a.asm.PreferAsm() }
+func (a *DebuggerApp) AsmHasSplit() bool                          { return a.asm.hasSplit() }
+func (a *DebuggerApp) AsmWidget() *widgets.AssemblyWidget         { return a.asm.Widget() }
+func (a *DebuggerApp) BufsSetPrimary(w *widgets.CodeWidget)       { a.bufs.setPrimary(w) }
+func (a *DebuggerApp) SetLogoWidget(w *widgets.LogoWidget)        { a.logoWidget = w }

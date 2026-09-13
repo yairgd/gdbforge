@@ -351,20 +351,20 @@ func (c *asmCtl) applyRefresh(msg asmRefreshMsg) {
 // Shared code leaf: preferAsm (:b asm) or autoAsm (missing source).
 func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 	h := c.host
-	if w == nil || h == nil || h.Shell().Tab() == nil {
+	if w == nil || h == nil || h.Shell().Layout() == nil {
 		return
 	}
-	tab := h.Shell().Tab()
+	lay := h.Shell().Layout()
 	// Dedicated :vs asm / :sp asm leaf — never touch the code leaf.
-	if leaf := tab.LeafMark(leafMarkAsm); leaf != nil && !h.isGdbLeaf(leaf) {
-		code := tab.LeafMark(leafMarkCode)
+	if leaf := lay.LeafMark(leafMarkAsm); leaf != nil && !h.isGdbLeaf(leaf) {
+		code := lay.LeafMark(leafMarkCode)
 		if code == nil || code != leaf {
 			leaf.SetWidget(w)
-			tab.SetLeafMark(leafMarkAsm, leaf)
+			lay.SetLeafMark(leafMarkAsm, leaf)
 			return
 		}
 		// Mistaken asm mark on the shared location leaf — heal and fall through.
-		tab.SetLeafMark(leafMarkAsm, nil)
+		lay.SetLeafMark(leafMarkAsm, nil)
 	}
 	// Shared location leaf: user sticky or auto for missing source.
 	if !c.ownsLocationLeaf() {
@@ -373,24 +373,24 @@ func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 	if !h.isGdbLeaf(h.focusedLeaf()) {
 		if _, ok := h.focusedWidget().(*widgets.AssemblyWidget); ok {
 			if h.focusedWidget() != w {
-				_ = tab.ReplaceFocusedWidget(w)
+				_ = lay.ReplaceFocusedWidget(w)
 			}
 			h.rememberCodeLeafFromFocus()
 			return
 		}
 		if isSourceCodeSlot(h.focusedWidget()) || isCodeSlot(h.focusedWidget()) {
-			_ = tab.ReplaceFocusedWidget(w)
+			_ = lay.ReplaceFocusedWidget(w)
 			h.rememberCodeLeafFromFocus()
 			return
 		}
 	}
 	if leaf := h.findCodeLeaf(); leaf != nil && !h.isGdbLeaf(leaf) {
 		leaf.SetWidget(w)
-		tab.SetLeafMark(leafMarkCode, leaf)
+		lay.SetLeafMark(leafMarkCode, leaf)
 		return
 	}
-	if tab.ReplaceMatchingLeafWidget(w, isCodeSlot) {
-		tab.SetLeafMark(leafMarkCode, tab.FindLeaf(isCodeSlot))
+	if lay.ReplaceMatchingLeafWidget(w, isCodeSlot) {
+		lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
 	}
 }
 
@@ -398,14 +398,14 @@ func (c *asmCtl) placeInSlot(w *widgets.AssemblyWidget) {
 // The shared location leaf showing Assembly (:b asm / autoAsm) is not a split.
 func (c *asmCtl) hasSplit() bool {
 	h := c.host
-	if c == nil || h == nil || h.Shell().Tab() == nil || c.widget == nil {
+	if c == nil || h == nil || h.Shell().Layout() == nil || c.widget == nil {
 		return false
 	}
-	leaf := h.Shell().Tab().LeafMark(leafMarkAsm)
+	leaf := h.Shell().Layout().LeafMark(leafMarkAsm)
 	if leaf == nil || leaf.GetWidget() != c.widget {
 		return false
 	}
-	code := h.Shell().Tab().LeafMark(leafMarkCode)
+	code := h.Shell().Layout().LeafMark(leafMarkCode)
 	// Dedicated only when asm and code marks point at different leaves.
 	return code != nil && code != leaf
 }
@@ -413,13 +413,13 @@ func (c *asmCtl) hasSplit() bool {
 // findLeaf returns the dedicated asm split leaf, if any.
 func (c *asmCtl) findLeaf() *termui.Node {
 	h := c.host
-	if h == nil || h.Shell().Tab() == nil {
+	if h == nil || h.Shell().Layout() == nil {
 		return nil
 	}
-	if leaf := h.Shell().Tab().LeafMark(leafMarkAsm); leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
+	if leaf := h.Shell().Layout().LeafMark(leafMarkAsm); leaf != nil && isAssemblyWidget(leaf.GetWidget()) {
 		return leaf
 	}
-	return h.Shell().Tab().FindLeaf(isAssemblyWidget)
+	return h.Shell().Layout().FindLeaf(isAssemblyWidget)
 }
 
 // sourceUnavailable reports whether the Code buffer has no readable source.
@@ -450,7 +450,7 @@ func (c *asmCtl) openBuffer() {
 		return
 	}
 	if leaf := c.findLeaf(); leaf != nil && c.hasSplit() {
-		_ = h.Shell().Tab().FocusLeaf(leaf)
+		_ = h.Shell().Layout().FocusLeaf(leaf)
 		c.armRefresh(true)
 		h.RequestFrame()
 		return
@@ -465,7 +465,7 @@ func (c *asmCtl) openBuffer() {
 // prepareCodeForSplit restores source into the code leaf and focuses it.
 func (c *asmCtl) prepareCodeForSplit() bool {
 	h := c.host
-	if h == nil || h.Shell().Tab() == nil || c.widget == nil {
+	if h == nil || h.Shell().Layout() == nil || c.widget == nil {
 		return false
 	}
 	if !c.supported() {
@@ -484,7 +484,7 @@ func (c *asmCtl) prepareCodeForSplit() bool {
 		} else if logo := h.LogoWidget(); logo != nil {
 			leaf.SetWidget(logo)
 		}
-		h.Shell().Tab().SetLeafMark(leafMarkCode, leaf)
+		h.Shell().Layout().SetLeafMark(leafMarkCode, leaf)
 	}
 	h.FocusCode()
 	return h.focusedLeaf() != nil && !h.isGdbLeaf(h.focusedLeaf())
@@ -498,7 +498,7 @@ func (c *asmCtl) focusExistingSplit() bool {
 		return false
 	}
 	if leaf := c.findLeaf(); leaf != nil {
-		_ = h.Shell().Tab().FocusLeaf(leaf)
+		_ = h.Shell().Layout().FocusLeaf(leaf)
 	}
 	c.armRefresh(true)
 	h.RequestRedraw()
@@ -517,19 +517,19 @@ func (c *asmCtl) splitAsm(horizontal bool) {
 	if !c.prepareCodeForSplit() {
 		return
 	}
-	tab := h.Shell().Tab()
+	lay := h.Shell().Layout()
 	if horizontal {
-		tab.HorizontalSplit(c.widget)
+		lay.Split(termui.Horizontal, c.widget)
 	} else {
-		tab.VerticalSplit(c.widget)
+		lay.Split(termui.Vertical, c.widget)
 	}
 	codeLeaf := h.focusedLeaf()
-	asmLeaf := tab.FindLeaf(func(w termui.Widget) bool { return w == c.widget })
+	asmLeaf := lay.FindLeaf(func(w termui.Widget) bool { return w == c.widget })
 	if codeLeaf != nil {
-		tab.SetLeafMark(leafMarkCode, codeLeaf)
+		lay.SetLeafMark(leafMarkCode, codeLeaf)
 	}
 	if asmLeaf != nil {
-		tab.SetLeafMark(leafMarkAsm, asmLeaf)
+		lay.SetLeafMark(leafMarkAsm, asmLeaf)
 	}
 	c.armRefresh(true)
 	h.RequestRedraw()

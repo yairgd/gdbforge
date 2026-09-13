@@ -16,7 +16,7 @@ type PanelsSpec struct{}
 
 func (PanelsSpec) Name() string { return Panels }
 
-func (PanelsSpec) Build(panes Panes) *termui.WidgetTree {
+func (PanelsSpec) Build(panes Panes) *termui.SplitLayout {
 	return BuildPanels(panes)
 }
 
@@ -25,8 +25,8 @@ func (PanelsSpec) Build(panes Panes) *termui.WidgetTree {
 //	Vertical: left = Code over GDB; right = Output over bottom half.
 //	Bottom half: (Threads | Callstack) over Breakpoints — Threads left, Callstack
 //	right, taking 2/3 of the bottom half; Breakpoints the remaining 1/3.
-func BuildPanels(panes Panes) *termui.WidgetTree {
-	tree := termui.NewWidgetTree(panes.Code)
+func BuildPanels(panes Panes) *termui.SplitLayout {
+	tree := termui.NewSplitLayout(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termui.Vertical, panes.Output)
 	tree.FocusWidget(panes.Code)

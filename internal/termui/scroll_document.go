@@ -195,7 +195,7 @@ func (d *ScrollDocument) Draw(c Canvas) {
 		lineStyle := style
 		if d.RowStyle != nil {
 			lineStyle = d.RowStyle(line, full)
-		} else 		if d.LineStyle != nil {
+		} else if d.LineStyle != nil {
 			lineStyle = d.LineStyle(full)
 		}
 

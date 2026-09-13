@@ -27,7 +27,7 @@ func NewHelpWidget() *HelpWidget {
 
 	w := &HelpWidget{
 		BaseWidget: termui.BaseWidget{PaneName: "Help"},
-		doc:   vp,
+		doc:        vp,
 		buf:        buf,
 	}
 	for _, line := range buildHelpLines() {

@@ -17,9 +17,9 @@ import (
 
 type noopSession struct{}
 
-func (noopSession) Send(string) error      { return nil }
-func (noopSession) SendRaw(string) error   { return nil }
-func (noopSession) Close()                 {}
+func (noopSession) Send(string) error    { return nil }
+func (noopSession) SendRaw(string) error { return nil }
+func (noopSession) Close()               {}
 func (noopSession) Subscribe() (<-chan core.PtyOutputMsg, func()) {
 	return nil, func() {}
 }
@@ -43,7 +43,7 @@ func (s *stubDebugInfoHost) Backend() backend.Backend {
 	}
 	return backend.NewGDB(nil)
 }
-func (s *stubDebugInfoHost) Session() core.Session    { return noopSession{} }
+func (s *stubDebugInfoHost) Session() core.Session { return noopSession{} }
 func (s *stubDebugInfoHost) State() *platform.AppState {
 	if s.st == nil {
 		s.st = platform.NewAppState()
@@ -70,7 +70,7 @@ func (s *stubDebugInfoHost) ShowCodeAt(string, int) *widgets.CodeWidget {
 }
 func (s *stubDebugInfoHost) LogError(string, string) {}
 func (s *stubDebugInfoHost) ApplyDebugInfoUI(bool)   {}
-func (s *stubDebugInfoHost) FocusCode()                {}
+func (s *stubDebugInfoHost) FocusCode()              {}
 
 func TestActivateThreadArmsFrameSyncNotSyncRefresh(t *testing.T) {
 	host := &stubDebugInfoHost{}

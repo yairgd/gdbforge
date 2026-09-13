@@ -15,6 +15,7 @@ type DemoApp struct {
 	insertKeys  *commands.KeyBindingRegistry
 
 	tab       *termui.TabWidget
+	layout    *termui.SplitLayout
 	cmdWidget *termui.CmdWidget
 	ctx       platform.AppContext
 

@@ -28,9 +28,9 @@ func newGdbLeafApp() *DebuggerApp {
 		builtins:     map[string]termui.Widget{"other": other},
 	}
 	initLayoutShell(a, tab)
-	a.Tab().FocusWidget(gdb)
-	a.Tab().SetLeafMark(leafMarkCode, a.Tab().FindLeaf(func(w termui.Widget) bool { return w == code }))
-	a.Tab().SetLeafMark(leafMarkGDB, a.Tab().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
+	a.Layout().FocusWidget(gdb)
+	a.Layout().SetLeafMark(leafMarkCode, a.Layout().FindLeaf(func(w termui.Widget) bool { return w == code }))
+	a.Layout().SetLeafMark(leafMarkGDB, a.Layout().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
 	return a
 }
 
@@ -56,11 +56,11 @@ func TestSwapFocusedWidgetRefusesGdbLeaf(t *testing.T) {
 func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 	a := newGdbLeafApp()
 	other := a.builtins["other"]
-	codeLeaf := a.Tab().LeafMark(leafMarkCode)
+	codeLeaf := a.Layout().LeafMark(leafMarkCode)
 	if codeLeaf == nil {
 		t.Fatal("missing code leaf mark")
 	}
-	if !a.Tab().FocusLeaf(codeLeaf) {
+	if !a.Layout().FocusLeaf(codeLeaf) {
 		t.Fatal("focus code leaf")
 	}
 	if a.isGdbLeaf(a.focusedLeaf()) {
@@ -72,7 +72,7 @@ func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 	if a.focusedWidget() != other {
 		t.Fatal("expected other widget on focused leaf")
 	}
-	gdbLeaf := a.Tab().LeafMark(leafMarkGDB)
+	gdbLeaf := a.Layout().LeafMark(leafMarkGDB)
 	if gdbLeaf == nil || gdbLeaf.GetWidget() != a.gdbWidget {
 		t.Fatal("GDB leaf must still show gdbWidget")
 	}

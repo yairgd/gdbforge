@@ -17,9 +17,9 @@ type WireTTYOpts struct {
 	// OnSendRaw runs for each keyboard chunk before it is sent to the PTY (Delve CLI side effects).
 	OnSendRaw func(data string)
 	// OnExit runs when the PTY session ends (EOF/EIO or subscribe channel closed).
-	OnExit func()
-	Interval  time.Duration
-	MaxBytes  int
+	OnExit   func()
+	Interval time.Duration
+	MaxBytes int
 }
 
 // WireTTY pumps tty.Subscribe output into ctl.Write with optional coalescing.

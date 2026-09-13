@@ -98,7 +98,7 @@ Do **not** introduce a separate popup/z-order system for one-line chrome.
 
 ## Workspace concept
 
-The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`Workspace` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above `TabWidget` — see [Workspace (gdbforge) vs Tab](#workspace-gdbforge-vs-tab-termui).
+The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`LayoutShell` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above the layout — see [LayoutShell (gdbforge) vs Tab](#layoutshell-gdbforge-vs-tab-termui).
 
 Workspace panes are **widgets** — views bound to application **models** owned by `*Ctl` controllers. Typical models and their views:
 
@@ -225,38 +225,79 @@ Per-layout normal-mode key policy is registered in `cmd/gdbforge/layout_behavior
 
 ---
 
-## Workspace (gdbforge) vs Tab (termui)
+## LayoutShell (gdbforge) vs Tab (termui)
 
-gdbforge owns a **`Workspace`** layer (`cmd/gdbforge/workspace*.go`) above `termui.TabWidget`:
+gdbforge owns a **`LayoutShell`** layer (`cmd/gdbforge/workspace*.go`) above `termui.TabWidget`:
 
 | Layer | Owns |
 |-------|------|
-| **`Workspace`** | Pane marks (`code` / `gdb` / `asm` / `last`), Code/GDB activation, placement (`placeCodeInSlot`, sticky GDB swap), layout apply — assumes Tab content is a split tree |
-| **`TabWidget`** | Tab list chrome; forwards Draw/HandleEvent to active tab content |
+| **`LayoutShell`** | Pane marks (`code` / `gdb` / `asm` / `last`), Code/GDB activation, placement (`placeCodeInSlot`, sticky GDB swap), layout apply — split-tree policy |
+| **`TabWidget`** | Tab list chrome; hands the active tab's `Layout` its canvas and events |
 | **`DebuggerApp` / `*Ctl`** | Debugger domain (breakpoints, stops, threads, buffers, …) |
 
-`Workspace` is **workspace policy**, not debugger policy. Split-tree ops stay on `TabWidget` via `Workspace.Tab()` / `DebuggerApp.Tab()`.
+`LayoutShell` is **workspace policy**, not debugger policy. Split-tree ops go straight to the layout via `LayoutShell.Layout()` / `DebuggerApp.Layout()`, which returns `*termui.SplitLayout` concretely — no forwarding through `Tab`.
 
-### Future: Tab as a generic content host
+### Tab is a generic Layout container
 
-**Long-term:** a `Tab` should host a **generic view/container** (any `Widget`), not always a `WidgetTree`. Examples: form UI, text viewer, custom WM, LazyGit-style UI, Stock Trader Dashboard.
+A `Tab` hosts any **`termui.Layout`** — the split tree today, and any future layout (a form, a text viewer, a different window arrangement, a whole embedded app):
 
-**Today (deferred redesign):** `Tab.tree` is still `*WidgetTree`. Do **not** add new termui APIs that deepen that assumption; prefer `Widget` when extending. Known WidgetTree-centric surfaces on `TabWidget`:
+```go
+type Layout interface {
+    Widget // HandleEvent, Draw, DrawStatusLine
+    BuildLayout(c Canvas)
+}
+```
 
-| API / field | Why it is tree-coupled |
-|-------------|------------------------|
-| `Tab.tree` | Content type is hardcoded |
-| `NewTabWidget(title, *WidgetTree)` | Constructor requires a tree |
-| `ActiveTree` / `SetActiveTree` | Layout remount for split trees |
-| `VerticalSplit` / `HorizontalSplit` / `OnlyFocus` / `DeleteFocus` | Split-tree geometry |
-| `SetLeafMark` / `LeafMark` / `FindLeaf` / `FocusLeaf` / … | Leaf navigation on a tree |
-| `ReplaceFocusedWidget` / `ReplaceMatchingLeafWidget` | Leaf buffer swap |
+```mermaid
+flowchart TD
+    TermApp["TermApp frame loop"]
+    TabW["TabWidget"]
+    Tab["Tab: Title, Content Layout"]
+    Iface["Layout interface<br/>Widget + BuildLayout"]
+    SL["SplitLayout<br/>embeds *WidgetTree"]
+    WT["WidgetTree"]
+    FutureA["future layout"]
+    FutureB["future layout"]
+    Shell["LayoutShell.Layout()<br/>returns *SplitLayout"]
+    AppCode["cmd/gdbforge pane, focus<br/>and mark call sites"]
 
-gdbforge `Workspace` may remain the **split-tree policy** layer even after Tab generalizes; other tab contents would use different app policy.
+    TermApp -->|"Draw"| TabW
+    TabW --> Tab
+    Tab --> Iface
+    Iface --> SL
+    Iface --> FutureA
+    Iface --> FutureB
+    SL --> WT
+    AppCode --> Shell
+    Shell --> SL
+```
+
+*Source: [`diagrams/tab_layout.mermaid`](diagrams/tab_layout.mermaid)*
+
+The two paths never cross: `TabWidget` reaches the layout only through the interface (paint and events), while application code reaches it only through `LayoutShell.Layout()`, typed concretely.
+
+`SplitLayout` is the tiling implementation. It **embeds `*WidgetTree`**, so every pane, focus and mark operation is reachable on the layout with no forwarding code:
+
+```go
+type SplitLayout struct {
+    *WidgetTree
+}
+```
+
+Two access paths, deliberately separate:
+
+| Caller | Uses | For |
+|--------|------|-----|
+| `TabWidget` | `Layout` interface only | `BuildLayout`, `Draw`, `HandleEvent` |
+| `LayoutShell` | `*SplitLayout` concretely | splits, focus, leaf marks, replacement |
+
+**Do not add `Tab` or `TabWidget` methods that forward into a `Layout`.** Code needing arrangement-specific behaviour takes the layout and drives it directly. `LayoutShell.Layout()` returns nil when the tab hosts a non-split layout, which is the signal that these mark and slot APIs do not apply.
+
+A layout can also sit **inside a leaf** (`Layout` embeds `Widget`, and `Node.Widget` is a `Widget`), giving two independent trees in one tab. `WidgetTree.buildLayout` hands a nested layout its canvas. Focus arbitration between two trees is separate policy and is not implemented.
 
 ## Tab management
 
-**Today** each tab’s content is a **`WidgetTree`**. **Tab** is chrome (title + content). Focus and named leaf marks live on the **WidgetTree**. Mark **names** and focus policy are **app-private** on `Workspace`. TermUI itself should stay free of debugger roles so other apps can reuse it.
+**Tab** is chrome: a title plus a `Layout`. For a `SplitLayout`, focus and named leaf marks live on the embedded **`WidgetTree`**. Mark **names** and focus policy are **app-private** on `LayoutShell`. TermUI itself stays free of debugger roles so other apps can reuse it.
 
 ```mermaid
 flowchart LR
@@ -270,12 +311,12 @@ flowchart LR
     TabBar --> T3
 ```
 
-Current `TabWidget` implementation (tree-coupled; see above):
+Current `TabWidget` implementation:
 
 ```go
 type Tab struct {
-    Title string
-    tree  *WidgetTree // future: generic content Widget
+    Title   string
+    Content Layout
 }
 
 type TabWidget struct {
@@ -284,12 +325,15 @@ type TabWidget struct {
 }
 ```
 
+Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent`, `DrawStatusLine` and the two constructors.
+
 | Feature | Status |
 |---------|--------|
 | Single tab container | Implemented |
-| Forward events/draw to active tab | Implemented |
-| Named leaf marks on WidgetTree | Implemented (tree-centric) |
-| Generic non-tree tab content | Not implemented (deferred) |
+| Hand events/draw to active tab's Layout | Implemented |
+| Named leaf marks on WidgetTree | Implemented (on `SplitLayout`) |
+| Generic non-tree tab content | Implemented (`Layout` interface); no second implementation yet |
+| Nested layout inside a leaf | Structurally supported; focus arbitration not implemented |
 | Tab header rendering | Not implemented |
 | Tab switching | Not implemented |
 | Tab close / new tab | Not implemented |
@@ -297,7 +341,7 @@ type TabWidget struct {
 
 **Design decision:** gdbforge tabs are **workspace presets**, not separate debugger sessions (initially). A tab might represent "source + console" vs "registers + memory". Multi-session tabs may come later with backend association per tab.
 
-Named layout builders (`internal/gdbforge/layout`) return a `*WidgetTree`; `Workspace` mounts it via `SetActiveTree` onto its single `TabWidget`.
+Named layout builders (`internal/gdbforge/layout`) return a `*termui.SplitLayout`; `LayoutShell.ApplyLayout` mounts it via `TabWidget.SetLayout` and then re-applies the startup wiring (status clipboard, resize hook, equalalways, marks) that a freshly built layout does not carry.
 
 ---
 

@@ -29,8 +29,8 @@ const (
 type AssemblyWidget struct {
 	termui.BaseWidget
 	doc *termui.DocumentView
-	
-	state    *debugstate.State
+
+	state *debugstate.State
 
 	items    []models.AsmLine
 	pcAddr   string   // normalized $pc
@@ -497,7 +497,7 @@ func (w *AssemblyWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) t
 		if absVisCol >= addrStart && absVisCol < addrEnd {
 			return w.addrCellStyle(norm, st)
 		}
-		offStart := addrEnd + 1 // space after addr
+		offStart := addrEnd + 1                     // space after addr
 		offEnd := offStart + 2 + w.offWidth + 2 + 1 // <+N>:␠
 		if absVisCol >= offStart && absVisCol < offEnd {
 			return st.Foreground(w.mutedColor())

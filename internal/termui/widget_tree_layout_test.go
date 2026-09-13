@@ -36,5 +36,5 @@ func NewStubWidget(name string) Widget {
 	return &stubWidget{BaseWidget: BaseWidget{PaneName: name}}
 }
 
-func (s *stubWidget) Draw(Canvas)              {}
+func (s *stubWidget) Draw(Canvas)             {}
 func (s *stubWidget) HandleEvent(tcell.Event) {}

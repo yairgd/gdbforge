@@ -34,7 +34,7 @@ type luaHost interface {
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
 	RequestFrame()
-	Tab() *termui.TabWidget
+	Layout() *termui.SplitLayout
 	Screen() tcell.Screen
 	FocusedWidget() termui.Widget
 	OutputWidget() *widgets.OutputWidget
@@ -76,14 +76,14 @@ type luaSerialAdapter struct{ a *DebuggerApp }
 func (d luaSerialAdapter) OpenShared(device string, baud int) error {
 	return d.a.serial.OpenShared(device, baud)
 }
-func (d luaSerialAdapter) DebuggerPTY() (string, error) { return d.a.serial.DebuggerPTY() }
+func (d luaSerialAdapter) DebuggerPTY() (string, error)  { return d.a.serial.DebuggerPTY() }
 func (d luaSerialAdapter) TerminalPTY() (string, error)  { return d.a.serial.TerminalPTY() }
-func (d luaSerialAdapter) Send(line string) error         { return d.a.serial.Send(line) }
-func (d luaSerialAdapter) SwitchOwner(mode string) error  { return d.a.serial.SwitchOwner(mode) }
-func (d luaSerialAdapter) Owner() (string, error)         { return d.a.serial.Owner() }
-func (d luaSerialAdapter) BeginDebugEntry() error         { return d.a.serial.BeginDebugEntry() }
-func (d luaSerialAdapter) SwitchToGDB() error             { return d.a.serial.SwitchToGDB() }
-func (d luaSerialAdapter) SwitchToConsole() error         { return d.a.serial.SwitchToConsole() }
+func (d luaSerialAdapter) Send(line string) error        { return d.a.serial.Send(line) }
+func (d luaSerialAdapter) SwitchOwner(mode string) error { return d.a.serial.SwitchOwner(mode) }
+func (d luaSerialAdapter) Owner() (string, error)        { return d.a.serial.Owner() }
+func (d luaSerialAdapter) BeginDebugEntry() error        { return d.a.serial.BeginDebugEntry() }
+func (d luaSerialAdapter) SwitchToGDB() error            { return d.a.serial.SwitchToGDB() }
+func (d luaSerialAdapter) SwitchToConsole() error        { return d.a.serial.SwitchToConsole() }
 func (d luaSerialAdapter) SysrqDelayed(delaySec float64) error {
 	return d.a.serial.SysrqDelayed(delaySec)
 }

@@ -17,8 +17,8 @@ type CommandParser struct {
 	token   string
 	args    []string
 
-	path            []*CommandNode
-	restTrailSpace  bool
+	path           []*CommandNode
+	restTrailSpace bool
 }
 
 func NewCommandParser(reg *CommandRegistry) *CommandParser {

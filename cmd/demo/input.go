@@ -90,8 +90,8 @@ func (a *DemoApp) tryKeyBindings(reg *commands.KeyBindingRegistry, ev *tcell.Eve
 }
 
 func (a *DemoApp) focusedWidget() termui.Widget {
-	if a.tab == nil {
+	if a.layout == nil {
 		return nil
 	}
-	return a.tab.FocusedWidget()
+	return a.layout.FocusedWidget()
 }

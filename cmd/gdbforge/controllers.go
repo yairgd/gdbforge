@@ -174,7 +174,7 @@ func (a *DebuggerApp) CmdWidget() *termui.CmdWidget        { return a.cmdWidget 
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }
 func (a *DebuggerApp) OutputWidget() *widgets.OutputWidget { return a.outputWidget }
 func (a *DebuggerApp) ExecWidget() *widgets.ExecWidget     { return a.execWidget }
-func (a *DebuggerApp) FocusedWidget() termui.Widget      { return a.focusedWidget() }
+func (a *DebuggerApp) FocusedWidget() termui.Widget        { return a.focusedWidget() }
 func (a *DebuggerApp) ActiveCodeWidget() *widgets.CodeWidget {
 	return a.activeCodeWidget()
 }
@@ -225,7 +225,7 @@ func (a *DebuggerApp) PublishCompletion(msg termui.CompletionMsg) {
 
 // --- breakCtl peers ---
 
-func (a *DebuggerApp) PaintAsmBreaks()     { a.breaks.paintAsmMarks(a.breaks.Items()) }
+func (a *DebuggerApp) PaintAsmBreaks() { a.breaks.paintAsmMarks(a.breaks.Items()) }
 func (a *DebuggerApp) PaintCodeBreaks(w *widgets.CodeWidget, path string) {
 	a.breaks.paintCodeWidget(w, path)
 }
@@ -262,11 +262,11 @@ func (a *DebuggerApp) Confirming() bool { return a.IsConfirming() }
 func (a *DebuggerApp) NoteStackNavDLV(cmd string, curLevel int) {
 	a.dlv.noteStackNavDLV(cmd, curLevel)
 }
-func (a *DebuggerApp) NoteStackNavGDB() { a.dlv.noteStackNavGDB() }
-func (a *DebuggerApp) BumpCodeNav()                    { a.dlv.bumpCodeNav() }
-func (a *DebuggerApp) SuppressDlvStopUI()              { a.dlv.suppressStopUI++ }
-func (a *DebuggerApp) SuppressStopUICount() int        { return a.dlv.suppressStopUI }
-func (a *DebuggerApp) ClearSuppressStopUI()            { a.dlv.clearSuppressStopUI() }
+func (a *DebuggerApp) NoteStackNavGDB()         { a.dlv.noteStackNavGDB() }
+func (a *DebuggerApp) BumpCodeNav()             { a.dlv.bumpCodeNav() }
+func (a *DebuggerApp) SuppressDlvStopUI()       { a.dlv.suppressStopUI++ }
+func (a *DebuggerApp) SuppressStopUICount() int { return a.dlv.suppressStopUI }
+func (a *DebuggerApp) ClearSuppressStopUI()     { a.dlv.clearSuppressStopUI() }
 func (a *DebuggerApp) ApplyPendingFrameSync(promptReady, isError bool) bool {
 	return a.dlv.applyPendingFrameSync(promptReady, isError)
 }
@@ -321,5 +321,5 @@ var (
 	_ inferiorHost   = (*DebuggerApp)(nil)
 	_ completionHost = (*DebuggerApp)(nil)
 	_ dlvHost        = (*DebuggerApp)(nil)
-	_ layoutHost        = (*DebuggerApp)(nil)
+	_ layoutHost     = (*DebuggerApp)(nil)
 )

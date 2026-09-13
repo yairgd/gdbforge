@@ -146,9 +146,9 @@ type Mux struct {
 	gdbLeg  *leg
 	termLeg *ptyx.TTY
 
-	ownerMu sync.RWMutex
-	owner   Owner
-	miAuto  bool
+	ownerMu    sync.RWMutex
+	owner      Owner
+	miAuto     bool
 	kgdbSerial bool // kgdb on shared UART: never auto-switch to console on ^running
 
 	stop      chan struct{}

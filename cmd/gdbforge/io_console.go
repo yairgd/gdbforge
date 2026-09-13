@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/platform"
 	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/termui"
