@@ -144,6 +144,9 @@ func (c *CompositeTerminal) Paint(cv Canvas, paintCursor bool) {
 	if c == nil || c.ctl == nil {
 		return
 	}
+	if cv.W() <= 0 || cv.H() <= 0 {
+		return
+	}
 	c.SetMouseOrigin(cv.ScreenX(0), cv.ScreenY(0))
 	_ = c.Resize(cv.W(), cv.H())
 	cols, rows := c.ctl.Size()

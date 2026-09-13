@@ -222,6 +222,11 @@ func (c *TerminalController) Resize(cols, rows int) error {
 	if c.closed {
 		return errors.New("terminal controller is closed")
 	}
+	// xterm-go indexes its reflow buffers off cols/rows and panics on a
+	// non-positive size, so an empty geometry must never reach it.
+	if cols <= 0 || rows <= 0 {
+		return nil
+	}
 
 	c.term.Resize(cols, rows)
 

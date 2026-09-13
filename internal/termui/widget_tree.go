@@ -800,27 +800,46 @@ func HorizontalOverlap(a, b Rect) bool {
 }
 
 func (l *WidgetTree) Draw(c Canvas) {
+	// A console too small for every split leaves those panes without geometry.
+	// Skip them: a 0x0 canvas is not something widgets can paint into, and the
+	// xterm emulator behind terminal panes panics when resized to it.
+	visible := func(n *Node) bool {
+		r := l.geom[n].canvas.Rect()
+		return r.W() > 0 && r.H() > 0
+	}
 	WalkLeaves(l.root, func(n *Node) {
 		if f, ok := n.Widget.(Focusable); ok {
 			f.SetFocused(n == l.focus)
 		}
-		n.Widget.Draw(l.leafCanvas(n))
+		if visible(n) {
+			n.Widget.Draw(l.leafCanvas(n))
+		}
 	})
 	WalkLeaves(l.root, func(n *Node) {
-		ClearStatusLine(l.leafCanvas(n))
+		if visible(n) {
+			ClearStatusLine(l.leafCanvas(n))
+		}
 	})
 	l.redrawGrid(l.root, c)
 	c.DrawHorizontalLocal(c.H(), 0, c.W(), false)
 	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
 
 	WalkLeaves(l.root, func(n *Node) {
-		n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
+		if visible(n) {
+			n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
+		}
 	})
 	l.paintStatusSelection()
 }
 
 func (l *WidgetTree) redrawGrid(node *Node, c Canvas) {
 	if node == nil || node.Type == NodeLeaf {
+		return
+	}
+	// buildLayout records geometry only for splits that fit; one that collapsed
+	// has no separator to paint and handed the whole region to a single child.
+	if _, ok := l.geom[node]; !ok {
+		l.redrawGrid(l.collapseChild(node), c)
 		return
 	}
 
@@ -883,9 +902,10 @@ func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect)
 }
 
 func (l *WidgetTree) BuildLayout(c Canvas) {
-	// Ratios are applied as-is; equalalways rebalances only on Split/DeleteFocus.
-	// Skip rebuild on a degenerate canvas (can happen for one frame after job-control
-	// resume); rebuilding would corrupt split ratios permanently.
+	// Geometry is derived from the ratios and never written back, so a build is
+	// idempotent and a resize is reversible: shrinking the terminal far enough to
+	// clamp a pane against minPaneCells and growing it again restores the
+	// layout. Ratios change only on Split, DeleteFocus and separator drag.
 	if c.W() < 2*minPaneCells || c.H() < 2*minPaneCells {
 		if len(l.geom) > 0 {
 			l.grid = c.grid
@@ -895,6 +915,29 @@ func (l *WidgetTree) BuildLayout(c Canvas) {
 	l.grid = c.grid
 	l.geom = make(map[*Node]layoutGeom)
 	l.buildLayout(l.root, c)
+}
+
+// collapseChild picks the child that takes the whole region when a split cannot
+// give both sides minPaneCells. The subtree holding focus wins, so the pane the
+// user is working in stays on screen rather than the console going blank.
+func (l *WidgetTree) collapseChild(node *Node) *Node {
+	if l.focus != nil && subtreeContains(node.Second, l.focus) {
+		return node.Second
+	}
+	if node.First != nil {
+		return node.First
+	}
+	return node.Second
+}
+
+func subtreeContains(n, target *Node) bool {
+	found := false
+	WalkLeaves(n, func(leaf *Node) {
+		if leaf == target {
+			found = true
+		}
+	})
+	return found
 }
 
 func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
@@ -917,9 +960,9 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 		leftW, rightW, r1, r2 := verticalSplitRects(node, c)
 		avail := c.W() - 1
 		if avail < 2*minPaneCells || leftW < minPaneCells || rightW < minPaneCells {
+			l.buildLayout(l.collapseChild(node), c)
 			return
 		}
-		node.Ratio = float64(leftW) / float64(avail)
 		c.DrawVerticalLocal(leftW, -1, c.H()+1, false)
 		l.geom[node] = layoutGeom{
 			layoutRect: c.Rect(),
@@ -932,9 +975,9 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 		topH, bottomH, r1, r2 := horizontalSplitRects(node, c)
 		avail := c.H() - 1
 		if avail < 2*minPaneCells || topH < minPaneCells || bottomH < minPaneCells {
+			l.buildLayout(l.collapseChild(node), c)
 			return
 		}
-		node.Ratio = float64(topH) / float64(avail)
 		c.DrawHorizontalLocal(topH, -1, c.W()+1, false)
 		l.geom[node] = layoutGeom{
 			layoutRect: c.Rect(),
