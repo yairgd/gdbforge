@@ -357,7 +357,7 @@ For TUI inferiors (htop, games, …) or programs that need a **real** terminal e
 
 **Pattern B — local GDB/dlv, external pts**
 
-1. Lua `gdbforge.open_external_tty()` opens kitty/xterm/… (`GDBFORGE_TERMINAL`) that runs `tty > file; sleep infinity`.
+1. Lua `gdbforge.open_external_tty()` opens kitty/xterm/… (`GDBFORGE_TERMINAL`) running `gdbforge --hold-inferior-tty`, which keeps the window alive and hands its pts to the inferior: it releases the pts from its own session (`TIOCNOTTY`) so the program can make it its **controlling terminal**. Without that, GDB warns `Failed to set controlling terminal: Operation not permitted` and the program sees `open /dev/tty: no such device or address` — fatal for Go TUIs, curses and `getpass` ([details](PTY_ARCHITECTURE.md#how-the-external-pts-is-created)).
 2. `gdbforge.set_inferior_tty(pts)` → GDB `-inferior-tty-set` (live). Delve restarts `dlv exec --tty …` with the new path (same program args).
 3. Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/external_tty), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/terminal_debug).
 

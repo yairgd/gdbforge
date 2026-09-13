@@ -19,6 +19,9 @@ func main() {
 		fmt.Println(version)
 		os.Exit(0)
 	}
+	if wantsInferiorTTYHold(os.Args[1:]) {
+		os.Exit(runInferiorTTYHold(os.Args[1:]))
+	}
 	cfg, err := parseFlags(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {

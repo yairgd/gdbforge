@@ -131,6 +131,7 @@ gdbforge/
 | `workspace_layout.go` | `ApplyLayout` mounts layout `WidgetTree` onto Tab |
 | `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` via `Backend.MapExec` |
 | `inferior_tty.go` | `:set inferior-tty` (GDB live / DLV restart) |
+| `inferior_tty_hold.go` | `--hold-inferior-tty` helper — keeps the external window open and releases its pts so the inferior gets a controlling terminal |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `stopped.go` | Stop pipeline; `presentLocation` (Code vs autoAsm); thread/frame select |
 | `lua.go` | `luaCtl` — ModeLua; `:lua` / embedded script builtins |

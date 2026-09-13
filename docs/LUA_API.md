@@ -235,7 +235,7 @@ gdbforge.spawn_terminal("ssh", "-t", "root@192.168.20.50", "gdbserver :1234 /tmp
 
 ### `gdbforge.open_external_tty()` → `pts_path`
 
-Spawn a terminal that holds a pts open (`tty > file; sleep infinity`) and return `/dev/pts/N`.
+Spawn a terminal that holds a pts open (`gdbforge --hold-inferior-tty`) and return `/dev/pts/N`. The holder releases the pts from its own session, so the inferior can make it its **controlling terminal** — that is what `/dev/tty`, curses and Go TUI libraries need.
 
 ### `gdbforge.set_inferior_tty(path|"internal")`
 

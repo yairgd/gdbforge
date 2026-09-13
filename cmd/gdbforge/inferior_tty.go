@@ -301,9 +301,7 @@ func (a *DebuggerApp) OpenExternalTTY() (string, error) {
 	_ = os.Remove(pathFile)
 	_ = os.Remove(pidFile)
 
-	hold := fmt.Sprintf("echo $$ > %s; tty > %s; exec sleep infinity",
-		shellSingleQuote(pidFile), shellSingleQuote(pathFile))
-	argv, err := terminalHoldArgv(hold)
+	argv, err := terminalHoldArgv(inferiorTTYHoldShell(pathFile, pidFile))
 	if err != nil {
 		return "", err
 	}

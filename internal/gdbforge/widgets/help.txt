@@ -223,6 +223,8 @@ Other:
       - Real VT (curses, menus, alternate screen)
       - Program I/O does not compete with gdbforge redraw
       - GDB: live -inferior-tty-set (no session restart)
+      - The program gets that pts as its controlling terminal,
+        so /dev/tty works (Go TUIs, curses, getpass)
 
     Quick switch (both backends):
       :set inferior-tty           open terminal + route stdio there

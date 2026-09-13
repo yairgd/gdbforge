@@ -74,7 +74,7 @@ flowchart TB
 
   subgraph Ext["Outside gdbforge"]
     Term["GDBFORGE_TERMINAL"]
-    Hold["hold pts · sleep infinity"]
+    Hold["hold pts · gdbforge --hold-inferior-tty"]
     Headless["dlv --headless --listen"]
     Serial["serialmux · UART"]
   end
@@ -233,7 +233,9 @@ Same **debugger** PTY #1. Inferior stdio moves to a **real terminal emulator**. 
 
   External terminal emulator
     └── MASTER (emulator owns keyboard/display)
-          └── SLAVE /dev/pts/N  ←── held open by:  tty > file; sleep infinity
+          └── SLAVE /dev/pts/N  ←── window held open by: gdbforge --hold-inferior-tty
+                                    (releases the pts with TIOCNOTTY so the
+                                     inferior can make it its controlling tty)
                                     ▲
                                     │  GDB: -inferior-tty-set /dev/pts/N  (live, no restart)
                                     │
@@ -248,7 +250,7 @@ flowchart TB
   Term["mate-terminal / kitty / …"]
   Term --- Mext["MASTER · held by emulator"]
   Mext <--> Sext["SLAVE /dev/pts/N"]
-  Hold["sleep infinity"] --- Sext
+  Hold["gdbforge --hold-inferior-tty · ctty released"] --- Sext
   GDB -.->|"-inferior-tty-set"| Sext
   Prog["inferior"] --- Sext
 
@@ -258,10 +260,20 @@ flowchart TB
 ### How the external pts is created
 
 1. `OpenExternalTTY` / `:set inferior-tty` / Lua `open_external_tty`
-2. Spawn `GDBFORGE_TERMINAL` (e.g. `mate-terminal`) running roughly: `tty > /tmp/…; exec sleep infinity`
-3. Read `/dev/pts/N` from the temp file
-4. GDB: live `-inferior-tty-set` pointing at that path; close internal `ptyx.TTY`
-5. Unwire `:b io` (shows a note — type in the other window)
+2. Spawn `GDBFORGE_TERMINAL` (e.g. `mate-terminal`) running `sh -c 'exec gdbforge --hold-inferior-tty <path-file> <pid-file>'`
+3. The hold helper (`cmd/gdbforge/inferior_tty_hold.go`) **releases the pts from its own session** (`TIOCNOTTY`), then writes `/dev/pts/N` and its pid to the temp files and sleeps until gdbforge signals it
+4. Read `/dev/pts/N` from the temp file
+5. GDB: live `-inferior-tty-set` pointing at that path; close internal `ptyx.TTY`
+6. Unwire `:b io` (shows a note — type in the other window)
+
+**Why the release matters.** GDB’s inferior calls `TIOCSCTTY` on the `-inferior-tty-set` path (`new_tty()` in GDB’s `fork-inferior.c`). That ioctl fails with `EPERM` while the pts is still the controlling terminal of the process the emulator started, so the program ends up with **no controlling terminal at all**:
+
+```text
+warning: GDB: Failed to set controlling terminal: Operation not permitted
+… and in the program:  open /dev/tty: no such device or address   (ENXIO)
+```
+
+That breaks everything that wants a real tty rather than just tty-ish fds — Go TUIs (tcell, bubbletea), curses, `getpass`. The helper must be the emulator’s **direct child** (hence `exec` in the shell command): the kernel only detaches the terminal from the session when `TIOCNOTTY` comes from the session leader. When it cannot (helper not the session leader, ioctl refused), it prints a one-line note in the window and the old no-ctty behaviour applies.
 
 **Do not** keep an internal master subscribed **and** point `-inferior-tty-set` at an external slave. Closing the external window does not auto-rewire — use `:set inferior-tty internal`.
 

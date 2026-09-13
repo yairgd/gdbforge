@@ -164,7 +164,7 @@ For TUI inferiors, do not pipe through `:b io`. Use:
 
 | API | Role |
 |-----|------|
-| `gdbforge.open_external_tty()` | Spawn kitty/xterm/… (`GDBFORGE_TERMINAL`) holding a pts; return `/dev/pts/N` |
+| `gdbforge.open_external_tty()` | Spawn kitty/xterm/… (`GDBFORGE_TERMINAL`) holding a pts the inferior can adopt as its controlling terminal; return `/dev/pts/N` |
 | `gdbforge.set_inferior_tty(path\|"internal")` | GDB `-inferior-tty-set` (live) or restore IO pane |
 | `gdbforge.spawn_terminal(...)` | Real terminal emulator + argv (gdbserver / headless dlv) |
 | `gdbforge.wait_port(port, timeout)` | Wait until listen (pattern A) |
