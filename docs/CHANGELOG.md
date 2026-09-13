@@ -9,6 +9,42 @@ Release history for gdbforge. Binaries for each version are on the
 [GitHub releases page](https://github.com/yairgd/gdbforge/releases); see
 [Releasing](RELEASING.md) for how tags drive the builds.
 
+## v1.3.0
+
+Window management hardened: resizes no longer destroy pane proportions, tiny terminals no
+longer crash on startup, Ctrl-C reliably halts a running Delve target, and
+`:set inferior-tty` hands the external window's terminal to the program being debugged.
+
+### Highlights
+
+- **Resize preserves proportions** — `buildLayout` used to write each computed cell count back into `Node.Ratio`, so every resize replaced the stored proportion with a lossy version of itself; a separator dragged to `0.707` became `0.7035`, and a 200x60 → 30x10 → 200x60 round trip moved the code pane from 119x56 to 116x39. Geometry is now a pure function of the ratios and the canvas, so a build is idempotent and a resize reversible. `Ratio` changes only on `Split`, `DeleteFocus`, a separator drag, or applying a named layout.
+- **No crash in a small terminal** — a split that could not give both sides `minPaneCells` recorded no geometry, and `Draw` painted the zero-value canvas anyway, which crashed gdbforge on startup in a 27x8 terminal. Such a split now collapses onto one child, preferring the subtree that holds focus. `Draw` skips panes without geometry, and `TerminalController.Resize` rejects a non-positive size at the boundary to xterm-go.
+- **The default layout fits 80x20** — all six panes are visible; Threads and Call Stack used to disappear there because clamping had corrupted the ratios.
+- **Ctrl-C halts a running Delve target** — `InferiorRunning` was armed by watching bytes typed into the Delve pane, so any resume through Delve's own line editor was invisible to it (history recall sends `\x1b[A`; a bare Enter repeats the last command and sends nothing). gdbforge now asks the server over rpc2 `GetStateNonBlocking`, the same query Delve's CLI makes in its SIGINT handler; this also stops a stale flag from making Ctrl-Z suspend gdbforge instead of the target. GDB MI has no equivalent and keeps its existing bookkeeping.
+- **Ctrl-C no longer eaten by a stale selection** — copy-on-Ctrl-C never cleared the mark, so once live output scrolled the highlight out of view, later presses silently re-copied invisible text. Copying now consumes the selection: the first press copies, the second interrupts.
+- **`:set inferior-tty` gives the pts to the inferior** — the external window was held open by a shell that owned the pts as its session's controlling terminal, so GDB's `TIOCSCTTY` failed with `EPERM` and the program ran with no controlling terminal. The window is now held by gdbforge re-executed as `--hold-inferior-tty`, which releases the pts with `TIOCNOTTY` before advertising the path, so `/dev/tty` works in there — Go TUIs, curses, `getpass`. `:b io` was never affected.
+- **Separator drags survive a `:layout` switch** — the resize hook was lost with `SetActiveTree`; `finishLayoutApply` now re-wires both it and the status clipboard.
+- **Tabs are generic layout containers** — a `Tab` held a `*WidgetTree` directly and `TabWidget` carried 28 methods that only forwarded into it, so a tab could never host anything but a split tree. `Tab.Content` is now a `Layout` interface (`Widget` plus `BuildLayout`), with `SplitLayout` as the tiling implementation; `tab.go` drops from 300 lines to 110 and callers take the layout directly.
+- **Documentation** — [window management](WINDOW_MANAGEMENT.md) now states the point it only implied: an internal node *is* the separator on screen, and only leaves are panes. Three worked cases build it up, including the real default layout dumped from `BuildDefault` with cell geometry for a 120x40 band.
+- **CI on Node 24** — every run warned that `checkout@v4`, `setup-go@v5`, `setup-python@v5`, `deploy-pages@v4`, and `upload-artifact@v4` were being forced onto Node 24 — harmless today, a hard failure once the runners drop Node 20. All actions moved to majors that declare `node24`.
+
+### The split tree, in one sentence
+
+```text
+internal node  = a split → no widget, reserves 1 cell for the separator line it draws
+leaf node      = a pane  → holds the widget
+
+so: number of splits == number of separators on screen
+```
+
+### Upgrading from v1.2.0
+
+- **No breaking CLI changes.** Existing `.gdbforge/` breakpoints and cmdline history remain compatible.
+- **Pane proportions behave differently — on purpose.** A separator you drag stays where you put it across resizes. If you relied on a resize quietly re-normalizing a layout, use `:layout <name>` to reset instead.
+- **New internal flag.** `gdbforge --hold-inferior-tty <path-file> <pid-file>` holds the external inferior terminal open; it is an implementation detail, not a user-facing command.
+- **Embedders of `internal/termui`** — `TabWidget.ActiveTree()`, `SetActiveTree()`, and the 28 pane forwarders (`FocusLeft`, `VerticalSplit`, `SetLeafMark`, …) are gone. Use `TabWidget.Layout()` / `SetLayout()` and call the tree operations on the concrete `*SplitLayout`, which embeds `*WidgetTree`. A non-nil tab no longer implies a split tree, so guards must test `Layout()`, not the container. The named layout presets and `internal/demo` now build `*SplitLayout` rather than `*WidgetTree`.
+- **Lua, STM32, and kernel kgdb** — unchanged from v1.2.0, including patched kdmx (`kdmx -v` → `141210a-gdbforge1`) for the one-UART path. See [Kernel / kgdb](KERNEL_KGDB.md).
+
 ## v1.2.0
 
 Terminal rendering rebuilt on a real xterm emulator, GDB and Delve unified behind one
