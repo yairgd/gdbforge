@@ -202,7 +202,7 @@ flows:
     chain:
       - { symbol: OnLayout, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnLayout, indent: 0 }
       - { symbol: ApplyLayout, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: ApplyLayout, indent: 1 }
-      - { symbol: buildLayoutTree, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: buildLayoutTree, indent: 2 }
+      - { symbol: buildLayout, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: buildLayout, indent: 2 }
     breakpoints:
       - main.(*DebuggerApp).OnLayout
 

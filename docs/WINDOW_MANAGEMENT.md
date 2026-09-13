@@ -175,6 +175,170 @@ Node
 
 **Design decision:** binary splits (not n-way splits) simplify ratio math and border drawing. An n-way toolbar layout can be built by composing binary nodes — the same approach used by Emacs window management and many IDE dock systems.
 
+### A separator *is* a node
+
+The most important property of this tree, and the easiest one to miss: **it is not a tree of panes.** Internal nodes and leaves mean two completely different things.
+
+> **Every visible separator on screen originates from an internal split node.
+> Every actual pane/widget is a leaf node.**
+
+| Node kind | Marked as | What it is | Holds a widget? |
+|-----------|-----------|------------|-----------------|
+| **Split** | `\|` vertical — divides into **left / right**<br>`-` horizontal — divides into **top / bottom** | the division itself, i.e. the separator line you see | No — `Split` sets `node.Widget = nil` |
+| **Leaf** | the widget name (`CODE`, `GDB`, `THREADS`, …) | one pane | Yes |
+
+A split node owns a direction, a `Ratio`, and two children. It takes the rectangle handed to it, keeps **1 cell for the separator it draws**, and gives what remains to `First` and `Second`. So counting the split nodes in a tree tells you exactly how many separator lines appear on screen.
+
+The three cases below build this up: one separator, then a nested separator, then the real `default` layout.
+
+#### Case 1 — simple split
+
+One split node, two leaves. The split node *is* the vertical line between the panes.
+
+```text
+TREE                                   SCREEN
+
+        |   <- SPLIT NODE              +----------+----------+
+       / \     (vertical separator)    |          |          |
+      /   \                            |   CODE   |   GDB    |
+  CODE     GDB         ==>             |          |          |
+    ^       ^                          +----------+----------+
+  LEAF    LEAF                                    ^
+                                         this separator *is*
+                                         the "|" split node
+```
+
+Hexagons are split nodes (the separators); rectangles are leaf panes.
+
+```mermaid
+graph TB
+    S1{{"SPLIT (vertical)<br/>ratio 1/2<br/>draws the separator"}}
+    L1["LEAF: CODE"]
+    L2["LEAF: GDB"]
+    S1 -->|First / left| L1
+    S1 -->|Second / right| L2
+```
+
+#### Case 2 — nested split
+
+Replacing a leaf with a split node is what creates nesting. Here the root's `Second` child is no longer a pane but another separator, so the right half of the screen gets divided again — this time top/bottom.
+
+```text
+              |  <- SPLIT NODE / separator  (vertical: left / right)
+             / \
+            /   \
+        CODE     -  <- SPLIT NODE / separator  (horizontal: top / bottom)
+                / \
+              GDB  STACK
+               ^     ^
+             LEAF   LEAF
+```
+
+```text
+TREE                         SCREEN
+
+       |                    +---------+--------+
+      / \                   |         |  GDB   |
+   CODE   -       ==>       |  CODE   |--------|  <- the "-" split node
+         / \                |         | STACK  |
+       GDB STACK            +---------+--------+
+                                      ^
+                              the "|" split node
+```
+
+Two split nodes, so two separators. Note the `-` separator spans only the right column: a split node divides *the rectangle it was given*, not the whole screen.
+
+```mermaid
+graph TB
+    S1{{"SPLIT (vertical)<br/>ratio 1/2"}}
+    C["LEAF: CODE"]
+    S2{{"SPLIT (horizontal)<br/>ratio 1/2"}}
+    G["LEAF: GDB"]
+    K["LEAF: STACK"]
+    S1 -->|First / left| C
+    S1 -->|Second / right| S2
+    S2 -->|First / top| G
+    S2 -->|Second / bottom| K
+```
+
+#### Case 3 — the real gdbforge `default` layout
+
+Exactly as built by `BuildDefault` (`internal/gdbforge/layout/default.go`), with the shipped ratios from `AppState.DefaultLayoutRatios` (`Left` 2/3, `Output` 1/2, `BottomFirst` 1/3). **5 split nodes and 6 leaves**, so 5 separators on screen.
+
+```text
+|  SPLIT vertical, ratio 2/3                     <- root
+├── -  SPLIT horizontal, ratio 1/2
+│   ├── Code                       LEAF
+│   └── GDB                        LEAF
+└── -  SPLIT horizontal, ratio 1/2
+    ├── Output                     LEAF
+    └── -  SPLIT horizontal, ratio 1/3
+        ├── Breakpoints            LEAF
+        └── -  SPLIT horizontal, ratio 1/2
+            ├── Threads            LEAF
+            └── Call stack         LEAF
+```
+
+Resulting panes for a 120x40 workspace band:
+
+```text
+ x=0                                x=79 x=80                       x=119
+  +-----------------------------------+--------------------------------+ y=0
+  |                                   |                                |
+  |  Code                             |  Output                        |
+  |  79 x 19                          |  40 x 19                       |
+  |                                   |                                |
+  +-----------------------------------+--------------------------------+ y=19
+  |                                   |  Breakpoints        40 x 6     |
+  |  GDB                              +--------------------------------+ y=26
+  |  79 x 20                          |  Threads            40 x 6     |
+  |                                   +--------------------------------+ y=33
+  |                                   |  Call stack         40 x 6     |
+  +-----------------------------------+--------------------------------+ y=39
+                                      ^
+                            the root "|" split node
+```
+
+Each separator maps back to exactly one split node:
+
+| Separator on screen | Split node | Ratio |
+|---------------------|------------|-------|
+| vertical at `x=79`, full height | root `\|` | 2/3 |
+| horizontal at `y=19`, `x=0..78` | `-` Code / GDB | 1/2 |
+| horizontal at `y=19`, `x=80..119` | `-` Output / lists | 1/2 |
+| horizontal at `y=26`, `x=80..119` | `-` Breakpoints / rest | 1/3 |
+| horizontal at `y=33`, `x=80..119` | `-` Threads / Call stack | 1/2 |
+
+The two separators at `y=19` are **different split nodes** that happen to line up, because both columns are 40 rows tall and both use ratio 1/2. Widen only the left pane and they stay aligned; drag either one and only that node's `Ratio` changes.
+
+```mermaid
+graph TB
+    R{{"SPLIT (vertical)<br/>ratio 2/3"}}
+    LC{{"SPLIT (horizontal)<br/>ratio 1/2"}}
+    CODE["LEAF: Code"]
+    GDB["LEAF: GDB"]
+    RC{{"SPLIT (horizontal)<br/>ratio 1/2"}}
+    OUT["LEAF: Output"]
+    B1{{"SPLIT (horizontal)<br/>ratio 1/3"}}
+    BP["LEAF: Breakpoints"]
+    B2{{"SPLIT (horizontal)<br/>ratio 1/2"}}
+    TH["LEAF: Threads"]
+    CS["LEAF: Call stack"]
+
+    R -->|First / left| LC
+    R -->|Second / right| RC
+    LC -->|First / top| CODE
+    LC -->|Second / bottom| GDB
+    RC -->|First / top| OUT
+    RC -->|Second / bottom| B1
+    B1 -->|First / top| BP
+    B1 -->|Second / bottom| B2
+    B2 -->|First / top| TH
+    B2 -->|Second / bottom| CS
+```
+
+`applyDefaultRatios` sets only the root, the right column, and the two nested list splits. The Code / GDB ratio of 1/2 comes from `ComputeRatios`, which runs on every `Split` while the builder has `equalalways` on.
+
 ---
 
 ## Horizontal and vertical splits
@@ -186,12 +350,12 @@ Node
 
 Layout algorithm (`widget_tree.go`):
 
-1. Compute first-child size using **`Units()`** leaf weighting along the split axis.
+1. Compute first-child size from the split node's **`Ratio`**, clamped to `minPaneCells`.
 2. Reserve 1 cell for the separator.
 3. Assign remaining space to second child.
 4. Recurse into both children with child `Canvas` values (`WithRect`).
 
-**Ratio default:** `0.5` when a split is created via `WidgetTree.Split`. `BuildLayout` currently uses unit counts, not `Ratio` directly.
+**Ratio is input only.** `BuildLayout` reads `Ratio` (in `verticalSplitRects` / `horizontalSplitRects`) and never writes it back, so geometry is a pure function of the ratios and the canvas: resizing the console scales panes and a shrink-then-grow restores them exactly. `Ratio` changes only on `Split` / `DeleteFocus` (via `Units()`-weighted `ComputeRatios`, when `equalalways` is on), on a separator drag, and when a named layout is applied.
 
 **Border drawing:** separators are written into the shared `Grid` during `BuildLayout`, not by individual widgets. This ensures corners align when splits nest.
 
@@ -248,33 +412,40 @@ type Layout interface {
 }
 ```
 
+Two consumers reach the same `SplitLayout`, by two deliberately separate routes:
+
+- **Rendering and lifecycle — the top path.** `TermApp → TabWidget → Tab → Layout interface → SplitLayout`. Everything on this path is generic: `TabWidget` and `Tab` see only the interface methods above, so neither can acquire a dependency on split-tree behaviour and a tab can host a completely different `Layout` with no changes.
+- **gdbforge application logic — the left path.** Code that genuinely needs split-specific operations (focus navigation, pane placement, splitting, leaf marks) takes the concrete `*SplitLayout` from `LayoutShell.Layout()`. Those operations are intentionally absent from the interface.
+
+Splitting the routes this way is what let the 28 forwarding methods `Tab` used to carry disappear: application code no longer hops through the container to reach the tree, while `Tab` stays small enough to host a future layout that has no panes at all. `LayoutShell.Layout()` is the single place the interface is narrowed to a concrete type.
+
 ```mermaid
 flowchart TD
     TermApp["TermApp frame loop"]
     TabW["TabWidget"]
-    Tab["Tab: Title, Content Layout"]
-    Iface["Layout interface<br/>Widget + BuildLayout"]
+    Tab["Tab<br/>Title + Content Layout"]
+    Iface(["Layout interface<br/>Widget + BuildLayout"])
     SL["SplitLayout<br/>embeds *WidgetTree"]
-    WT["WidgetTree"]
+    WT["WidgetTree<br/>topology, geometry, focus, marks"]
     FutureA["future layout"]
     FutureB["future layout"]
-    Shell["LayoutShell.Layout()<br/>returns *SplitLayout"]
-    AppCode["cmd/gdbforge pane, focus<br/>and mark call sites"]
+    Shell["LayoutShell.Layout()<br/>the one type assertion"]
+    AppCode[["many cmd/gdbforge call sites<br/>focus, placement, splits, marks<br/>(not a type)"]]
 
-    TermApp -->|"Draw"| TabW
-    TabW --> Tab
-    Tab --> Iface
-    Iface --> SL
-    Iface --> FutureA
-    Iface --> FutureB
-    SL --> WT
-    AppCode --> Shell
-    Shell --> SL
+    TermApp -->|"calls Draw"| TabW
+    TabW -->|"active tab"| Tab
+    Tab -->|"Content field"| Iface
+    Iface -.->|"implemented by"| SL
+    Iface -.->|"implemented by"| FutureA
+    Iface -.->|"implemented by"| FutureB
+    SL -->|"embeds"| WT
+    AppCode -->|"calls"| Shell
+    Shell -->|"returns concrete type"| SL
 ```
 
-*Source: [`diagrams/tab_layout.mermaid`](diagrams/tab_layout.mermaid)*
+Solid arrows are runtime use (a call, a field, an embed); dotted arrows are the `implements` relationship. Every box is a Go type except the double-barred one, whose shape marks it as a set of scattered call sites — `lay := a.Layout()` appears in about a dozen files such as `workspace_policy.go`, `workspace_place.go` and `actions.go`.
 
-The two paths never cross: `TabWidget` reaches the layout only through the interface (paint and events), while application code reaches it only through `LayoutShell.Layout()`, typed concretely.
+*Source: [`diagrams/tab_layout.mermaid`](diagrams/tab_layout.mermaid)*
 
 `SplitLayout` is the tiling implementation. It **embeds `*WidgetTree`**, so every pane, focus and mark operation is reachable on the layout with no forwarding code:
 
@@ -283,13 +454,6 @@ type SplitLayout struct {
     *WidgetTree
 }
 ```
-
-Two access paths, deliberately separate:
-
-| Caller | Uses | For |
-|--------|------|-----|
-| `TabWidget` | `Layout` interface only | `BuildLayout`, `Draw`, `HandleEvent` |
-| `LayoutShell` | `*SplitLayout` concretely | splits, focus, leaf marks, replacement |
 
 **Do not add `Tab` or `TabWidget` methods that forward into a `Layout`.** Code needing arrangement-specific behaviour takes the layout and drives it directly. `LayoutShell.Layout()` returns nil when the tab hosts a non-split layout, which is the signal that these mark and slot APIs do not apply.
 
