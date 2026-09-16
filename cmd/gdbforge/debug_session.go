@@ -10,8 +10,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // DebugSession owns the debugger backend, shared debug models, and GDB/DLV

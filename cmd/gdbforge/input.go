@@ -8,14 +8,14 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // withGlobalKeys runs mode-independent shortcuts (Ctrl-Z, Ctrl-C, Ctrl-D)
 // before a mode handler. Policy lives on Activity (C/Z) and Confirm (D) —
 // Mode only owns keymaps.
-func (a *DebuggerApp) withGlobalKeys(h termui.KeyHandler) termui.KeyHandler {
+func (a *DebuggerApp) withGlobalKeys(h termforge.KeyHandler) termforge.KeyHandler {
 	return func(ev *tcell.EventKey) bool {
 		if a.tryGlobalSuspend(ev) {
 			return true
@@ -46,7 +46,7 @@ func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 		return false
 	}
 	if w := a.focusedWidget(); w != nil {
-		if ts, ok := w.(termui.TerminalSelectionPane); ok && ts.HasTerminalSelection() {
+		if ts, ok := w.(termforge.TerminalSelectionPane); ok && ts.HasTerminalSelection() {
 			a.Tab().HandleEvent(ev)
 			a.RequestFrame()
 			return true
@@ -167,7 +167,7 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 	}
 	// Focused scrollable panes (e.g. Log) handle their bindings without insert mode.
 	if w := a.focusedWidget(); w != nil {
-		if h, ok := w.(termui.FocusKeyHandler); ok && h.HandleFocusKey(ev) {
+		if h, ok := w.(termforge.FocusKeyHandler); ok && h.HandleFocusKey(ev) {
 			return true
 		}
 	}
@@ -435,7 +435,7 @@ func (a *DebuggerApp) enterSearchMode() {
 // leaveCommandMode exits ':' / '/' / wildmenu (same as Esc).
 func (a *DebuggerApp) leaveCommandMode() {
 	wasSearch := a.Mode() == platform.ModeSearch ||
-		(a.cmdWidget != nil && a.cmdWidget.Kind() == termui.CmdKindSearch)
+		(a.cmdWidget != nil && a.cmdWidget.Kind() == termforge.CmdKindSearch)
 	a.comp.setForGDB(false)
 	a.comp.clear()
 	if wasSearch {
@@ -475,7 +475,7 @@ func (a *DebuggerApp) clickCmdLine(screenX int) {
 	if a.Mode() == platform.ModeCompletion {
 		a.comp.setForGDB(false)
 		a.comp.clear()
-		if a.cmdWidget != nil && a.cmdWidget.Kind() == termui.CmdKindSearch {
+		if a.cmdWidget != nil && a.cmdWidget.Kind() == termforge.CmdKindSearch {
 			a.SetMode(platform.ModeSearch)
 			if !a.cmdWidget.Active() {
 				a.cmdWidget.ActivateSearch()

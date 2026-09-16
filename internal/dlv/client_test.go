@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestClientIsSession(t *testing.T) {
-	var _ core.Session = (*Client)(nil)
-	var _ core.Session = (*ptyx.TTY)(nil)
+	var _ ptyx.Session = (*Client)(nil)
+	var _ ptyx.Session = (*ptyx.TTY)(nil)
 }
 
 func TestNewClientRequiresProg(t *testing.T) {

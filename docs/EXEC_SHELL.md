@@ -6,7 +6,7 @@ description: Learn how gdbforge executes shell commands in interactive panes wit
 
 gdbforge can open an **external PTY session** in the focused pane, similar to Vim’s `:!` but as a persistent console widget (not a one-shot filter).
 
-**Companion docs:** [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [INPUT.md](INPUT.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)
+**Companion docs:** [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) · [INPUT.md](INPUT.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md)
 
 ---
 
@@ -44,7 +44,7 @@ flowchart LR
 |-------|----------------|------|
 | Command | `LeafRest("!", OnRun)` | Rest-args leaf; remainder of line → argv |
 | PTY | `*ptyx.TTY` (`ptyx.Start`) | Process PTY: `Subscribe`, `SendRaw`, `SetSize` |
-| Client | `internal/execcli.ExecClient` | Thin embed of `*ptyx.TTY` |
+| Client | `termforge/execcli.ExecClient` | Thin embed of `*ptyx.TTY` |
 | Terminal | `CompositeTerminal` + `WireTTY` | xterm emulator in Exec pane |
 | Widget | `widgets.ExecWidget` | View — `WireExec`, keys, cursor |
 | App | `DebuggerApp.OnRun` | Owns `ExecClient`; `swapFocusedWidget`; insert mode |
@@ -68,7 +68,7 @@ A **rest-args** leaf (`RestArgs == true`) means: after accepting this node, **st
   └─ current stays on "!" node → OnRun
 ```
 
-Implementation: `internal/commands/dsl.go` (`CmdRest` / `LeafRest`) and `CommandParser.Parse` / `Sync` (including glued `:!ls`).
+Implementation: `termforge/commands/dsl.go` (`CmdRest` / `LeafRest`) and `CommandParser.Parse` / `Sync` (including glued `:!ls`).
 
 ---
 
@@ -127,8 +127,8 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 | `cmd/gdbforge/actions.go` | `OnRun`, `startExecSession` |
 | `cmd/gdbforge/workspace_place.go` | `swapFocusedWidget`, `JumpBack`, jump list |
 | `cmd/gdbforge/keybindings.go` | `<C-o>` |
-| `internal/execcli/exec_client.go` | `ptyx.Start` wrapper |
+| `termforge/execcli/exec_client.go` | `ptyx.Start` wrapper |
 | `internal/gdbforge/widgets/exec_widget.go` | Exec terminal view |
-| `internal/termui/composite_terminal.go` | xterm + `WireTTY` |
-| `internal/termui/wire_tty.go` | PTY ↔ terminal bridge |
-| `internal/ptyx/tty.go` | Unified PTY type |
+| `termforge/composite_terminal.go` | xterm + `WireTTY` |
+| `termforge/wire_tty.go` | PTY ↔ terminal bridge |
+| `termforge/ptyx/tty.go` | Unified PTY type |

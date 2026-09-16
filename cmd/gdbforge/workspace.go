@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // Named leaf marks on the active SplitLayout (workspace role names).
@@ -18,7 +18,7 @@ const (
 
 const widgetJumpMax = 32
 
-// LayoutShell owns gdbforge workspace policy above a termui.SplitLayout:
+// LayoutShell owns gdbforge workspace policy above a termforge.SplitLayout:
 // pane marks, placement, focus activation (Code/GDB/last), layout apply, and
 // focused-pane widget swap / jump-back.
 //
@@ -27,15 +27,15 @@ const widgetJumpMax = 32
 // returns it concretely so nothing here forwards.
 //
 // LayoutShell is the split-tree policy layer specifically. A tab hosting some
-// other termui.Layout needs its own policy, not these mark and slot APIs;
+// other termforge.Layout needs its own policy, not these mark and slot APIs;
 // Layout() returns nil in that case.
 type LayoutShell struct {
-	tab        *termui.TabWidget
+	tab        *termforge.TabWidget
 	host       layoutHost
-	widgetJump []termui.Widget
+	widgetJump []termforge.Widget
 }
 
-func initLayoutShell(app *DebuggerApp, tab *termui.TabWidget) {
+func initLayoutShell(app *DebuggerApp, tab *termforge.TabWidget) {
 	if app == nil {
 		return
 	}
@@ -45,7 +45,7 @@ func initLayoutShell(app *DebuggerApp, tab *termui.TabWidget) {
 
 // Tab returns the tab container. It only hosts the layout — use Layout for
 // pane, focus and mark operations.
-func (w *LayoutShell) Tab() *termui.TabWidget {
+func (w *LayoutShell) Tab() *termforge.TabWidget {
 	if w == nil {
 		return nil
 	}
@@ -60,37 +60,37 @@ func (w *LayoutShell) Tab() *termui.TabWidget {
 // Layout. Callers must nil-check: SplitLayout embeds *WidgetTree, so calling a
 // promoted method on a nil *SplitLayout panics when the embedded field is read,
 // before any nil receiver check inside WidgetTree can run.
-func (w *LayoutShell) Layout() *termui.SplitLayout {
+func (w *LayoutShell) Layout() *termforge.SplitLayout {
 	if w == nil || w.tab == nil {
 		return nil
 	}
-	lay, _ := w.tab.Layout().(*termui.SplitLayout)
+	lay, _ := w.tab.Layout().(*termforge.SplitLayout)
 	return lay
 }
 
-// Widget returns the TabWidget as a termui.Widget for TermApp.AddWidget.
-func (w *LayoutShell) Widget() termui.Widget {
+// Widget returns the TabWidget as a termforge.Widget for App.AddWidget.
+func (w *LayoutShell) Widget() termforge.Widget {
 	if w == nil {
 		return nil
 	}
 	return w.tab
 }
 
-func (w *LayoutShell) setTab(tab *termui.TabWidget) {
+func (w *LayoutShell) setTab(tab *termforge.TabWidget) {
 	if w == nil {
 		return
 	}
 	w.tab = tab
 }
 
-func isCodeWidget(w termui.Widget) bool {
+func isCodeWidget(w termforge.Widget) bool {
 	_, ok := w.(*widgets.CodeWidget)
 	return ok
 }
 
 // isCodeSlot is the startup code leaf: Logo / Code, or single-pane Assembly
 // when there is no dedicated :vs asm / :sp asm leaf.
-func isCodeSlot(w termui.Widget) bool {
+func isCodeSlot(w termforge.Widget) bool {
 	if isCodeWidget(w) {
 		return true
 	}
@@ -101,7 +101,7 @@ func isCodeSlot(w termui.Widget) bool {
 }
 
 // isSourceCodeSlot is a leaf that shows source (or the logo placeholder).
-func isSourceCodeSlot(w termui.Widget) bool {
+func isSourceCodeSlot(w termforge.Widget) bool {
 	if isCodeWidget(w) {
 		return true
 	}

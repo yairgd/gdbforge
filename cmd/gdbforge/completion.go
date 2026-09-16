@@ -3,13 +3,13 @@ package main
 import (
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // completionHost is the narrow surface completionCtl needs from the composition
@@ -18,14 +18,14 @@ type completionHost interface {
 	GDBWidget() *widgets.GDBWidget
 	LuaConsoleWidget() *widgets.LuaConsoleWidget
 	LuaGdbforgeComplete(text string) (newLine string, matches []string)
-	CmdWidget() *termui.CmdWidget
+	CmdWidget() *termforge.CmdWidget
 	Backend() backend.Backend
-	Session() core.Session
+	Session() ptyx.Session
 	State() *platform.AppState
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
 	IsConfirming() bool
-	PublishCompletion(msg termui.CompletionMsg)
+	PublishCompletion(msg termforge.CompletionMsg)
 	RequestFrame()
 }
 
@@ -34,9 +34,9 @@ type completionHost interface {
 // DebuggerApp (handleCompletionKey); the ctl owns the domain.
 type completionCtl struct {
 	host completionHost
-	menu *termui.CompletionMenu
-	view termui.CompletionView
-	bar  *termui.CompletionBarWidget // concrete chrome; also CompletionView
+	menu *termforge.CompletionMenu
+	view termforge.CompletionView
+	bar  *termforge.CompletionBarWidget // concrete chrome; also CompletionView
 	// forGDB is true while ModeCompletion is driven by GDB Tab
 	// (apply/cancel return to insert mode instead of command mode).
 	forGDB bool
@@ -45,7 +45,7 @@ type completionCtl struct {
 }
 
 // attach takes ownership of the wildmenu model and its chrome widget.
-func (c *completionCtl) attach(menu *termui.CompletionMenu, bar *termui.CompletionBarWidget) {
+func (c *completionCtl) attach(menu *termforge.CompletionMenu, bar *termforge.CompletionBarWidget) {
 	c.menu = menu
 	c.bar = bar
 	c.view = bar
@@ -56,7 +56,7 @@ func (c *completionCtl) Register(bus *platform.EventBus) {
 }
 
 // onMsg applies Tab results to the CompletionMenu and syncs the view.
-func (c *completionCtl) onMsg(msg termui.CompletionMsg) {
+func (c *completionCtl) onMsg(msg termforge.CompletionMsg) {
 	if c.menu == nil {
 		return
 	}
@@ -263,7 +263,7 @@ func (c *completionCtl) publishLuaMenu(text string, names []string) {
 	if h == nil {
 		return
 	}
-	h.PublishCompletion(termui.CompletionMsg{
+	h.PublishCompletion(termforge.CompletionMsg{
 		Input: text,
 		Token: text,
 		Names: names,
@@ -363,7 +363,7 @@ func (c *completionCtl) publishGDBMenu(text string, names []string) {
 	if h.Backend() != nil {
 		menu = h.Backend().EnrichLinespecMenu(text, menu, h.Session(), h.State())
 	}
-	h.PublishCompletion(termui.CompletionMsg{
+	h.PublishCompletion(termforge.CompletionMsg{
 		Input: text,
 		Token: text,
 		Names: menu,
@@ -382,7 +382,7 @@ func (c *completionCtl) refreshCmdMenu() {
 		return
 	}
 	names := cmd.CompletionNames()
-	h.PublishCompletion(termui.CompletionMsg{
+	h.PublishCompletion(termforge.CompletionMsg{
 		Input: cmd.Text(),
 		Token: cmd.Text(),
 		Names: names,

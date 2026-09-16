@@ -8,7 +8,7 @@ This document describes the high-level architecture of **gdbforge**: subsystems,
 
 **gdbforge is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
 
-**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
+**Companion docs:** [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) · [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
 
 ---
 
@@ -22,7 +22,7 @@ The debugger app is organized as **Model–View–Controller** with a **composit
 ```mermaid
 flowchart TB
     subgraph root ["Composition root"]
-        App["DebuggerApp<br/>TermApp wiring + host adapters"]
+        App["DebuggerApp<br/>App wiring + host adapters"]
         Shell["LayoutShell<br/>tab tree · pane marks · focus"]
         Sess["DebugSession<br/>backend · GDB widgets · debug ctls"]
         BE["backend.Backend<br/>GDB · Delve"]
@@ -68,14 +68,14 @@ flowchart TB
 
 | Layer | Owns | Lives in |
 |-------|------|----------|
-| **Composition root** | Wire TermApp, hosts, modes, stop orchestration | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
+| **Composition root** | Wire App, hosts, modes, stop orchestration | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
 | **LayoutShell** | Pane marks, Code/GDB placement, layout apply, focus/jump-back | `cmd/gdbforge/workspace*.go`, `layout_host.go` (embedded on app) |
 | **DebugSession** | Backend, debug state, GDB/DLV widgets, debug `*Ctl` group | `debug_session.go` (embedded on app) |
 | **Backend** | GDB vs Delve policy; owns concrete client | `internal/gdbforge/backend` |
 | **Model** | Session + domain snapshots (on `*Ctl`, not app fields) | `breakCtl.list`, `debugInfoCtl`, `asmCtl`, `internal/gdbforge/models` |
 | **Domain surface** | Peer ops for AI / future Lua | `internal/gdbforge/domain` · `cmd/gdbforge/debug_domain.go` |
 | **Controller** | Intents → mutate model → paint / `Send`; `Register` on EventBus | GUI: `*Ctl` · MCP: `internal/mcp` |
-| **View** | Paint + host intents / callbacks | `internal/gdbforge/widgets`, `internal/termui` |
+| **View** | Paint + host intents / callbacks | `internal/gdbforge/widgets`, `termforge` |
 
 ```text
 View (widget)  --Host / OnSubmit-->  DebuggerApp (forwards)
@@ -141,7 +141,7 @@ Consoles use `WireCLI` / `WireInferior` / `WireExec` on `CompositeTerminal`. Lua
 
 ```text
 DebuggerApp
-├── *TermApp              UI loop (PollEvent, draw)
+├── *App              UI loop (PollEvent, draw)
 ├── LayoutShell (embed)   tab tree, pane marks, focus, :layout apply
 ├── DebugSession (embed)  backend, gdbWidget, debug *Ctl group
 └── cross-cutting         lua, search, serial, exec, keybindings, modes
@@ -164,7 +164,7 @@ Background work (GDB PTY, Lua jobs, exec) must not call widgets directly. Everyt
 ```mermaid
 flowchart LR
     Worker["Worker goroutine"]
-    Post["TermApp.PostInterrupt"]
+    Post["App.PostInterrupt"]
     Screen["tcell.PostEvent"]
     Poll["PollEvent · UI thread"]
     HI["HandleInterrupt"]
@@ -183,7 +183,7 @@ flowchart LR
 
 This separation is what made steps 1–6 safe: controllers could move behind host interfaces without fighting a monolithic interrupt switch. The bus handles **events**; host interfaces handle **dependencies**.
 
-Legacy note: older docs refer to `HandleCoreEvents` and `TermApp.events` — removed in favor of `PostInterrupt` + `EventBus`.
+Legacy note: older docs refer to `HandleCoreEvents` and `App.events` — removed in favor of `PostInterrupt` + `EventBus`.
 
 ### Orthogonal input mini-machines
 
@@ -237,7 +237,7 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 - [Why not :attach](#why-not-attach)
 - [Design philosophy](#design-philosophy)
 - [Platform layer](#platform-layer)
-- [TermUI layer](#termui-layer)
+- [termforge layer](#termforge-layer)
 - [High-level architecture](#high-level-architecture)
 - [Main subsystems](#main-subsystems)
 - [Data flow](#data-flow)
@@ -256,7 +256,7 @@ gdbforge runs as a terminal application. It owns the UI event loop, renders into
 flowchart LR
     User["Developer"]
     Term["Terminal"]
-    gdbforge["gdbforge · TermApp"]
+    gdbforge["gdbforge · App"]
     BE["backend.Backend"]
     GDB["GDB MI2 / Delve"]
     Target["Debug target"]
@@ -332,7 +332,7 @@ Each application defines its own set of models during startup. Examples:
 
 All models are created during application initialization. They live for the entire lifetime of the application, subscribe to application events, and continuously maintain their state.
 
-The same `termui` framework (split tree, `:buffer`, `:split`, `:tab`) serves all applications; only the models and services differ.
+The same `termforge` framework (split tree, `:buffer`, `:split`, `:tab`) serves all applications; only the models and services differ.
 
 ---
 
@@ -359,7 +359,7 @@ Services communicate with the outside world. They publish events through the eve
 | Service | Application |
 |---------|-------------|
 | `backend.Backend` | GDB vs Delve policy — **owned by `DebuggerApp`**; wraps `gdb.GDBClient` or `dlv.Client` |
-| `core.Session` (`app.GDB()`) | Shared debugger session (name is historical; works for `-g dlv` too) |
+| `ptyx.Session` (`app.GDB()`) | Shared debugger session (name is historical; works for `-g dlv` too) |
 | `execcli.ExecClient` | Vim-style `:!` shell / SSH PTYs — owned by `DebuggerApp` |
 | `mcp.GdbMcpService` | In-app `:AI` / tool access to the live `Session` (`app.GDB()`) |
 | `IBKRClient` | Trader (planned) |
@@ -452,7 +452,7 @@ Widgets are **views**. A widget should contain little or no business logic. It r
 |--------|------|
 | `LoggerWidget` | Scrollable log output |
 | `GraphWidget` | Time series, histograms, scatter plots |
-| `TableWidget` | Tabular data (implemented in `internal/termui`; BP/threads/callstack embed it) |
+| `TableWidget` | Tabular data (implemented in `termforge`; BP/threads/callstack embed it) |
 | `TreeWidget` | Hierarchical data |
 | `TextWidget` | Line-oriented text |
 
@@ -583,15 +583,15 @@ The **Platform** package contains reusable infrastructure independent from any s
 | **SSH** | Remote access primitives |
 | **Runtime utilities** | Shared helpers used across applications |
 
-Platform components do not import terminal or widget packages. Today many of these live in or near `internal/core`; the target is a dedicated platform layer that applications and TermUI both depend on.
+Platform components do not import terminal or widget packages. Today many of these live in or near `termforge/ptyx`; the target is a dedicated platform layer that applications and termforge both depend on.
 
-**Design decision:** `Buffer` belongs to Platform because it is a reusable data structure with no UI knowledge. Scroll position and cursor visibility are presentation concerns — see [TermUI layer](#termui-layer).
+**Design decision:** `Buffer` belongs to Platform because it is a reusable data structure with no UI knowledge. Scroll position and cursor visibility are presentation concerns — see [termforge layer](#termforge-layer).
 
 ---
 
-## TermUI layer
+## termforge layer
 
-**TermUI** is responsible for presentation: turning model state into terminal output and routing local input.
+**termforge** is responsible for presentation: turning model state into terminal output and routing local input.
 
 | Component | Role |
 |-----------|------|
@@ -603,9 +603,9 @@ Platform components do not import terminal or widget packages. Today many of the
 | **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
 
-**Design decision:** `Viewport` belongs to TermUI because it manages scrolling, cursor visibility, and rendering. `Buffer` belongs to Platform because it holds data with no presentation logic.
+**Design decision:** `Viewport` belongs to termforge because it manages scrolling, cursor visibility, and rendering. `Buffer` belongs to Platform because it holds data with no presentation logic.
 
-Implementation today: `internal/termui` (Canvas, Grid, WidgetTree) plus scroll/view helpers still migrating from `internal/core`.
+Implementation today: `termforge` (Canvas, Grid, WidgetTree) plus scroll/view helpers still migrating from `termforge/ptyx`.
 
 ---
 
@@ -613,8 +613,8 @@ Implementation today: `internal/termui` (Canvas, Grid, WidgetTree) plus scroll/v
 
 ```mermaid
 flowchart TB
-    subgraph Presentation["Presentation · internal/termui"]
-        TermApp["TermApp"]
+    subgraph Presentation["Presentation · termforge"]
+        App["App"]
         RootLayout["Root: TabBar / Workspace / CmdLine"]
         SplitTree["Split tree · WidgetTree"]
         Widgets["Widgets: Code, GDB, Cmd, …"]
@@ -630,10 +630,10 @@ flowchart TB
         HandleCore["HandleCoreEvents"]
     end
 
-    subgraph Domain["Domain · internal/core + termui events"]
-        Events["termui.Event bus"]
+    subgraph Domain["Domain · termforge/ptyx + termforge events"]
+        Events["termforge.Event bus"]
         Buffer["Buffer / Viewport"]
-        History["History / Autocomplete · termui"]
+        History["History / Autocomplete · termforge"]
         DebuggerIF["Debugger / Session"]
     end
 
@@ -642,7 +642,7 @@ flowchart TB
         MI["MI / Delve parse"]
     end
 
-    TermApp --> RootLayout --> SplitTree --> Widgets --> Render
+    App --> RootLayout --> SplitTree --> Widgets --> Render
     Widgets --> Application
     DebuggerApp --> Ctls
     DebuggerApp --> WS
@@ -660,22 +660,22 @@ flowchart TB
 | Subsystem | Package | Responsibility |
 |-----------|---------|----------------|
 | **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, `internal/dlv`, …) | Communicate with external systems; produce events |
-| **Event bus** | `termui.Event` channel | Distribute events to models and application dispatch |
+| **Event bus** | `termforge.Event` channel | Distribute events to models and application dispatch |
 | **Models** | `internal/gdbforge/models` on `*Ctl` | Own application state; controllers push `SetItems` / paint |
 | **Workspace** | `cmd/gdbforge/workspace*.go` | Pane marks, placement, focus policy, layout apply above Tab |
-| **Window manager** | `termui` (`WidgetTree`, `TabWidget`) | Generic layout / focus / splits (no debugger roles) |
-| **Terminal application** | `termui.TermApp` | Event loop, screen init, widget registry, redraw orchestration |
-| **Root layout** | `termui` (planned `RootLayout`) | Fixed TabBar, flexible Workspace band, fixed CmdLine |
-| **Split tree** | `termui.WidgetTree`, `Node` | Recursive pane division inside Workspace |
-| **Widget layer** | `termui.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
+| **Window manager** | `termforge` (`WidgetTree`, `TabWidget`) | Generic layout / focus / splits (no debugger roles) |
+| **Terminal application** | `termforge.App` | Event loop, screen init, widget registry, redraw orchestration |
+| **Root layout** | `termforge` (planned `RootLayout`) | Fixed TabBar, flexible Workspace band, fixed CmdLine |
+| **Split tree** | `termforge.WidgetTree`, `Node` | Recursive pane division inside Workspace |
+| **Widget layer** | `termforge.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
-| **Domain events** | `termui.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
+| **Domain events** | `termforge.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
 | **Text model (legacy)** | `platform.Buffer`, `Viewport` | Line storage — Code/Asm/Help/FileList; **list panes BP/threads/stack use `TableWidget`** |
 | Generic `TableModel` | — | Not yet — widgets use `SetFill` + typed `SetItems` |
-| **CmdLine helpers** | `termui.History`, `termui.AutoCompleter` | Command-line UX (no tcell in API surface) |
-| **Key sequences** | `termui.Trie` | Prefix-tree matcher for multi-key bindings |
+| **CmdLine helpers** | `termforge.History`, `termforge.AutoCompleter` | Command-line UX (no tcell in API surface) |
+| **Key sequences** | `termforge.Trie` | Prefix-tree matcher for multi-key bindings |
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
-| **Debugger backend** | `gdbforge/backend`, `ptyx`, `gdb` / `dlv`, `core.Session` | Policy surface + MI/Delve PTY + inferior stdio PTY |
+| **Debugger backend** | `gdbforge/backend`, `ptyx`, `gdb` / `dlv`, `ptyx.Session` | Policy surface + MI/Delve PTY + inferior stdio PTY |
 | **AI / tools** | `mcp.GdbMcpService` | Same-process `:AI` on live Session |
 | **Application shell** | `cmd/gdbforge` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleCoreEvents` |
 
@@ -699,18 +699,18 @@ gdbforge uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
-| **Terminal** | `tcell.Event` | `PollEvent` → `TermApp.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
-| **Domain** | `termui.Event` | Any producer → `TermApp.events` channel → **`HandleCoreEvents`** |
+| **Terminal** | `tcell.Event` | `PollEvent` → `App.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
+| **Domain** | `termforge.Event` | Any producer → `App.events` channel → **`HandleCoreEvents`** |
 
-Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `termui.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
+Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `termforge.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
-    participant App as TermApp
+    participant App as App
     participant Dbg as DebuggerApp
     participant Widget as Widget · Tab / CmdWidget
-    participant Bus as termui.Event channel
+    participant Bus as termforge.Event channel
     participant Core as HandleCoreEvents
     participant Render as Redraw
 
@@ -719,7 +719,7 @@ sequenceDiagram
     App ->> Dbg: HandleKey(ev) · on EventKey
     Dbg ->> Dbg: mode + trie routing
     Dbg ->> Widget: HandleEvent(ev)
-    Widget ->> Bus: Events <- SubmitMsg / other termui.Event
+    Widget ->> Bus: Events <- SubmitMsg / other termforge.Event
     App ->> Bus: drain channel
     Bus ->> Core: AppApi.HandleCoreEvents(ev)
     Core ->> Core: dispatch by CommandID / type
@@ -759,10 +759,10 @@ flowchart TB
         Async["Async sources · GDB PTY"]
     end
 
-    subgraph TermApp["TermApp event loop"]
+    subgraph App["App event loop"]
         Poll["PollEvent · tcell.Event"]
-        Bus["events chan · termui.Event"]
-        TermHandler["TermApp.HandleEvent"]
+        Bus["events chan · termforge.Event"]
+        TermHandler["App.HandleEvent"]
         HandleKey["AppApi.HandleKey"]
         Widgets["TabWidget / CmdWidget HandleEvent"]
         CoreHub["HandleCoreEvents"]
@@ -792,7 +792,7 @@ flowchart TB
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `termui.Event` on the `TermApp` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/gdbforge/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
+**Design decision:** domain events do **not** fan out to widgets directly. Every `termforge.Event` on the `App` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/gdbforge/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
 
 Typed app notifications use **`platform.EventBus`** (`Subscribe` / `Publish`) so producers and consumers wire without constructor injection:
 
@@ -803,7 +803,7 @@ Typed app notifications use **`platform.EventBus`** (`Subscribe` / `Publish`) so
 
 Breakpoint sync details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
 
-Terminal input routing (modes, trie, widget dispatch) is also centralized in **`DebuggerApp`**, keeping `TermApp` a generic event loop and draw orchestrator.
+Terminal input routing (modes, trie, widget dispatch) is also centralized in **`DebuggerApp`**, keeping `App` a generic event loop and draw orchestrator.
 
 ---
 
@@ -823,13 +823,13 @@ These principles are **non-negotiable** for gdbforge. They explain many seemingl
 | 8 | TabBar, CmdLine, Workspace are top-level | Split tree stays scoped to Workspace only |
 | 9 | Only Workspace contains the split tree | TabBar/CmdLine never participate in recursive splits |
 | 10 | Debugger backends must not import UI | Keeps GDB/OpenOCD/JTAG testable without a terminal |
-| 11 | Buffer is Platform; Viewport is TermUI | Data storage vs scroll/cursor/rendering concerns stay separated |
+| 11 | Buffer is Platform; Viewport is termforge | Data storage vs scroll/cursor/rendering concerns stay separated |
 
 ---
 
 ## Layer responsibilities
 
-The [Platform layer](#platform-layer) and [TermUI layer](#termui-layer) sections above define the reusable infrastructure vs presentation split. The subsections below map those roles onto today's packages and wiring.
+The [Platform layer](#platform-layer) and [termforge layer](#termforge-layer) sections above define the reusable infrastructure vs presentation split. The subsections below map those roles onto today's packages and wiring.
 
 ### Services
 
@@ -843,7 +843,7 @@ Two mechanisms, both UI-thread only for widget mutation:
 
 | Mechanism | Use | API |
 |-----------|-----|-----|
-| **PostInterrupt** | Cross-thread wakeups (GDB PTY, Lua, exec) | `TermApp.PostInterrupt` → `HandleInterrupt` → `EventBus.Dispatch` |
+| **PostInterrupt** | Cross-thread wakeups (GDB PTY, Lua, exec) | `App.PostInterrupt` → `HandleInterrupt` → `EventBus.Dispatch` |
 | **EventBus** | Typed pub/sub between controllers | `platform.Subscribe`, `UIComponent.Register` |
 
 Controllers subscribe in `registerUIComponents()`; the app shell no longer switches on every message type.
@@ -864,10 +864,10 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 ### Window manager
 
 - Manages layout (split tree, tabs).
-- **`termui.WidgetTree`**, **`TabWidget`** — generic geometry and focus.
+- **`termforge.WidgetTree`**, **`TabWidget`** — generic geometry and focus.
 - **`LayoutShell`** — gdbforge pane marks, sticky GDB, `:layout` apply (`workspace*.go`).
 
-### Presentation (`internal/termui`)
+### Presentation (`termforge`)
 
 - `tcell.Screen` lifecycle, Canvas, Grid, WidgetTree, poll/draw loop.
 - Must **not** parse GDB MI — delegates to app/controllers + `internal/gdb`.
@@ -875,7 +875,7 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 ### Application (`cmd/gdbforge` + `internal/gdbforge`)
 
 - Declares available models and services at startup.
-- `DebuggerApp` embeds `termui.TermApp`, **`LayoutShell`**, and **`DebugSession`**, implements `AppApi` and all **host interfaces**:
+- `DebuggerApp` embeds `termforge.App`, **`LayoutShell`**, and **`DebugSession`**, implements `AppApi` and all **host interfaces**:
   - **`HandleInterrupt`** — thin dispatch: string session exits + `EventBus.Dispatch`.
   - **`AppState`** — mode, PTY owner, layout policy.
   - **`keyBindings`** — multi-key chords.
@@ -885,26 +885,26 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
   - **`gdbMcp`** — MCP peer on `app.GDB()`.
 - Defines app-specific command tree (colon commands via `CommandParser`).
 
-### Domain (`internal/core` + `termui` event types)
+### Domain (`termforge/ptyx` + `termforge` event types)
 
-See [Platform layer](#platform-layer). Today `internal/core` holds platform primitives migrating toward a dedicated platform package:
+See [Platform layer](#platform-layer). Today `termforge/ptyx` holds platform primitives migrating toward a dedicated platform package:
 
-- **`termui.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`internal/termui/event.go`, `command.go`).
-- **`core` PTY events** — `PtyOutputMsg` (`internal/core/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
-- **`CommandID`** — infra constant `CmdUnknown` in `termui`; app-specific command IDs live in `cmd/gdbforge`.
+- **`termforge.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`termforge/event.go`, `command.go`).
+- **`core` PTY events** — `PtyOutputMsg` (`termforge/ptyx/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
+- **`CommandID`** — infra constant `CmdUnknown` in `termforge`; app-specific command IDs live in `cmd/gdbforge`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
-- `History`, `AutoCompleter` for command-line UX (`termui`).
+- `History`, `AutoCompleter` for command-line UX (`termforge`).
 - `Debugger` / `Session` / `PTYWriter` — send API, exclusive write, shared Subscribe.
 
-### Infrastructure (`internal/ptyx`, `internal/gdb`, `internal/mcp`)
+### Infrastructure (`termforge/ptyx`, `internal/gdb`, `internal/mcp`)
 
 - **`ptyx.TTY`** — unified PTY type: `Start` (process), `Open` (pair), `AttachPath` (external slave path). Exclusive `WithWrite`, `Subscribe` fan-out, `SetSize`, `Close`.
-- **`gdb.GDBClient`** — **3 PTYs**: CLI (`CLITTY`), MI (`core.Session` embed), inferior; bootstrap via `new-ui mi2`.
-- **`termui.CompositeTerminal` + `WireTTY`** — xterm bridge for GDB/IO/exec panes.
-- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on MI `core.Session`.
+- **`gdb.GDBClient`** — **3 PTYs**: CLI (`CLITTY`), MI (`ptyx.Session` embed), inferior; bootstrap via `new-ui mi2`.
+- **`termforge.CompositeTerminal` + `WireTTY`** — xterm bridge for GDB/IO/exec panes.
+- **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on MI `ptyx.Session`.
 - MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb` (MI PTY stream only).
 
-**Dependency rule:** `termui` → `core` ← `gdb` / `ptyx` / `mcp`. Never `gdb` → `termui`.
+**Dependency rule:** `termforge` → `core` ← `gdb` / `ptyx` / `mcp`. Never `gdb` → `termforge`.
 
 ---
 
@@ -921,7 +921,7 @@ flowchart TB
         Exec["Exec PTY"]
     end
 
-    subgraph Loop["TermApp.Run · UI thread"]
+    subgraph Loop["App.Run · UI thread"]
         Poll["pollEventBatch · PollEvent"]
         Batch["handleUIEventBatch"]
         HI["DebuggerApp.HandleInterrupt"]
@@ -979,7 +979,7 @@ Mode and key-sequence routing happen in **`DebuggerApp.HandleKey`** before widge
 
 ### Legacy: `HandleCoreEvents`
 
-Older revisions routed all domain events through **`HandleCoreEvents`** on a `termui.Event` channel. That hub is **removed**. New code should use **`PostInterrupt`** (async → UI thread) and **`EventBus.Register` / `Subscribe`** (controller handlers).
+Older revisions routed all domain events through **`HandleCoreEvents`** on a `termforge.Event` channel. That hub is **removed**. New code should use **`PostInterrupt`** (async → UI thread) and **`EventBus.Register` / `Subscribe`** (controller handlers).
 
 ### Interfaces and types
 
@@ -1034,16 +1034,16 @@ classDiagram
 
 ### Command IDs and colon commands
 
-Colon commands use a **hierarchical command tree** (`internal/commands`). See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` / `CommandRegistry` / `CommandParser`), the DSL, and tab completion.
+Colon commands use a **hierarchical command tree** (`termforge/commands`). See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` / `CommandRegistry` / `CommandParser`), the DSL, and tab completion.
 
 | Layer | Owns |
 |-------|------|
 | **`commands.CommandNode`** | Tree nodes — `Name`, `Children`, `Action` |
 | **`commands.CommandRegistry`** | `Root` tree + key-binding trie |
 | **`commands.CommandParser`** | Runtime cursor — `current`, `token`, `path` |
-| **`termui.CmdWidget`** | `:` input + parser for Tab sync; **`SetOnExecute`** → app runs `ExecuteParsed()` |
+| **`termforge.CmdWidget`** | `:` input + parser for Tab sync; **`SetOnExecute`** → app runs `ExecuteParsed()` |
 
-Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via app-owned `ExecuteParsed()` → `CommandNode.Action`.
+Legacy **`termforge.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMode`, `CmdUnknown`). Tree leaf commands execute via app-owned `ExecuteParsed()` → `CommandNode.Action`.
 
 ### Wiring (current)
 
@@ -1052,12 +1052,12 @@ Legacy **`termui.CommandID`** / `SubmitMsg` remain for infra events (`CmdExitMod
 a.commandReg = commands.NewCommandRegistry()
 a.ExapData()  // cmd/gdbforge/command_tree.go
 
-a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
-a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+a.completionBar = termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 ```
 
-Implementation: `internal/commands/`, `internal/termui/cmd_widget.go`, `internal/platform/event_bus.go`, `cmd/gdbforge/`.
+Implementation: `termforge/commands/`, `termforge/cmd_widget.go`, `termforge/platform/event_bus.go`, `cmd/gdbforge/`.
 
 ---
 
@@ -1073,8 +1073,8 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Backend → controller → model → view | Debugger events update models; widgets paint snapshots | **Done** — `backend.Backend` + `*Ctl`; views are hosts / `Set*` |
 | Composition root | Thin app + embedded layers | **Done** — `LayoutShell` + `DebugSession` + host adapters |
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
-| Viewport ownership | Viewport in TermUI; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
-| TableWidget | Columnar lists off Viewport | **Done** — `internal/termui/table_*.go`; BP/threads/callstack adapters |
+| Viewport ownership | Viewport in termforge; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
+| TableWidget | Columnar lists off Viewport | **Done** — `termforge/table_*.go`; BP/threads/callstack adapters |
 | Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |
@@ -1097,9 +1097,9 @@ Detailed tracker: [ROADMAP.md](ROADMAP.md).
 
 | Topic | Document |
 |-------|----------|
-| Widgets, canvas, grid | [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) |
+| Widgets, canvas, grid | [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) |
 | Splits, tabs, command line | [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) |
-| Cells, borders, Unicode | [RENDERING.md](RENDERING.md) |
+| Cells, borders, Unicode | [termforge: Rendering](https://yairgd.github.io/termforge/RENDERING/) |
 | Keyboard, modes | [INPUT.md](INPUT.md) |
 | Command tree, DSL, parser | [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | PTY master/slave, IO, external tty | [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) |

@@ -1,7 +1,7 @@
 package dlv
 
 import (
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 	"path/filepath"
 	"strconv"
 	"strings"

@@ -3,9 +3,9 @@ package main
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // inferiorHost is the narrow surface inferiorIOCtl needs from the composition
@@ -30,7 +30,7 @@ func (c *inferiorIOCtl) wire(tty *ptyx.TTY) {
 	if h == nil || h.OutputWidget() == nil || tty == nil {
 		return
 	}
-	opts := termui.WireTTYOpts{PostFrame: h.RequestFrame}
+	opts := termforge.WireTTYOpts{PostFrame: h.RequestFrame}
 	if h.Debug() != nil {
 		opts.OnData = func(data string) {
 			if gw := h.GDBWidget(); gw != nil && h.Debug().GdbTargetPrint() {
@@ -112,7 +112,7 @@ func (a *DebuggerApp) wireSerialConsole() error {
 	if a.outputWidget != nil {
 		a.outputWidget.AppendHostLine("serial: console on " + a.serial.Device() + " (IO pane)")
 	}
-	if a.TermApp != nil {
+	if a.App != nil {
 		a.RequestFrame()
 	}
 	return nil

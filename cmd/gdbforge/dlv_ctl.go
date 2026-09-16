@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 )
 
 // dlvCtl owns Delve confirm-gate state and stop/frame-sync bookkeeping used by

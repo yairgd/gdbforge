@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 )
 
 // activeCodeWidget returns the CodeWidget buffer Esc / global keys should drive.

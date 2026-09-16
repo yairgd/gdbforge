@@ -8,14 +8,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // GDBClient owns three PTYs: CLI (user console), MI (backend), and inferior
 // (program stdio). Session I/O uses the MI PTY after bootstrap via new-ui.
 type GDBClient struct {
-	*ptyx.TTY  // MI PTY — core.Session
+	*ptyx.TTY  // MI PTY — ptyx.Session
 	CLI        *ptyx.TTY
 	inferior   *ptyx.TTY
 	Quit       QuitGate
@@ -29,7 +28,7 @@ type ClientOptions struct {
 	InferiorTTY string
 }
 
-var _ core.Session = (*GDBClient)(nil)
+var _ ptyx.Session = (*GDBClient)(nil)
 
 // How long to wait for the first (gdb) prompt after spawn (covers -x remote load).
 const startupPromptWait = 90 * time.Second

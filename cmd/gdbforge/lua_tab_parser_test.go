@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/commands"
+	"github.com/yairgd/termforge/commands"
 )
 
 func TestLuaTabCompletionViaCommandParser(t *testing.T) {

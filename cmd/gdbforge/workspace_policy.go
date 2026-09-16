@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
-func (w *LayoutShell) findCodeLeaf() *termui.Node {
+func (w *LayoutShell) findCodeLeaf() *termforge.Node {
 	lay := w.Layout()
 	if lay == nil {
 		return nil
@@ -71,7 +71,7 @@ func (w *LayoutShell) rememberCodeLeafFromFocus() {
 	}
 }
 
-func (w *LayoutShell) focusedLeaf() *termui.Node {
+func (w *LayoutShell) focusedLeaf() *termforge.Node {
 	lay := w.Layout()
 	if lay == nil {
 		return nil
@@ -79,7 +79,7 @@ func (w *LayoutShell) focusedLeaf() *termui.Node {
 	return lay.FocusedLeaf()
 }
 
-func (w *LayoutShell) isGdbLeaf(leaf *termui.Node) bool {
+func (w *LayoutShell) isGdbLeaf(leaf *termforge.Node) bool {
 	lay := w.Layout()
 	h := w.host
 	if leaf == nil || lay == nil || h == nil {
@@ -127,7 +127,7 @@ func (w *LayoutShell) activateLastOrCodePane() {
 	w.FocusCode()
 }
 
-func (w *LayoutShell) findGdbLeaf() *termui.Node {
+func (w *LayoutShell) findGdbLeaf() *termforge.Node {
 	lay := w.Layout()
 	h := w.host
 	gdb := h.GDBWidget()
@@ -137,12 +137,12 @@ func (w *LayoutShell) findGdbLeaf() *termui.Node {
 	if leaf := lay.LeafMark(leafMarkGDB); leaf != nil && leaf.GetWidget() == gdb {
 		return leaf
 	}
-	leaf := lay.FindLeaf(func(wid termui.Widget) bool { return wid == gdb })
+	leaf := lay.FindLeaf(func(wid termforge.Widget) bool { return wid == gdb })
 	lay.SetLeafMark(leafMarkGDB, leaf)
 	return leaf
 }
 
-func (w *LayoutShell) pickGdbFallbackLeaf() *termui.Node {
+func (w *LayoutShell) pickGdbFallbackLeaf() *termforge.Node {
 	lay := w.Layout()
 	if lay == nil {
 		return nil
@@ -151,7 +151,7 @@ func (w *LayoutShell) pickGdbFallbackLeaf() *termui.Node {
 		return leaf
 	}
 	codeLeaf := lay.LeafMark(leafMarkCode)
-	for _, n := range termui.CollectLeaves(lay.Root()) {
+	for _, n := range termforge.CollectLeaves(lay.Root()) {
 		if n != codeLeaf {
 			return n
 		}

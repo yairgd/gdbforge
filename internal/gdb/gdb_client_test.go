@@ -7,8 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestNewGDBClientStartsAndCloses(t *testing.T) {
@@ -74,8 +73,8 @@ func TestConcurrentSendSerialized(t *testing.T) {
 }
 
 func TestGDBClientIsSession(t *testing.T) {
-	var _ core.Session = (*GDBClient)(nil)
-	var _ core.Session = (*ptyx.TTY)(nil)
+	var _ ptyx.Session = (*GDBClient)(nil)
+	var _ ptyx.Session = (*ptyx.TTY)(nil)
 }
 
 func TestHasInitScript(t *testing.T) {

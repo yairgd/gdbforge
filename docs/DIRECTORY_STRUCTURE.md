@@ -12,28 +12,34 @@ This document maps the **gdbforge** repository packages to their responsibilitie
 
 ## Table of contents
 
+- [Framework vs application](#framework-vs-application)
 - [Repository tree](#repository-tree)
 - [Command entry points](#command-entry-points)
-- [internal/termui](#internaltermui)
-- [internal/core](#internalcore)
+- [internal/gdbforge](#internalgdbforge)
+- [internal/mcp](#internalmcp)
+- [internal/serialmux](#internalserialmux)
 - [internal/gdb](#internalgdb)
 - [internal/dlv](#internaldlv)
-- [internal/gdbforge](#internalgdbforge)
 - [docs](#docs)
 - [Dependency graph](#dependency-graph)
 - [What belongs where](#what-belongs-where)
 
 ---
 
-## FRAMEWORK vs APP
+## Framework vs application
 
-| Kind | Path | Notes |
-|------|------|-------|
-| FRAMEWORK | `internal/termui`, `platform`, `commands`, `collections`, `ptyx`, `luahost`, `core` | Reusable TUI / host |
-| APP | `internal/gdb`, `dlv`, `mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
-| APP events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
-| APP state | `internal/gdbforge/debugstate` | Debugger fields formerly on `platform.AppState` |
-| APP DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers/string helpers |
+The terminal UI framework lives in a **separate module**,
+[termforge](https://github.com/yairgd/termforge). Everything in this repository is the
+debugger application.
+
+| Kind | Where | Notes |
+|------|-------|-------|
+| Framework | `github.com/yairgd/termforge` (+ `/platform`, `/commands`, `/collections`, `/ptyx`, `/execcli`, `/devport`) | Reusable TUI — see [termforge docs](https://yairgd.github.io/termforge/) |
+| Application | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
+| App events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
+| App state | `internal/gdbforge/debugstate` | Debugger session fields |
+| App DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers / string helpers |
+| Script host | `internal/luahost` | Generic Lua VM; debugger bindings come from `internal/gdbforge/luadebug` |
 
 Import guardrails: `task check-imports`.
 
@@ -44,42 +50,40 @@ Import guardrails: `task check-imports`.
 ```text
 gdbforge/
 ├── cmd/
-│   ├── gdbforge/              # gdbforge debugger app
+│   ├── gdbforge/          # Debugger app — composition root
 │   ├── docserve/          # Documentation HTTP server
-│   └── dbug/              # (removed — was a dev helper)
+│   └── flowdoc/           # Code-flow catalog generator (build-time)
 ├── internal/
-│   ├── termui/            # TUI framework (tcell) ★
-│   ├── commands/          # Command tree, parser, DSL, key bindings ★
-│   ├── collections/       # Shared trie (keys + command children) ★
-│   ├── platform/          # Buffer, Logger, AppContext ★
-│   ├── luahost/           # Lua VM + framework API (APP wires gdb/dlv) ★
-│   ├── ptyx/              # PTY sessions (FRAMEWORK) ★
-│   ├── serialmux/         # UART ↔ PTY mux (kgdb one-cable) ★
-│   ├── devport/           # Serial port open helper ★
-│   ├── demo/               # Host showcase app (no debugger) ★
-│   ├── gdbforge/              # Debugger app layer ★
+│   ├── gdbforge/          # Debugger app layer
 │   │   ├── models/        # Break/thread/stack DTOs
-│   │   ├── parse/         # MI parsers (not in mcp)
+│   │   ├── parse/         # MI parsers
 │   │   ├── mitext/        # MI string unescape / prompt tokens
-│   │   ├── debugstate/    # Debugger AppState fields
+│   │   ├── debugstate/    # Debugger session state
 │   │   ├── events/        # GdbOutputMsg (MI bridge)
-│   │   ├── domain/
-│   │   ├── layout/
-│   │   ├── persist/
+│   │   ├── domain/        # DebugDomain surface for MCP
+│   │   ├── debugger/      # Backend-facing debugger interfaces
+│   │   ├── backend/       # backend.Backend — GDB/Delve policy surface
+│   │   ├── layout/        # Named workspace builders
+│   │   ├── luadebug/      # Debugger Lua bindings
+│   │   ├── persist/       # Breakpoint + history YAML
 │   │   └── widgets/       # Debugger panes (no gdb/mcp imports)
-│   ├── core/              # UI-agnostic domain + generic PTY/exec events ★
-│   ├── gdb/               # GDB MI2 backend ★
-│   ├── dlv/               # Delve CLI backend ★
-│   ├── mcp/               # HTTP/MCP surface (thin; parsers elsewhere)
-│   └── playground/        # Experiments (not production)
-│                          # Tests: *_test.go next to each package (no internal/tests/)
-├── docs/                  # gdbforge documentation ★
-├── go.mod
+│   ├── gdb/               # GDB MI2 backend
+│   ├── dlv/               # Delve backend (rpc2 + CLI PTY)
+│   ├── mcp/               # HTTP/MCP surface
+│   ├── luahost/           # Lua VM + generic script API
+│   └── serialmux/         # UART ↔ PTY mux (kgdb one-cable)
+│                          # Tests: *_test.go next to each package
+├── docs/                  # gdbforge documentation
+├── lua/                   # Shipped Lua workflows (embedded via lua/fs.go)
+├── examples/              # Sample programs to debug
+├── scripts/               # check_imports.sh and friends
+├── go.mod                 # requires github.com/yairgd/termforge
 ├── Taskfile.yml
 └── CONTRIBUTING.md
 ```
 
-★ = primary gdbforge packages
+The UI framework is **not** in this tree — it is the `termforge` module. See
+[termforge: package layout](https://yairgd.github.io/termforge/#package-layout).
 
 ---
 
@@ -88,8 +92,11 @@ gdbforge/
 | Path | Binary | Purpose |
 |------|--------|---------|
 | `cmd/gdbforge/` | `gdbforge` | **gdbforge** debugger app (`package main`, split across files) |
-| `cmd/demo/` | `demo` | Host showcase (gdbforge-like UI, basic commands; no GDB) |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
+| `cmd/flowdoc/` | `flowdoc` | Generates and validates `docs/flows/flows.json` |
+
+A framework showcase binary lives in the termforge repository at
+[`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo).
 
 ### `cmd/gdbforge` layout
 
@@ -145,61 +152,6 @@ task build
 ```
 
 ---
-
-## internal/termui
-
-**gdbforge TUI framework.** Depends on `tcell` only. App-specific widgets live in `internal/gdbforge/widgets`.
-
-| File | Responsibility |
-|------|----------------|
-| `term_app.go` | Event loop, `AppApi`, `termui.Event` channel, widget list, grid buffers; `Suspend`/`Resume` (Ctrl-Z job control) |
-| `event.go`, `command.go` | UI events (`SubmitMsg`, `CompletionMsg`), `CommandID` |
-| `completion_bar.go` | Wildmenu chrome row (`ModeCompletion`); draw-only-when-active |
-| `cmd_widget.go` | Global `:` command line (parser for Tab; `SetOnExecute` → app) |
-| `history.go`, `autocomplete.go` | CmdLine history; legacy flat completer |
-| `widget.go` | `Widget` interface |
-| `node.go` | Split tree node types; `SetWidget` / `GetWidget` |
-| `layout_tree.go` | Tree walks and ratio algorithms |
-| `widget_tree.go` | Split/focus/geometry; `ReplaceFocusedWidget` |
-| `tab.go` | Tab container over a per-tab `WidgetTree` |
-| `canvas.go` | Local-coordinate drawing context |
-| `grid.go` | Off-screen cell framebuffer |
-| `cell.go` | Border edge composition |
-| `rect.go` | Rectangle primitive |
-| `utf.go` | UTF-8 / ANSI text drawing (`DrawANSIText`, `StripANSI`, width helpers) |
-| `app_api.go` | `AppAPI` / `UIContext` interfaces |
-| `base_widget.go` | Shared widget helpers: event channels, `PaneName`, key trie, default `DrawStatusLine` |
-| `input_line.go` | Reusable readline editor (text, cursor, history, paste insert) |
-| `console_pane.go` | Natural REPL transcript: scrollback + live/walking prompt + InputLine (Lua REPL) |
-| `composite_terminal.go` | xterm emulator + key trie; `AttachTTY`, `Paint`, `HandleKey` |
-| `wire_tty.go` | `WireTTY` — PTY bytes ↔ xterm; `WireTTYOpts` (PostFrame, OnExit) |
-| `viewport.go` | Scroll window over line buffer; follow-tail, selection/clipboard, optional ANSI |
-| `viewport_search.go` | `SearchHost` for Viewport-backed panes |
-| `rect_viewport.go` | Content rect + origin; pan/clamp; `EnsureRowVisible` (Y-only) |
-| `cell_buffer.go` | Pane-sized rune+style grid; `BlitTo` canvas |
-| `table.go` | Column layout, sticky header, `PaintVisible` |
-| `table_widget.go` | `TableWidget`: `SetFill`, selection, pan, mouse, copy |
-| `table_search.go` | `SearchHost` for table-backed panes |
-| `table_paint.go` | Row style + search highlight spans |
-| `viewport_word.go` | Double-click word / triple-click line select + copy |
-| `viewport_clipboard.go` | Selection → CLIPBOARD + PRIMARY |
-| `clipboard.go` | Middle-paste rising-edge + debounce; paste routing |
-| `logger_widget.go` | Reusable log pane (`platform.Sink`, `:clear`, scroll bindings) |
-| `status_line.go` | Per-pane status row helpers (`ClearStatusLine`, `PaintStatusBar`) |
-| `named_widget.go` | Optional `WindowName()` hook for dynamic pane titles |
-
-## internal/commands
-
-**Hierarchical command tree** for colon commands, tab completion, and shared `CommandNode` types for key bindings.
-
-| File | Responsibility |
-|------|----------------|
-| `command_node.go` | `CommandNode`, `CommandRegistry` — tree storage |
-| `command_parser.go` | `CommandParser` — navigate tree, complete, execute |
-| `dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` — declarative tree builder |
-| `key_binding_gegistry.go` | `KeyBindingRegistry` — key chord → command |
-
-See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, `CommandRegistry` = owns, `CommandParser` = navigates).
 
 ## internal/gdbforge
 
@@ -258,16 +210,6 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 | `stack_frames.go` | Parse `-stack-list-frames` into `StackFrame` |
 | `agent.go` | `:AI` LLM loop (Anthropic / OpenAI) with domain tools + `gdb_command` |
 
-## internal/ptyx
-
-**Unified PTY transport** for GDB (CLI + MI + inferior), Delve, exec, and serial console legs.
-
-| File | Responsibility |
-|------|----------------|
-| `tty.go` | `ptyx.TTY` — `Start` / `Open` / `AttachPath`; `Subscribe`, `Send`/`SendRaw`, `SetSize`, `Close`, `Master()` |
-| `closed.go` | `ClosedError` — detect PTY session end (EOF/EIO) |
-| `tty_test.go` | Fan-out, process, attach-path tests |
-
 ## internal/serialmux
 
 **Shared UART mux** for kgdb on one serial cable — bridges hardware UART to virtual PTY legs.
@@ -280,58 +222,9 @@ See [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) for ownership (`CommandNode` = tree, 
 
 See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) and [KERNEL_KGDB.md](KERNEL_KGDB.md).
 
-## internal/devport
-
-**Device open helper** — `go.bug.st/serial` wrapper for `/dev/ttyUSB*` (8N1).
-
-| File | Responsibility |
-|------|----------------|
-| `open.go` | `Open(device, baud)` — hardware UART (used by `serialmux`) |
-
-## internal/execcli
-
-**External process PTY client** (Vim-style `:!` sessions) — thin wrapper over `ptyx`.
-
-| File | Responsibility |
-|------|----------------|
-| `exec_client.go` | `ExecClient` embeds `*ptyx.TTY`; `ptyx.Start` |
-
-See [EXEC_SHELL.md](EXEC_SHELL.md).
-
-`cmd/gdbforge` wires `DebuggerApp` across `app.go`, `setup.go`, `input.go`, and related files (see table above).
-
-```mermaid
-flowchart TB
-    TermApp --> Widget
-    Widget --> Canvas
-    Canvas --> Grid
-    WidgetTree --> Node
-```
-
----
-
-## internal/core
-
-**UI-agnostic domain logic.** No imports of `tcell` or other terminal packages.
-
-Today this package holds shared primitives (`Buffer`, `Debugger` interface, backend event types). Explicit application models live in `internal/gdbforge/models` (breakpoints, threads, call stack).
-
-| File | Responsibility |
-|------|----------------|
-| `events.go` | Backend events (`PtyOutputMsg` in `core`; `GdbOutputMsg` in `gdbforge/events`) |
-| `debugger.go` | `Debugger` / `Session` / `PTYWriter` — send, Subscribe, WithWrite |
-| `buffer.go` | Line-oriented text storage — building block for text-oriented models |
-| `viewport.go` | Scroll window over buffer |
-
-**Rule:** if it can be tested without a terminal, it belongs here.
-
-CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`**, not `core`. UI domain events (`SubmitMsg`, `CommandID`) also live in **`termui`**; `core/events.go` holds generic PTY/exec types; `gdbforge/events` holds `GdbOutputMsg` (MI bridge).
-
----
-
 ## internal/gdb
 
-**GDB MI2 backend.** Owns GDB PTY + inferior TTY; parses MI. Implements `core.Session`.
+**GDB MI2 backend.** Owns GDB PTY + inferior TTY; parses MI. Implements `ptyx.Session`.
 
 | File | Responsibility |
 |------|----------------|
@@ -340,9 +233,9 @@ CmdLine helpers (`history`, `autocomplete`, command registry) live in **`termui`
 | `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 
-**Rule:** no imports from `termui`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
+**Rule:** no imports from `termforge`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
 
-Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termui.TermApp` and implements `HandleCoreEvents`).
+Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termforge.App` and implements `HandleCoreEvents`).
 
 ---
 
@@ -372,9 +265,9 @@ Selected with `gdbforge -g dlv`. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRAT
 | `OVERVIEW.md` | Vision and comparison |
 | `ARCHITECTURE.md` | High-level architecture |
 | `PTY_ARCHITECTURE.md` | Dual PTY master/slave, `:b io`, external tty, Delve TCP |
-| `UI_ARCHITECTURE.md` | Widget/canvas/grid details |
+| *(moved to termforge)* | Widget/canvas/grid details |
 | `WINDOW_MANAGEMENT.md` | Splits, tabs, CmdLine |
-| `RENDERING.md` | Grid, cells, diff rendering |
+| *(moved to termforge)* | Grid, cells, diff rendering |
 | `INPUT.md` | Keyboard, modes, commands |
 | `COMMAND_SYSTEM.md` | Command tree, DSL, rest-args |
 | `EXEC_SHELL.md` | `:!` exec panes, jump list |
@@ -397,29 +290,40 @@ Full detail: **[DEPENDENCIES.md](DEPENDENCIES.md)**.
 
 ```mermaid
 flowchart BT
-    tcell["gdamore/tcell"]
-    termui["internal/termui"]
-    gdbforge_pkg["internal/gdbforge"]
+    subgraph ext["external module: termforge"]
+        tf["termforge<br/>(engine root · needs tcell)"]
+        tfplatform["termforge/platform"]
+        tfptyx["termforge/ptyx"]
+    end
+
     widgets["internal/gdbforge/widgets"]
-    core["internal/core"]
+    layoutpkg["internal/gdbforge/layout"]
+    backend["internal/gdbforge/backend"]
     gdb["internal/gdb"]
-    gdbforge_cmd["cmd/gdbforge"]
+    dlv["internal/dlv"]
+    app["cmd/gdbforge"]
 
-    termui --> tcell
-    widgets --> termui
-    widgets --> core
-    gdb --> core
+    widgets --> tf
+    layoutpkg --> tf
+    gdb --> tfptyx
+    gdb --> tfplatform
+    dlv --> tfptyx
+    backend --> gdb
+    backend --> dlv
 
-    gdbforge_cmd --> termui
-    gdbforge_cmd --> gdbforge_pkg
-    gdbforge_cmd --> widgets
-    gdbforge_cmd --> core
-    gdbforge_cmd --> gdb
+    app --> tf
+    app --> widgets
+    app --> layoutpkg
+    app --> backend
 
-    gdb -.->|"must NOT import"| termui
-    core -.->|"must NOT import"| termui
-    termui -.->|"must NOT import"| core
+    gdb -.->|"must NOT import"| tf
+    dlv -.->|"must NOT import"| tf
+    widgets -.->|"must NOT import"| gdb
 ```
+
+Only `cmd/gdbforge`, `internal/gdbforge/widgets`, and `internal/gdbforge/layout` touch
+the termforge engine root. Backends reach the headless subpackages only, so they stay
+testable without a terminal.
 
 ---
 
@@ -429,20 +333,26 @@ flowchart BT
 |----------|---------|
 | Application model (domain state)? | `internal/gdbforge/models` |
 | Peer control surface (AI / Lua)? | `internal/gdbforge/domain` (+ `cmd/gdbforge/debug_domain.go` impl) |
-| Service (external I/O)? | `gdb` or future backend packages |
-| Split pane layout / window manager? | `termui` |
-| Widget (view of a model)? | `internal/gdbforge/widgets` or `termui` |
-| GDB MI parsing? | `gdb` |
-| Scrollable text storage primitive? | `core` |
+| Service (external I/O)? | `internal/gdb`, `internal/dlv`, or a new backend package |
+| GDB MI parsing? | `internal/gdb` + `internal/gdbforge/parse` |
+| Debugger pane (view of a model)? | `internal/gdbforge/widgets` |
+| Named workspace preset? | `internal/gdbforge/layout` |
 | Key binding in normal mode? | `cmd/gdbforge/keybindings.go` + `input.go` |
-| Interaction mode state? | `platform.AppState` via `TermApp` |
-| Spawn/debug external process? | `gdb` (or future backend service) |
-| `:buffer` / model registry? | App startup + `HandleCoreEvents` dispatch |
-| Vim `:` command registry? | `internal/commands` + `cmd/gdbforge/command_tree.go` |
-| Draw box borders? | `termui` Grid/Cell |
-| Compose services + models + UI? | `cmd/gdbforge/setup.go` |
+| Debugger session state? | `internal/gdbforge/debugstate` |
+| Breakpoint / history persistence? | `internal/gdbforge/persist` |
+| Debugger Lua binding? | `internal/gdbforge/luadebug` |
+| Colon command for the debugger? | `cmd/gdbforge/command_tree.go` |
+| Compose backends + controllers + UI? | `cmd/gdbforge/setup.go` |
+| Split pane layout / window manager? | **termforge** — not this repo |
+| Generic widget, scroll primitive, box borders? | **termforge** — not this repo |
+| Interaction mode plumbing? | **termforge** (`platform.AppState` via `App`) |
 
-When unsure, ask: **"Can this be unit-tested without a terminal?"** — if yes, prefer `core` or a dedicated model package over `termui`.
+Two questions settle most cases:
+
+1. **"Can this be unit-tested without a terminal?"** If yes, keep it out of any package
+   that imports the termforge engine root.
+2. **"Would the stock dashboard want this?"** If yes, it belongs upstream in termforge,
+   not here.
 
 ---
 

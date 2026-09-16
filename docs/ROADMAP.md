@@ -34,7 +34,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Split tree (`Node`, `WidgetTree`) | Done | Binary splits, ratio layout |
 | `Canvas` / `Rect` | Done | Local coordinates |
 | `Grid` / `Cell` borders | Done | Unicode box drawing |
-| `TermApp` event loop | Done | Poll, draw, flush |
+| `App` event loop | Done | Poll, draw, flush |
 | Root layout (Tab / CompletionBar / CmdLine) | Done | Flat `AddWidget` chrome; completion overlays status row only when active |
 | `TabWidget` | Stub | Single tab, no header; `NewTabTwoHozSplitWins` does not yet wire second widget |
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
@@ -44,7 +44,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
 | `BreakpointWidget` | Working | `:b breakpoint`; `TableWidget` (3 cols); `e`/`d`; syncs with GDB + CodeWidget |
 | `ThreadWidget` / `CallStackWidget` | Working | Default right panes; `TableWidget` lists; refreshed on GDB stop |
-| `TableWidget` (termui) | Working | `RectViewport` + `CellBuffer`; selection, search, copy; used by BP/threads/stack |
+| `TableWidget` (termforge) | Working | `RectViewport` + `CellBuffer`; selection, search, copy; used by BP/threads/stack |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Working | `CompositeTerminal` + `WireCLI`; app owns MI on PTY #2 |
 | `ExecWidget` / `:!` | Working | `CompositeTerminal` + `WireExec`; PTY via `ptyx.Start` |
@@ -188,7 +188,7 @@ Success criteria (future 1.0):
 | Single `frontBuffer` (no `backBuffer`) | `term_app.go` | Medium |
 | `NewTabTwoHozSplitWins` ignores second widget | `tab.go` | Medium |
 | Grid cursor not flushed to tcell | `grid.go` | Low |
-| Empty `base_widget.go` | `termui` | Low |
+| Empty `base_widget.go` | `termforge` | Low |
 | Global MI state variable | `mi.go` `var state` | Medium |
 
 ---

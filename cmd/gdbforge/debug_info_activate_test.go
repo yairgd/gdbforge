@@ -6,13 +6,13 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 type noopSession struct{}
@@ -20,10 +20,10 @@ type noopSession struct{}
 func (noopSession) Send(string) error    { return nil }
 func (noopSession) SendRaw(string) error { return nil }
 func (noopSession) Close()               {}
-func (noopSession) Subscribe() (<-chan core.PtyOutputMsg, func()) {
+func (noopSession) Subscribe() (<-chan ptyx.PtyOutputMsg, func()) {
 	return nil, func() {}
 }
-func (noopSession) WithWrite(context.Context, func(core.PTYWriter) error) error {
+func (noopSession) WithWrite(context.Context, func(ptyx.PTYWriter) error) error {
 	return nil
 }
 
@@ -43,7 +43,7 @@ func (s *stubDebugInfoHost) Backend() backend.Backend {
 	}
 	return backend.NewGDB(nil)
 }
-func (s *stubDebugInfoHost) Session() core.Session { return noopSession{} }
+func (s *stubDebugInfoHost) Session() ptyx.Session { return noopSession{} }
 func (s *stubDebugInfoHost) State() *platform.AppState {
 	if s.st == nil {
 		s.st = platform.NewAppState()

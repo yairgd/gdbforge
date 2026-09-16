@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 )
 
 // State is the gdbforge-private session model: inferior location, BP/PC

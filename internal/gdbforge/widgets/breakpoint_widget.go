@@ -7,8 +7,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // BreakpointWidget is a view of the shared breakpoint model.
@@ -21,7 +21,7 @@ import (
 //	e — ToggleBreakpoint(selected)
 //	d — DeleteBreakpoint(selected)
 type BreakpointWidget struct {
-	*termui.TableWidget
+	*termforge.TableWidget
 	state *debugstate.State
 
 	items []models.BreakInfo
@@ -32,7 +32,7 @@ type BreakpointWidget struct {
 }
 
 func NewBreakpointWidget() *BreakpointWidget {
-	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw := termforge.NewTableWidget(platform.NewAppContext())
 	tw.PaneName = "Breakpoints"
 	tbl := tw.Table()
 	tbl.SetShowHeader(false)
@@ -203,7 +203,7 @@ func (w *BreakpointWidget) formatCols(it models.BreakInfo) (num, en, loc string)
 	return num, en, loc
 }
 
-func (w *BreakpointWidget) fillTable(t *termui.Table) {
+func (w *BreakpointWidget) fillTable(t *termforge.Table) {
 	if len(w.items) == 0 {
 		t.AddRow("no breakpoints")
 		return

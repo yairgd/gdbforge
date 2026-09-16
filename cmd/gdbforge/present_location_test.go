@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // newLocationLeafApp builds Code | GDB with a real CodeWidget + AssemblyWidget
@@ -13,7 +13,7 @@ func newLocationLeafApp() *DebuggerApp {
 	code := widgets.NewCodeWidget()
 	asm := widgets.NewAssemblyWidget()
 	gdb := widgets.NewGDBWidget()
-	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
+	tab := termforge.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
 		DebugSession: DebugSession{gdbWidget: gdb},
 	}
@@ -23,9 +23,9 @@ func newLocationLeafApp() *DebuggerApp {
 	a.bufs.host = a
 	a.bufs.initMaps()
 	a.bufs.setPrimary(code)
-	codeLeaf := a.Layout().FindLeaf(func(w termui.Widget) bool { return w == code })
+	codeLeaf := a.Layout().FindLeaf(func(w termforge.Widget) bool { return w == code })
 	a.Layout().SetLeafMark(leafMarkCode, codeLeaf)
-	a.Layout().SetLeafMark(leafMarkGDB, a.Layout().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
+	a.Layout().SetLeafMark(leafMarkGDB, a.Layout().FindLeaf(func(w termforge.Widget) bool { return w == gdb }))
 	_ = a.Layout().FocusLeaf(codeLeaf)
 	return a
 }

@@ -198,7 +198,7 @@ p.token = ""
 
 ## DSL — building the tree
 
-The DSL in `internal/commands/dsl.go` builds the tree declaratively instead of imperative `InsertName` calls.
+The DSL in `termforge/commands/dsl.go` builds the tree declaratively instead of imperative `InsertName` calls.
 
 | Function | Creates |
 |----------|---------|
@@ -308,7 +308,7 @@ Startup **`panels`** layout: Code over GDB (left, **2/3**); right IO (top half) 
 
 ## CmdWidget integration
 
-`CmdWidget` (`internal/termui/cmd_widget.go`) is a **muxed** cmdline: **`CmdKindCommand`** (`:`) and **`CmdKindSearch`** (`/`). It holds a `CommandParser` for Tab sync / completions on the command kind only (search has its own history and **no** Tab). **Execute** for `:` is owned by the app (`SetOnExecute` → `ExecuteParsed()`). Search Enter / live edits call `SetOnSearchSubmit` / `SetOnChange` → focused pane `SearchHost` ([INPUT.md](INPUT.md)).
+`CmdWidget` (`termforge/cmd_widget.go`) is a **muxed** cmdline: **`CmdKindCommand`** (`:`) and **`CmdKindSearch`** (`/`). It holds a `CommandParser` for Tab sync / completions on the command kind only (search has its own history and **no** Tab). **Execute** for `:` is owned by the app (`SetOnExecute` → `ExecuteParsed()`). Search Enter / live edits call `SetOnSearchSubmit` / `SetOnChange` → focused pane `SearchHost` ([INPUT.md](INPUT.md)).
 
 ```mermaid
 sequenceDiagram
@@ -340,12 +340,12 @@ sequenceDiagram
 Wiring in `cmd/gdbforge/setup.go`:
 
 ```go
-a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
 a.cmdWidget.SetOnExecute(func() {
     _ = a.cmdWidget.ExecuteParsed()
 })
-a.completionBar = termui.NewCompletionBarWidget(a.ctx)
+a.completionBar = termforge.NewCompletionBarWidget(a.ctx)
 ```
 
 On **Enter**, the widget calls `Parse`; if `CanExecute()`, it invokes **`onExecute`** (app controller). Leaf actions run on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
@@ -354,7 +354,7 @@ On **Enter**, the widget calls `Parse`; if `CanExecute()`, it invokes **`onExecu
 
 ## Tab completion via EventBus
 
-Tab completion is announced as a **`termui.CompletionMsg`** on **`platform.EventBus`**:
+Tab completion is announced as a **`termforge.CompletionMsg`** on **`platform.EventBus`**:
 
 ```go
 type CompletionMsg struct {
@@ -370,7 +370,7 @@ type CompletionMsg struct {
 | Subscriber | `CompletionBarWidget` | Wildmenu row above `:` (white-on-black); multi-match → `ModeCompletion` |
 | Keys | `ModeCompletion` | Left/Right/Up/Down cycle; Esc → `ModeCommand`; Enter applies token |
 
-Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is TermApp chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
+Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is App chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
 
 **Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddWidget` + `HandleResize` rect + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
 
@@ -422,7 +422,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Tab completion feedback
 
-1. `CompletionBarWidget` subscribes to `termui.CompletionMsg` (wildmenu above the cmdline).
+1. `CompletionBarWidget` subscribes to `termforge.CompletionMsg` (wildmenu above the cmdline).
 
 ---
 
@@ -430,16 +430,16 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 | Path | Responsibility |
 |------|----------------|
-| `internal/commands/command_node.go` | `CommandNode`, `CommandRegistry` |
-| `internal/commands/command_parser.go` | `CommandParser` — navigation, completion, execution |
-| `internal/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
-| `internal/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
-| `internal/termui/cmd_widget.go` | `:` input, parser sync, tab; `SetOnExecute` → app |
-| `internal/termui/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
-| `internal/termui/event.go` | `CompletionMsg` and other UI-generic events |
+| `termforge/commands/command_node.go` | `CommandNode`, `CommandRegistry` |
+| `termforge/commands/command_parser.go` | `CommandParser` — navigation, completion, execution |
+| `termforge/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
+| `termforge/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
+| `termforge/cmd_widget.go` | `:` input, parser sync, tab; `SetOnExecute` → app |
+| `termforge/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
+| `termforge/event.go` | `CompletionMsg` and other UI-generic events |
 | `cmd/gdbforge/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
-| `internal/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
-| `internal/termui/logger_widget.go` | Log sink pane |
+| `termforge/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
+| `termforge/logger_widget.go` | Log sink pane |
 | `cmd/gdbforge/command_tree.go` | `ExapData` DSL |
 | `cmd/gdbforge/keybindings.go` | `InitKeyBindings` |
 | `cmd/gdbforge/actions.go` | Command action methods |

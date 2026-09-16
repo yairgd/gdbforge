@@ -10,7 +10,7 @@ gdbforge is designed for **extensibility**: custom debugger panes, scripted auto
 
 **User API reference:** **[LUA_API.md](LUA_API.md)**. Script catalog: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
+**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/)
 
 ---
 
@@ -49,7 +49,7 @@ gdbforge is designed for **extensibility**: custom debugger panes, scripted auto
 | Sandboxing | Well-understood coroutine model | Python sandbox harder |
 | cgdb precedent | cgdb uses Tcl — Lua is lighter modern equivalent | Tcl declining in new projects |
 
-**Design decision:** Lua scripts extend **gdbforge UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `core.Session` instead.
+**Design decision:** Lua scripts extend **gdbforge UI and session orchestration**, not replace GDB's own Python scripting. Avoid duplicating GDB's introspection API — delegate to `ptyx.Session` instead.
 
 ---
 
@@ -57,7 +57,7 @@ gdbforge is designed for **extensibility**: custom debugger panes, scripted auto
 
 ```mermaid
 flowchart TB
-    subgraph UI["termui"]
+    subgraph UI["termforge"]
         WidgetHost["Widget host / PluginPane"]
         Tree["WidgetTree / split tree"]
     end
@@ -113,7 +113,7 @@ flowchart LR
 
 1. Plugin registers pane metadata (title, init function).
 2. User runs `:plugin load trace` or config auto-loads.
-3. Runtime creates `PluginWidget` implementing `termui.Widget`.
+3. Runtime creates `PluginWidget` implementing `termforge.Widget`.
 4. Lua `on_draw(canvas)` / `on_key(event)` callbacks fire each frame/event.
 
 ### Example use cases
@@ -136,9 +136,9 @@ Headless and semi-headless workflows run Lua without full UI:
 ```mermaid
 sequenceDiagram
     participant Script as Lua script
-    participant Core as core.Session
+    participant Core as ptyx.Session
     participant DBG as Debugger backend
-    participant UI as termui (optional)
+    participant UI as termforge (optional)
 
     Script->>Core: session.attach(config)
     Core->>DBG: connect
@@ -152,7 +152,7 @@ Use cases:
 
 | Workflow | Mode |
 |----------|------|
-| Nightly regression | Headless — no `TermApp` |
+| Nightly regression | Headless — no `App` |
 | Repeatable bring-up | Script + visible UI |
 | Custom `:command` | Lua registers command handler |
 
@@ -169,7 +169,7 @@ For TUI inferiors, do not pipe through `:b io`. Use:
 | `gdbforge.spawn_terminal(...)` | Real terminal emulator + argv (gdbserver / headless dlv) |
 | `gdbforge.wait_port(port, timeout)` | Wait until listen (pattern A) |
 
-Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/external_tty), [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/gdbserver_tui), [`lua/dlv_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_port), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
+Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/external_tty), [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/gdbserver_tui), [`lua/dlv_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_port), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/terminal_debug). Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets). Install layout: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 ---
 
@@ -184,7 +184,7 @@ on_event("BreakpointHit", function(ev)
 end)
 ```
 
-Maps to Go `core.Event` types.
+Maps to Go message types published on `platform.EventBus`.
 
 ### Debugger
 
@@ -193,7 +193,7 @@ debugger.send("info registers")
 debugger.on_output(function(text) ... end)
 ```
 
-Maps to `core.Session` (`Send` / `Subscribe` / `WithWrite`) — same handle used by `:AI` / `GdbMcpService`.
+Maps to `ptyx.Session` (`Send` / `Subscribe` / `WithWrite`) — same handle used by `:AI` / `GdbMcpService`.
 
 ### UI
 
@@ -255,5 +255,5 @@ Tracker: [ROADMAP.md](ROADMAP.md).
 ## Related documentation
 
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — backend interfaces plugins call
-- [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) — Widget / Canvas contract
+- [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) — Widget / Canvas contract
 - [INPUT.md](INPUT.md) — command registration

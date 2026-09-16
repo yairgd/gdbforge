@@ -13,7 +13,7 @@ func TestKgdbSerialMainBoardTTY(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := filepath.Join(root, "lua", "kgdb_serial", "kgdb_serial.lua")
+	script := filepath.Join(root, "lua", "kernel", "kgdb_serial", "kgdb_serial.lua")
 	src, err := os.ReadFile(script)
 	if err != nil {
 		t.Fatal(err)

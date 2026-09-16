@@ -4,18 +4,18 @@ import (
 	"unicode/utf8"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // LogoWidget shows the gdbforge banner in the code leaf until source is opened.
 type LogoWidget struct {
-	termui.BaseWidget
+	termforge.BaseWidget
 }
 
 // NewLogoWidget returns the startup splash for the code pane.
 func NewLogoWidget() *LogoWidget {
 	return &LogoWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "gdbforge"},
+		BaseWidget: termforge.BaseWidget{PaneName: "gdbforge"},
 	}
 }
 
@@ -34,7 +34,7 @@ func logoLines() []string {
 
 func (w *LogoWidget) HandleEvent(ev tcell.Event) {}
 
-func (w *LogoWidget) Draw(c termui.Canvas) {
+func (w *LogoWidget) Draw(c termforge.Canvas) {
 	style := tcell.StyleDefault
 	title := style.Foreground(tcell.ColorYellow).Bold(true)
 	tag := style.Foreground(tcell.ColorWhite)

@@ -15,8 +15,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // styleSpan is a half-open [start,end) visible-column range in source text
@@ -38,8 +38,8 @@ const (
 // When focused: Up/Down move a bold cursor line; Space / e fire intents for the
 // shared breakpoint model (app owns GDB sends).
 type CodeWidget struct {
-	termui.BaseWidget
-	doc   *termui.DocumentView
+	termforge.BaseWidget
+	doc   *termforge.DocumentView
 	state *debugstate.State
 
 	path      string
@@ -58,11 +58,11 @@ type CodeWidget struct {
 
 func NewCodeWidget() *CodeWidget {
 	w := &CodeWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Code"},
-		doc:        termui.NewDocumentView(),
+		BaseWidget: termforge.BaseWidget{PaneName: "Code"},
+		doc:        termforge.NewDocumentView(),
 	}
 	w.doc.SetReadOnly(true)
-	w.doc.SetCursor(termui.NewInverseCursor())
+	w.doc.SetCursor(termforge.NewInverseCursor())
 	w.doc.SetCursorVisible(false)
 	w.doc.SetSearchContentOffset(codeGutterCols)
 	w.doc.SetOnSearchJump(func(lineIdx int) {
@@ -265,7 +265,7 @@ func (w *CodeWidget) contentCol() int {
 		return 0
 	}
 	line := w.displayLine(w.doc.CursorLine)
-	vis := termui.VisibleColAtByte(line, w.doc.CursorCol)
+	vis := termforge.VisibleColAtByte(line, w.doc.CursorCol)
 	col := vis - codeGutterCols
 	if col < 0 {
 		return 0
@@ -290,7 +290,7 @@ func (w *CodeWidget) setCursorContentCol(contentCol int) {
 		contentCol = maxContent
 	}
 	w.preferCol = contentCol
-	w.doc.CursorCol = termui.ByteIndexAtVisibleCol(line, codeGutterCols+contentCol)
+	w.doc.CursorCol = termforge.ByteIndexAtVisibleCol(line, codeGutterCols+contentCol)
 }
 
 func (w *CodeWidget) breakAtSel() {
@@ -763,7 +763,7 @@ func (w *CodeWidget) SetFocused(focused bool) {
 	}
 }
 
-func (w *CodeWidget) SetClipboard(io termui.ClipboardIO) {
+func (w *CodeWidget) SetClipboard(io termforge.ClipboardIO) {
 	w.doc.SetClipboard(io)
 }
 
@@ -775,25 +775,25 @@ func (w *CodeWidget) statusLabel() string {
 	return w.PaneName
 }
 
-// StatusLabel implements termui.StatusLabeler (copyable status-band text).
+// StatusLabel implements termforge.StatusLabeler (copyable status-band text).
 func (w *CodeWidget) StatusLabel() string {
 	return w.statusLabel()
 }
 
 // DrawStatusLine shows the full file path on the pane status bar.
-func (w *CodeWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (w *CodeWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	name := w.statusLabel()
 	if name == "" {
 		return
 	}
 	if w.Focused() {
-		termui.PaintStatusBar(c, name, active)
+		termforge.PaintStatusBar(c, name, active)
 		return
 	}
-	termui.PaintInactiveStatusBar(c, name)
+	termforge.PaintInactiveStatusBar(c, name)
 }
 
-func (w *CodeWidget) Draw(c termui.Canvas) {
+func (w *CodeWidget) Draw(c termforge.Canvas) {
 	if w.unavailable {
 		w.drawUnavailable(c)
 		return
@@ -824,7 +824,7 @@ func (w *CodeWidget) Draw(c termui.Canvas) {
 			visible = visible[:width]
 		}
 		c.ClearLineRange(row, len(visible), width, lineStyle)
-		byteIdx := termui.ByteIndexAtVisibleCol(full, start)
+		byteIdx := termforge.ByteIndexAtVisibleCol(full, start)
 		for col, ch := range visible {
 			absVisCol := start + col
 			st := lineStyle
@@ -840,7 +840,7 @@ func (w *CodeWidget) Draw(c termui.Canvas) {
 	w.doc.DrawCursor(c, w.lineCount(), lineAt)
 }
 
-func (w *CodeWidget) drawUnavailable(c termui.Canvas) {
+func (w *CodeWidget) drawUnavailable(c termforge.Canvas) {
 	h, width := c.H(), c.W()
 	if h <= 0 || width <= 0 {
 		return
@@ -870,7 +870,7 @@ func (w *CodeWidget) drawUnavailable(c termui.Canvas) {
 	}
 }
 
-func drawCentered(c termui.Canvas, y, width int, text string, st tcell.Style) {
+func drawCentered(c termforge.Canvas, y, width int, text string, st tcell.Style) {
 	if text == "" || width <= 0 {
 		return
 	}

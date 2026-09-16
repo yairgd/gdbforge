@@ -8,10 +8,10 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/execcli"
+	"github.com/yairgd/termforge/platform"
 )
 
 func (app *DebuggerApp) OnFocusLeft(args ...any) {
@@ -138,9 +138,9 @@ func (app *DebuggerApp) SplitHorizontal(args ...any) {
 		return
 	}
 
-	l := termui.NewLoggerWidget(app.ctx)
+	l := termforge.NewLoggerWidget(app.ctx)
 	l.SetClipboard(app.ClipboardIO())
-	lay.Split(termui.Horizontal, l)
+	lay.Split(termforge.Horizontal, l)
 	app.RequestRedraw()
 }
 
@@ -154,7 +154,7 @@ func (app *DebuggerApp) SplitVertical(args ...any) {
 	w.SetClipboard(app.ClipboardIO())
 	app.bufs.wire(w)
 	if lay := app.Layout(); lay != nil {
-		lay.Split(termui.Vertical, w)
+		lay.Split(termforge.Vertical, w)
 	}
 	app.RequestRedraw()
 }
@@ -186,7 +186,7 @@ func (app *DebuggerApp) EnterInsertMode(args ...any) {
 
 func (app *DebuggerApp) ClearFocus(args ...any) {
 	w := app.focusedWidget()
-	if c, ok := w.(termui.Clearable); ok {
+	if c, ok := w.(termforge.Clearable); ok {
 		c.Clear()
 	}
 	app.RequestFrame()

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/yairgd/gdbforge/internal/devport"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/devport"
+	"github.com/yairgd/termforge/ptyx"
 	"golang.org/x/sys/unix"
 )
 

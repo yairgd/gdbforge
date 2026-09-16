@@ -11,8 +11,7 @@ import (
 
 	"github.com/go-delve/delve/service/rpc2"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const (
@@ -44,7 +43,7 @@ type ClientOptions struct {
 	InferiorTTY string
 }
 
-var _ core.Session = (*Client)(nil)
+var _ ptyx.Session = (*Client)(nil)
 
 func NewClient(dlvPath string, dlvArgs []string) (*Client, error) {
 	return NewClientOpts(dlvPath, dlvArgs, ClientOptions{})

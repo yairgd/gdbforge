@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 func (c *searchCtl) Register(bus *platform.EventBus) {
@@ -13,17 +13,17 @@ func (c *searchCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onSearchSubmitted)
 }
 
-func (c *searchCtl) onSearchTextChanged(msg termui.SearchTextChangedMsg) {
+func (c *searchCtl) onSearchTextChanged(msg termforge.SearchTextChangedMsg) {
 	c.onCmdChange(msg.Text)
 }
 
-func (c *searchCtl) onSearchSubmitted(msg termui.SearchSubmittedMsg) {
+func (c *searchCtl) onSearchSubmitted(msg termforge.SearchSubmittedMsg) {
 	c.onCmdSubmit(msg.Pattern)
 }
 
 func (c *searchCtl) onCmdChange(text string) {
 	h := c.host
-	if h == nil || h.CmdWidget() == nil || h.CmdWidget().Kind() != termui.CmdKindSearch {
+	if h == nil || h.CmdWidget() == nil || h.CmdWidget().Kind() != termforge.CmdKindSearch {
 		return
 	}
 	host := c.target
@@ -142,7 +142,7 @@ func (c *searchCtl) wordMatch(dir int) {
 	c.nextMatch()
 }
 
-func (c *searchCtl) cursorInMatch(host termui.SearchHost) bool {
+func (c *searchCtl) cursorInMatch(host termforge.SearchHost) bool {
 	if host == nil {
 		return false
 	}
@@ -166,7 +166,7 @@ func (c *searchCtl) hasActivePattern() bool {
 	return host.SearchPattern() != ""
 }
 
-func (c *searchCtl) wordAt(host termui.SearchHost) string {
+func (c *searchCtl) wordAt(host termforge.SearchHost) string {
 	if host == nil {
 		return ""
 	}
@@ -176,7 +176,7 @@ func (c *searchCtl) wordAt(host termui.SearchHost) string {
 	return ""
 }
 
-func (c *searchCtl) selectionAt(host termui.SearchHost) string {
+func (c *searchCtl) selectionAt(host termforge.SearchHost) string {
 	if host == nil {
 		return ""
 	}
@@ -190,17 +190,19 @@ func (c *searchCtl) selectionAt(host termui.SearchHost) string {
 	return strings.TrimSpace(vp.SelectedText())
 }
 
-func (c *searchCtl) clearSelection(host termui.SearchHost) {
+func (c *searchCtl) clearSelection(host termforge.SearchHost) {
 	if vp := c.viewportOf(host); vp != nil {
 		vp.ClearSelection()
 	}
 }
 
-func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.ScrollDocument {
+func (c *searchCtl) viewportOf(host termforge.SearchHost) *termforge.ScrollDocument {
 	switch t := host.(type) {
-	case *termui.ScrollDocument:
+	case *termforge.ScrollDocument:
 		return t
-	case interface{ Viewport() *termui.ScrollDocument }:
+	case interface {
+		Viewport() *termforge.ScrollDocument
+	}:
 		return t.Viewport()
 	default:
 		return nil
@@ -210,7 +212,7 @@ func (c *searchCtl) viewportOf(host termui.SearchHost) *termui.ScrollDocument {
 // resolveHost returns the /search target for the last active (focused)
 // pane — the one with the green/blue status bar. Falls back to the active
 // CodeWidget when the focused pane has no viewport.
-func (c *searchCtl) resolveHost() termui.SearchHost {
+func (c *searchCtl) resolveHost() termforge.SearchHost {
 	h := c.host
 	if h == nil {
 		return nil
@@ -224,11 +226,11 @@ func (c *searchCtl) resolveHost() termui.SearchHost {
 	return nil
 }
 
-func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
+func (c *searchCtl) hostOf(w termforge.Widget) termforge.SearchHost {
 	if w == nil {
 		return nil
 	}
-	if host, ok := w.(termui.SearchHost); ok {
+	if host, ok := w.(termforge.SearchHost); ok {
 		return host
 	}
 	switch t := w.(type) {
@@ -246,9 +248,11 @@ func (c *searchCtl) hostOf(w termui.Widget) termui.SearchHost {
 		return t
 	case *widgets.HelpWidget:
 		return t.Viewport()
-	case *termui.LoggerWidget:
+	case *termforge.LoggerWidget:
 		return t.Viewport()
-	case interface{ Viewport() *termui.ScrollDocument }:
+	case interface {
+		Viewport() *termforge.ScrollDocument
+	}:
 		return t.Viewport()
 	}
 	return nil

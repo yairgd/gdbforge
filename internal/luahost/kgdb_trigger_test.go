@@ -14,7 +14,7 @@ func TestKgdbTriggerSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trigger := filepath.Join(root, "lua", "kgdb_trigger", "kgdb_trigger.lua")
+	trigger := filepath.Join(root, "lua", "kernel", "kgdb_trigger", "kgdb_trigger.lua")
 
 	var log []string
 	rt := New(nil, nil)

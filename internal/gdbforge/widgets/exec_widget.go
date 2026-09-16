@@ -4,8 +4,8 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const execScrollback = 4000
@@ -14,17 +14,17 @@ const execSessionEnded = "exec-session-ended"
 
 // ExecWidget is the :! command shell terminal view.
 type ExecWidget struct {
-	termui.BaseWidget
-	term      *termui.CompositeTerminal
-	clip      termui.TerminalClipboard
+	termforge.BaseWidget
+	term      *termforge.CompositeTerminal
+	clip      termforge.TerminalClipboard
 	ended     bool
 	onDismiss func()
 }
 
 func NewExecWidget() *ExecWidget {
 	return &ExecWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Exec"},
-		term:       termui.NewCompositeTerminalWithPrefix(80, 24, execScrollback, ""),
+		BaseWidget: termforge.BaseWidget{PaneName: "Exec"},
+		term:       termforge.NewCompositeTerminalWithPrefix(80, 24, execScrollback, ""),
 	}
 }
 
@@ -33,7 +33,7 @@ func (m *ExecWidget) WireExec(tty *ptyx.TTY, onFrame func()) {
 		return
 	}
 	m.ended = false
-	m.term.AttachTTY(tty, termui.WireTTYOpts{PostFrame: onFrame})
+	m.term.AttachTTY(tty, termforge.WireTTYOpts{PostFrame: onFrame})
 }
 
 func (m *ExecWidget) SetOnDismiss(fn func()) { m.onDismiss = fn }
@@ -50,7 +50,7 @@ func (m *ExecWidget) Clear() {
 		return
 	}
 	m.term.Close()
-	m.term = termui.NewCompositeTerminalWithPrefix(80, 24, execScrollback, "")
+	m.term = termforge.NewCompositeTerminalWithPrefix(80, 24, execScrollback, "")
 	m.clip.Apply(m.term)
 	m.ended = false
 }
@@ -59,7 +59,7 @@ func (m *ExecWidget) SetFocused(focused bool) {
 	m.BaseWidget.SetFocused(focused)
 }
 
-func (m *ExecWidget) SetClipboard(io termui.ClipboardIO) {
+func (m *ExecWidget) SetClipboard(io termforge.ClipboardIO) {
 	if m == nil {
 		return
 	}
@@ -75,14 +75,14 @@ func (m *ExecWidget) SetMouseOrigin(screenX, screenY int) {
 	}
 }
 
-func (m *ExecWidget) Draw(c termui.Canvas) {
+func (m *ExecWidget) Draw(c termforge.Canvas) {
 	if m == nil {
 		return
 	}
 	m.term.Paint(c, m.Focused())
 }
 
-func (m *ExecWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (m *ExecWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	m.BaseWidget.DrawStatusLine(c, active)
 }
 

@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/domain"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const (
@@ -20,10 +20,10 @@ const (
 	stackCaptureMax  = 15 * time.Second
 )
 
-// GdbMcpService exposes GDB tools over a shared core.Session (same process
+// GdbMcpService exposes GDB tools over a shared ptyx.Session (same process
 // as the UI). It never owns or Closes the session.
 type GdbMcpService struct {
-	sess  core.Session
+	sess  ptyx.Session
 	state *platform.AppState
 
 	captureIdle time.Duration
@@ -41,7 +41,7 @@ type GdbMcpService struct {
 	OnBreakpointsChanged func()
 }
 
-func NewGdbMcpService(sess core.Session, state *platform.AppState) *GdbMcpService {
+func NewGdbMcpService(sess ptyx.Session, state *platform.AppState) *GdbMcpService {
 	return &GdbMcpService{
 		sess:        sess,
 		state:       state,
@@ -64,7 +64,7 @@ func (s *GdbMcpService) SetPromptToken(token string) {
 
 // SetSession replaces the shared debugger session (e.g. after Delve restart
 // to change --tty). Does not Close the previous session — caller owns lifetime.
-func (s *GdbMcpService) SetSession(sess core.Session) {
+func (s *GdbMcpService) SetSession(sess ptyx.Session) {
 	if s == nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (s *GdbMcpService) queryCapture(ctx context.Context, command string, owner 
 		tok = gdb.MIPromptToken
 	}
 	run := func() error {
-		return s.sess.WithWrite(ctx, func(w core.PTYWriter) error {
+		return s.sess.WithWrite(ctx, func(w ptyx.PTYWriter) error {
 			if err := w.Send(command); err != nil {
 				return err
 			}
@@ -142,11 +142,11 @@ func (s *GdbMcpService) queryCapture(ctx context.Context, command string, owner 
 	return raw, err
 }
 
-func drain(ch <-chan core.PtyOutputMsg, wait time.Duration) {
-	core.Drain(ch, wait)
+func drain(ch <-chan ptyx.PtyOutputMsg, wait time.Duration) {
+	ptyx.Drain(ch, wait)
 }
 
-func capture(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration, promptToken string) {
+func capture(ctx context.Context, ch <-chan ptyx.PtyOutputMsg, out *strings.Builder, idle, max time.Duration, promptToken string) {
 	deadline := time.NewTimer(max)
 	defer deadline.Stop()
 	idleT := time.NewTimer(idle)

@@ -7,8 +7,8 @@ import (
 
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/yairgd/gdbforge/internal/devport"
 	"github.com/yairgd/gdbforge/internal/luahost"
+	"github.com/yairgd/termforge/devport"
 )
 
 func writePayload(w io.WriteCloser, device string, payload []byte) error {

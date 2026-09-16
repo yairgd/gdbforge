@@ -62,7 +62,7 @@ tasks:
 
 
   check-imports:
-    desc: Fail on forbidden framework→app / widgets→gdb|mcp / dlv→termui imports
+    desc: Fail on forbidden luahost→app / widgets→gdb|mcp / backend→termforge-root imports
     cmds:
       - ./scripts/check_imports.sh
 

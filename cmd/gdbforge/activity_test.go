@@ -7,7 +7,7 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 func TestActivitySnapForCtrlC(t *testing.T) {
@@ -91,7 +91,7 @@ func TestCtrlZCancelsLuaWhenInferiorIdle(t *testing.T) {
 }
 
 func TestCtrlZPrefersInferiorOverLua(t *testing.T) {
-	a := &DebuggerApp{TermApp: &termui.TermApp{}}
+	a := &DebuggerApp{App: &termforge.App{}}
 	a.lua.host = a
 	a.debug = debugstate.New(nil)
 	a.debug.SetInferiorRunning(true)

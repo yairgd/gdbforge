@@ -46,7 +46,7 @@ gdbforge is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.
 |------|-------------|
 | **Model-driven UI** | Services → event bus → models → widgets; widgets never talk to services |
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
-| **Backend agnostic** | `core.Session` + `backend.Backend`; GDB and Delve via `-g gdb\|dlv`; `:AI` shares the live session |
+| **Backend agnostic** | `ptyx.Session` + `backend.Backend`; GDB and Delve via `-g gdb\|dlv`; `:AI` shares the live session |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
 | **Low latency feel** | Off-screen grid; path to diff rendering to minimize I/O |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |
@@ -74,7 +74,7 @@ Bubble Tea excels at application-level TUI with declarative models, but gdbforge
 - A **replaceable framebuffer** (`Grid`) for diff rendering.
 - Direct **tcell** access for mouse, focus, and low-level drawing control.
 
-The gdbforge stack (`internal/termui`) is intentionally lower-level than Bubble Tea.
+The gdbforge stack (`termforge`) is intentionally lower-level than Bubble Tea.
 
 ### Why Go?
 
@@ -121,7 +121,7 @@ flowchart LR
     end
 
     subgraph gdbforge["gdbforge"]
-        UI["termui"]
+        UI["termforge"]
         Core["core"]
         GDB["gdb"]
         UI --> Core
@@ -160,5 +160,5 @@ See [ROADMAP.md](ROADMAP.md) for phased delivery plans.
 - Commands and everyday debugging: [USER_GUIDE.md](USER_GUIDE.md)
 - Common setup questions: [FAQ.md](FAQ.md)
 - Architecture deep dive: [ARCHITECTURE.md](ARCHITECTURE.md)
-- UI internals: [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)
+- UI internals: [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/)
 - Onboarding: [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)

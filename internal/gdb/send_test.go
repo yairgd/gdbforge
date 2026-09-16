@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestIsContinueCmd(t *testing.T) {
@@ -31,10 +31,10 @@ type sendSess struct {
 func (s *sendSess) Send(string) error    { return nil }
 func (s *sendSess) SendRaw(string) error { return nil }
 func (s *sendSess) Close()               {}
-func (s *sendSess) Subscribe() (<-chan core.PtyOutputMsg, func()) {
+func (s *sendSess) Subscribe() (<-chan ptyx.PtyOutputMsg, func()) {
 	return nil, func() {}
 }
-func (s *sendSess) WithWrite(_ context.Context, fn func(core.PTYWriter) error) error {
+func (s *sendSess) WithWrite(_ context.Context, fn func(ptyx.PTYWriter) error) error {
 	return fn(sendWriter{s})
 }
 

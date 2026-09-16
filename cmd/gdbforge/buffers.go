@@ -11,8 +11,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // bufferHost is the narrow surface bufferCtl needs from the composition root.
@@ -21,8 +21,8 @@ type bufferHost interface {
 	Debug() *debugstate.State
 	Shell() *LayoutShell
 	AppContext() platform.AppContext
-	ClipboardIO() termui.ClipboardIO
-	Builtins() map[string]termui.Widget
+	ClipboardIO() termforge.ClipboardIO
+	Builtins() map[string]termforge.Widget
 	FileListWidget() *widgets.FileListWidget
 	PublishBreakpointsChanged()
 	PaintCodeBreaks(w *widgets.CodeWidget, path string)
@@ -34,8 +34,8 @@ type bufferHost interface {
 	RequestFrame()
 	ensureSourceFiles()
 	syncFileListViews()
-	swapFocusedWidget(w termui.Widget) bool
-	LuaEnterBuffer(w termui.Widget)
+	swapFocusedWidget(w termforge.Widget) bool
+	LuaEnterBuffer(w termforge.Widget)
 	LuaEnsureBuffer(name string, from *luahost.Runtime) bool
 	OpenLuaConsole()
 	LogError(area, msg string)
@@ -367,7 +367,7 @@ func (c *bufferCtl) openSourcePath(path string) {
 	h.PublishBreakpointsChanged()
 	c.primary = w
 	if h.swapFocusedWidget(w) {
-		if leaf := h.Shell().Layout().FindLeaf(func(x termui.Widget) bool { return x == w }); leaf != nil {
+		if leaf := h.Shell().Layout().FindLeaf(func(x termforge.Widget) bool { return x == w }); leaf != nil {
 			h.Shell().Layout().SetLeafMark(leafMarkCode, leaf)
 		}
 		h.RequestFrame()
@@ -399,7 +399,7 @@ func (c *bufferCtl) editCompletions(prefix string, _ bool) []string {
 	return names
 }
 
-func (c *bufferCtl) focusBufferWidget(w termui.Widget) {
+func (c *bufferCtl) focusBufferWidget(w termforge.Widget) {
 	h := c.host
 	if w == nil || h == nil || h.Shell().Layout() == nil {
 		return

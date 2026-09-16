@@ -5,7 +5,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/layout"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // OnLayout applies a named workspace layout (:layout panels|default|classic|wide).
@@ -86,7 +86,7 @@ func (a *DebuggerApp) layoutCompletions(prefix string, _ bool) []string {
 	return out
 }
 
-func (a *DebuggerApp) layoutCodePane() termui.Widget {
+func (a *DebuggerApp) layoutCodePane() termforge.Widget {
 	if w := a.layoutCodeWidget(); w != nil {
 		return w
 	}
@@ -113,7 +113,7 @@ func (a *DebuggerApp) registerLayouts() {
 	a.State().SetCurrentLayout(layout.Wide)
 }
 
-func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
+func (a *DebuggerApp) debugPanes(code termforge.Widget) layout.Panes {
 	return layout.Panes{
 		Code:        code,
 		GDB:         a.gdbWidget,
@@ -125,6 +125,6 @@ func (a *DebuggerApp) debugPanes(code termui.Widget) layout.Panes {
 }
 
 // newStartupTab builds the initial wide workspace tab.
-func (a *DebuggerApp) newStartupTab(code termui.Widget) *termui.TabWidget {
-	return termui.NewTabWidget("wide", layout.BuildWide(a.debugPanes(code)))
+func (a *DebuggerApp) newStartupTab(code termforge.Widget) *termforge.TabWidget {
+	return termforge.NewTabWidget("wide", layout.BuildWide(a.debugPanes(code)))
 }

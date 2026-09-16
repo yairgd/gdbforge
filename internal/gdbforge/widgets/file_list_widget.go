@@ -6,21 +6,21 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // FileListWidget shows GDB project source files (j/k selection; Enter opens).
 // Mouse: first click selects (blue mark); second click on the marked row opens.
 type FileListWidget struct {
-	*termui.TableWidget
+	*termforge.TableWidget
 	state *debugstate.State
 
 	paths []string
 }
 
 func NewFileListWidget() *FileListWidget {
-	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw := termforge.NewTableWidget(platform.NewAppContext())
 	tw.PaneName = "Files"
 	tbl := tw.Table()
 	tbl.SetShowHeader(false)
@@ -114,7 +114,7 @@ func (w *FileListWidget) SetItems(paths []string) {
 	w.EnsureRowVisible()
 }
 
-func (w *FileListWidget) fillTable(t *termui.Table) {
+func (w *FileListWidget) fillTable(t *termforge.Table) {
 	if len(w.paths) == 0 {
 		t.AddRow("no files")
 		return

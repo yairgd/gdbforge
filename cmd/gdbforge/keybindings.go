@@ -3,9 +3,9 @@ package main
 import (
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/commands"
+	"github.com/yairgd/termforge/platform"
 )
 
 func (a *DebuggerApp) InitKeyBindings() {

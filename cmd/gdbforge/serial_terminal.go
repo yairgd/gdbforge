@@ -12,8 +12,8 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/ptyx"
 	"github.com/yairgd/gdbforge/internal/serialmux"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // serialCtl owns the shared UART mux (one device per gdbforge session).

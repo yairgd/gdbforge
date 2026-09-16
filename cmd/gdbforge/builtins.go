@@ -7,7 +7,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // initBackend starts gdb or dlv before the TUI initializes the terminal.
@@ -34,7 +34,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	if a.backend == nil {
 		return fmt.Errorf("debugger backend not initialized")
 	}
-	a.builtins = make(map[string]termui.Widget)
+	a.builtins = make(map[string]termforge.Widget)
 
 	a.aboutWidget = widgets.NewAboutWidget(version)
 	a.registerBuiltin("about", a.aboutWidget)
@@ -45,16 +45,16 @@ func (a *DebuggerApp) initBuiltins() error {
 
 	a.logoWidget = widgets.NewLogoWidget()
 
-	logWidget := termui.NewLoggerWidget(a.ctx)
+	logWidget := termforge.NewLoggerWidget(a.ctx)
 	logWidget.SetClipboard(a.ClipboardIO())
 	a.registerBuiltin("logger", logWidget)
 
 	return a.DebugSession.init(a)
 }
 
-func (a *DebuggerApp) registerBuiltin(name string, w termui.Widget) {
+func (a *DebuggerApp) registerBuiltin(name string, w termforge.Widget) {
 	if a.builtins == nil {
-		a.builtins = make(map[string]termui.Widget)
+		a.builtins = make(map[string]termforge.Widget)
 	}
 	a.builtins[name] = w
 }

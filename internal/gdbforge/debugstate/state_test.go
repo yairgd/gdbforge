@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 )
 
 func TestDebugStateDefaultsAndSuppress(t *testing.T) {

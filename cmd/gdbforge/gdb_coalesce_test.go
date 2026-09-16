@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestCoalesceGdbOutputBatchesChunks(t *testing.T) {
-	ch := make(chan core.PtyOutputMsg, 8)
+	ch := make(chan ptyx.PtyOutputMsg, 8)
 	var mu sync.Mutex
 	var got []events.GdbOutputMsg
 	done := make(chan struct{})
@@ -21,9 +21,9 @@ func TestCoalesceGdbOutputBatchesChunks(t *testing.T) {
 		mu.Unlock()
 	}, func() { close(done) })
 
-	ch <- core.PtyOutputMsg{Data: "a"}
-	ch <- core.PtyOutputMsg{Data: "b"}
-	ch <- core.PtyOutputMsg{Data: "c"}
+	ch <- ptyx.PtyOutputMsg{Data: "a"}
+	ch <- ptyx.PtyOutputMsg{Data: "b"}
+	ch <- ptyx.PtyOutputMsg{Data: "c"}
 	close(ch)
 
 	select {

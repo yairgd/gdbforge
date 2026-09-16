@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/layout"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // ApplyLayout remounts the active tab with a freshly built named layout.
@@ -27,7 +27,7 @@ func (w *LayoutShell) ApplyLayout(name string) {
 	w.finishLayoutApply(name)
 }
 
-func (w *LayoutShell) buildLayout(name string) *termui.SplitLayout {
+func (w *LayoutShell) buildLayout(name string) *termforge.SplitLayout {
 	h := w.host
 	code := h.LayoutCodePane()
 	panes := h.DebugPanes(code)
@@ -58,7 +58,7 @@ func (w *LayoutShell) finishLayoutApply(name string) {
 	lay.SetEqualAlways(true)
 	lay.FocusWidget(h.GDBWidget())
 	lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
-	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(wid termui.Widget) bool { return wid == h.GDBWidget() }))
+	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(wid termforge.Widget) bool { return wid == h.GDBWidget() }))
 	h.EnterInsertMode()
 	h.RequestFrame()
 }

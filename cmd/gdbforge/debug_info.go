@@ -2,25 +2,26 @@ package main
 
 import (
 	"context"
+	"github.com/yairgd/termforge"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // debugInfoHost is the narrow surface debugInfoCtl needs from the composition
 // root. DebuggerApp implements it; debugInfoCtl must not depend on *DebuggerApp.
 type debugInfoHost interface {
 	Backend() backend.Backend
-	Session() core.Session
+	Session() ptyx.Session
 	State() *platform.AppState
 	Debug() *debugstate.State
 	GdbMcp() *mcp.GdbMcpService
@@ -46,7 +47,7 @@ type debugInfoCtl struct {
 	stack    *models.CallStack
 	threadW  *widgets.ThreadWidget
 	stackW   *widgets.CallStackWidget
-	coalesce coalesceRunner
+	coalesce termforge.CoalesceRunner
 }
 
 func (c *debugInfoCtl) Register(bus *platform.EventBus) {

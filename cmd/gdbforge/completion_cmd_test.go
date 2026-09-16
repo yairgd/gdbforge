@@ -3,37 +3,37 @@ package main
 import (
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/commands"
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/commands"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 type completionTestHost struct {
 	mode platform.Mode
-	cmd  *termui.CmdWidget
+	cmd  *termforge.CmdWidget
 }
 
 func (h *completionTestHost) GDBWidget() *widgets.GDBWidget                 { return nil }
 func (h *completionTestHost) LuaConsoleWidget() *widgets.LuaConsoleWidget   { return nil }
 func (h *completionTestHost) LuaGdbforgeComplete(string) (string, []string) { return "", nil }
-func (h *completionTestHost) CmdWidget() *termui.CmdWidget                  { return h.cmd }
+func (h *completionTestHost) CmdWidget() *termforge.CmdWidget               { return h.cmd }
 func (h *completionTestHost) Backend() backend.Backend                      { return nil }
-func (h *completionTestHost) Session() core.Session                         { return nil }
+func (h *completionTestHost) Session() ptyx.Session                         { return nil }
 func (h *completionTestHost) State() *platform.AppState                     { return nil }
 func (h *completionTestHost) Mode() platform.Mode                           { return h.mode }
 func (h *completionTestHost) SetMode(m platform.Mode)                       { h.mode = m }
 func (h *completionTestHost) IsConfirming() bool                            { return false }
-func (h *completionTestHost) PublishCompletion(termui.CompletionMsg)        {}
+func (h *completionTestHost) PublishCompletion(termforge.CompletionMsg)     {}
 func (h *completionTestHost) RequestFrame()                                 {}
 
 func TestMaybeEnterCommandCompletionMode(t *testing.T) {
-	cmd := termui.NewCmdWidget(commands.NewCommandRegistry())
+	cmd := termforge.NewCmdWidget(commands.NewCommandRegistry())
 	cmd.Activate()
 	host := &completionTestHost{mode: platform.ModeCommand, cmd: cmd}
-	c := &completionCtl{host: host, menu: &termui.CompletionMenu{}}
+	c := &completionCtl{host: host, menu: &termforge.CompletionMenu{}}
 
 	c.maybeEnterCommandCompletionMode(1)
 	if host.mode != platform.ModeCommand {
@@ -47,12 +47,12 @@ func TestMaybeEnterCommandCompletionMode(t *testing.T) {
 }
 
 func TestOnMsgEntersCommandCompletionMode(t *testing.T) {
-	cmd := termui.NewCmdWidget(commands.NewCommandRegistry())
+	cmd := termforge.NewCmdWidget(commands.NewCommandRegistry())
 	cmd.Activate()
 	host := &completionTestHost{mode: platform.ModeCommand, cmd: cmd}
-	c := &completionCtl{host: host, menu: &termui.CompletionMenu{}}
+	c := &completionCtl{host: host, menu: &termforge.CompletionMenu{}}
 
-	c.onMsg(termui.CompletionMsg{Names: []string{"gdb", "io", "lua"}})
+	c.onMsg(termforge.CompletionMsg{Names: []string{"gdb", "io", "lua"}})
 	if host.mode != platform.ModeCompletion {
 		t.Fatalf("onMsg: mode = %v, want completion", host.mode)
 	}

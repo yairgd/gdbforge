@@ -2,7 +2,7 @@ package dlv
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
 	"regexp"
 	"strconv"
 	"strings"

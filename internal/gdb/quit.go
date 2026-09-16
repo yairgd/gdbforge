@@ -3,7 +3,7 @@ package gdb
 import (
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // QuitAction is a quit-policy decision for a UI to present and/or a Session to send.
@@ -169,7 +169,7 @@ func QuitRepromptLines() []string {
 }
 
 // ApplyQuitAction performs the PTY write for a sending QuitAction on a Session.
-func ApplyQuitAction(d core.Debugger, a QuitAction) error {
+func ApplyQuitAction(d ptyx.CommandSink, a QuitAction) error {
 	if d == nil || !a.Sends() {
 		return nil
 	}

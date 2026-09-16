@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 type cmdHost interface {
@@ -19,14 +19,14 @@ func (c *cmdCtl) Register(bus *platform.EventBus) {
 	platform.Subscribe(bus, c.onSubmit)
 }
 
-func (c *cmdCtl) onSubmit(msg termui.SubmitMsg) {
+func (c *cmdCtl) onSubmit(msg termforge.SubmitMsg) {
 	if c.host == nil {
 		return
 	}
 	switch msg.CmdID {
-	case termui.CmdExitMode:
+	case termforge.CmdExitMode:
 		c.host.leaveCommandMode()
-	case termui.CmdUnknown:
+	case termforge.CmdUnknown:
 		c.host.tryGotoLineCmd(msg.Text)
 	}
 }

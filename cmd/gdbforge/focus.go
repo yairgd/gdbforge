@@ -2,12 +2,12 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // focusedWidget returns the focused leaf widget via Tab (generic shell only).
 // Debugger-specific type knowledge lives in the helpers below, not at call sites.
-func (a *DebuggerApp) focusedWidget() termui.Widget {
+func (a *DebuggerApp) focusedWidget() termforge.Widget {
 	if lay := a.Layout(); lay != nil {
 		return lay.FocusedWidget()
 	}

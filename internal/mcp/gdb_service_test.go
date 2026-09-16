@@ -6,29 +6,29 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 type fakeSession struct {
 	writes []string
-	ch     chan core.PtyOutputMsg
+	ch     chan ptyx.PtyOutputMsg
 }
 
 func (f *fakeSession) Send(cmd string) error {
-	return f.WithWrite(context.Background(), func(w core.PTYWriter) error {
+	return f.WithWrite(context.Background(), func(w ptyx.PTYWriter) error {
 		return w.Send(cmd)
 	})
 }
 func (f *fakeSession) SendRaw(raw string) error {
-	return f.WithWrite(context.Background(), func(w core.PTYWriter) error {
+	return f.WithWrite(context.Background(), func(w ptyx.PTYWriter) error {
 		return w.SendRaw(raw)
 	})
 }
 func (f *fakeSession) Close() {}
-func (f *fakeSession) Subscribe() (<-chan core.PtyOutputMsg, func()) {
+func (f *fakeSession) Subscribe() (<-chan ptyx.PtyOutputMsg, func()) {
 	return f.ch, func() {}
 }
-func (f *fakeSession) WithWrite(_ context.Context, fn func(w core.PTYWriter) error) error {
+func (f *fakeSession) WithWrite(_ context.Context, fn func(w ptyx.PTYWriter) error) error {
 	return fn(fakeWriter{f})
 }
 
@@ -37,7 +37,7 @@ type fakeWriter struct{ f *fakeSession }
 func (w fakeWriter) Send(cmd string) error {
 	w.f.writes = append(w.f.writes, cmd+"\n")
 	select {
-	case w.f.ch <- core.PtyOutputMsg{Data: ">>> " + cmd + "\n(gdb) "}:
+	case w.f.ch <- ptyx.PtyOutputMsg{Data: ">>> " + cmd + "\n(gdb) "}:
 	default:
 	}
 	return nil
@@ -48,7 +48,7 @@ func (w fakeWriter) SendRaw(raw string) error {
 }
 
 func TestGdbCommandCapturesOutput(t *testing.T) {
-	ch := make(chan core.PtyOutputMsg, 8)
+	ch := make(chan ptyx.PtyOutputMsg, 8)
 	sess := &fakeSession{ch: ch}
 	svc := NewGdbMcpService(sess, nil)
 	svc.captureIdle = 80 * time.Millisecond

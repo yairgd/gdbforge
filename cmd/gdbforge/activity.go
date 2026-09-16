@@ -117,7 +117,7 @@ func (a *DebuggerApp) noteJobCancelled(via string) {
 }
 
 func (a *DebuggerApp) requestFrameIfReady() {
-	if a != nil && a.TermApp != nil {
+	if a != nil && a.App != nil {
 		a.RequestFrame()
 	}
 }

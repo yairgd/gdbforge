@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 const (
@@ -21,8 +21,8 @@ const (
 // AboutWidget is a passive, scrollable built-in page (Logger-style Viewport).
 // No goroutines, timers, or background work.
 type AboutWidget struct {
-	termui.BaseWidget
-	doc *termui.ScrollDocument
+	termforge.BaseWidget
+	doc *termforge.ScrollDocument
 	buf *platform.Buffer
 }
 
@@ -31,14 +31,14 @@ type AboutWidget struct {
 // "v1.0.0". Non-release builds show AboutNotForRelease.
 func NewAboutWidget(version string) *AboutWidget {
 	buf := platform.NewBuffer()
-	vp := termui.NewScrollDocument(buf)
+	vp := termforge.NewScrollDocument(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
 	vp.SetCursorVisible(false)
 	vp.LineStyle = aboutLineStyle
 
 	w := &AboutWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "About"},
+		BaseWidget: termforge.BaseWidget{PaneName: "About"},
 		doc:        vp,
 		buf:        buf,
 	}
@@ -208,11 +208,11 @@ func (w *AboutWidget) SetFocused(focused bool) {
 	w.doc.SetCursorVisible(focused)
 }
 
-func (w *AboutWidget) Draw(c termui.Canvas) {
+func (w *AboutWidget) Draw(c termforge.Canvas) {
 	w.doc.Draw(c)
 }
 
-func (w *AboutWidget) Viewport() *termui.ScrollDocument {
+func (w *AboutWidget) Viewport() *termforge.ScrollDocument {
 	return w.doc
 }
 

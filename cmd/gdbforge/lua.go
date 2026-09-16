@@ -15,8 +15,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/luadebug"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/platform"
 	luacatalog "github.com/yairgd/gdbforge/lua"
+	"github.com/yairgd/termforge/platform"
 )
 
 // luaCtl owns Lua scripting state: pane widgets, script registry, and async jobs.

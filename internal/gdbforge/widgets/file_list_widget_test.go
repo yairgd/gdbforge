@@ -7,8 +7,8 @@ import (
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 func TestFileListWidgetSetItems(t *testing.T) {
@@ -49,8 +49,8 @@ func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
 	w.SetFocused(true)
 	w.SetItems([]string{"/tmp/a.c", "/tmp/b.c"})
 
-	g := termui.NewGrid(40, 4)
-	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 4)))
+	g := termforge.NewGrid(40, 4)
+	w.Draw(termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 40, 4)))
 
 	// First click on row 1: select only.
 	w.HandleEvent(tcell.NewEventMouse(0, 1, tcell.ButtonPrimary, 0))

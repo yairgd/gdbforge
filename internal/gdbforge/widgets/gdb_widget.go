@@ -3,27 +3,42 @@ package widgets
 import (
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const gdbScrollback = 8000
 
+// debuggerPrompts are the CLI prompts GDB and Delve emit. Console detection
+// drives Home/End line editing; Strip peels the prompt off the input line.
+// "> " is GDB's continuation prompt inside define/commands/if blocks, where
+// tab completion still has to see the bare input.
+var debuggerPrompts = termforge.PromptPrefixes{
+	Console: []string{"(gdb) ", "(dlv) "},
+	Strip:   []string{"(gdb) ", "(dlv) ", "> "},
+}
+
+func newGDBTerminal() *termforge.CompositeTerminal {
+	t := termforge.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, "")
+	t.SetPromptPrefixes(debuggerPrompts)
+	return t
+}
+
 // GDBWidget is the debugger CLI terminal (:b gdb).
 type GDBWidget struct {
-	termui.BaseWidget
-	term *termui.CompositeTerminal
-	clip termui.TerminalClipboard
+	termforge.BaseWidget
+	term *termforge.CompositeTerminal
+	clip termforge.TerminalClipboard
 }
 
 func NewGDBWidget() *GDBWidget {
 	return &GDBWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "GDB"},
-		term:       termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, ""),
+		BaseWidget: termforge.BaseWidget{PaneName: "GDB"},
+		term:       newGDBTerminal(),
 	}
 }
 
-func (w *GDBWidget) WireCLI(tty *ptyx.TTY, opts termui.WireTTYOpts) {
+func (w *GDBWidget) WireCLI(tty *ptyx.TTY, opts termforge.WireTTYOpts) {
 	if w == nil || w.term == nil {
 		return
 	}
@@ -60,7 +75,7 @@ func (w *GDBWidget) Clear() {
 		return
 	}
 	w.term.Close()
-	w.term = termui.NewCompositeTerminalWithPrefix(80, 24, gdbScrollback, "")
+	w.term = newGDBTerminal()
 	w.clip.Apply(w.term)
 }
 
@@ -80,7 +95,7 @@ func (w *GDBWidget) InputText() string {
 	if w == nil || w.term == nil {
 		return ""
 	}
-	return termui.InputLineText(w.term.Controller())
+	return termforge.InputLineText(w.term.Controller())
 }
 
 func (w *GDBWidget) ApplyCompletion(full string) {
@@ -93,14 +108,14 @@ func (w *GDBWidget) ApplyCompletionFrom(cur, full string) {
 	if w == nil || full == "" {
 		return
 	}
-	termui.ApplyCompletion(w.term.Controller(), cur, full)
+	termforge.ApplyCompletion(w.term.Controller(), cur, full)
 }
 
 func (w *GDBWidget) SetFocused(focused bool) {
 	w.BaseWidget.SetFocused(focused)
 }
 
-func (w *GDBWidget) SetClipboard(io termui.ClipboardIO) {
+func (w *GDBWidget) SetClipboard(io termforge.ClipboardIO) {
 	if w == nil {
 		return
 	}
@@ -116,14 +131,14 @@ func (w *GDBWidget) SetMouseOrigin(screenX, screenY int) {
 	}
 }
 
-func (w *GDBWidget) Draw(c termui.Canvas) {
+func (w *GDBWidget) Draw(c termforge.Canvas) {
 	if w == nil {
 		return
 	}
 	w.term.Paint(c, w.Focused())
 }
 
-func (w *GDBWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (w *GDBWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	w.BaseWidget.DrawStatusLine(c, active)
 }
 

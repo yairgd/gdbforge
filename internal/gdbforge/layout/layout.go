@@ -3,7 +3,7 @@
 package layout
 
 import (
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 // Named layouts registered with AppState / :layout.
@@ -28,18 +28,18 @@ func AsmSplitRight(name string) bool {
 // Panes are the singleton widgets a layout may place. Unused fields may be nil
 // (e.g. Classic ignores Output / list panes).
 type Panes struct {
-	Code        termui.Widget
-	GDB         termui.Widget
-	Output      termui.Widget
-	Breakpoints termui.Widget
-	Threads     termui.Widget
-	Callstack   termui.Widget
+	Code        termforge.Widget
+	GDB         termforge.Widget
+	Output      termforge.Widget
+	Breakpoints termforge.Widget
+	Threads     termforge.Widget
+	Callstack   termforge.Widget
 }
 
 // Spec builds the split layout for one named layout.
 type Spec interface {
 	Name() string
-	Build(panes Panes) *termui.SplitLayout
+	Build(panes Panes) *termforge.SplitLayout
 }
 
 func clampRatio(r float64) float64 {

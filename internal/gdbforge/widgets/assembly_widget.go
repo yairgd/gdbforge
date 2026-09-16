@@ -9,8 +9,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 const (
@@ -27,8 +27,8 @@ const (
 // ━━▶ marks real $pc; the blue line is the browse caret (same as CodeWidget).
 // Space / e fire breakpoint intents at the browse address (app owns GDB).
 type AssemblyWidget struct {
-	termui.BaseWidget
-	doc *termui.DocumentView
+	termforge.BaseWidget
+	doc *termforge.DocumentView
 
 	state *debugstate.State
 
@@ -57,15 +57,15 @@ type AssemblyWidget struct {
 
 func NewAssemblyWidget() *AssemblyWidget {
 	w := &AssemblyWidget{
-		BaseWidget:        termui.BaseWidget{PaneName: "Assembly"},
-		doc:               termui.NewDocumentView(),
+		BaseWidget:        termforge.BaseWidget{PaneName: "Assembly"},
+		doc:               termforge.NewDocumentView(),
 		selIdx:            0,
 		browsePreserveRow: -1,
 		offWidth:          asmOffsetColsMin,
 	}
 	w.doc.SetReadOnly(true)
 	w.doc.SetDragAutoScroll(false)
-	w.doc.SetCursor(termui.NewInverseCursor())
+	w.doc.SetCursor(termforge.NewInverseCursor())
 	w.doc.SetCursorVisible(false)
 	w.doc.SetSearchContentOffset(asmGutterCols)
 	w.doc.SetOnSearchJump(func(lineIdx int) {
@@ -90,7 +90,7 @@ func (w *AssemblyWidget) SetAppState(st *debugstate.State) {
 	w.state = st
 }
 
-func (w *AssemblyWidget) SetClipboard(io termui.ClipboardIO) {
+func (w *AssemblyWidget) SetClipboard(io termforge.ClipboardIO) {
 	if w != nil && w.doc != nil {
 		w.doc.SetClipboard(io)
 	}
@@ -622,7 +622,7 @@ func (w *AssemblyWidget) displayLine(lineIdx int) string {
 	return fmt.Sprintf("%s %s:  %s", mark, addr, it.Inst)
 }
 
-func (w *AssemblyWidget) Draw(c termui.Canvas) {
+func (w *AssemblyWidget) Draw(c termforge.Canvas) {
 	if w == nil {
 		return
 	}
@@ -662,7 +662,7 @@ func (w *AssemblyWidget) Draw(c termui.Canvas) {
 			visible = visible[:width]
 		}
 		c.ClearLineRange(row, len(visible), width, lineStyle)
-		byteIdx := termui.ByteIndexAtVisibleCol(full, start)
+		byteIdx := termforge.ByteIndexAtVisibleCol(full, start)
 		for col, ch := range visible {
 			absVisCol := start + col
 			st := lineStyle
@@ -801,14 +801,14 @@ func trimAsm0x(addr string) string {
 	return addr
 }
 
-func (w *AssemblyWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (w *AssemblyWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	title := w.StatusLabel()
 	w.PaneName = title
 	if w.Focused() {
-		termui.PaintStatusBar(c, title, active)
+		termforge.PaintStatusBar(c, title, active)
 		return
 	}
-	termui.PaintInactiveStatusBar(c, title)
+	termforge.PaintInactiveStatusBar(c, title)
 }
 
 func (w *AssemblyWidget) SetSearchPattern(pattern string) {

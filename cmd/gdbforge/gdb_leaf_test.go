@@ -5,16 +5,16 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 type stubView struct {
-	termui.BaseWidget
+	termforge.BaseWidget
 	id string
 }
 
 func (s *stubView) HandleEvent(ev tcell.Event) {}
-func (s *stubView) Draw(c termui.Canvas)       {}
+func (s *stubView) Draw(c termforge.Canvas)    {}
 
 // newGdbLeafApp builds a minimal DebuggerApp with Code | GDB side by side and
 // the "gdb" leaf mark set on the GDB pane.
@@ -22,15 +22,15 @@ func newGdbLeafApp() *DebuggerApp {
 	code := &stubView{id: "code"}
 	gdb := widgets.NewGDBWidget()
 	other := &stubView{id: "other"}
-	tab := termui.NewTabTwoHozSplitWins("test", code, gdb)
+	tab := termforge.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
 		DebugSession: DebugSession{gdbWidget: gdb},
-		builtins:     map[string]termui.Widget{"other": other},
+		builtins:     map[string]termforge.Widget{"other": other},
 	}
 	initLayoutShell(a, tab)
 	a.Layout().FocusWidget(gdb)
-	a.Layout().SetLeafMark(leafMarkCode, a.Layout().FindLeaf(func(w termui.Widget) bool { return w == code }))
-	a.Layout().SetLeafMark(leafMarkGDB, a.Layout().FindLeaf(func(w termui.Widget) bool { return w == gdb }))
+	a.Layout().SetLeafMark(leafMarkCode, a.Layout().FindLeaf(func(w termforge.Widget) bool { return w == code }))
+	a.Layout().SetLeafMark(leafMarkGDB, a.Layout().FindLeaf(func(w termforge.Widget) bool { return w == gdb }))
 	return a
 }
 
@@ -81,7 +81,7 @@ func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 func TestJumpBackRefusesGdbLeaf(t *testing.T) {
 	a := newGdbLeafApp()
 	other := a.builtins["other"]
-	a.widgetJump = []termui.Widget{other}
+	a.widgetJump = []termforge.Widget{other}
 
 	a.JumpBack()
 	if a.focusedWidget() != a.gdbWidget {

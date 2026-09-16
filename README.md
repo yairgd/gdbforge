@@ -110,22 +110,29 @@ cp -r lua/mpsoc/cortex_r5 .gdbforge/lua/
 
 More installable workflows: [`lua/README.md`](lua/README.md) — **platform sections** (`mpsoc/`, `stm32/`, `kernel/`, `embedded/`), env vars, and `:lua` recipes.
 
-## Host skeleton (`cmd/demo`)
+## Built on termforge
 
-The repo is split so **gdbforge is one app** on a reusable TUI host. A second binary, **`cmd/demo`**, is the minimal showcase of that host — same chrome (modes, `:` cmdline, panes, layouts) and **no GDB/Delve**. Use it as a skeleton when building another product (trader dashboard, ops console, …) on the same framework.
+The terminal UI — modes, `:` command line, split-tree panes, tabs, layouts, and the
+terminal emulator pane — is a separate project:
+**[termforge](https://github.com/yairgd/termforge)**. gdbforge is the first and largest
+application built on it, and everything in this repository is debugger-specific.
+
+If you want to build a different keyboard-driven terminal app (a trading dashboard, an
+ops console, a log explorer), start from termforge rather than from this repo:
 
 ```bash
-go build -o bin/demo ./cmd/demo
-./bin/demo
+go get github.com/yairgd/termforge
+go run github.com/yairgd/termforge/cmd/demo@latest   # runnable example
 ```
 
-| Layer | What to reuse |
-|-------|----------------|
-| **FRAMEWORK** | `termui`, `platform`, `commands`, `ptyx`, `luahost`, … |
-| **Skeleton** | `cmd/demo` (+ optional `internal/demo`) — copy / rename as `cmd/<your-app>` |
-| **Debugger app** | `cmd/gdbforge` + `internal/gdb` / `dlv` / `gdbforge/*` — do **not** import these from a non-debugger app |
+| Layer | Where |
+|-------|-------|
+| **Framework** | `github.com/yairgd/termforge` — widgets, window manager, commands, PTY plumbing |
+| **Example app** | [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo) in that repo |
+| **Debugger app** | this repo: `cmd/gdbforge` + `internal/gdb` / `dlv` / `mcp` / `gdbforge/*` |
 
-Recipe: wire `TermApp` + command tree + your domain packages; keep debugger imports out of the host. Details and import rules: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) (`FRAMEWORK vs APP`, `task check-imports`).
+Import rules for this repo: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)
+(`task check-imports`).
 
 ## Problems it solves
 
@@ -208,7 +215,7 @@ Published on [gdbforge docs](https://yairgd.github.io/gdbforge/) with search-fri
 | Doc | Contents |
 |-----|----------|
 | **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
-| **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | FRAMEWORK vs APP split; `cmd/demo` as host skeleton |
+| **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | The termforge boundary; internal import rules |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 
 View docs locally: `./docs/serve.sh` → <http://127.0.0.1:8765/>. Deployed site: <https://yairgd.github.io/gdbforge/>.

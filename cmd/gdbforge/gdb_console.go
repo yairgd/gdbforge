@@ -7,16 +7,15 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const (
@@ -27,7 +26,7 @@ const (
 // consoleHost is the narrow surface consoleCtl needs from the composition root.
 // DebuggerApp implements it; consoleCtl must not depend on *DebuggerApp.
 type consoleHost interface {
-	Session() core.Session
+	Session() ptyx.Session
 	Backend() backend.Backend
 	gdbBackend() *backend.GDBBackend
 	GDBWidget() *widgets.GDBWidget
@@ -143,7 +142,7 @@ func (c *consoleCtl) wireCLI(w *widgets.GDBWidget, tty *ptyx.TTY, onFrame func()
 		return
 	}
 	gen := c.cliWireGen.Add(1)
-	opts := termui.WireTTYOpts{
+	opts := termforge.WireTTYOpts{
 		PostFrame: onFrame,
 		OnExit: func() {
 			if c.cliWireGen.Load() != gen {
@@ -237,8 +236,8 @@ func (c *consoleCtl) stopBridge() {
 	}
 }
 
-func coalesceGdbOutput(ch <-chan core.PtyOutputMsg, post func(events.GdbOutputMsg), onExit func()) {
-	coalescePtyOutput(ch, ptyCoalesceOpts{
+func coalesceGdbOutput(ch <-chan ptyx.PtyOutputMsg, post func(events.GdbOutputMsg), onExit func()) {
+	termforge.CoalescePtyOutput(ch, termforge.PtyCoalesceOpts{
 		Interval: gdbOutputFlushInterval,
 		MaxBytes: gdbOutputFlushMaxBytes,
 		Post: func(data string, err error) {

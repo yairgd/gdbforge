@@ -6,15 +6,19 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.8
-	github.com/gitpod-io/xterm-go v0.0.0-20260828130427-e62e9648055e
 	github.com/go-delve/delve v1.27.1
+	github.com/yairgd/termforge v0.0.0
 	github.com/yuin/goldmark v1.8.2
 	github.com/yuin/gopher-lua v1.1.2
-	go.bug.st/serial v1.6.4
-	golang.design/x/clipboard v0.9.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/tools v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
+)
+
+require (
+	github.com/gitpod-io/xterm-go v0.0.0-20260828130427-e62e9648055e // indirect
+	go.bug.st/serial v1.6.4 // indirect
+	golang.design/x/clipboard v0.9.0 // indirect
 )
 
 require (
@@ -41,3 +45,5 @@ require (
 )
 
 tool golang.org/x/tools/cmd/callgraph
+
+replace github.com/yairgd/termforge => ../termforge

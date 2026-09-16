@@ -5,28 +5,28 @@ import (
 	"strings"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // HelpWidget is a scrollable Viewport user manual (:help / :b help).
 type HelpWidget struct {
-	termui.BaseWidget
-	doc *termui.ScrollDocument
+	termforge.BaseWidget
+	doc *termforge.ScrollDocument
 	buf *platform.Buffer
 }
 
 // NewHelpWidget caches the guide text into a read-only Viewport buffer.
 func NewHelpWidget() *HelpWidget {
 	buf := platform.NewBuffer()
-	vp := termui.NewScrollDocument(buf)
+	vp := termforge.NewScrollDocument(buf)
 	vp.SetFollowTail(false)
 	vp.SetReadOnly(true)
 	vp.SetCursorVisible(false)
 	vp.LineStyle = helpLineStyle
 
 	w := &HelpWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Help"},
+		BaseWidget: termforge.BaseWidget{PaneName: "Help"},
 		doc:        vp,
 		buf:        buf,
 	}
@@ -101,15 +101,15 @@ func (w *HelpWidget) SetFocused(focused bool) {
 	w.doc.SetCursorVisible(false)
 }
 
-func (w *HelpWidget) SetClipboard(io termui.ClipboardIO) {
+func (w *HelpWidget) SetClipboard(io termforge.ClipboardIO) {
 	w.doc.SetClipboard(io)
 }
 
-func (w *HelpWidget) Draw(c termui.Canvas) {
+func (w *HelpWidget) Draw(c termforge.Canvas) {
 	w.doc.Draw(c)
 }
 
-func (w *HelpWidget) Viewport() *termui.ScrollDocument {
+func (w *HelpWidget) Viewport() *termforge.ScrollDocument {
 	return w.doc
 }
 

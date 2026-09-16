@@ -9,8 +9,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // CallStackWidget shows GDB stack frames.
@@ -19,7 +19,7 @@ import (
 //	wheel / click — same (browse only; do not steal focus)
 //	Enter — ActivateCallStack then FocusCode (status line → Code)
 type CallStackWidget struct {
-	*termui.TableWidget
+	*termforge.TableWidget
 	state *debugstate.State
 
 	items []models.StackFrame
@@ -32,7 +32,7 @@ type CallStackWidget struct {
 }
 
 func NewCallStackWidget() *CallStackWidget {
-	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw := termforge.NewTableWidget(platform.NewAppContext())
 	tw.PaneName = "Call Stack"
 	tbl := tw.Table()
 	tbl.SetShowHeader(false)
@@ -218,7 +218,7 @@ func (w *CallStackWidget) SelectLevel(level int) {
 	}
 }
 
-func (w *CallStackWidget) fillTable(t *termui.Table) {
+func (w *CallStackWidget) fillTable(t *termforge.Table) {
 	if len(w.items) == 0 {
 		t.AddRow("no frames")
 		return

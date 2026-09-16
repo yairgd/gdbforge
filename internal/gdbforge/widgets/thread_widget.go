@@ -9,8 +9,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // ThreadWidget shows GDB threads.
@@ -19,7 +19,7 @@ import (
 //	wheel — same as j/k (Code / GDB follow the selected thread)
 //	Enter / click — ActivateThread
 type ThreadWidget struct {
-	*termui.TableWidget
+	*termforge.TableWidget
 	state *debugstate.State
 
 	items []models.ThreadInfo
@@ -31,7 +31,7 @@ type ThreadWidget struct {
 }
 
 func NewThreadWidget() *ThreadWidget {
-	tw := termui.NewTableWidget(platform.NewAppContext())
+	tw := termforge.NewTableWidget(platform.NewAppContext())
 	tw.PaneName = "Threads"
 	tbl := tw.Table()
 	tbl.SetShowHeader(false)
@@ -199,7 +199,7 @@ func (w *ThreadWidget) SetItems(items []models.ThreadInfo) {
 	w.EnsureRowVisible()
 }
 
-func (w *ThreadWidget) fillTable(t *termui.Table) {
+func (w *ThreadWidget) fillTable(t *termforge.Table) {
 	if len(w.items) == 0 {
 		t.AddRow("no threads")
 		return

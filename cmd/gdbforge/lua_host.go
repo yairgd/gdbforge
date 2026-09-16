@@ -8,8 +8,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // luaSerialHost is the serial-terminal surface exposed to Lua scripts.
@@ -34,12 +34,12 @@ type luaHost interface {
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
 	RequestFrame()
-	Layout() *termui.SplitLayout
+	Layout() *termforge.SplitLayout
 	Screen() tcell.Screen
-	FocusedWidget() termui.Widget
+	FocusedWidget() termforge.Widget
 	OutputWidget() *widgets.OutputWidget
 	LuaConsoleWidget() *widgets.LuaConsoleWidget
-	SwapFocusedWidget(w termui.Widget) bool
+	SwapFocusedWidget(w termforge.Widget) bool
 	GDBWidget() *widgets.GDBWidget
 	ActiveCodeWidget() *widgets.CodeWidget
 	CodeBufferForB() *widgets.CodeWidget
@@ -63,11 +63,11 @@ type luaHost interface {
 	SendGdbExec(cmd string)
 	PlaceCodeInSlot(w *widgets.CodeWidget)
 	FocusCode()
-	FindGdbLeaf() *termui.Node
-	FocusBufferWidget(w termui.Widget)
+	FindGdbLeaf() *termforge.Node
+	FocusBufferWidget(w termforge.Widget)
 	OpenOrCreateBuffer(name string, from *luahost.Runtime)
-	RegisterBuiltin(name string, w termui.Widget)
-	BuiltinWidget(name string) termui.Widget
+	RegisterBuiltin(name string, w termforge.Widget)
+	BuiltinWidget(name string) termforge.Widget
 	Serial() luaSerialHost
 }
 
@@ -122,9 +122,9 @@ func (a *DebuggerApp) SendGdbExec(cmd string) {
 }
 
 func (a *DebuggerApp) PlaceCodeInSlot(w *widgets.CodeWidget) { a.placeCodeInSlot(w) }
-func (a *DebuggerApp) FindGdbLeaf() *termui.Node             { return a.findGdbLeaf() }
+func (a *DebuggerApp) FindGdbLeaf() *termforge.Node          { return a.findGdbLeaf() }
 
-func (a *DebuggerApp) FocusBufferWidget(w termui.Widget) {
+func (a *DebuggerApp) FocusBufferWidget(w termforge.Widget) {
 	if a != nil {
 		a.bufs.focusBufferWidget(w)
 	}
@@ -136,9 +136,9 @@ func (a *DebuggerApp) OpenOrCreateBuffer(name string, from *luahost.Runtime) {
 	}
 }
 
-func (a *DebuggerApp) RegisterBuiltin(name string, w termui.Widget) { a.registerBuiltin(name, w) }
+func (a *DebuggerApp) RegisterBuiltin(name string, w termforge.Widget) { a.registerBuiltin(name, w) }
 
-func (a *DebuggerApp) BuiltinWidget(name string) termui.Widget {
+func (a *DebuggerApp) BuiltinWidget(name string) termforge.Widget {
 	if a == nil || a.builtins == nil {
 		return nil
 	}
@@ -151,7 +151,7 @@ func (a *DebuggerApp) TrackChild(pid int) {
 	}
 }
 
-func (a *DebuggerApp) SwapFocusedWidget(w termui.Widget) bool { return a.swapFocusedWidget(w) }
+func (a *DebuggerApp) SwapFocusedWidget(w termforge.Widget) bool { return a.swapFocusedWidget(w) }
 
 func (a *DebuggerApp) SetKgdbMode(on bool) { a.setKgdbMode(on) }
 

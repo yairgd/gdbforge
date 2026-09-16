@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 func (w *LayoutShell) placeCodeInSlot(cw *widgets.CodeWidget) {
@@ -96,7 +96,7 @@ func (w *LayoutShell) placeLogoInCodeSlot() {
 	}
 }
 
-func (w *LayoutShell) swapFocusedWidget(wid termui.Widget) bool {
+func (w *LayoutShell) swapFocusedWidget(wid termforge.Widget) bool {
 	lay := w.Layout()
 	h := w.host
 	if lay == nil || wid == nil || h == nil {
@@ -119,7 +119,7 @@ func (w *LayoutShell) swapFocusedWidget(wid termui.Widget) bool {
 	return true
 }
 
-func (w *LayoutShell) pushWidgetJump(wid termui.Widget) {
+func (w *LayoutShell) pushWidgetJump(wid termforge.Widget) {
 	if wid == nil {
 		return
 	}

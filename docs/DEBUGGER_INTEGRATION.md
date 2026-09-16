@@ -4,9 +4,9 @@ description: Technical guide to gdbforge debugger integration with GDB MI2, Delv
 
 # Debugger Integration
 
-gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `core.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB** (`gdb.GDBClient`, **3 PTYs**: CLI + MI + inferior) and **Delve** (`dlv.Client`, headless **rpc2** + `dlv connect` CLI PTY + inferior `--tty`) via `-g gdb|dlv`. Controllers call **semantic backend ops** (breakpoints, frame/thread select, exec) — not raw MI or Delve CLI strings. The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP. Program I/O is wired to the IO pane (`:b io`) via `CompositeTerminal` + `WireTTY`.
+gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbforge/backend`), which wraps adapters that implement `ptyx.Session` (`Debugger` + lifetime + PTY mux). Supported today: **GDB** (`gdb.GDBClient`, **3 PTYs**: CLI + MI + inferior) and **Delve** (`dlv.Client`, headless **rpc2** + `dlv connect` CLI PTY + inferior `--tty`) via `-g gdb|dlv`. Controllers call **semantic backend ops** (breakpoints, frame/thread select, exec) — not raw MI or Delve CLI strings. The session is **owned by `DebuggerApp`** (through `Backend`) and shared by the console view, in-app `:AI`, and MCP. Program I/O is wired to the IO pane (`:b io`) via `CompositeTerminal` + `WireTTY`.
 
-**Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
+**Companion docs:** [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) (master/slave dual PTY, Delve TCP) · [ARCHITECTURE.md](ARCHITECTURE.md) · [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) · [EXEC_SHELL.md](EXEC_SHELL.md) · [PLUGINS.md](PLUGINS.md)
 
 ---
 
@@ -44,7 +44,7 @@ flowchart TB
         ExecW["ExecWidget · CompositeTerminal"]
     end
 
-    subgraph TermUI["termui bridge"]
+    subgraph termforge["termforge bridge"]
         Wire["WireTTY · xterm emulator"]
     end
 
@@ -102,9 +102,9 @@ flowchart TB
 
 **Dependency rules:**
 
-- `internal/gdb`, `internal/dlv`, and `internal/ptyx` must not import `internal/termui`
+- `internal/gdb`, `internal/dlv`, and `termforge/ptyx` must not import `termforge`
 - `DebuggerApp` owns `backend.Backend` (concrete GDB or Delve client); views never hold `Session`
-- External APIs use `app.GDB() core.Session` (works for `-g dlv` too)
+- External APIs use `app.GDB() ptyx.Session` (works for `-g dlv` too)
 - Controllers use **`Backend` semantic ops** (`InsertBreakpoint`, `SelectFrame`, `Exec`, …) and **capability flags** (`NavigationAsync`, `WireCLILineTap`, `DeferBreakpointRefresh`, …) — not `isDLV()` / `isGDB()` branches or MI string literals in `cmd/gdbforge/`
 - Never `Close()` the session from MCP/AI — the app owns lifetime
 
@@ -241,7 +241,7 @@ Future extensions (separate interfaces):
 | `RegisterReader` | Read register sets |
 | `MemoryReader` | Read/write memory |
 
-These will emit `core.Event` updates rather than synchronous returns.
+These will publish typed messages on `platform.EventBus` rather than returning synchronously.
 
 ---
 
@@ -254,7 +254,7 @@ gdbforge uses **one unified type** — `*ptyx.TTY` (`Start` / `Open` / `AttachPa
 | PTY | Created | Role | UI |
 |-----|---------|------|-----|
 | **#1 CLI** | `ptyx.Start(gdb …)` — **no** `--interpreter=mi2` | Native GDB console (readline) | `:b gdb` via `WireCLI` → `CompositeTerminal` |
-| **#2 MI** | `ptyx.Open()` + `new-ui mi2 /dev/pts/N` | Backend `core.Session`; MI parser | No widget — `consoleCtl` bridge only |
+| **#2 MI** | `ptyx.Open()` + `new-ui mi2 /dev/pts/N` | Backend `ptyx.Session`; MI parser | No widget — `consoleCtl` bridge only |
 | **#3 Inferior** | `ptyx.Open()` or `AttachPath` | Program stdin/stdout | `:b io` via `WireInferior` → `CompositeTerminal` |
 
 ### Delve (2 PTYs)
@@ -359,13 +359,13 @@ For TUI inferiors (htop, games, …) or programs that need a **real** terminal e
 
 1. Lua `gdbforge.open_external_tty()` opens kitty/xterm/… (`GDBFORGE_TERMINAL`) running `gdbforge --hold-inferior-tty`, which keeps the window alive and hands its pts to the inferior: it releases the pts from its own session (`TIOCNOTTY`) so the program can make it its **controlling terminal**. Without that, GDB warns `Failed to set controlling terminal: Operation not permitted` and the program sees `open /dev/tty: no such device or address` — fatal for Go TUIs, curses and `getpass` ([details](PTY_ARCHITECTURE.md#how-the-external-pts-is-created)).
 2. `gdbforge.set_inferior_tty(pts)` → GDB `-inferior-tty-set` (live). Delve restarts `dlv exec --tty …` with the new path (same program args).
-3. Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/external_tty), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/terminal_debug).
+3. Examples: [`lua/external_tty`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/external_tty), [`lua/terminal_debug`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/terminal_debug).
 
 **Pattern A — gdbserver / headless dlv in the other window**
 
 1. GDB: `gdbforge.spawn_terminal("gdbserver", ":2345", "./my_tui")` then `target remote`.
 2. Delve: `:lua dlv_ext_port` / `dlv_port` (or `spawn_dlv_headless` + `dlv_connect`) — inferior inherits that terminal’s stdio.
-3. Examples and **how to use each script**: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md); code: [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/gdbserver_tui), [`lua/dlv_ext_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_ext_port).
+3. Examples and **how to use each script**: [`lua/README.md`](https://github.com/yairgd/gdbforge/blob/main/lua/README.md); code: [`lua/gdbserver_tui`](https://github.com/yairgd/gdbforge/tree/main/lua/embedded/gdbserver_tui), [`lua/dlv_ext_port`](https://github.com/yairgd/gdbforge/tree/main/lua/dlv_ext_port).
 
 Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an external slave at the same time. Closing the external window does not auto-rewire IO — use `:set inferior-tty internal`.
 
@@ -585,7 +585,7 @@ mi, _ := ptyx.Open()
 // mi.Send("-inferior-tty-set " + inf.SlaveName())
 ```
 
-`GDBClient` embeds `*ptyx.TTY` as the **MI** session (`core.Session`). `CLITTY()` returns PTY #1 for the GDB pane.
+`GDBClient` embeds `*ptyx.TTY` as the **MI** session (`ptyx.Session`). `CLITTY()` returns PTY #1 for the GDB pane.
 
 **Quit / exit:** typing `q`/`quit` in the GDB pane goes to the CLI PTY. When GDB exits, `WireCLI` `OnExit` and/or the MI bridge posts `"gdb-exit"` → `app.Exit()` (cgdb-like).
 
@@ -714,7 +714,7 @@ MI bytes   →  consoleCtl bridge  →  GdbInputState  →  models / stop pipeli
 
 `initBuiltins` creates `gdb.NewGDBClientOpts`; `wireCLI` attaches CLI PTY with `OnExit`; `startGdbConsoleBridge` coalesces **MI** `Subscribe` → `EventInterrupt(GdbOutputMsg)` (~16ms / 64KiB) for parsing only — **not** GDB pane paint.
 
-**Job control (Ctrl-Z):** `onGdbConsoleSuspend` — if `InferiorRunning`, `SuspendInferior`; otherwise `TermApp.Suspend`. Bound globally — see [INPUT.md](INPUT.md).
+**Job control (Ctrl-Z):** `onGdbConsoleSuspend` — if `InferiorRunning`, `SuspendInferior`; otherwise `App.Suspend`. Bound globally — see [INPUT.md](INPUT.md).
 
 ```mermaid
 sequenceDiagram
@@ -738,12 +738,12 @@ sequenceDiagram
 
 | Component | File | Role |
 |-----------|------|------|
-| `CompositeTerminal` | `termui/composite_terminal.go` | xterm emulator + key trie + `WireTTY` |
-| `WireTTY` | `termui/wire_tty.go` | PTY bytes ↔ terminal controller |
+| `CompositeTerminal` | `termforge/composite_terminal.go` | xterm emulator + key trie + `WireTTY` |
+| `WireTTY` | `termforge/wire_tty.go` | PTY bytes ↔ terminal controller |
 | `GDBWidget` | `widgets/gdb_widget.go` | View — `WireCLI`, `Draw`, focus cursor |
 | `consoleCtl` | `cmd/gdbforge/gdb_console.go` | MI bridge, quit, `OnExit`, Send on MI PTY |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` (MI PTY only) |
-| `ptyx.TTY` | `internal/ptyx/tty.go` | Unified PTY: `Start` / `Open` / `AttachPath` |
+| `ptyx.TTY` | `termforge/ptyx/tty.go` | Unified PTY: `Start` / `Open` / `AttachPath` |
 
 ### Console layout
 
@@ -773,7 +773,7 @@ flowchart LR
   App --> BE["backend.Backend"]
   BE --> GDB["GDBBackend · gdb.GDBClient"]
   BE --> DLV["DLVBackend · dlv.Client"]
-  GDB --> Sess["core.Session + MI"]
+  GDB --> Sess["ptyx.Session + MI"]
   DLV --> RPC["rpc2 machine"]
   DLV --> PTY["dlv connect PTY"]
 ```
@@ -817,13 +817,13 @@ Planned adapter: `internal/openocd` (not yet created).
 |--------|------|
 | Transport | TCP telnet or pipe to `openocd` process |
 | Protocol | TCL commands + event text (not MI2) |
-| Interface | Same `core.Session` for send/subscribe; adapter translates |
+| Interface | Same `ptyx.Session` for send/subscribe; adapter translates |
 | UI impact | None — new backend package only |
 
 ```mermaid
 flowchart LR
-    UI["termui"]
-    Core["core.Session"]
+    UI["termforge"]
+    Core["ptyx.Session"]
     GDB["gdb.GDBClient"]
     DLV["dlv.Client"]
     OOCD["openocd.Client · planned"]
@@ -882,7 +882,7 @@ Further planned options:
 
 | Constraint | Reason |
 |------------|--------|
-| Backends never import `termui` | Testability, headless automation |
+| Backends never import `termforge` | Testability, headless automation |
 | Async-only responses | MI2 / OpenOCD are streaming |
 | Exclusive PTY write / shared read | UI + AI share one `ptmx` safely |
 | Parse MI in gdb layer | Widgets display buffers, not raw protocol |

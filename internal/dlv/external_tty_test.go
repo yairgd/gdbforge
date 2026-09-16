@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestNewClientOptsExternalInferiorOwnedPTY(t *testing.T) {

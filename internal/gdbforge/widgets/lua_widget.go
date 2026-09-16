@@ -6,8 +6,8 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 	"github.com/yairgd/gdbforge/internal/luahost"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // cell is one painted glyph in the Lua pane grid.
@@ -18,7 +18,7 @@ type luaCell struct {
 
 // LuaWidget hosts a Lua script with cell draw, keys, tick, and gdbforge.print.
 type LuaWidget struct {
-	termui.BaseWidget
+	termforge.BaseWidget
 	rt *luahost.Runtime
 
 	mu       sync.Mutex
@@ -38,7 +38,7 @@ type LuaWidget struct {
 // NewLuaWidget loads src into a dedicated Lua VM bound to this pane.
 func NewLuaWidget(title, src string, onRegister luahost.OnRegister) (*LuaWidget, error) {
 	w := &LuaWidget{
-		BaseWidget: termui.BaseWidget{PaneName: title},
+		BaseWidget: termforge.BaseWidget{PaneName: title},
 		tickEvery:  100 * time.Millisecond,
 		logLines:   nil,
 	}
@@ -56,7 +56,7 @@ func NewLuaWidget(title, src string, onRegister luahost.OnRegister) (*LuaWidget,
 // The widget owns rt for Close; the caller must not Close rt separately.
 func AdoptLuaWidget(title string, rt *luahost.Runtime) *LuaWidget {
 	w := &LuaWidget{
-		BaseWidget: termui.BaseWidget{PaneName: title},
+		BaseWidget: termforge.BaseWidget{PaneName: title},
 		tickEvery:  100 * time.Millisecond,
 		rt:         rt,
 		useTick:    true,
@@ -171,7 +171,7 @@ func (w *LuaWidget) Size() (int, int) {
 	return w.gridW, w.gridH
 }
 
-// Clear implements termui.Clearable (:clear).
+// Clear implements termforge.Clearable (:clear).
 func (w *LuaWidget) Clear() {
 	w.ClearAll()
 }
@@ -196,7 +196,7 @@ func (w *LuaWidget) HandleEvent(ev tcell.Event) {
 }
 
 // Draw runs on_tick/on_draw then blits the cell grid (+ print log at bottom).
-func (w *LuaWidget) Draw(c termui.Canvas) {
+func (w *LuaWidget) Draw(c termforge.Canvas) {
 	w.ensureGrid(c.W(), c.H())
 	now := time.Now()
 	dt := now.Sub(w.lastTick).Seconds()

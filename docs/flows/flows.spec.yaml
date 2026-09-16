@@ -79,8 +79,7 @@ flows:
     backend: [both]
     chain:
       - { symbol: handleCommandKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Tab in ModeCommand" }
-      - { symbol: CmdWidget.CompletionNames, pkg: internal/termui, recv: "(*CmdWidget)", name: CompletionNames, indent: 1, note: "Command trie — not debugger MI" }
-      - { symbol: refreshCmdMenu, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: refreshCmdMenu, indent: 2 }
+      - { symbol: refreshCmdMenu, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: refreshCmdMenu, indent: 1, note: "Names come from termforge CmdWidget.CompletionNames (command trie, not debugger MI)" }
     breakpoints:
       - main.(*completionCtl).refreshCmdMenu
 
@@ -653,8 +652,7 @@ flows:
     backend: [gdb, dlv]
     chain:
       - { symbol: handleCommandKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Enter submits cmdline" }
-      - { symbol: Execute, pkg: internal/commands, recv: "(*CommandParser)", name: Execute, indent: 1 }
-      - { symbol: GdbContinue, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbContinue, indent: 2 }
+      - { symbol: GdbContinue, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbContinue, indent: 1, note: "Dispatched by termforge commands.CommandParser.Execute" }
 
   - id: colon-quit
     title: ":quit confirm"
@@ -810,9 +808,6 @@ discover:
     - internal/gdbforge
     - internal/dlv
     - internal/gdb
-    - internal/termui
-    - internal/commands
-    - internal/ptyx
     - internal/luahost
   include_prefixes:         # edges kept in the rendered trees
     - cmd/gdbforge

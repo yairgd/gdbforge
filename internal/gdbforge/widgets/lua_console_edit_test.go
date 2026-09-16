@@ -5,7 +5,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 func typeLua(t *testing.T, w *LuaConsoleWidget, s string) {
@@ -16,7 +16,7 @@ func typeLua(t *testing.T, w *LuaConsoleWidget, s string) {
 }
 
 func luaLine(w *LuaConsoleWidget) (string, int) {
-	return termui.PromptInputState(w.term.Controller(), luaPrompt)
+	return termforge.PromptInputState(w.term.Controller(), luaPrompt)
 }
 
 func TestLuaConsoleBackspaceDeletesChar(t *testing.T) {
@@ -49,7 +49,7 @@ func TestLuaConsoleBackspaceStopsAtPrompt(t *testing.T) {
 	if got != "" || cur != 0 {
 		t.Fatalf("text=%q cursor=%d want empty/0", got, cur)
 	}
-	if !termui.OnEmptyPromptLine(w.term.Controller(), luaPrompt) {
+	if !termforge.OnEmptyPromptLine(w.term.Controller(), luaPrompt) {
 		t.Fatal("prompt was eaten by backspace")
 	}
 }
@@ -58,7 +58,7 @@ func TestLuaConsoleBackspaceMidLine(t *testing.T) {
 	w := NewLuaConsoleWidget()
 	typeLua(t, w, "abcd")
 	w.cursorHome()
-	termui.MovePromptCursor(w.term.Controller(), luaPrompt, 2)
+	termforge.MovePromptCursor(w.term.Controller(), luaPrompt, 2)
 
 	w.HandleFocusKey(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone))
 	got, cur := luaLine(w)
@@ -70,7 +70,7 @@ func TestLuaConsoleBackspaceMidLine(t *testing.T) {
 func TestLuaConsoleDeleteKeyRemovesCharUnderCursor(t *testing.T) {
 	w := NewLuaConsoleWidget()
 	typeLua(t, w, "abcd")
-	termui.MovePromptCursor(w.term.Controller(), luaPrompt, 1)
+	termforge.MovePromptCursor(w.term.Controller(), luaPrompt, 1)
 
 	w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone))
 	got, cur := luaLine(w)
@@ -90,7 +90,7 @@ func TestLuaConsoleDeleteKeyRemovesCharUnderCursor(t *testing.T) {
 func TestLuaConsoleInsertMidLineShiftsTail(t *testing.T) {
 	w := NewLuaConsoleWidget()
 	typeLua(t, w, "ac")
-	termui.MovePromptCursor(w.term.Controller(), luaPrompt, 1)
+	termforge.MovePromptCursor(w.term.Controller(), luaPrompt, 1)
 
 	typeLua(t, w, "b")
 	got, cur := luaLine(w)

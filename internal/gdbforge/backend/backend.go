@@ -3,19 +3,18 @@ package backend
 import (
 	"context"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // Backend is the GDB vs Delve policy surface. DebuggerApp wires UI to Session
 // and calls these methods instead of scattering isDLV() branches.
 type Backend interface {
 	Kind() Kind
-	Session() core.Session
+	Session() ptyx.Session
 	Close()
 
 	TakeStartupOutput() string
@@ -45,8 +44,8 @@ type Backend interface {
 	FetchBreakpoints(ctx context.Context, q Querier) ([]models.BreakInfo, bool)
 	RefreshThreadsAndStack(ctx context.Context, q Querier, log LogFn) (threads []models.ThreadInfo, frames []models.StackFrame, threadsOK, stackOK bool)
 
-	Complete(sess core.Session, state *platform.AppState, text string) gdb.CompleteResult
-	EnrichLinespecMenu(text string, menu []string, sess core.Session, state *platform.AppState) []string
+	Complete(sess ptyx.Session, state *platform.AppState, text string) gdb.CompleteResult
+	EnrichLinespecMenu(text string, menu []string, sess ptyx.Session, state *platform.AppState) []string
 
 	// Interrupt sends SIGINT / cancel-confirm according to backend rules.
 	Interrupt(inferiorRunning, confirming bool) error

@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 func TestCodeWidgetShowLocationMarksPC(t *testing.T) {
@@ -222,8 +222,8 @@ func TestCodeWidgetShowUnavailable(t *testing.T) {
 		t.Fatalf("want empty buffer lines, got %v", got)
 	}
 
-	g := termui.NewGrid(40, 10)
-	full := termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 10))
+	g := termforge.NewGrid(40, 10)
+	full := termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 40, 10))
 	w.Draw(full)
 
 	rowText := func(y int) string {
@@ -270,8 +270,8 @@ func TestCodeWidgetStatusLineFullPath(t *testing.T) {
 		t.Fatalf("PaneName=%q", w.PaneName)
 	}
 
-	g := termui.NewGrid(80, 5)
-	c := termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 80, 4))
+	g := termforge.NewGrid(80, 5)
+	c := termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 80, 4))
 	w.SetFocused(true)
 	w.DrawStatusLine(c, false)
 	var b strings.Builder
@@ -316,11 +316,11 @@ type fakeSess struct {
 func (f *fakeSess) Send(cmd string) error { f.sent <- cmd; return nil }
 func (f *fakeSess) SendRaw(string) error  { return nil }
 func (f *fakeSess) Close()                {}
-func (f *fakeSess) Subscribe() (<-chan core.PtyOutputMsg, func()) {
-	ch := make(chan core.PtyOutputMsg)
+func (f *fakeSess) Subscribe() (<-chan ptyx.PtyOutputMsg, func()) {
+	ch := make(chan ptyx.PtyOutputMsg)
 	return ch, func() {}
 }
-func (f *fakeSess) WithWrite(_ context.Context, fn func(w core.PTYWriter) error) error {
+func (f *fakeSess) WithWrite(_ context.Context, fn func(w ptyx.PTYWriter) error) error {
 	return fn(fakePW{f})
 }
 

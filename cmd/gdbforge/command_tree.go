@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/yairgd/gdbforge/internal/commands"
+	"github.com/yairgd/termforge/commands"
 )
 
 // ExapData builds the command hierarchy on commandReg.Root:

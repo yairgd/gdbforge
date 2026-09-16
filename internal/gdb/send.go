@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // InferiorCtl is debugger run-state used while sending break/clear under a live inferior.
@@ -45,14 +45,14 @@ const interruptSettle = 30 * time.Millisecond
 // and, optionally, to remove when InferiorCtl.ContinueAfterClear is set.
 // Other commands (frame, thread, …) stay stopped after the interrupt —
 // never send a surprise continue.
-func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd string, opts SendOpts) {
+func SendCmd(sess ptyx.Session, app *platform.AppState, ctl InferiorCtl, cmd string, opts SendOpts) {
 	if sess == nil || cmd == "" {
 		return
 	}
 	send := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = sess.WithWrite(ctx, func(pw core.PTYWriter) error {
+		_ = sess.WithWrite(ctx, func(pw ptyx.PTYWriter) error {
 			running := ctl != nil && ctl.InferiorRunning()
 			willResume := false
 			if running {
@@ -92,7 +92,7 @@ func SendCmd(sess core.Session, app *platform.AppState, ctl InferiorCtl, cmd str
 
 // interruptInferior stops the target on the command channel, so the interrupt
 // cannot be reordered against the break/clear that follows it.
-func interruptInferior(pw core.PTYWriter, opts SendOpts) error {
+func interruptInferior(pw ptyx.PTYWriter, opts SendOpts) error {
 	if opts.InterruptCmd != "" {
 		return pw.Send(opts.InterruptCmd)
 	}

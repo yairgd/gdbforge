@@ -3,8 +3,8 @@ package main
 import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 func (a *DebuggerApp) InitB() error {
@@ -33,18 +33,18 @@ func (a *DebuggerApp) InitB() error {
 	lay.SetStatusClipboard(a.ClipboardIO())
 	lay.FocusWidget(a.gdbWidget)
 	lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
-	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(w termui.Widget) bool { return w == a.gdbWidget }))
+	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(w termforge.Widget) bool { return w == a.gdbWidget }))
 	a.EnterInsertMode()
 	lay.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
 	lay.SetEqualAlways(true)
 	a.AddWidget(a.Widget())
 
-	bar := termui.NewCompletionBarWidget(a.ctx)
-	a.comp.attach(&termui.CompletionMenu{}, bar)
+	bar := termforge.NewCompletionBarWidget(a.ctx)
+	a.comp.attach(&termforge.CompletionMenu{}, bar)
 	a.AddWidget(bar)
 
-	a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+	a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())

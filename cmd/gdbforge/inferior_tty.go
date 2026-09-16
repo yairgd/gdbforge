@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/yairgd/termforge"
 	"os"
 	"strconv"
 	"strings"
@@ -272,10 +273,10 @@ func (a *DebuggerApp) closeExternalInferiorHold() {
 	a.extInferiorHold = nil
 	// Kill the shell/sleep inside the terminal first — mate-terminal exits with it.
 	if h.holdPID > 0 {
-		signalProcess(h.holdPID, false, syscall.SIGTERM)
+		termforge.SignalProcess(h.holdPID, false, syscall.SIGTERM)
 		time.Sleep(150 * time.Millisecond)
-		if processAlive(h.holdPID) {
-			signalProcess(h.holdPID, false, syscall.SIGKILL)
+		if termforge.ProcessAlive(h.holdPID) {
+			termforge.SignalProcess(h.holdPID, false, syscall.SIGKILL)
 		}
 	}
 	if h.termPID > 0 {

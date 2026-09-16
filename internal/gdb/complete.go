@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const (
@@ -158,7 +158,7 @@ func EnrichLinespecMenuNames(prefix string, menu []string, sigs map[string]strin
 }
 
 // FunctionSignatures runs -symbol-info-functions and returns name → "name(args)".
-func FunctionSignatures(sess core.Session, state *platform.AppState) map[string]string {
+func FunctionSignatures(sess ptyx.Session, state *platform.AppState) map[string]string {
 	if sess == nil {
 		return nil
 	}
@@ -338,7 +338,7 @@ func QuoteCompleteArg(text string) string {
 // CompleteNames runs MI -complete for prefix and returns match names.
 // Same shape as commands.Completer / CommandNode.CompleteArgs.
 // Uses PTYOwnerApp so the console paint policy matches other silent queries.
-func CompleteNames(sess core.Session, state *platform.AppState, prefix string) []string {
+func CompleteNames(sess ptyx.Session, state *platform.AppState, prefix string) []string {
 	res := Complete(sess, state, prefix)
 	if len(res.Matches) > 0 {
 		return res.Matches
@@ -350,7 +350,7 @@ func CompleteNames(sess core.Session, state *platform.AppState, prefix string) [
 }
 
 // Complete runs -complete and returns the full parsed result.
-func Complete(sess core.Session, state *platform.AppState, prefix string) CompleteResult {
+func Complete(sess ptyx.Session, state *platform.AppState, prefix string) CompleteResult {
 	if sess == nil {
 		return CompleteResult{}
 	}
@@ -362,7 +362,7 @@ func Complete(sess core.Session, state *platform.AppState, prefix string) Comple
 	return ParseCompleteResult(raw)
 }
 
-func querySilent(sess core.Session, state *platform.AppState, command string) (string, error) {
+func querySilent(sess ptyx.Session, state *platform.AppState, command string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), completeMax)
 	defer cancel()
 
@@ -372,7 +372,7 @@ func querySilent(sess core.Session, state *platform.AppState, command string) (s
 
 	var out strings.Builder
 	run := func() error {
-		return sess.WithWrite(ctx, func(w core.PTYWriter) error {
+		return sess.WithWrite(ctx, func(w ptyx.PTYWriter) error {
 			if err := w.Send(command); err != nil {
 				return err
 			}
@@ -391,11 +391,11 @@ func querySilent(sess core.Session, state *platform.AppState, command string) (s
 	return out.String(), err
 }
 
-func drainComplete(ch <-chan core.PtyOutputMsg, wait time.Duration) {
-	core.Drain(ch, wait)
+func drainComplete(ch <-chan ptyx.PtyOutputMsg, wait time.Duration) {
+	ptyx.Drain(ch, wait)
 }
 
-func captureComplete(ctx context.Context, ch <-chan core.PtyOutputMsg, out *strings.Builder, idle, max time.Duration) {
+func captureComplete(ctx context.Context, ch <-chan ptyx.PtyOutputMsg, out *strings.Builder, idle, max time.Duration) {
 	deadline := time.NewTimer(max)
 	defer deadline.Stop()
 	idleT := time.NewTimer(idle)

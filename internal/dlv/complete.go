@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const (
@@ -71,7 +71,7 @@ type FuncLister interface {
 
 // Complete runs Delve console Tab completion: command names, or function
 // locspecs for break/b/trace/… via rpc2 ListFunctions.
-func Complete(sess core.Session, state *platform.AppState, prefix string) gdb.CompleteResult {
+func Complete(sess ptyx.Session, state *platform.AppState, prefix string) gdb.CompleteResult {
 	base := gdb.CompletionBase(prefix)
 	if base == "" {
 		return CompleteCommands(prefix)

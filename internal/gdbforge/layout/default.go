@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 // DefaultSpec builds the multi-pane default workspace.
@@ -13,51 +13,51 @@ type DefaultSpec struct {
 
 func (s DefaultSpec) Name() string { return Default }
 
-func (s DefaultSpec) Build(panes Panes) *termui.SplitLayout {
+func (s DefaultSpec) Build(panes Panes) *termforge.SplitLayout {
 	return BuildDefault(panes, s.Ratios)
 }
 
 // BuildDefault builds:
 //
 //	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
-func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termui.SplitLayout {
+func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termforge.SplitLayout {
 	ratios.Left = clampRatio(ratios.Left)
 	ratios.Output = clampRatio(ratios.Output)
 	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
-	tree := termui.NewSplitLayout(panes.Code)
+	tree := termforge.NewSplitLayout(panes.Code)
 	tree.SetEqualAlways(true)
-	tree.Split(termui.Vertical, panes.Output)
+	tree.Split(termforge.Vertical, panes.Output)
 	tree.FocusWidget(panes.Code)
-	tree.Split(termui.Horizontal, panes.GDB)
+	tree.Split(termforge.Horizontal, panes.GDB)
 	tree.FocusWidget(panes.Output)
-	tree.Split(termui.Horizontal, panes.Breakpoints)
+	tree.Split(termforge.Horizontal, panes.Breakpoints)
 	tree.FocusWidget(panes.Breakpoints)
-	tree.Split(termui.Horizontal, panes.Threads)
+	tree.Split(termforge.Horizontal, panes.Threads)
 	tree.FocusWidget(panes.Threads)
-	tree.Split(termui.Horizontal, panes.Callstack)
+	tree.Split(termforge.Horizontal, panes.Callstack)
 	tree.FocusWidget(panes.GDB)
 	applyDefaultRatios(tree.Root(), ratios)
 	tree.SetEqualAlways(false)
 	return tree
 }
 
-func applyDefaultRatios(root *termui.Node, ratios platform.DefaultLayoutRatios) {
-	if root == nil || root.Type != termui.NodeSplit || root.Dir != termui.Vertical {
+func applyDefaultRatios(root *termforge.Node, ratios platform.DefaultLayoutRatios) {
+	if root == nil || root.Type != termforge.NodeSplit || root.Dir != termforge.Vertical {
 		return
 	}
 	root.Ratio = ratios.Left
 	right := root.Second
-	if right == nil || right.Type != termui.NodeSplit || right.Dir != termui.Horizontal {
+	if right == nil || right.Type != termforge.NodeSplit || right.Dir != termforge.Horizontal {
 		return
 	}
 	right.Ratio = ratios.Output
 	bottom := right.Second
-	if bottom == nil || bottom.Type != termui.NodeSplit || bottom.Dir != termui.Horizontal {
+	if bottom == nil || bottom.Type != termforge.NodeSplit || bottom.Dir != termforge.Horizontal {
 		return
 	}
 	bottom.Ratio = ratios.BottomFirst
 	rest := bottom.Second
-	if rest != nil && rest.Type == termui.NodeSplit && rest.Dir == termui.Horizontal {
+	if rest != nil && rest.Type == termforge.NodeSplit && rest.Dir == termforge.Horizontal {
 		rest.Ratio = 0.5
 	}
 }

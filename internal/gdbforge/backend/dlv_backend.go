@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // DLVBackend is the Delve CLI + rpc2 implementation of Backend.
@@ -27,7 +26,7 @@ func NewDLV(client *dlv.Client) *DLVBackend {
 }
 
 func (b *DLVBackend) Kind() Kind            { return DLV }
-func (b *DLVBackend) Session() core.Session { return b.client() }
+func (b *DLVBackend) Session() ptyx.Session { return b.client() }
 func (b *DLVBackend) Close() {
 	if c := b.client(); c != nil {
 		c.Close()
@@ -103,11 +102,11 @@ func (b *DLVBackend) SelectThreadCmd(id string) string {
 	return "goroutine " + id
 }
 
-func (b *DLVBackend) Complete(sess core.Session, state *platform.AppState, text string) gdb.CompleteResult {
+func (b *DLVBackend) Complete(sess ptyx.Session, state *platform.AppState, text string) gdb.CompleteResult {
 	return dlv.Complete(sess, state, text)
 }
 
-func (b *DLVBackend) EnrichLinespecMenu(text string, menu []string, sess core.Session, state *platform.AppState) []string {
+func (b *DLVBackend) EnrichLinespecMenu(text string, menu []string, sess ptyx.Session, state *platform.AppState) []string {
 	_ = text
 	_ = sess
 	_ = state

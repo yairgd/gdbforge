@@ -5,13 +5,13 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/commands"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/commands"
+	"github.com/yairgd/termforge/platform"
 )
 
 func TestKeyBindingsFallthroughUp(t *testing.T) {
 	a := &DebuggerApp{}
-	a.TermApp = nil // unused
+	a.App = nil // unused
 	a.keyBindings = commands.NewKeyBindingRegistry()
 	a.keyBindings.Bind(
 		commands.NewHandledCommand("code-up", func() bool { return false }),

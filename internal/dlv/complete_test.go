@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/core"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // fakeSession records any PTY write. Completion must stay off the CLI PTY: it
@@ -19,12 +19,12 @@ func (f *fakeSession) Send(cmd string) error    { f.written = append(f.written, 
 func (f *fakeSession) SendRaw(raw string) error { f.written = append(f.written, raw); return nil }
 func (f *fakeSession) Close()                   {}
 
-func (f *fakeSession) Subscribe() (<-chan core.PtyOutputMsg, func()) {
-	ch := make(chan core.PtyOutputMsg)
+func (f *fakeSession) Subscribe() (<-chan ptyx.PtyOutputMsg, func()) {
+	ch := make(chan ptyx.PtyOutputMsg)
 	return ch, func() {}
 }
 
-func (f *fakeSession) WithWrite(_ context.Context, fn func(w core.PTYWriter) error) error {
+func (f *fakeSession) WithWrite(_ context.Context, fn func(w ptyx.PTYWriter) error) error {
 	return fn(f)
 }
 

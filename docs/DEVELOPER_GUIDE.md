@@ -35,12 +35,12 @@ description: Set up a gdbforge development environment, understand the codebase,
 | Order | File | Why |
 |-------|------|-----|
 | 1 | `cmd/gdbforge/main.go` → `app.go` → `setup.go` | Entry + app wiring |
-| 2 | `internal/termui/term_app.go` | Event loop, grids, draw flush |
-| 3 | `internal/termui/widget.go` | Widget contract |
-| 4 | `internal/termui/widget_tree.go`, `layout_tree.go` | Split layout |
-| 5 | `internal/termui/canvas.go` | Drawing abstraction |
-| 6 | `internal/termui/grid.go`, `cell.go` | Border composition |
-| 7 | `internal/termui/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
+| 2 | `termforge/term_app.go` | Event loop, grids, draw flush |
+| 3 | `termforge/widget.go` | Widget contract |
+| 4 | `termforge/widget_tree.go`, `layout_tree.go` | Split layout |
+| 5 | `termforge/canvas.go` | Drawing abstraction |
+| 6 | `termforge/grid.go`, `cell.go` | Border composition |
+| 7 | `termforge/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
 | 8 | `internal/gdbforge/widgets/gdb_widget.go` | GDB console view (paint + callbacks) |
 | 9 | `cmd/gdbforge/gdb_console.go` | GDB controller (owns Session / MI) |
 | 10 | `internal/gdb/gdb_client.go` | PTY backend |
@@ -48,7 +48,7 @@ description: Set up a gdbforge development environment, understand the codebase,
 
 ### Half-day path (implement a feature)
 
-Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_msg.go`, `internal/core/buffer.go`, `internal/core/events.go`, and skim `docs/diagrams/*.mermaid`.
+Add: `termforge/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_msg.go`, `termforge/platform/buffer.go`, `termforge/ptyx/events.go`, and skim `docs/diagrams/*.mermaid`.
 
 ### Mental model
 
@@ -56,12 +56,12 @@ Add: `internal/termui/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `in
 Application startup
   ├── DebugSession.init     backend, gdbWidget, debug *Ctl models
   ├── LayoutShell           TabWidget, pane marks, focus policy
-  ├── TermApp               PollEvent / PostInterrupt / draw
+  ├── App               PollEvent / PostInterrupt / draw
   ├── EventBus              *Ctl Register handlers (UI thread)
   └── Cross-cutting         lua, search, serial, exec, cmdline
 
 DebuggerApp (composition root)
-  ├── embeds TermApp + LayoutShell + DebugSession
+  ├── embeds App + LayoutShell + DebugSession
   ├── initControllers()     each *Ctl.host = a
   ├── HandleInterrupt       thin: string exits + Bus.Dispatch
   ├── HandleKey             modes, trie, widget dispatch
@@ -110,7 +110,7 @@ Async path:
 | **ConsoleUpdate** | `debugger.ConsoleUpdate` — unified console/stop delta from `PushConsoleOutput` |
 | **StopInfo** | `debugger.StopInfo` — normalized stop event for the stop pipeline |
 | **Service** | External-system adapter (`ptyx` / `GDBClient` / `dlv.Client` / `GdbMcpService`); never imports UI |
-| **Session** | `core.Session` — Send, Close, Subscribe, WithWrite; via `app.GDB()`; MCP/AI external API |
+| **Session** | `ptyx.Session` — Send, Close, Subscribe, WithWrite; via `app.GDB()`; MCP/AI external API |
 | **PTY mux** | Exclusive write lock + fan-out reads on one `ptmx` |
 | **Window manager** | Split tree, tabs, `:buffer` binding — creates/destroys widgets, binds to models |
 | **Canvas** | Local drawing context for a `Rect` |
@@ -120,7 +120,7 @@ Async path:
 | **Workspace / LayoutShell** | Middle chrome band; `LayoutShell` = pane-policy layer (`workspace*.go`) |
 | **CmdLine** | Top-level `:` command input band |
 | **Event bus** | `PostInterrupt` → `HandleInterrupt` → `platform.EventBus` → `*Ctl` |
-| **CommandID** | Int token; `termui.CmdUnknown` in infra; app IDs private |
+| **CommandID** | Int token; `termforge.CmdUnknown` in infra; app IDs private |
 | **AppState** | `platform.AppState` — Mode, PTYOwner (ui/mcp/app), EqualAlways |
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
@@ -175,10 +175,10 @@ go run ./cmd/gdbforge
 ```mermaid
 sequenceDiagram
     participant Main
-    participant App as TermApp
+    participant App as App
     participant Screen as tcell.Screen
 
-    Main->>App: NewTermApp()
+    Main->>App: NewApp()
     App->>Screen: Init, EnableMouse
     Main->>App: InitB · AddWidget · HandleResize()
     loop until exit
@@ -196,7 +196,7 @@ sequenceDiagram
 
 | Phase | Code | Side effects |
 |-------|------|--------------|
-| **Init** | `NewTermApp` | Opens screen, enables mouse |
+| **Init** | `NewApp` | Opens screen, enables mouse |
 | **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size |
 | **Register widgets** | `AddWidget` | Appends to widget slice |
 | **Initial layout** | `HandleResize()` in `NewDebuggerApp` | Tab + completion bar (`H-2`) + cmdline (`H-1`) |
@@ -211,17 +211,17 @@ Widgets are views. Before adding a widget, ensure the corresponding **model** ex
 
 1. Define or use an application model that holds the pane's state.
 
-2. Create `internal/gdbforge/widgets/my_widget.go` (or `internal/termui/` for generic widgets):
+2. Create `internal/gdbforge/widgets/my_widget.go` (or `termforge/` for generic widgets):
 
 ```go
 type MyWidget struct {
-    termui.BaseWidget
+    termforge.BaseWidget
     /* state */
 }
 
 func NewMyWidget() *MyWidget {
     w := &MyWidget{
-        BaseWidget: termui.BaseWidget{PaneName: "MyPane"},
+        BaseWidget: termforge.BaseWidget{PaneName: "MyPane"},
     }
     return w
 }
@@ -243,10 +243,10 @@ layout.NewSplit(Vertical, NewMyWidget(myModel))
 4. Wire the command line with a `CommandRegistry` (completions use the app event bus):
 
 ```go
-a.cmdWidget = termui.NewCmdWidget(a.commandReg)
+a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
 a.cmdWidget.Events = a.Events()
-a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+a.completionBar = termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
@@ -255,8 +255,8 @@ a.completionBar = termui.NewCompletionBarWidget(a.ctx) // Subscribes to Completi
 6. Handle legacy bus events in the application when needed:
 
 ```go
-func (app *MyApp) HandleCoreEvents(ev termui.Event) {
-    msg, ok := ev.(termui.CommandEvent)
+func (app *MyApp) HandleCoreEvents(ev termforge.Event) {
+    msg, ok := ev.(termforge.CommandEvent)
     if !ok { return }
     switch msg.CommandID() { /* ... */ }
 }
@@ -312,7 +312,7 @@ See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md).
 3. **Unicode** — use `DrawANSIText` for strings; `SetContent` for single runes.
 4. **Clipping** — check `col < c.W()` before drawing.
 
-Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [RENDERING.md](RENDERING.md).
+Incremental diff rendering uses `BackCells` in `Grid.Draw`. See [termforge: Rendering](https://yairgd.github.io/termforge/RENDERING/).
 
 ---
 
@@ -398,7 +398,7 @@ dlv debug ./cmd/docserve -- --port 8765
 |------|------------|
 | New application model | App startup in `cmd/gdbforge`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register builtin in `initBuiltins` or open via `:e` / layout |
-| New service / backend | Implement `core.Session` (or wrap `ptyx`), new `internal/<backend>/` |
+| New service / backend | Implement `ptyx.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | `:!` / Exec pane | [EXEC_SHELL.md](EXEC_SHELL.md) |
 | New key chord | `InitKeyBindings()` → `keyBindings.Bind(...)` |
@@ -416,25 +416,25 @@ Always update docs when changing architecture-visible behavior.
 |---------|-------|
 | Event loop + bus | `term_app.go` |
 | App API / dispatch | `term_app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
-| Interaction modes | `internal/platform/mode.go` (via `TermApp` / `AppState`) — includes `ModeSearch` |
-| Key-sequence bindings | `internal/commands` + `cmd/gdbforge/keybindings.go` |
+| Interaction modes | `termforge/platform/mode.go` (via `App` / `AppState`) — includes `ModeSearch` |
+| Key-sequence bindings | `termforge/commands` + `cmd/gdbforge/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
 | Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `tab.go` |
 | Drawing | `canvas.go`, `grid.go`, `cell.go`, `rect.go`, `utf.go` |
 | Tabs | `tab.go` |
-| Command tree / parser / DSL | `internal/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| Command tree / parser / DSL | `termforge/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command / search line | `cmd_widget.go` (`CmdKindCommand` / `CmdKindSearch`), `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `cmd/gdbforge/search.go` — [INPUT.md](INPUT.md) |
 | TableWidget lists | `table_widget.go`, `table_search.go`; BP/threads/callstack embed; `/search` via `SearchHost` |
 | Table paint stack | `rect_viewport.go`, `cell_buffer.go`, `table.go`, `table_paint.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
-| Debugger panes | `internal/termui/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |
+| Debugger panes | `termforge/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |
 | Shared models | `internal/gdbforge/models/`; sync in `breakpoints.go`, `debug_info.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
-| UI events / commands | `termui/event.go`, `termui/command.go` |
+| UI events / commands | `termforge/event.go`, `termforge/command.go` |
 | Debugger events | `core/events.go` |
 | Entry point | `cmd/gdbforge/` (`main.go` + companions) |
 | Docs server | `cmd/docserve/main.go` |
@@ -445,7 +445,7 @@ Always update docs when changing architecture-visible behavior.
 
 - [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) — command tree, DSL, parser, tab completion
 - [EXEC_SHELL.md](EXEC_SHELL.md) — `:!` exec panes, rest-args, Ctrl-O
-- [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) — deep UI dive
+- [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) — deep UI dive
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) — GDB MI2 details
 - [ROADMAP.md](ROADMAP.md) — what's planned
 - [CONTRIBUTING.md](https://github.com/yairgd/gdbforge/blob/main/CONTRIBUTING.md) — commit conventions

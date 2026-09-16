@@ -42,7 +42,7 @@ so: number of splits == number of separators on screen
 - **No breaking CLI changes.** Existing `.gdbforge/` breakpoints and cmdline history remain compatible.
 - **Pane proportions behave differently — on purpose.** A separator you drag stays where you put it across resizes. If you relied on a resize quietly re-normalizing a layout, use `:layout <name>` to reset instead.
 - **New internal flag.** `gdbforge --hold-inferior-tty <path-file> <pid-file>` holds the external inferior terminal open; it is an implementation detail, not a user-facing command.
-- **Embedders of `internal/termui`** — `TabWidget.ActiveTree()`, `SetActiveTree()`, and the 28 pane forwarders (`FocusLeft`, `VerticalSplit`, `SetLeafMark`, …) are gone. Use `TabWidget.Layout()` / `SetLayout()` and call the tree operations on the concrete `*SplitLayout`, which embeds `*WidgetTree`. A non-nil tab no longer implies a split tree, so guards must test `Layout()`, not the container. The named layout presets and `internal/demo` now build `*SplitLayout` rather than `*WidgetTree`.
+- **Embedders of `termforge`** — `TabWidget.ActiveTree()`, `SetActiveTree()`, and the 28 pane forwarders (`FocusLeft`, `VerticalSplit`, `SetLeafMark`, …) are gone. Use `TabWidget.Layout()` / `SetLayout()` and call the tree operations on the concrete `*SplitLayout`, which embeds `*WidgetTree`. A non-nil tab no longer implies a split tree, so guards must test `Layout()`, not the container. The named layout presets and `internal/demo` now build `*SplitLayout` rather than `*WidgetTree`.
 - **Lua, STM32, and kernel kgdb** — unchanged from v1.2.0, including patched kdmx (`kdmx -v` → `141210a-gdbforge1`) for the one-UART path. See [Kernel / kgdb](KERNEL_KGDB.md).
 
 ## v1.2.0

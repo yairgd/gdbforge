@@ -4,7 +4,9 @@ description: Documentation for gdbforge, a Vim-inspired multi-pane terminal debu
 
 # gdbforge Documentation
 
-**gdbforge** is a Vim-inspired terminal application framework built in Go on [tcell](https://github.com/gdamore/tcell). The debugger app (`-g gdb|dlv`) is the first application on the framework: source, debugger console, program I/O, threads, call stack, and breakpoints in one keyboard-driven workspace, with Lua workflows for remote and embedded targets. The UI lives in `internal/termui`; the debugger app is driven from `cmd/gdbforge`.
+**gdbforge** is a Vim-inspired multi-pane terminal debugger for GDB and Delve (`-g gdb|dlv`), written in Go: source, debugger console, program I/O, threads, call stack, and breakpoints in one keyboard-driven workspace, with Lua workflows for remote and embedded targets.
+
+The terminal UI it runs on is a separate project, [**termforge**](https://github.com/yairgd/termforge) — widgets, split-tree windows, tabs, colon commands, and the terminal emulator pane. This repository is the debugger: everything under `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, and `cmd/gdbforge`.
 
 The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` embeds **`LayoutShell`** and **`DebugSession`**, domain lives on host-backed `*Ctl` controllers, widgets are views, and UI events flow **`PostInterrupt` → EventBus → controller handlers**. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
@@ -51,9 +53,9 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 | **[OVERVIEW.md](OVERVIEW.md)** | Users, contributors | Vision, goals, comparison to cgdb / gdb TUI |
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Architects, reviewers | High-level subsystems and data flow |
 | **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)** | Architects, backend contributors | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal, TCP headless |
-| **[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)** | UI contributors | Widgets, canvas, grid, layout, focus |
+| **[termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/)** | UI contributors | Widgets, canvas, grid, layout, focus |
 | **[WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)** | UI contributors | Splits, tabs, workspace, command line |
-| **[RENDERING.md](RENDERING.md)** | Rendering contributors | Cells, borders, Unicode, diff rendering |
+| **[termforge: Rendering](https://yairgd.github.io/termforge/RENDERING/)** | Rendering contributors | Cells, borders, Unicode, diff rendering |
 | **[INPUT.md](INPUT.md)** | UX contributors | Keyboard, mouse, modes, vim commands |
 | **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)** | UX / app contributors | Command tree, DSL, parser, tab completion |
 | **[EXEC_SHELL.md](EXEC_SHELL.md)** | App / UX contributors | `:!` exec panes, rest-args, live prompt, Ctrl-O |
@@ -162,7 +164,7 @@ gdbforge/
 │   ├── gdbforge/          # gdbforge debugger entry point
 │   └── docserve/      # Documentation HTTP server
 ├── internal/
-│   ├── termui/        # gdbforge terminal UI (primary)
+│   ├── termforge/        # gdbforge terminal UI (primary)
 │   ├── core/          # UI-agnostic logic (events, buffers)
 │   ├── gdb/           # GDB MI2 client and parsing
 │   ├── gdbforge/          # Layouts + debugger panes

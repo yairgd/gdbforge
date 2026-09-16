@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugger"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // GDBBackend is the MI/GDB implementation of Backend.
@@ -29,7 +28,7 @@ func NewGDB(client *gdb.GDBClient) *GDBBackend {
 }
 
 func (b *GDBBackend) Kind() Kind            { return GDB }
-func (b *GDBBackend) Session() core.Session { return b.client() }
+func (b *GDBBackend) Session() ptyx.Session { return b.client() }
 func (b *GDBBackend) Close() {
 	if c := b.client(); c != nil {
 		c.Close()
@@ -118,11 +117,11 @@ func (b *GDBBackend) RefreshThreadsAndStack(ctx context.Context, q Querier, log 
 	return ThreadsAndStack(ctx, GDB, q, log)
 }
 
-func (b *GDBBackend) Complete(sess core.Session, state *platform.AppState, text string) gdb.CompleteResult {
+func (b *GDBBackend) Complete(sess ptyx.Session, state *platform.AppState, text string) gdb.CompleteResult {
 	return gdb.Complete(sess, state, text)
 }
 
-func (b *GDBBackend) EnrichLinespecMenu(text string, menu []string, sess core.Session, state *platform.AppState) []string {
+func (b *GDBBackend) EnrichLinespecMenu(text string, menu []string, sess ptyx.Session, state *platform.AppState) []string {
 	if !gdb.CompletingLinespec(text) {
 		return menu
 	}

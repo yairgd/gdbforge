@@ -6,7 +6,7 @@ description: Learn how gdbforge handles keyboard, mouse, interaction modes, Vim-
 
 gdbforge handles keyboard and mouse input through **tcell**, routes events based on **interaction mode**, and will support a **Vim-like command system** via the global CmdLine.
 
-**Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
+**Companion docs:** [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
@@ -28,9 +28,9 @@ gdbforge handles keyboard and mouse input through **tcell**, routes events based
 ```text
 Keyboard / Mouse / async workers
         ↓
-TermApp.Run (UI thread · pollEventBatch)
+App.Run (UI thread · pollEventBatch)
         ├── PollEvent → tcell.Event
-        │     ├── EventKey / EventMouse / EventResize → TermApp.HandleEvent
+        │     ├── EventKey / EventMouse / EventResize → App.HandleEvent
         │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
         │     │       └── EventKey → AppApi.HandleKey → mode router / Trie / widgets
         │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
@@ -41,7 +41,7 @@ TermApp.Run (UI thread · pollEventBatch)
 sequenceDiagram
     participant Input as Keyboard / Mouse
     participant Worker as Worker goroutine
-    participant App as TermApp
+    participant App as App
     participant Screen as tcell.Screen
     participant Dbg as DebuggerApp
     participant Widget as Widget
@@ -64,10 +64,10 @@ sequenceDiagram
 
 **Design principles:**
 
-1. One thread owns input and rendering (`TermApp.Run` polls tcell directly — no background `PollEvent` goroutine).
+1. One thread owns input and rendering (`App.Run` polls tcell directly — no background `PollEvent` goroutine).
 2. Async sources post **`PostInterrupt`** → `screen.PostEvent(EventInterrupt)` — never call widget methods from reader goroutines.
 3. Typed reactions live on **`*Ctl` handlers** registered on **`EventBus`**, not in a giant app `switch`.
-4. **Mode-aware routing** lives in `DebuggerApp`, not `TermApp`.
+4. **Mode-aware routing** lives in `DebuggerApp`, not `App`.
 
 ---
 
@@ -84,12 +84,12 @@ sequenceDiagram
 
 ### Dispatch (current)
 
-1. `TermApp.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
+1. `App.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
 3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
      - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
-     - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`TermApp.Suspend`).
+     - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`App.Suspend`).
      - **Confirm** — [`confirm_router.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
      Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
@@ -101,10 +101,10 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-    Select["TermApp.Run · UI thread"]
+    Select["App.Run · UI thread"]
     Poll["pollEventBatch · PollEvent"]
     Batch["handleUIEventBatch"]
-    TermHandler["TermApp.HandleEvent"]
+    TermHandler["App.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
     HandleResize["AppApi.HandleResize"]
     HandleInt["HandleInterrupt → EventBus"]
@@ -132,12 +132,12 @@ flowchart TB
 
 ### Widget-level handling
 
-GDB / Delve console keys are handled by shared termui pieces, then backend-specific callbacks:
+GDB / Delve console keys are handled by shared termforge pieces, then backend-specific callbacks:
 
 | Layer | File | Owns |
 |-------|------|------|
-| `InputLine` | `termui/input_line.go` | Editing + history chords |
-| `ConsolePane` | `termui/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
+| `InputLine` | `termforge/input_line.go` | Editing + history chords |
+| `ConsolePane` | `termforge/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
 | `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit |
 | `cmd/gdbforge/input.go` | Tab → `gdbTabComplete` | GDB: MI `-complete`; Delve: `dlv.Complete` (commands + `funcs`) |
 | `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
@@ -191,7 +191,7 @@ Command mode entry and exit:
 | `Esc` | `CmdWidget` → `SubmitMsg{CmdID: CmdExitMode}` | `HandleCoreEvents` resets mode, deactivates widget |
 | `Enter` | `HandleKey` after submit | `SetMode(ModeNormal)`, `CmdWidget.Deativate()` |
 
-On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termui.CmdUnknown`), and publishes to `TermApp.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
+On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termforge.CmdUnknown`), and publishes to `App.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
 
 ---
 
@@ -220,15 +220,15 @@ In **normal mode** (`cmd/gdbforge/input.go`), key→action maps live on a **mode
 | `<C-w>k`, `<C-w><Up>` | Focus up pane |
 | `<C-w>j`, `<C-w><Down>` | Focus down pane |
 
-Implementation: `internal/collections/trie.go` via `KeyBindingRegistry`.
+Implementation: `termforge/collections/trie.go` via `KeyBindingRegistry`.
 
-**Design decision:** bindings live on the application object, not in `TermApp`, so key chords remain app-specific while shared packages provide the prefix-tree machinery.
+**Design decision:** bindings live on the application object, not in `App`, so key chords remain app-specific while shared packages provide the prefix-tree machinery.
 
 ---
 
 ## Mouse handling
 
-`tcell` mouse support is enabled in `NewTermApp` (`EnableMouse` with motion events).
+`tcell` mouse support is enabled in `NewApp` (`EnableMouse` with motion events).
 
 **Implemented today:**
 
@@ -238,7 +238,7 @@ Implementation: `internal/collections/trie.go` via `KeyBindingRegistry`.
 | Click cmdline | Enter command mode; set caret from column |
 | Scroll wheel | Scroll focused viewport (source / console / lists) |
 | Drag in viewport | Text selection; copy to CLIPBOARD and X11 PRIMARY (`platform/clipboard.go`) |
-| Double-click (content) | Select word (`termui/viewport_word.go`) and copy |
+| Double-click (content) | Select word (`termforge/viewport_word.go`) and copy |
 | Triple-click (content) | Select line and copy |
 | Status band | Double-click name text → copy full label. Single-click / drag anywhere on the row → split resize as before (`status_sel.go`) |
 | Middle-click | Paste PRIMARY (preferred) or CLIPBOARD — **rising edge only** (debounce ~120ms) |
@@ -277,10 +277,10 @@ stateDiagram-v2
 | **Completion** | Wildmenu + source line edit | Tab completion (`ModeCompletion`) | **Implemented** |
 | **Lua** | Active `LuaWidget` | `:lua snake` then `:b snake` (cell demos); `gdbforge.print` → `:b io` | **Implemented** |
 
-Mode state lives in **`platform.AppState`** on `TermApp` (`State()`):
+Mode state lives in **`platform.AppState`** on `App` (`State()`):
 
 ```go
-// internal/platform/mode.go
+// termforge/platform/mode.go
 type Mode int
 const (
     ModeNormal Mode = iota
@@ -340,7 +340,7 @@ Flow:
 
 ### Legacy note
 
-Older docs described a flat `termui.AutoCompleter` + `CommandID` + `SubmitMsg` path for every colon command. Tree leaves now execute via `CommandParser` directly. `SubmitMsg` / `HandleCoreEvents` remain for infra events (`CmdExitMode`, layout commands not yet in the tree).
+Older docs described a flat `termforge.AutoCompleter` + `CommandID` + `SubmitMsg` path for every colon command. Tree leaves now execute via `CommandParser` directly. `SubmitMsg` / `HandleCoreEvents` remain for infra events (`CmdExitMode`, layout commands not yet in the tree).
 
 ### Command categories
 

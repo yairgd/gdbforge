@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/platform"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 // CommandEnv is the session context for backend-initiated debugger commands.
 type CommandEnv struct {
-	Session  core.Session
+	Session  ptyx.Session
 	App      *platform.AppState
 	Inferior gdb.InferiorCtl
 }
@@ -61,7 +61,7 @@ func sendExecUI(env CommandEnv, sendCmd string) {
 	fn := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		_ = env.Session.WithWrite(ctx, func(pw core.PTYWriter) error {
+		_ = env.Session.WithWrite(ctx, func(pw ptyx.PTYWriter) error {
 			return pw.Send(sendCmd)
 		})
 	}

@@ -17,8 +17,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 type asmRefreshMsg struct {
@@ -39,10 +39,10 @@ type asmHost interface {
 	RequestFrame()
 	RequestRedraw()
 	FocusCode()
-	findCodeLeaf() *termui.Node
-	focusedLeaf() *termui.Node
-	focusedWidget() termui.Widget
-	isGdbLeaf(leaf *termui.Node) bool
+	findCodeLeaf() *termforge.Node
+	focusedLeaf() *termforge.Node
+	focusedWidget() termforge.Widget
+	isGdbLeaf(leaf *termforge.Node) bool
 	rememberCodeLeafFromFocus()
 	CodeBufferForB() *widgets.CodeWidget
 	PrimaryCode() *widgets.CodeWidget
@@ -411,7 +411,7 @@ func (c *asmCtl) hasSplit() bool {
 }
 
 // findLeaf returns the dedicated asm split leaf, if any.
-func (c *asmCtl) findLeaf() *termui.Node {
+func (c *asmCtl) findLeaf() *termforge.Node {
 	h := c.host
 	if h == nil || h.Shell().Layout() == nil {
 		return nil
@@ -519,12 +519,12 @@ func (c *asmCtl) splitAsm(horizontal bool) {
 	}
 	lay := h.Shell().Layout()
 	if horizontal {
-		lay.Split(termui.Horizontal, c.widget)
+		lay.Split(termforge.Horizontal, c.widget)
 	} else {
-		lay.Split(termui.Vertical, c.widget)
+		lay.Split(termforge.Vertical, c.widget)
 	}
 	codeLeaf := h.focusedLeaf()
-	asmLeaf := lay.FindLeaf(func(w termui.Widget) bool { return w == c.widget })
+	asmLeaf := lay.FindLeaf(func(w termforge.Widget) bool { return w == c.widget })
 	if codeLeaf != nil {
 		lay.SetLeafMark(leafMarkCode, codeLeaf)
 	}
@@ -535,7 +535,7 @@ func (c *asmCtl) splitAsm(horizontal bool) {
 	h.RequestRedraw()
 }
 
-func isAssemblyWidget(w termui.Widget) bool {
+func isAssemblyWidget(w termforge.Widget) bool {
 	_, ok := w.(*widgets.AssemblyWidget)
 	return ok
 }

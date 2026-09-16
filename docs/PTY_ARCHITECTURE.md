@@ -61,7 +61,7 @@ flowchart TB
     InfCtl["inferior_tty.go"]
   end
 
-  subgraph Ptyx["internal/ptyx · *TTY"]
+  subgraph Ptyx["termforge/ptyx · *TTY"]
     CLI["CLI · GDB/dlv console"]
     MI["MI · GDB backend only"]
     T["TTY · inferior MASTER"]
@@ -101,7 +101,7 @@ flowchart TB
 | Piece | Package / file | Holds |
 |-------|----------------|-------|
 | GDB CLI PTY | `*ptyx.TTY` (`Start`) | Master #1 — user console in `:b gdb` |
-| GDB MI PTY | `*ptyx.TTY` (`Open`) | Master #2 — `core.Session`, MI parser |
+| GDB MI PTY | `*ptyx.TTY` (`Open`) | Master #2 — `ptyx.Session`, MI parser |
 | Delve CLI PTY | `*ptyx.TTY` (`Start`) | Master — dlv console + parser |
 | Inferior PTY (internal) | `*ptyx.TTY` (`Open`) | Master for program stdio |
 | GDB attach | `-inferior-tty-set` via MI PTY | Tells GDB which **slave** the program should use |
@@ -440,8 +440,8 @@ Bare `:set inferior-tty` opens `GDBFORGE_TERMINAL` and points GDB at that pts (`
 
 | Concern | Path |
 |---------|------|
-| Unified PTY transport | `internal/ptyx/tty.go` |
-| Terminal bridge | `internal/termui/composite_terminal.go`, `wire_tty.go` |
+| Unified PTY transport | `termforge/ptyx/tty.go` |
+| Terminal bridge | `termforge/composite_terminal.go`, `wire_tty.go` |
 | GDB 3-PTY bootstrap | `internal/gdb/gdb_client.go` |
 | Delve `--tty` / connect | `internal/dlv/client.go` |
 | IO / GDB / exec widgets | `internal/gdbforge/widgets/{output,gdb,exec}_widget.go` |

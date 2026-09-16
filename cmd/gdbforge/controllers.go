@@ -3,7 +3,6 @@ package main
 import (
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/core"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
@@ -11,9 +10,9 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 
 	tcell "github.com/gdamore/tcell/v2"
 )
@@ -22,7 +21,7 @@ import (
 // DebuggerApp implements it; breakCtl must not depend on *DebuggerApp.
 type breakHost interface {
 	Backend() backend.Backend
-	Session() core.Session
+	Session() ptyx.Session
 	State() *platform.AppState
 	Debug() *debugstate.State
 	BPWidget() *widgets.BreakpointWidget
@@ -47,15 +46,15 @@ type breakCtl struct {
 	list        *models.BreakpointList
 	snapshot    []models.BreakInfo
 	snapshotSet bool
-	coalesce    coalesceRunner
+	coalesce    termforge.CoalesceRunner
 }
 
 // searchHost is the narrow surface searchCtl needs from the composition root.
 type searchHost interface {
 	State() *platform.AppState
 	RequestFrame()
-	CmdWidget() *termui.CmdWidget
-	FocusedWidget() termui.Widget
+	CmdWidget() *termforge.CmdWidget
+	FocusedWidget() termforge.Widget
 	ActiveCodeWidget() *widgets.CodeWidget
 }
 
@@ -63,7 +62,7 @@ type searchHost interface {
 // Mode entry/exit and search-vs-GDB-next stay on *DebuggerApp (orchestration).
 type searchCtl struct {
 	host   searchHost
-	target termui.SearchHost
+	target termforge.SearchHost
 }
 
 // luaCtl is declared in lua.go (owns scripting state and domain methods).
@@ -141,7 +140,7 @@ func (a *DebuggerApp) onExecDismissed(_ events.ExecDismissedMsg) {
 // widgets, and bus publishing).
 
 func (a *DebuggerApp) Backend() backend.Backend { return a.backend }
-func (a *DebuggerApp) Session() core.Session    { return a.GDB() }
+func (a *DebuggerApp) Session() ptyx.Session    { return a.GDB() }
 
 // LayoutShell returns the embedded workspace policy layer above TabWidget.
 func (a *DebuggerApp) Shell() *LayoutShell {
@@ -170,18 +169,18 @@ func (a *DebuggerApp) LuaGdbforgeComplete(text string) (string, []string) {
 	return a.lua.replGdbforgeComplete(text)
 }
 func (a *DebuggerApp) GdbMcp() *mcp.GdbMcpService          { return a.gdbMcp }
-func (a *DebuggerApp) CmdWidget() *termui.CmdWidget        { return a.cmdWidget }
+func (a *DebuggerApp) CmdWidget() *termforge.CmdWidget     { return a.cmdWidget }
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }
 func (a *DebuggerApp) OutputWidget() *widgets.OutputWidget { return a.outputWidget }
 func (a *DebuggerApp) ExecWidget() *widgets.ExecWidget     { return a.execWidget }
-func (a *DebuggerApp) FocusedWidget() termui.Widget        { return a.focusedWidget() }
+func (a *DebuggerApp) FocusedWidget() termforge.Widget     { return a.focusedWidget() }
 func (a *DebuggerApp) ActiveCodeWidget() *widgets.CodeWidget {
 	return a.activeCodeWidget()
 }
 func (a *DebuggerApp) FileListWidget() *widgets.FileListWidget {
 	return a.fileListWidget
 }
-func (a *DebuggerApp) Builtins() map[string]termui.Widget { return a.builtins }
+func (a *DebuggerApp) Builtins() map[string]termforge.Widget { return a.builtins }
 
 // LogError writes a controller-side error to the named log area (nil-safe).
 func (a *DebuggerApp) LogError(area, msg string) {
@@ -216,7 +215,7 @@ func (a *DebuggerApp) PublishBreakpointsChanged() {
 	a.ctx.Bus.Dispatch(BreakpointsChangedMsg{})
 }
 
-func (a *DebuggerApp) PublishCompletion(msg termui.CompletionMsg) {
+func (a *DebuggerApp) PublishCompletion(msg termforge.CompletionMsg) {
 	if a == nil || a.ctx.Bus == nil {
 		return
 	}
@@ -306,7 +305,7 @@ func (a *DebuggerApp) ConsoleSuspend() { a.console.onGdbConsoleSuspend() }
 
 func (a *DebuggerApp) sendInferior(tty *ptyx.TTY, send func()) { a.inferiorIO.send(tty, send) }
 
-func (a *DebuggerApp) LuaEnterBuffer(w termui.Widget) { a.lua.maybeEnterBuffer(w) }
+func (a *DebuggerApp) LuaEnterBuffer(w termforge.Widget) { a.lua.maybeEnterBuffer(w) }
 func (a *DebuggerApp) LuaEnsureBuffer(name string, from *luahost.Runtime) bool {
 	return a.lua.ensureBuffer(name, from)
 }

@@ -7,8 +7,8 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/platform"
 )
 
 func TestThreadWidgetSetItems(t *testing.T) {
@@ -322,8 +322,8 @@ func TestCallStackDragDoesNotActivateUntilRelease(t *testing.T) {
 		{Level: 0, Func: "main"},
 		{Level: 1, Func: "start"},
 	})
-	g := termui.NewGrid(40, 10)
-	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 10)))
+	g := termforge.NewGrid(40, 10)
+	w.Draw(termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 40, 10)))
 
 	// Press + drag motion samples must not activate.
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.ButtonPrimary, 0))
@@ -353,8 +353,8 @@ func TestCallStackEmptyClickDoesNotJumpToLast(t *testing.T) {
 	}
 	w.SetItems(frames)
 	w.moveTo(2)
-	g := termui.NewGrid(40, 20)
-	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 40, 20)))
+	g := termforge.NewGrid(40, 20)
+	w.Draw(termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 40, 20)))
 
 	// Click blank area below the last frame (row 15) — must not select #8.
 	w.HandleEvent(tcell.NewEventMouse(2, 15, tcell.ButtonPrimary, 0))
@@ -375,8 +375,8 @@ func TestThreadWidgetHorizontalScrollKeys(t *testing.T) {
 		{ID: "2", State: "running", File: "b.c", Line: 2},
 	})
 	// Establish pane width so ViewScrollColRight can advance Left.
-	g := termui.NewGrid(8, 4)
-	w.Draw(termui.NewCanvas(g).WithRect(termui.NewRect(0, 0, 8, 4)))
+	g := termforge.NewGrid(8, 4)
+	w.Draw(termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 8, 4)))
 
 	sel := w.Selected()
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)) {

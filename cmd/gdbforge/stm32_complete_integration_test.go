@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yairgd/gdbforge/internal/commands"
 	"github.com/yairgd/gdbforge/internal/luahost"
+	"github.com/yairgd/termforge/commands"
 )
 
 func TestSTM32StlinkScriptCompletion(t *testing.T) {

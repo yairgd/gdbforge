@@ -3,31 +3,31 @@ package widgets
 import (
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/ptyx"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const outputScrollback = 8000
 
 // OutputWidget is the IO console: inferior PTY via xterm plus [lua] host lines.
 type OutputWidget struct {
-	termui.BaseWidget
-	term *termui.CompositeTerminal
-	clip termui.TerminalClipboard
+	termforge.BaseWidget
+	term *termforge.CompositeTerminal
+	clip termforge.TerminalClipboard
 }
 
 func NewOutputWidget() *OutputWidget {
 	return &OutputWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "IO"},
-		term:       termui.NewCompositeTerminal(80, 24, outputScrollback),
+		BaseWidget: termforge.BaseWidget{PaneName: "IO"},
+		term:       termforge.NewCompositeTerminal(80, 24, outputScrollback),
 	}
 }
 
 func (w *OutputWidget) WireInferior(tty *ptyx.TTY, onFrame func()) {
-	w.WireInferiorOpts(tty, termui.WireTTYOpts{PostFrame: onFrame})
+	w.WireInferiorOpts(tty, termforge.WireTTYOpts{PostFrame: onFrame})
 }
 
-func (w *OutputWidget) WireInferiorOpts(tty *ptyx.TTY, opts termui.WireTTYOpts) {
+func (w *OutputWidget) WireInferiorOpts(tty *ptyx.TTY, opts termforge.WireTTYOpts) {
 	if w == nil || w.term == nil {
 		return
 	}
@@ -53,11 +53,11 @@ func (w *OutputWidget) Clear() {
 		return
 	}
 	w.term.Close()
-	w.term = termui.NewCompositeTerminal(80, 24, outputScrollback)
+	w.term = termforge.NewCompositeTerminal(80, 24, outputScrollback)
 	w.clip.Apply(w.term)
 }
 
-func (w *OutputWidget) SetClipboard(io termui.ClipboardIO) {
+func (w *OutputWidget) SetClipboard(io termforge.ClipboardIO) {
 	if w == nil {
 		return
 	}
@@ -73,14 +73,14 @@ func (w *OutputWidget) SetMouseOrigin(screenX, screenY int) {
 	}
 }
 
-func (w *OutputWidget) Draw(c termui.Canvas) {
+func (w *OutputWidget) Draw(c termforge.Canvas) {
 	if w == nil {
 		return
 	}
 	w.term.Paint(c, w.Focused())
 }
 
-func (w *OutputWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (w *OutputWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	w.BaseWidget.DrawStatusLine(c, active)
 }
 

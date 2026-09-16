@@ -6,7 +6,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 const (
@@ -14,13 +14,26 @@ const (
 	luaScrollback = 8000
 )
 
+// luaConsolePrompts strips the REPL prompt off the input line. Console is
+// empty: this is a local-echo REPL, not a readline-backed CLI, so Home/End
+// stay bound to scrollback navigation.
+var luaConsolePrompts = termforge.PromptPrefixes{
+	Strip: []string{luaPrompt, "> "},
+}
+
+func newLuaTerminal() *termforge.CompositeTerminal {
+	t := termforge.NewCompositeTerminalWithPrefix(80, 24, luaScrollback, "")
+	t.SetPromptPrefixes(luaConsolePrompts)
+	return t
+}
+
 // LuaConsoleWidget is a line-oriented Lua REPL backed by xterm (no PTY).
 // The app owns the Runtime and eval policy; it paints via AppendOutput and
 // handles Submit / Interrupt intents.
 type LuaConsoleWidget struct {
-	termui.BaseWidget
-	term     *termui.CompositeTerminal
-	clip     termui.TerminalClipboard
+	termforge.BaseWidget
+	term     *termforge.CompositeTerminal
+	clip     termforge.TerminalClipboard
 	handlers *ConsoleHandlers
 
 	history    []string
@@ -32,8 +45,8 @@ type LuaConsoleWidget struct {
 // NewLuaConsoleWidget builds an empty Lua console view.
 func NewLuaConsoleWidget() *LuaConsoleWidget {
 	w := &LuaConsoleWidget{
-		BaseWidget: termui.BaseWidget{PaneName: "Lua"},
-		term:       termui.NewCompositeTerminalWithPrefix(80, 24, luaScrollback, ""),
+		BaseWidget: termforge.BaseWidget{PaneName: "Lua"},
+		term:       newLuaTerminal(),
 	}
 	w.wireLocalEcho()
 	w.EnsureLivePrompt()
@@ -53,7 +66,7 @@ func (m *LuaConsoleWidget) wireLocalEcho() {
 	})
 }
 
-func (m *LuaConsoleWidget) SetClipboard(io termui.ClipboardIO) {
+func (m *LuaConsoleWidget) SetClipboard(io termforge.ClipboardIO) {
 	if m == nil {
 		return
 	}
@@ -81,7 +94,7 @@ func (m *LuaConsoleWidget) AppendOutput(line string) {
 	if m == nil || line == "" {
 		return
 	}
-	out := termui.TerminalNewlines(line)
+	out := termforge.TerminalNewlines(line)
 	if out == "" {
 		return
 	}
@@ -90,7 +103,7 @@ func (m *LuaConsoleWidget) AppendOutput(line string) {
 	}
 	ctl := m.term.Controller()
 	atBottom := m.term.AtBottom()
-	if termui.CurrentLine(ctl) != "" {
+	if termforge.CurrentLine(ctl) != "" {
 		m.term.WriteRaw("\r\n")
 	}
 	m.term.WriteRaw(out)
@@ -111,7 +124,7 @@ func (m *LuaConsoleWidget) Clear() {
 		return
 	}
 	m.term.Close()
-	m.term = termui.NewCompositeTerminalWithPrefix(80, 24, luaScrollback, "")
+	m.term = newLuaTerminal()
 	m.clip.Apply(m.term)
 	m.history = nil
 	m.histIndex = 0
@@ -125,7 +138,7 @@ func (m *LuaConsoleWidget) InputText() string {
 	if m == nil || m.term == nil {
 		return ""
 	}
-	return termui.InputLineText(m.term.Controller())
+	return termforge.InputLineText(m.term.Controller())
 }
 
 func (m *LuaConsoleWidget) LastHistory() string {
@@ -155,7 +168,7 @@ func (m *LuaConsoleWidget) EchoSubmit(cmd string) {
 	}
 	cur := m.InputText()
 	if cur != cmd {
-		termui.RewritePromptInput(m.term.Controller(), luaPrompt, cmd)
+		termforge.RewritePromptInput(m.term.Controller(), luaPrompt, cmd)
 	}
 	m.term.WriteRaw("\r\n")
 	m.promptLive = false
@@ -179,7 +192,7 @@ func (m *LuaConsoleWidget) ApplyCompletionFrom(cur, full string) {
 		}
 		return
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, full)
+	termforge.RewritePromptInput(ctl, luaPrompt, full)
 }
 
 func (m *LuaConsoleWidget) InsertInputRune(r rune) {
@@ -201,13 +214,13 @@ func (m *LuaConsoleWidget) insertAtCursor(r rune) {
 		return
 	}
 	ctl := m.term.Controller()
-	text, cur := termui.PromptInputState(ctl, luaPrompt)
+	text, cur := termforge.PromptInputState(ctl, luaPrompt)
 	if cur >= len(text) {
 		_ = ctl.SendInput([]byte(string(r)))
 		return
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, text[:cur]+string(r)+text[cur:])
-	termui.MovePromptCursor(ctl, luaPrompt, cur+len(string(r)))
+	termforge.RewritePromptInput(ctl, luaPrompt, text[:cur]+string(r)+text[cur:])
+	termforge.MovePromptCursor(ctl, luaPrompt, cur+len(string(r)))
 }
 
 // backspaceAtCursor deletes the rune before the caret.
@@ -216,7 +229,7 @@ func (m *LuaConsoleWidget) backspaceAtCursor() {
 		return
 	}
 	ctl := m.term.Controller()
-	text, cur := termui.PromptInputState(ctl, luaPrompt)
+	text, cur := termforge.PromptInputState(ctl, luaPrompt)
 	if cur <= 0 || cur > len(text) {
 		return
 	}
@@ -224,8 +237,8 @@ func (m *LuaConsoleWidget) backspaceAtCursor() {
 	if size == 0 {
 		return
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, text[:cur-size]+text[cur:])
-	termui.MovePromptCursor(ctl, luaPrompt, cur-size)
+	termforge.RewritePromptInput(ctl, luaPrompt, text[:cur-size]+text[cur:])
+	termforge.MovePromptCursor(ctl, luaPrompt, cur-size)
 }
 
 // deleteAtCursor deletes the rune under the caret (Delete).
@@ -234,7 +247,7 @@ func (m *LuaConsoleWidget) deleteAtCursor() {
 		return
 	}
 	ctl := m.term.Controller()
-	text, cur := termui.PromptInputState(ctl, luaPrompt)
+	text, cur := termforge.PromptInputState(ctl, luaPrompt)
 	if cur < 0 || cur >= len(text) {
 		return
 	}
@@ -242,15 +255,15 @@ func (m *LuaConsoleWidget) deleteAtCursor() {
 	if size == 0 {
 		return
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, text[:cur]+text[cur+size:])
-	termui.MovePromptCursor(ctl, luaPrompt, cur)
+	termforge.RewritePromptInput(ctl, luaPrompt, text[:cur]+text[cur+size:])
+	termforge.MovePromptCursor(ctl, luaPrompt, cur)
 }
 
 func (m *LuaConsoleWidget) ClearInput() {
 	if m == nil || m.term == nil {
 		return
 	}
-	termui.RewritePromptInput(m.term.Controller(), luaPrompt, "")
+	termforge.RewritePromptInput(m.term.Controller(), luaPrompt, "")
 	m.promptLive = true
 }
 
@@ -259,18 +272,18 @@ func (m *LuaConsoleWidget) EnsureLivePrompt() {
 		return
 	}
 	ctl := m.term.Controller()
-	if termui.OnEmptyPromptLine(ctl, luaPrompt) {
+	if termforge.OnEmptyPromptLine(ctl, luaPrompt) {
 		m.promptLive = true
 		return
 	}
 	text := ""
-	if termui.OnPromptLine(ctl, luaPrompt) {
-		text, _ = termui.PromptInputState(ctl, luaPrompt)
+	if termforge.OnPromptLine(ctl, luaPrompt) {
+		text, _ = termforge.PromptInputState(ctl, luaPrompt)
 	}
-	if termui.CurrentLine(ctl) != "" {
+	if termforge.CurrentLine(ctl) != "" {
 		m.term.WriteRaw("\r\n")
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, text)
+	termforge.RewritePromptInput(ctl, luaPrompt, text)
 	m.promptLive = true
 }
 
@@ -294,14 +307,14 @@ func (m *LuaConsoleWidget) SetFocused(focused bool) {
 	m.BaseWidget.SetFocused(focused)
 }
 
-func (m *LuaConsoleWidget) Draw(c termui.Canvas) {
+func (m *LuaConsoleWidget) Draw(c termforge.Canvas) {
 	if m == nil || m.term == nil {
 		return
 	}
 	m.term.Paint(c, m.Focused())
 }
 
-func (m *LuaConsoleWidget) DrawStatusLine(c termui.Canvas, active bool) {
+func (m *LuaConsoleWidget) DrawStatusLine(c termforge.Canvas, active bool) {
 	m.BaseWidget.DrawStatusLine(c, active)
 }
 
@@ -420,7 +433,7 @@ func (m *LuaConsoleWidget) cursorHome() {
 	if m == nil || m.term == nil {
 		return
 	}
-	termui.MovePromptCursor(m.term.Controller(), luaPrompt, 0)
+	termforge.MovePromptCursor(m.term.Controller(), luaPrompt, 0)
 }
 
 func (m *LuaConsoleWidget) cursorEnd() {
@@ -428,8 +441,8 @@ func (m *LuaConsoleWidget) cursorEnd() {
 		return
 	}
 	ctl := m.term.Controller()
-	text, _ := termui.PromptInputState(ctl, luaPrompt)
-	termui.MovePromptCursor(ctl, luaPrompt, len(text))
+	text, _ := termforge.PromptInputState(ctl, luaPrompt)
+	termforge.MovePromptCursor(ctl, luaPrompt, len(text))
 }
 
 func (m *LuaConsoleWidget) killToStart() {
@@ -437,12 +450,12 @@ func (m *LuaConsoleWidget) killToStart() {
 		return
 	}
 	ctl := m.term.Controller()
-	text, cur := termui.PromptInputState(ctl, luaPrompt)
+	text, cur := termforge.PromptInputState(ctl, luaPrompt)
 	if cur <= 0 {
 		return
 	}
-	termui.RewritePromptInput(ctl, luaPrompt, text[cur:])
-	termui.MovePromptCursor(ctl, luaPrompt, 0)
+	termforge.RewritePromptInput(ctl, luaPrompt, text[cur:])
+	termforge.MovePromptCursor(ctl, luaPrompt, 0)
 }
 
 func (m *LuaConsoleWidget) refreshScreen() {
@@ -451,11 +464,11 @@ func (m *LuaConsoleWidget) refreshScreen() {
 	}
 	ctl := m.term.Controller()
 	text := ""
-	if termui.OnPromptLine(ctl, luaPrompt) {
-		text, _ = termui.PromptInputState(ctl, luaPrompt)
+	if termforge.OnPromptLine(ctl, luaPrompt) {
+		text, _ = termforge.PromptInputState(ctl, luaPrompt)
 	}
 	m.term.WriteRaw("\x1b[2J\x1b[H")
-	termui.RewritePromptInput(ctl, luaPrompt, text)
+	termforge.RewritePromptInput(ctl, luaPrompt, text)
 	m.promptLive = true
 }
 
@@ -465,8 +478,8 @@ func (m *LuaConsoleWidget) submitLine() {
 	}
 	ctl := m.term.Controller()
 	raw := ""
-	if !termui.OnEmptyPromptLine(ctl, luaPrompt) {
-		raw = termui.FullInputLineText(ctl, luaPrompt)
+	if !termforge.OnEmptyPromptLine(ctl, luaPrompt) {
+		raw = termforge.FullInputLineText(ctl, luaPrompt)
 	}
 	m.handlers.Submit(raw)
 }
@@ -476,7 +489,7 @@ func (m *LuaConsoleWidget) historyPrev() {
 		return
 	}
 	if m.histIndex == len(m.history) {
-		m.histDraft = termui.FullInputLineText(m.term.Controller(), luaPrompt)
+		m.histDraft = termforge.FullInputLineText(m.term.Controller(), luaPrompt)
 	}
 	if m.histIndex > 0 {
 		m.histIndex--
@@ -500,7 +513,7 @@ func (m *LuaConsoleWidget) rewriteInput(text string) {
 	if m == nil || m.term == nil {
 		return
 	}
-	termui.RewritePromptInput(m.term.Controller(), luaPrompt, text)
+	termforge.RewritePromptInput(m.term.Controller(), luaPrompt, text)
 }
 
 func isLuaEnter(ev *tcell.EventKey) bool {

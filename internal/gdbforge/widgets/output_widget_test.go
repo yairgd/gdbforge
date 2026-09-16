@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tcell "github.com/gdamore/tcell/v2"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
 )
 
 func TestOutputWidgetHostLine(t *testing.T) {
@@ -23,7 +23,7 @@ func TestOutputWidgetClear(t *testing.T) {
 func TestOutputWidgetClearKeepsClipboard(t *testing.T) {
 	w := NewOutputWidget()
 	var copied string
-	w.SetClipboard(termui.ClipboardIO{Copy: func(s string) { copied = s }})
+	w.SetClipboard(termforge.ClipboardIO{Copy: func(s string) { copied = s }})
 	_ = w.term.Controller().WriteString("hello world\r\n")
 
 	w.Clear()

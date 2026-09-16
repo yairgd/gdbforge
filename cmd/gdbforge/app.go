@@ -3,24 +3,24 @@ package main
 import (
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/commands"
-	"github.com/yairgd/gdbforge/internal/core"
-	"github.com/yairgd/gdbforge/internal/execcli"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
-	"github.com/yairgd/gdbforge/internal/platform"
-	"github.com/yairgd/gdbforge/internal/termui"
+	"github.com/yairgd/termforge"
+	"github.com/yairgd/termforge/commands"
+	"github.com/yairgd/termforge/execcli"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
 )
 
 const defaultLogFile = "gdbforge.log"
 
-// DebuggerApp is the composition root: TermApp loop, LayoutShell, DebugSession,
+// DebuggerApp is the composition root: App loop, LayoutShell, DebugSession,
 // and cross-cutting controllers (lua, search, serial, exec). Domain logic lives
 // on embedded DebugSession controllers and LayoutShell policy.
 type DebuggerApp struct {
-	*termui.TermApp
+	*termforge.App
 	LayoutShell
 	DebugSession
 
@@ -29,7 +29,7 @@ type DebuggerApp struct {
 	insertKeys     *commands.KeyBindingRegistry
 	completionKeys *commands.KeyBindingRegistry
 
-	cmdWidget *termui.CmdWidget
+	cmdWidget *termforge.CmdWidget
 	ctx       platform.AppContext
 	cfg       SessionConfig
 	fileLog   *platform.FileSink
@@ -39,13 +39,13 @@ type DebuggerApp struct {
 	search          searchCtl
 	lua             luaCtl
 	serial          serialCtl
-	children        childProcCtl
+	children        termforge.ChildProcCtl
 	extInferiorHold *externalInferiorHold
 
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
 
-	builtins    map[string]termui.Widget
+	builtins    map[string]termforge.Widget
 	aboutWidget *widgets.AboutWidget
 	helpWidget  *widgets.HelpWidget
 	logoWidget  *widgets.LogoWidget
@@ -59,8 +59,8 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 	if err := dbg.initBackend(); err != nil {
 		return nil, err
 	}
-	dbg.TermApp = termui.NewTermApp()
-	dbg.TermApp.Api = dbg
+	dbg.App = termforge.NewApp()
+	dbg.App.Api = dbg
 	dbg.commandReg = commands.NewCommandRegistry()
 	if err := dbg.InitB(); err != nil {
 		dbg.Close()
@@ -71,7 +71,7 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 }
 
 // GDB returns the owned debugger session for external APIs (e.g. MCP).
-func (a *DebuggerApp) GDB() core.Session {
+func (a *DebuggerApp) GDB() ptyx.Session {
 	if a == nil || a.backend == nil {
 		return nil
 	}
@@ -143,8 +143,8 @@ func (a *DebuggerApp) Close() {
 		_ = a.fileLog.Close()
 		a.fileLog = nil
 	}
-	if a.TermApp != nil {
-		a.TermApp.Close()
+	if a.App != nil {
+		a.App.Close()
 	}
 }
 
