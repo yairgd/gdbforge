@@ -821,8 +821,7 @@ func (l *WidgetTree) Draw(c Canvas) {
 		}
 	})
 	l.redrawGrid(l.root, c)
-	c.DrawHorizontalLocal(c.H(), 0, c.W(), false)
-	c.DrawVerticalLocal(c.W()-1, 0, c.H(), false)
+	c.DrawHorizontalLocal(c.H(), 0, c.W()+1, false)
 
 	WalkLeaves(l.root, func(n *Node) {
 		if visible(n) {
