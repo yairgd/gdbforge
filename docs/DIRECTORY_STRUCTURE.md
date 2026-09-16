@@ -235,7 +235,7 @@ See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) 
 
 **Rule:** no imports from `termforge`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
 
-Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termforge.App` and implements `HandleCoreEvents`).
+Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termforge.App` and implements `termforge.AppApi`).
 
 ---
 

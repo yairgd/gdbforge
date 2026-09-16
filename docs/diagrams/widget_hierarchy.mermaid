@@ -1,24 +1,33 @@
 flowchart TB
     subgraph Widgets["gdbforge widgets"]
-        N1["CodeWidget · Viewport"]
-        N2["AssemblyWidget · Viewport"]
+        N1["CodeWidget · DocumentView"]
+        N2["AssemblyWidget · DocumentView"]
         N3["BreakpointWidget · TableWidget"]
         N4["ThreadWidget · TableWidget"]
         N4b["CallStackWidget · TableWidget"]
         N9["FileListWidget · TableWidget"]
-        N10["HelpWidget · Viewport"]
+        N10["HelpWidget · ScrollDocument"]
         N5["GDBWidget · CompositeTerminal + WireCLI"]
         N6["OutputWidget · CompositeTerminal + WireInferior"]
         N7["ExecWidget · CompositeTerminal + WireExec"]
-        N8["LuaConsoleWidget · ConsolePane + InputLine"]
+        N8["LuaConsoleWidget · CompositeTerminal · local echo"]
     end
 
-    subgraph TermUI["termui"]
+    subgraph TF["termforge"]
         CT["CompositeTerminal · xterm + WireTTY"]
-        CP["ConsolePane · REPL scrollback + InputLine"]
+        DV["DocumentView · document over platform.Buffer"]
+        SD["ScrollDocument · scrollback + selection"]
+        TW["TableWidget · CellBuffer + RectViewport"]
     end
 
+    N1 --> DV
+    N2 --> DV
+    N10 --> SD
+    N3 --> TW
+    N4 --> TW
+    N4b --> TW
+    N9 --> TW
     N5 --> CT
     N6 --> CT
     N7 --> CT
-    N8 --> CP
+    N8 --> CT

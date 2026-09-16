@@ -32,7 +32,7 @@ App.Run (UI thread · pollEventBatch)
         ├── PollEvent → tcell.Event
         │     ├── EventKey / EventMouse / EventResize → App.HandleEvent
         │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
-        │     │       └── EventKey → AppApi.HandleKey → mode router / Trie / widgets
+        │     │       └── EventKey → App.HandleKey → mode handler / key sequences / widgets
         │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
         └── paint ticker (16ms) when dirty
 ```
@@ -86,7 +86,7 @@ sequenceDiagram
 
 1. `App.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
 2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
-3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
+3. `App.HandleKey` — dispatches to the handler registered for `AppState.Mode()` via `RegisterModeHandler`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
      - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
      - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`App.Suspend`).
@@ -105,7 +105,7 @@ flowchart TB
     Poll["pollEventBatch · PollEvent"]
     Batch["handleUIEventBatch"]
     TermHandler["App.HandleEvent"]
-    HandleKey["AppApi.HandleKey"]
+    HandleKey["App.HandleKey"]
     HandleResize["AppApi.HandleResize"]
     HandleInt["HandleInterrupt → EventBus"]
     Router["DebuggerApp · AppState.Mode()"]
@@ -188,10 +188,10 @@ Command mode entry and exit:
 | `:` | `HandleKey` in normal mode | `SetMode(ModeCommand)`, `CmdWidget.Activate()` |
 | Click cmdline | `HandleMouse` | Same as `:` (enter command mode); sets caret from click column |
 | Click outside cmdline (command mode) | `HandleMouse` | Leave command mode (like Esc), then focus the pane under the pointer |
-| `Esc` | `CmdWidget` → `SubmitMsg{CmdID: CmdExitMode}` | `HandleCoreEvents` resets mode, deactivates widget |
+| `Esc` | `CmdWidget` → `SubmitMsg{CmdID: CmdExitMode}` | `cmdCtl.onSubmit` resets mode, deactivates widget |
 | `Enter` | `HandleKey` after submit | `SetMode(ModeNormal)`, `CmdWidget.Deativate()` |
 
-On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termforge.CmdUnknown`), and publishes to `App.events`. **`HandleCoreEvents`** in the app dispatches by `CommandID`.
+On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `CmdID` (or `termforge.CmdUnknown`), and posts the `SubmitMsg` through `App.PostInterrupt`. `DebuggerApp.HandleInterrupt` dispatches it on **`platform.EventBus`**, where **`cmdCtl.onSubmit`** switches on `CmdID`.
 
 ---
 
@@ -340,20 +340,20 @@ Flow:
 
 ### Legacy note
 
-Older docs described a flat `termforge.AutoCompleter` + `CommandID` + `SubmitMsg` path for every colon command. Tree leaves now execute via `CommandParser` directly. `SubmitMsg` / `HandleCoreEvents` remain for infra events (`CmdExitMode`, layout commands not yet in the tree).
+Older docs described a flat `termforge.AutoCompleter` + `CommandID` + `SubmitMsg` path for every colon command, dispatched by a single `HandleCoreEvents` hub. That hub is gone. Tree leaves now execute via `CommandParser` directly, and `SubmitMsg` survives only for infra events (`CmdExitMode`, goto-line) handled by `cmdCtl` on the bus.
 
 ### Command categories
 
 | Category | Examples | Dispatch |
 |----------|----------|----------|
 | Model / window | `:buffer code`, `:buffer breakpoints`, `:vs`, `:split`, `:close` | Window manager binds widget to existing model — **partial** (`:vs` / `:split` wired) |
-| Tab | `:tabnew`, `:tabclose` | `HandleCoreEvents` → tab widget (planned) |
+| Tab | `:tabnew`, `:tabclose` | Bus handler → tab widget (planned) |
 | Debugger | `:gdb break`, `:gdb info registers` | Colon tree under `gdb`; GDB CLI still typed in the GDB pane |
 | UI | `:quit` / `:q` | confirm if inferior alive (Ctrl-D); `:q!` / `:quit!` force exit |
 
 The `:buffer <name>` command displays an application model, not a file. Each `<name>` must be declared at startup (e.g. `code`, `breakpoints`, `console`). There is no `:attach` command — all models exist from initialization. See [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
 
-**Design decision:** UI commands and GDB CLI commands share familiar ideas (`:gdb break file`) but all routing happens in **`HandleCoreEvents`**. Widgets publish events; the app decides whether to mutate layout, talk to services, or exit.
+**Design decision:** UI commands and GDB CLI commands share familiar ideas (`:gdb break file`), but routing stays out of the widgets. A widget publishes an intent; the command tree or a bus subscriber in `cmd/gdbforge` decides whether to mutate layout, talk to services, or exit.
 
 ---
 

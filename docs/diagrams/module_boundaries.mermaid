@@ -1,29 +1,30 @@
 flowchart TB
-    subgraph UI["UI Layer · internal/termui"]
-        TermApp
+    subgraph TF["Framework · module github.com/yairgd/termforge"]
+        App["App · event loop + draw"]
         Widget
         WidgetTree
         Canvas
         Grid
+        Bus["platform.EventBus"]
     end
 
-    subgraph App["Orchestration · cmd/gdbforge"]
-        DebuggerApp["DebuggerApp"]
-        HandleCore["HandleCoreEvents"]
+    subgraph Shell["Orchestration · cmd/gdbforge"]
+        DebuggerApp["DebuggerApp · composition root"]
+        Ctls["*Ctl · typed bus subscribers"]
     end
 
-    subgraph Core["Business Logic · internal/core"]
-        Events
-        Buffer
-        Viewport
+    subgraph Domain["Debugger domain · internal/gdbforge"]
+        Models["models · breakpoints, threads, stack"]
+        Panes["widgets · Code, Assembly, Breakpoints"]
+        Backend["backend.Backend"]
     end
 
-    subgraph Backends["Debugger Backends · internal/gdb"]
-        GDB_MI["GDB MI2 Client"]
-        Future["OpenOCD / JTAG / Kernel · planned"]
+    subgraph Backends["Debugger backends · internal/gdb · internal/dlv · internal/mcp"]
+        GDB_MI["GDB MI2 client"]
+        DLV["Delve rpc2 client"]
     end
 
-    TermApp --> App
-    App --> Core
-    Core --> Backends
-    UI -.->|"no direct import"| Backends
+    App --> Shell
+    Shell --> Domain
+    Domain --> Backends
+    TF -.->|"separate module · cannot import gdbforge"| Domain

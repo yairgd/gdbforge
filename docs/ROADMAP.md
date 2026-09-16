@@ -38,7 +38,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | Root layout (Tab / CompletionBar / CmdLine) | Done | Flat `AddWidget` chrome; completion overlays status row only when active |
 | `TabWidget` | Stub | Single tab, no header; `NewTabTwoHozSplitWins` does not yet wire second widget |
 | `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
-| Event bus → `HandleCoreEvents` | Partial | `CmdWidget` wired; GDB publish planned |
+| `PostInterrupt` → `EventBus` → `*Ctl` | Working | `CmdWidget`, GDB output, Lua jobs wired |
 | Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
 | Interaction modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
@@ -56,7 +56,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | `dlv.Client` | Working | `-g dlv` backend; inferior PTY IO |
 | `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
 | Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
-| Runtime splits | Partial | `:vs` / `:split` wired in `HandleCoreEvents` |
+| Runtime splits | Partial | `:vs` / `:split` wired through the command tree |
 | Modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
 | Mouse support | Working | Focus, scroll, select, word/line click, list activate on release, PRIMARY paste |
 | Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/**/*.lua` from [`scripts/`](https://github.com/yairgd/gdbforge/tree/main/scripts) — [PLUGINS.md](PLUGINS.md) |
@@ -109,7 +109,7 @@ Dates are indicative — adjust as development progresses.
 | `:buffer` dispatch | Display model by name; bind widget to existing model |
 | `RootWidget` | Structured TabBar + Workspace + CmdLine |
 | Tab header rendering | Visible tab bar with switch keys |
-| CmdLine dispatch | `SubmitMsg` on event bus → `HandleCoreEvents` by `CommandID` |
+| CmdLine dispatch | `CommandParser` for tree leaves; `SubmitMsg` → `cmdCtl` for infra events |
 | Focus indicators | Bold border on focused pane |
 | Focus movement | `Ctrl+W` + arrow keys — **partial (trie wired)** |
 | Mode router | Normal / Command / Search — **done**; Focus mode still planned |

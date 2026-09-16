@@ -3,7 +3,7 @@
 %% the implements relationship. Stadium node = interface, double-barred
 %% node = a set of call sites rather than a type.
 flowchart TD
-    TermApp["TermApp frame loop"]
+    TFApp["termforge.App frame loop"]
     TabW["TabWidget"]
     Tab["Tab<br/>Title + Content Layout"]
     Iface(["Layout interface<br/>Widget + BuildLayout"])
@@ -14,7 +14,7 @@ flowchart TD
     Shell["LayoutShell.Layout()<br/>the one type assertion"]
     AppCode[["many cmd/gdbforge call sites<br/>focus, placement, splits, marks<br/>(not a type)"]]
 
-    TermApp -->|"calls Draw"| TabW
+    TFApp -->|"calls Draw"| TabW
     TabW -->|"active tab"| Tab
     Tab -->|"Content field"| Iface
     Iface -.->|"implemented by"| SL

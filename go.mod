@@ -7,7 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/go-delve/delve v1.27.1
-	github.com/yairgd/termforge v0.0.0
+	github.com/yairgd/termforge v0.1.0
 	github.com/yuin/goldmark v1.8.2
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/sys v0.47.0
@@ -46,4 +46,5 @@ require (
 
 tool golang.org/x/tools/cmd/callgraph
 
-replace github.com/yairgd/termforge => ../termforge
+// Uncomment to build against the local termforge checkout instead of the published module.
+// replace github.com/yairgd/termforge => ../termforge

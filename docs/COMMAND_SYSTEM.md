@@ -414,7 +414,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 1. Add a `Cmd` or nested `Group` in `ExapData()` (`cmd/gdbforge/command_tree.go`).
 2. Implement the handler on `DebuggerApp` in `cmd/gdbforge/actions.go`.
-3. No `CommandID` or `HandleCoreEvents` wiring needed for tree leaves — `Execute()` calls `Action` directly.
+3. No `CommandID` or event-bus wiring needed for tree leaves — `Execute()` calls `Action` directly.
 
 ### Key chord
 

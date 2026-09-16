@@ -6,9 +6,43 @@ description: High-level architecture of gdbforge, covering MVC boundaries, contr
 
 This document describes the high-level architecture of **gdbforge**: subsystems, boundaries, data flow, and the design principles that govern implementation decisions.
 
-**gdbforge is not a clone of Vim.** It is a generic application framework inspired by Vim's interaction model. Vim has a single data model (text buffers); this framework supports **multiple application-specific data models**. The GDB debugger is the first application built on it.
+**gdbforge is not a clone of Vim.** It borrows Vim's interaction model — modes, a `:` command line, split windows — but where Vim has one data model (text buffers), gdbforge carries **several application-specific models**: source, disassembly, breakpoints, threads, call stack.
 
 **Companion docs:** [termforge: UI Architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) · [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) · [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) · [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)
+
+---
+
+## Built on termforge
+
+The generic half of that interaction model is not in this repository. It is
+[**termforge**](https://github.com/yairgd/termforge), a standalone Go module for
+keyboard-driven terminal applications: the `Widget` interface and widget set, the
+binary split-tree window manager, tabs, the `Canvas` → `Grid` → `tcell` rendering
+pipeline, the colon-command tree with tab completion, key-sequence bindings, modes,
+the typed event bus, and the `CompositeTerminal` terminal-emulator pane.
+
+termforge was **extracted from gdbforge** rather than adopted into it. The framework
+grew in-tree while the debugger was being built, then moved out to its own module
+once the boundary was clean enough to enforce. gdbforge is its first and largest
+consumer, which is why the two read like siblings.
+
+| gdbforge supplies | termforge supplies |
+|-------------------|--------------------|
+| `DebuggerApp`, the composition root | `termforge.App` — event loop, screen, draw orchestration |
+| Debugger panes (Code, Assembly, Breakpoints, Threads) | `DocumentView`, `TableWidget`, `CompositeTerminal` to build them from |
+| The `:gdb …` command tree and debugger key bindings | `CommandParser`, `CommandRegistry`, `KeyBindingRegistry` |
+| Named debugger workspaces and pane policy | `SplitLayout` / `WidgetTree` geometry, focus, and marks |
+| GDB MI and Delve rpc2 clients | `ptyx` PTY plumbing the backends read and write through |
+
+Concretely: `DebuggerApp` embeds `*termforge.App` and implements `termforge.AppApi`,
+and every pane implements `termforge.Widget`. The boundary is compiler-enforced —
+termforge does not depend on this module, so it cannot import debugger code. See
+[DEPENDENCIES.md](DEPENDENCIES.md#the-termforge-boundary) for the import rules and the
+[termforge docs site](https://yairgd.github.io/termforge/) for the framework side.
+
+To build a different terminal application on the same machinery, start from termforge
+and its [runnable demo](https://github.com/yairgd/termforge/tree/main/cmd/demo), not
+from this repository.
 
 ---
 
@@ -219,6 +253,7 @@ C++ analogy: an abstract class / pure virtual API. Architecture labels that fit:
 
 ## Table of contents
 
+- [Built on termforge](#built-on-termforge)
 - [MVC (current)](#mvc-current)
 - [What `DebugDomain` means (naming)](#what-debugdomain-means-naming)
 - [Controllers and host interfaces](#controllers-and-host-interfaces)
@@ -307,10 +342,10 @@ flowchart TB
 
 ## Application framework
 
-The central idea is that Vim's interaction model maps cleanly onto a broader class of applications — not only text editors.
+The central idea behind termforge is that Vim's interaction model maps cleanly onto a broader class of applications — not only text editors. gdbforge is one instance of the pattern below.
 
-| Vim | This framework |
-|-----|----------------|
+| Vim | termforge |
+|-----|-----------|
 | Single data model (text buffers) | **Multiple application-specific data models** |
 | Buffers hold file content | Models hold domain state (breakpoints, orders, registers, …) |
 | Windows display buffers | Widgets display models |
@@ -627,14 +662,14 @@ flowchart TB
         WS["Workspace · pane policy"]
         BE["backend.Backend"]
         AppState["AppState · modes"]
-        HandleCore["HandleCoreEvents"]
+        HandleInt["HandleInterrupt → EventBus.Dispatch"]
     end
 
-    subgraph Domain["Domain · termforge/ptyx + termforge events"]
-        Events["termforge.Event bus"]
-        Buffer["Buffer / Viewport"]
+    subgraph Domain["Domain · internal/gdbforge + termforge/ptyx"]
+        Events["platform.EventBus · typed Subscribe"]
+        Models["models · breakpoints, threads, stack"]
         History["History / Autocomplete · termforge"]
-        DebuggerIF["Debugger / Session"]
+        DebuggerIF["ptyx.Session / CommandSink"]
     end
 
     subgraph Infrastructure["Infrastructure · gdb / dlv / ptyx"]
@@ -660,7 +695,7 @@ flowchart TB
 | Subsystem | Package | Responsibility |
 |-----------|---------|----------------|
 | **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, `internal/dlv`, …) | Communicate with external systems; produce events |
-| **Event bus** | `termforge.Event` channel | Distribute events to models and application dispatch |
+| **Event bus** | `platform.EventBus` | Distribute typed messages to controller subscribers |
 | **Models** | `internal/gdbforge/models` on `*Ctl` | Own application state; controllers push `SetItems` / paint |
 | **Workspace** | `cmd/gdbforge/workspace*.go` | Pane marks, placement, focus policy, layout apply above Tab |
 | **Window manager** | `termforge` (`WidgetTree`, `TabWidget`) | Generic layout / focus / splits (no debugger roles) |
@@ -669,7 +704,7 @@ flowchart TB
 | **Split tree** | `termforge.WidgetTree`, `Node` | Recursive pane division inside Workspace |
 | **Widget layer** | `termforge.Widget` + `gdbforge/widgets` | Views; host intents / callbacks; no business logic |
 | **Rendering** | `Canvas`, `Grid`, `Cell` | Local coordinates, border composition, terminal flush |
-| **Domain events** | `termforge.Event` bus | Decouple widgets from app logic; all events → `HandleCoreEvents` |
+| **Domain events** | `platform.EventBus` | Decouple widgets from app logic; typed handlers per `*Ctl` |
 | **Text model (legacy)** | `platform.Buffer`, `Viewport` | Line storage — Code/Asm/Help/FileList; **list panes BP/threads/stack use `TableWidget`** |
 | Generic `TableModel` | — | Not yet — widgets use `SetFill` + typed `SetItems` |
 | **CmdLine helpers** | `termforge.History`, `termforge.AutoCompleter` | Command-line UX (no tcell in API surface) |
@@ -677,7 +712,7 @@ flowchart TB
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
 | **Debugger backend** | `gdbforge/backend`, `ptyx`, `gdb` / `dlv`, `ptyx.Session` | Policy surface + MI/Delve PTY + inferior stdio PTY |
 | **AI / tools** | `mcp.GdbMcpService` | Same-process `:AI` on live Session |
-| **Application shell** | `cmd/gdbforge` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleCoreEvents` |
+| **Application shell** | `cmd/gdbforge` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleInterrupt` |
 
 ---
 
@@ -699,31 +734,31 @@ gdbforge uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
-| **Terminal** | `tcell.Event` | `PollEvent` → `App.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
-| **Domain** | `termforge.Event` | Any producer → `App.events` channel → **`HandleCoreEvents`** |
+| **Terminal** | `tcell.Event` | `PollEvent` → `App.HandleKey` (mode handler table) / `AppApi.HandleResize` |
+| **Domain** | any payload | Producer → `App.PostInterrupt` → `HandleInterrupt` → **`platform.EventBus.Dispatch`** |
 
-Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it **publishes** a `termforge.Event` onto the bus. The main loop drains the channel and forwards every domain event to a single application hook: `AppApi.HandleCoreEvents`.
+Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it hands a payload to **`App.PostInterrupt`**, which wakes the UI thread through `tcell`. `DebuggerApp.HandleInterrupt` then dispatches it on the bus, where each `*Ctl` has registered a handler for the message types it cares about.
 
 ```mermaid
 sequenceDiagram
     participant Input as Keyboard / Mouse
-    participant App as App
+    participant App as termforge.App
     participant Dbg as DebuggerApp
     participant Widget as Widget · Tab / CmdWidget
-    participant Bus as termforge.Event channel
-    participant Core as HandleCoreEvents
+    participant Bus as platform.EventBus
+    participant Ctl as Ctl subscriber
     participant Render as Redraw
 
-    Input ->> App: PollEvent · tcell.Event
-    App ->> App: HandleEvent(ev)
-    App ->> Dbg: HandleKey(ev) · on EventKey
-    Dbg ->> Dbg: mode + trie routing
+    Input ->> App: PollEvent · tcell.EventKey
+    App ->> App: HandleKey(ev) · modeHandlers[Mode()]
+    App ->> Dbg: mode handler · withGlobalKeys
+    Dbg ->> Dbg: gates + key-sequence routing
     Dbg ->> Widget: HandleEvent(ev)
-    Widget ->> Bus: Events <- SubmitMsg / other termforge.Event
-    App ->> Bus: drain channel
-    Bus ->> Core: AppApi.HandleCoreEvents(ev)
-    Core ->> Core: dispatch by CommandID / type
-    App ->> Render: Draw → Grid → Screen
+    Widget ->> App: PostInterrupt(SubmitMsg)
+    App ->> Dbg: PollEvent · tcell.EventInterrupt
+    Dbg ->> Bus: Dispatch(data)
+    Bus ->> Ctl: typed handler from Register(bus)
+    Ctl ->> Render: RequestFrame → Draw → Grid → Screen
 ```
 
 *Sources: [`diagrams/event_flow.mermaid`](diagrams/event_flow.mermaid) · [`diagrams/event_bus.mermaid`](diagrams/event_bus.mermaid)*
@@ -756,45 +791,44 @@ Layering: `CompositeTerminal` + `WireTTY` (GDB/IO/exec panes) ← `*ptyx.TTY`. `
 flowchart TB
     subgraph Input["Input paths"]
         User["User keyboard / mouse"]
-        Async["Async sources · GDB PTY"]
+        Async["Async sources · GDB PTY, Lua jobs"]
     end
 
-    subgraph App["App event loop"]
+    subgraph Loop["App event loop · termforge"]
         Poll["PollEvent · tcell.Event"]
-        Bus["events chan · termforge.Event"]
-        TermHandler["App.HandleEvent"]
-        HandleKey["AppApi.HandleKey"]
+        KeyRoute["App.HandleKey · mode handler table"]
         Widgets["TabWidget / CmdWidget HandleEvent"]
-        CoreHub["HandleCoreEvents"]
+        Interrupt["App.PostInterrupt · EventInterrupt"]
         Draw["Draw pipeline"]
         Screen["Terminal screen"]
     end
 
-    subgraph App["Application layer"]
-        Dispatch["Command / event dispatch"]
-        Debugger["Debugger backend"]
-        Model["Buffer / Viewport / state"]
+    subgraph AppLayer["Application layer · cmd/gdbforge"]
+        HI["DebuggerApp.HandleInterrupt"]
+        Bus["platform.EventBus.Dispatch"]
+        Ctls["*Ctl typed handlers"]
+        Debugger["backend.Backend · GDB / Delve"]
+        Model["models / platform.Buffer state"]
     end
 
     User --> Poll
-    Async --> Poll
-    Poll --> TermHandler
-    TermHandler --> HandleKey --> Widgets
-    Widgets -->|"publish domain events"| Bus
-    Async -.->|"planned: publish"| Bus
-    Bus --> CoreHub --> Dispatch
-    Dispatch --> Debugger
+    Poll --> KeyRoute --> Widgets
+    Widgets -->|"intents via PostInterrupt"| Interrupt
+    Async -->|"PostInterrupt"| Interrupt
+    Interrupt --> Poll
+    Poll --> HI
+    HI --> Bus --> Ctls
+    Ctls --> Debugger
     Debugger --> Model
-    Dispatch --> Model
+    Ctls --> Model
+    Model --> Widgets
     Widgets --> Draw
     Draw --> Screen
 ```
 
 *Source: [`diagrams/data_flow.mermaid`](diagrams/data_flow.mermaid)*
 
-**Design decision:** domain events do **not** fan out to widgets directly. Every `termforge.Event` on the `App` channel is handled in one place — `HandleCoreEvents` on the application object (`DebuggerApp` in `cmd/gdbforge/`). The app decides whether to exit, talk to GDB, change layout, or push state back into widgets on the next draw.
-
-Typed app notifications use **`platform.EventBus`** (`Subscribe` / `Publish`) so producers and consumers wire without constructor injection:
+**Design decision:** domain events do **not** fan out to widgets directly. Async producers never touch a widget; they call `PostInterrupt`, and the payload reaches the UI thread as one `tcell.EventInterrupt`. `DebuggerApp.HandleInterrupt` is the only place that unwraps it, and from there **`platform.EventBus`** (`Subscribe` / `Publish`) routes by message type so producers and consumers wire without constructor injection:
 
 | Message | Publisher | Subscriber |
 |---------|-----------|------------|

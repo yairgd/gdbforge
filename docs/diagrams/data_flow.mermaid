@@ -1,35 +1,36 @@
 flowchart TB
     subgraph Input["Input paths"]
         User["User keyboard / mouse"]
-        Async["Async sources · GDB PTY"]
+        Async["Async sources · GDB PTY, Lua jobs"]
     end
 
-    subgraph TermApp["TermApp event loop"]
+    subgraph Loop["App event loop · termforge"]
         Poll["PollEvent · tcell.Event"]
-        Bus["events chan · termui.Event"]
-        TermHandler["TermApp.HandleEvent"]
-        HandleKey["AppApi.HandleKey"]
+        KeyRoute["App.HandleKey · mode handler table"]
         Widgets["widget HandleEvent"]
-        CoreHub["HandleCoreEvents"]
+        Interrupt["App.PostInterrupt · EventInterrupt"]
         Draw["Draw pipeline"]
         Screen["Terminal screen"]
     end
 
-    subgraph App["Application layer"]
-        Dispatch["Command / event dispatch"]
-        Debugger["Debugger backend"]
-        Model["Buffer / Viewport / state"]
+    subgraph AppLayer["Application layer · cmd/gdbforge + internal/gdbforge"]
+        HI["DebuggerApp.HandleInterrupt"]
+        Bus["platform.EventBus.Dispatch"]
+        Ctls["*Ctl typed handlers"]
+        Backend["backend.Backend · GDB / Delve"]
+        Model["models · Buffer / TableWidget state"]
     end
 
     User --> Poll
-    Async --> Poll
-    Poll --> TermHandler
-    TermHandler --> HandleKey --> Widgets
-    Widgets -->|"publish domain events"| Bus
-    Async -.->|"planned: publish"| Bus
-    Bus --> CoreHub --> Dispatch
-    Dispatch --> Debugger
-    Debugger --> Model
-    Dispatch --> Model
+    Poll --> KeyRoute --> Widgets
+    Widgets -->|"intents via PostInterrupt"| Interrupt
+    Async -->|"PostInterrupt"| Interrupt
+    Interrupt --> Poll
+    Poll --> HI
+    HI --> Bus --> Ctls
+    Ctls --> Backend
+    Backend --> Model
+    Ctls --> Model
+    Model --> Widgets
     Widgets --> Draw
     Draw --> Screen

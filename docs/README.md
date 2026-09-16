@@ -6,7 +6,7 @@ description: Documentation for gdbforge, a Vim-inspired multi-pane terminal debu
 
 **gdbforge** is a Vim-inspired multi-pane terminal debugger for GDB and Delve (`-g gdb|dlv`), written in Go: source, debugger console, program I/O, threads, call stack, and breakpoints in one keyboard-driven workspace, with Lua workflows for remote and embedded targets.
 
-The terminal UI it runs on is a separate project, [**termforge**](https://github.com/yairgd/termforge) — widgets, split-tree windows, tabs, colon commands, and the terminal emulator pane. This repository is the debugger: everything under `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, and `cmd/gdbforge`.
+The terminal UI it runs on is a separate project, [**termforge**](https://github.com/yairgd/termforge) — widgets, split-tree windows, tabs, colon commands, key-sequence bindings, and the terminal emulator pane. termforge was extracted *from* gdbforge once that machinery stood on its own, so gdbforge is both its origin and its largest consumer. This repository is now the debugger only: everything under `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, and `cmd/gdbforge`. See [ARCHITECTURE.md — Built on termforge](ARCHITECTURE.md#built-on-termforge) for the split, or the [termforge docs site](https://yairgd.github.io/termforge/) for the framework itself.
 
 The project targets a **cgdb-like experience** with a cleaner **MVC** architecture: `DebuggerApp` embeds **`LayoutShell`** and **`DebugSession`**, domain lives on host-backed `*Ctl` controllers, widgets are views, and UI events flow **`PostInterrupt` → EventBus → controller handlers**. See [ARCHITECTURE.md — MVC](ARCHITECTURE.md#mvc-current).
 
@@ -90,7 +90,7 @@ go run ./cmd/gdbforge -- ./hello
 # then in gdbforge:  :AI what breakpoints are set?
 ```
 
-The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords**, **`:!` exec panes**, **`:AI` in-app LLM**, and an event bus that dispatches domain events through `HandleCoreEvents`.
+The prototype registers a split workspace, a functional `:` command line with **normal/command modes**, **Ctrl+W focus chords**, **`:!` exec panes**, **`:AI` in-app LLM**, and a typed event bus that dispatches domain messages to controller subscribers.
 
 ### View documentation in a browser
 

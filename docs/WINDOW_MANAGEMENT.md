@@ -373,7 +373,7 @@ The **CmdLine** is a top-level band for **Vim-style `:` commands**, distinct fro
 - Vim-style `:` activation and drawing on the bottom line (row `H-1` of the terminal).
 - Command history (`termforge.History`) — Up/Down navigation.
 - Tab completion (`termforge.AutoCompleter`) — command name only.
-- **`SubmitMsg` on the event bus** — resolved `CommandID` + args; app dispatches in `HandleCoreEvents`.
+- **`SubmitMsg` on the event bus** — resolved `CommandID` + args; `cmdCtl` handles it via `platform.Subscribe`.
 
 Command mode is entered by **`DebuggerApp`** (`:` → `ModeCommand`, `CmdWidget.Activate()`), not by `CmdWidget` alone. `Esc` returns to normal mode at the app layer.
 

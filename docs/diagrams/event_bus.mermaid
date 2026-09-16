@@ -1,40 +1,38 @@
 flowchart TB
-    subgraph Producers["Event producers (any subsystem)"]
-        CmdW["CmdWidget"]
-        GDB["GDB backend / goroutines"]
+    subgraph Producers["Event producers (any goroutine)"]
+        CmdW["CmdWidget · SubmitMsg"]
+        GDB["GDB / Delve PTY readers"]
+        Lua["Lua jobs · exec panes"]
         Widgets["Other widgets"]
-        Future["Plugins · planned"]
     end
 
-    subgraph Bus["termui event bus"]
-        Chan["TermApp.events chan termui.Event"]
+    subgraph Wake["Wake the UI thread · termforge"]
+        PI["App.PostInterrupt(payload)"]
+        Post["screen.PostEvent · EventInterrupt"]
+        Poll["PollEvent · App.Run"]
     end
 
-    subgraph Loop["TermApp.Run main loop"]
-        Select["select: channel vs PollEvent"]
-        CoreDispatch["AppApi.HandleCoreEvents(ev)"]
-        TcellDispatch["HandleEvent → HandleKey / HandleResize"]
-        Draw["Draw → Grid → Screen"]
+    subgraph Shell["Application shell · DebuggerApp"]
+        HI["HandleInterrupt(ev)"]
+        Str["string payload · gdb-exit, pane forward"]
+        Disp["platform.EventBus.Dispatch(data)"]
     end
 
-    subgraph App["Application · DebuggerApp"]
-        Handler["HandleCoreEvents — single dispatch hub"]
-        CmdSwitch["switch CommandID / event type"]
-        Modes["AppState · HandleKey"]
-        Trie["Trie · SearchPartial"]
-        Actions["Exit, debugger, layout, …"]
+    subgraph Handlers["Typed subscribers · (*Ctl).Register(bus)"]
+        Console["consoleCtl · GdbOutputMsg"]
+        Cmd["cmdCtl · SubmitMsg"]
+        Search["searchCtl · search text / submit"]
+        Asm["asmCtl · refresh / browse"]
     end
 
-    CmdW -->|"Events <- SubmitMsg"| Chan
-    GDB -.->|"planned: Publish(GdbOutputMsg)"| Chan
-    Widgets -.->|"planned"| Chan
-    Future -.-> Chan
-
-    Chan --> Select
-    Select --> CoreDispatch
-    CoreDispatch --> Handler --> CmdSwitch --> Actions
-
-    Select --> TcellDispatch
-    TcellDispatch --> Modes
-    TcellDispatch --> Trie
-    TcellDispatch --> Draw
+    CmdW --> PI
+    GDB --> PI
+    Lua --> PI
+    Widgets --> PI
+    PI --> Post --> Poll --> HI
+    HI --> Str
+    HI --> Disp
+    Disp --> Console
+    Disp --> Cmd
+    Disp --> Search
+    Disp --> Asm

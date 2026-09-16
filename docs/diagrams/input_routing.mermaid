@@ -1,23 +1,24 @@
 flowchart TB
-    Select["TermApp.Run select loop"]
+    Run["App.Run loop · termforge"]
     Poll["PollEvent · tcell"]
-    Bus["<- events · termui.Event"]
-    TermHandler["TermApp.HandleEvent"]
-    HandleKey["AppApi.HandleKey"]
-    HandleResize["AppApi.HandleResize"]
-    Router["DebuggerApp · AppState.Mode()"]
-    Trie["Trie.SearchPartial"]
+    KeyRoute["App.HandleKey · mode handler for AppState.Mode()"]
+    Resize["AppApi.HandleResize"]
+    Interrupt["AppApi.HandleInterrupt"]
+    Global["withGlobalKeys · activity + confirm gates"]
+    Router["DebuggerApp mode handler"]
+    Trie["KeyBindingRegistry.HandleKey · key sequences"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
-    Core["HandleCoreEvents"]
+    Bus["platform.EventBus.Dispatch"]
 
-    Select --> Poll
-    Select --> Bus
-    Poll --> TermHandler
-    TermHandler -->|"EventKey"| HandleKey --> Router
-    TermHandler -->|"EventResize"| HandleResize
+    Run --> Poll
+    Poll -->|"EventKey"| KeyRoute
+    Poll -->|"EventResize"| Resize
+    Poll -->|"EventInterrupt"| Interrupt
+    KeyRoute --> Global --> Router
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
     Router -->|"ModeNormal · colon"| Cmd
-    Router -->|"ModeCommand"| Cmd
-    Bus --> Core
+    Router -->|"ModeCommand / ModeSearch"| Cmd
+    Router -->|"ModeLua"| Tab
+    Interrupt --> Bus

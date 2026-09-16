@@ -23,15 +23,15 @@ description: Goals, motivation, and design direction of gdbforge, including how 
 
 ## Vision
 
-gdbforge is **not a clone of Vim**. It is a **generic application framework** inspired by Vim's interaction model, with the GDB debugger as its first application.
+gdbforge is **not a clone of Vim**. It is a debugger built on a **generic application framework** inspired by Vim's interaction model — that framework is [**termforge**](https://github.com/yairgd/termforge), extracted from this project into its own module, and the debugger is its first application.
 
-Vim has a single data model (text buffers). This framework supports **multiple application-specific data models** — breakpoints, registers, and console output in a debugger; orders, portfolio, and charts in a trading app. The user still works with familiar concepts (`:buffer`, `:split`, `:vsplit`, `:tab`), but `:buffer` selects which **model** to display, not which file to open.
+Vim has a single data model (text buffers). termforge supports **multiple application-specific data models** — breakpoints, registers, and console output in a debugger; orders, portfolio, and charts in a trading app. The user still works with familiar concepts (`:buffer`, `:split`, `:vsplit`, `:tab`), but `:buffer` selects which **model** to display, not which file to open.
 
 gdbforge should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — built as a **composable widget system over domain models**, not a monolithic ncurses application.
 
 The long-term vision:
 
-- A **Vim-inspired interaction framework** — normal mode, focus mode, and a `:` command line — applied to arbitrary application data, not only text files.
+- A **Vim-inspired interaction framework** (termforge) — normal mode, focus mode, and a `:` command line — applied to arbitrary application data, not only text files.
 - A **single UI codebase** that adapts to GDB and Delve today (`-g gdb|dlv`), OpenOCD/JTAG tomorrow, and other domains (trading, monitoring, …) via application-specific models and services.
 - **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
 - **Efficient rendering** through an off-screen grid and future diff-based terminal updates.

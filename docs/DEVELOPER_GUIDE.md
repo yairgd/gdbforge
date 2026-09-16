@@ -245,20 +245,19 @@ layout.NewSplit(Vertical, NewMyWidget(myModel))
 ```go
 a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
-a.cmdWidget.Events = a.Events()
-a.completionBar = termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
+bar := termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
 5. Build the command tree with the DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
 
-6. Handle legacy bus events in the application when needed:
+6. Subscribe a controller to the messages it cares about, one typed handler each:
 
 ```go
-func (app *MyApp) HandleCoreEvents(ev termforge.Event) {
-    msg, ok := ev.(termforge.CommandEvent)
-    if !ok { return }
-    switch msg.CommandID() { /* ... */ }
+func (c *myCtl) Register(bus *platform.EventBus) {
+    platform.Subscribe(bus, c.onSubmit)   // func(termforge.SubmitMsg)
+    platform.Subscribe(bus, c.onRefresh)  // func(myRefreshMsg)
 }
 ```
 
@@ -414,8 +413,8 @@ Always update docs when changing architecture-visible behavior.
 
 | Feature | Files |
 |---------|-------|
-| Event loop + bus | `term_app.go` |
-| App API / dispatch | `term_app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
+| Event loop + bus | `termforge/app.go`, `termforge/platform/event_bus.go` |
+| App API / dispatch | `termforge/app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
 | Interaction modes | `termforge/platform/mode.go` (via `App` / `AppState`) — includes `ModeSearch` |
 | Key-sequence bindings | `termforge/commands` + `cmd/gdbforge/keybindings.go` |
 | Widget interface | `widget.go` |
