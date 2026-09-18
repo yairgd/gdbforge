@@ -31,7 +31,7 @@ Keyboard / Mouse / async workers
 App.Run (UI thread · pollEventBatch)
         ├── PollEvent → tcell.Event
         │     ├── EventKey / EventMouse / EventResize → App.HandleEvent
-        │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
+        │     │       ├── EventResize → UpdateCanvas (grid + chrome rects)
         │     │       └── EventKey → App.HandleKey → mode handler / key sequences / widgets
         │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
         └── paint ticker (16ms) when dirty
@@ -85,8 +85,9 @@ sequenceDiagram
 ### Dispatch (current)
 
 1. `App.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
-2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
-3. `App.HandleKey` — dispatches to the handler registered for `AppState.Mode()` via `RegisterModeHandler`:
+   A resize needs no application hook: `UpdateCanvas` reallocates the grid and the chrome
+   layout recomputes its rects (see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
+2. `App.HandleKey` — dispatches to the handler registered for `AppState.Mode()` via `RegisterModeHandler`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
      - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
      - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`App.Suspend`).
@@ -106,7 +107,7 @@ flowchart TB
     Batch["handleUIEventBatch"]
     TermHandler["App.HandleEvent"]
     HandleKey["App.HandleKey"]
-    HandleResize["AppApi.HandleResize"]
+    Resize["App.UpdateCanvas"]
     HandleInt["HandleInterrupt → EventBus"]
     Router["DebuggerApp · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
@@ -118,7 +119,7 @@ flowchart TB
     Batch -->|"EventKey / Mouse / Resize"| TermHandler
     Batch -->|"EventInterrupt"| HandleInt
     TermHandler -->|"EventKey"| HandleKey --> Router
-    TermHandler -->|"EventResize"| HandleResize
+    TermHandler -->|"EventResize"| Resize
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
     Router -->|"ModeInsert"| Tab

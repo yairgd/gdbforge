@@ -66,7 +66,6 @@ func NewDebuggerApp(cfg SessionConfig) (*DebuggerApp, error) {
 		dbg.Close()
 		return nil, err
 	}
-	dbg.HandleResize()
 	return dbg, nil
 }
 

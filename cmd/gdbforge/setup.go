@@ -38,18 +38,20 @@ func (a *DebuggerApp) InitB() error {
 	lay.SetOnResize(a.RequestFrame)
 	a.State().SetEqualAlways(true)
 	lay.SetEqualAlways(true)
+	// Chrome banding, top to bottom: the workspace fills what the two rows below
+	// it leave over, the completion bar overlays the row above the cmdline.
 	a.AddWidget(a.Widget())
 
 	bar := termforge.NewCompletionBarWidget(a.ctx)
 	a.comp.attach(&termforge.CompletionMenu{}, bar)
-	a.AddWidget(bar)
+	a.AddRowWidget(bar, 1)
 
 	a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
 	a.restoreCmdlineHistory()
-	a.AddWidget(a.cmdWidget)
+	a.AddRowWidget(a.cmdWidget, 1)
 
 	a.registerUIComponents()
 

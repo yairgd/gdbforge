@@ -180,14 +180,14 @@ sequenceDiagram
 
     Main->>App: NewApp()
     App->>Screen: Init, EnableMouse
-    Main->>App: InitB · AddWidget · HandleResize()
+    Main->>App: InitB · AddWidget / AddRowWidget
     loop until exit
         App->>Screen: pollEventBatch (PollEvent)
         App->>App: handleUIEventBatch
         alt EventInterrupt
             App->>App: HandleInterrupt → EventBus
         else EventKey / Mouse / Resize
-            App->>App: HandleEvent → HandleKey / HandleResize
+            App->>App: HandleEvent → HandleKey / UpdateCanvas
         end
         App->>App: present when dirty
     end
@@ -197,9 +197,9 @@ sequenceDiagram
 | Phase | Code | Side effects |
 |-------|------|--------------|
 | **Init** | `NewApp` | Opens screen, enables mouse |
-| **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size |
-| **Register widgets** | `AddWidget` | Appends to widget slice |
-| **Initial layout** | `HandleResize()` in `NewDebuggerApp` | Tab + completion bar (`H-2`) + cmdline (`H-1`) |
+| **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size, rebuilds chrome rects |
+| **Register widgets** | `AddWidget` / `AddRowWidget` | Appends to the `WidgetsList` with its placement |
+| **Layout** | `WidgetsList.BuildLayout` per frame | Tab + completion bar (`H-2`) + cmdline (`H-1`) |
 | **Run** | `Run` | Blocks until `Ctrl+D` |
 | **Close** | `Close` / defer | Restores terminal |
 
@@ -385,7 +385,7 @@ dlv debug ./cmd/docserve -- --port 8765
 | GDB hangs | Target binary missing | Build `hello` or fix `gdb_client.go` target |
 | No GDB output | Reader goroutine exited | Check channel close / PTY errors |
 | Keys affect all widgets | Normal mode forwards to tab after trie | Expected until focus mode is wired |
-| Cmd line invisible | Wrong rect (`y = H` instead of `H-1`) | Fix in `HandleResize()` |
+| Cmd line invisible | Wrong band order or height | Check the `AddWidget` / `AddRowWidget` order in `setup.go` |
 | Mermaid not rendering in docs | CDN blocked | Check network; view raw `.md` |
 | Port 8765 in use | Previous docserve running | `fuser -k 8765/tcp` or `--port 8766` |
 

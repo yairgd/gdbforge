@@ -372,7 +372,7 @@ type CompletionMsg struct {
 
 Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is App chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
 
-**Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddWidget` + `HandleResize` rect + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
+**Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddRowWidget` + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 

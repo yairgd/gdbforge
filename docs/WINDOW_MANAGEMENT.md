@@ -75,25 +75,24 @@ graph TB
 - Workspace resize math is isolated — only the middle band changes height on terminal resize.
 - Optional chrome overlays (wildmenu, future search/message bars) share the same App layer — **no popup compositor**.
 
-**App chrome** is a flat `AddWidget` list. **`DebuggerApp.HandleResize`** assigns rects today (`cmd/gdbforge/setup.go` order = index order):
+**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. `cmd/gdbforge/setup.go` declares the banding once; nothing assigns rects on resize:
 
 ```go
-// setup: AddWidget(workspace.Widget()), AddWidget(completionBar), AddWidget(cmdWidget)
-w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))     // TabWidget (workspace band)
-w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))     // CompletionBarWidget (overlay row)
-w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))     // CmdWidget (: line)
+a.AddWidget(a.Widget())         // TabWidget: fills what the rows leave over
+a.AddRowWidget(bar, 1)          // CompletionBarWidget (overlay row)
+a.AddRowWidget(a.cmdWidget, 1)  // CmdWidget (: line)
 ```
 
-Apps own chrome banding in `HandleResize`; `TabWidget.Draw` uses its full assigned rect. `App.Draw` paints in that order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
+`WidgetsList.BuildLayout` stacks the rows top to bottom in registration order and gives the fill widget everything left, so the bands are workspace `H-2`, bar at row `H-2`, cmdline at row `H-1`. `TabWidget.Draw` uses its full assigned rect. `App.Draw` paints in registration order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
 
-Called on startup (`NewDebuggerApp`) and on every `EventResize`.
+Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given, which is how cmdline hit tests work.
 
 ### Extending chrome (no popup layer)
 
 Reuse the same pattern for future overlays (search bar, confirm strip, message line):
 
-1. `AddWidget` a chrome widget at App level (same event/draw layer as tab + cmdline).
-2. Give it a rect in `HandleResize` (document the slot; avoid magic indexes).
+1. Register a chrome widget at App level (same event/draw layer as tab + cmdline).
+2. Pick its placement there: `AddRowWidget` for a band, `AddFloatingWidget` for a window.
 3. Own keys with a `platform.Mode` (like `ModeCompletion`) or forward when `Active()`.
 4. `Draw` only when needed so idle overlays do not cover status lines.
 

@@ -453,25 +453,14 @@ func (a *DebuggerApp) cmdLineContains(x, y int) bool {
 	if a.cmdWidget == nil {
 		return false
 	}
-	for _, n := range a.Widgets() {
-		if n.Widget() == a.cmdWidget {
-			return n.Rect().Contains(x, y)
-		}
-	}
-	return false
+	return a.WidgetRect(a.cmdWidget).Contains(x, y)
 }
 
 func (a *DebuggerApp) clickCmdLine(screenX int) {
 	if a.cmdWidget == nil {
 		return
 	}
-	originX := 0
-	for _, n := range a.Widgets() {
-		if n.Widget() == a.cmdWidget {
-			originX = n.Rect().X()
-			break
-		}
-	}
+	originX := a.WidgetRect(a.cmdWidget).X()
 	if a.Mode() == platform.ModeCompletion {
 		a.comp.setForGDB(false)
 		a.comp.clear()
@@ -489,19 +478,6 @@ func (a *DebuggerApp) clickCmdLine(screenX int) {
 	}
 	a.cmdWidget.SetCursorAtLocalX(screenX - originX)
 	a.RequestFrame()
-}
-
-func (a *DebuggerApp) HandleResize() {
-	c := a.UpdateCanvas()
-
-	w := a.Widgets()
-	if len(w) < 3 {
-		return
-	}
-	// Workspace band is H-2; completion bar overlays row H-2; cmdline at H-1.
-	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))
-	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
-	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
 }
 
 func (a *DebuggerApp) HandleTTYResume() {

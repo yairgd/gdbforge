@@ -734,7 +734,7 @@ gdbforge uses **two parallel event planes**:
 
 | Plane | Type | Path |
 |-------|------|------|
-| **Terminal** | `tcell.Event` | `PollEvent` → `App.HandleKey` (mode handler table) / `AppApi.HandleResize` |
+| **Terminal** | `tcell.Event` | `PollEvent` → `App.HandleKey` (mode handler table) / `App.UpdateCanvas` |
 | **Domain** | any payload | Producer → `App.PostInterrupt` → `HandleInterrupt` → **`platform.EventBus.Dispatch`** |
 
 Widgets handle terminal input locally (keys, cursor). When a widget needs the application to act — submit a `:` command, quit, forward to GDB — it hands a payload to **`App.PostInterrupt`**, which wakes the UI thread through `tcell`. `DebuggerApp.HandleInterrupt` then dispatches it on the bus, where each `*Ctl` has registered a handler for the message types it cares about.
@@ -1109,7 +1109,7 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
 | Viewport ownership | Viewport in termforge; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
 | TableWidget | Columnar lists off Viewport | **Done** — `termforge/table_*.go`; BP/threads/callstack adapters |
-| Root layout | Tab + CompletionBar + CmdLine | Flat `AddWidget` list; `HandleResize` assigns rects |
+| Root layout | Tab + CompletionBar + CmdLine | Flat `WidgetsList` layout; placement declared at `AddWidget` / `AddRowWidget` |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |
 | CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |

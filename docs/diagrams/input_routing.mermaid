@@ -2,7 +2,7 @@ flowchart TB
     Run["App.Run loop · termforge"]
     Poll["PollEvent · tcell"]
     KeyRoute["App.HandleKey · mode handler for AppState.Mode()"]
-    Resize["AppApi.HandleResize"]
+    Resize["App.UpdateCanvas"]
     Interrupt["AppApi.HandleInterrupt"]
     Global["withGlobalKeys · activity + confirm gates"]
     Router["DebuggerApp mode handler"]
