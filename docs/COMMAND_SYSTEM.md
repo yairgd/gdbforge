@@ -52,7 +52,7 @@ flowchart TB
     subgraph ui ["UI layer"]
         CmdW["CmdWidget"]
         Bus["platform.EventBus"]
-        Bar["CompletionBarWidget"]
+        Bar["CompletionPopupWidget"]
         CmdW --> Parser
         CmdW -->|"Publish CompletionMsg"| Bus
         Bus -->|"Subscribe"| Bar
@@ -317,7 +317,7 @@ sequenceDiagram
     participant Parser as CommandParser
     participant App as DebuggerApp
     participant Bus as platform.EventBus
-    participant Bar as CompletionBarWidget
+    participant Bar as CompletionPopupWidget
     participant Tree as CommandNode tree
 
     User->>CmdW: Tab
@@ -345,7 +345,10 @@ a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
 a.cmdWidget.SetOnExecute(func() {
     _ = a.cmdWidget.ExecuteParsed()
 })
-a.completionBar = termforge.NewCompletionBarWidget(a.ctx)
+// setup.go: completionAsWindow picks the view; both are floating widgets
+bar := termforge.NewCompletionBarWidget(a.ctx)
+a.AddFloatingWidget(bar, completionBarRect)          // row H-2, over the separator
+a.comp.attach(&termforge.CompletionMenu{}, bar)
 ```
 
 On **Enter**, the widget calls `Parse`; if `CanExecute()`, it invokes **`onExecute`** (app controller). Leaf actions run on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
@@ -367,12 +370,14 @@ type CompletionMsg struct {
 | Role | Where | Behavior |
 |------|-------|----------|
 | Publisher | `CmdWidget` (Tab) | `platform.Publish(ctx.Bus, CompletionMsg{…})` |
-| Subscriber | `CompletionBarWidget` | Wildmenu row above `:` (white-on-black); multi-match → `ModeCompletion` |
+| Subscriber | `completionCtl` | Applies names to `CompletionMenu`, syncs its `CompletionView`; multi-match → `ModeCompletion` |
+| View | `CompletionBarWidget` (default) | One row on `H-2`, over the workspace separator above the `:` line |
+| View | `CompletionPopupWidget` | Floating list window centered over the workspace |
 | Keys | `ModeCompletion` | Left/Right/Up/Down cycle; Esc → `ModeCommand`; Enter applies token |
 
-Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is App chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
+Single unique match still auto-inserts in `ModeCommand` (no mode switch). `CompletionView` is an interface (`SetItems` / `Clear` / `Active`), so the ctl never knows which one it drives; `completionAsWindow` in `setup.go` is the single line that picks. Both are registered with `AddFloatingWidget` and own no layout space, so opening the wildmenu never reshapes the splits — the bar simply paints over the separator row while it is active, and the pane status labels come back when it clears.
 
-**Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddRowWidget` + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
+**Architecture note:** there is still no popup *layer*. The window is an ordinary widget registered with `AddFloatingWidget`, drawn last, with keys routed by mode — registration order is the whole z-order. See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 
@@ -422,7 +427,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Tab completion feedback
 
-1. `CompletionBarWidget` subscribes to `termforge.CompletionMsg` (wildmenu above the cmdline).
+1. `completionCtl` subscribes to `termforge.CompletionMsg` and pushes the names into its `CompletionView` (the floating `CompletionPopupWidget`).
 
 ---
 
@@ -435,7 +440,8 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `termforge/commands/dsl.go` | `Cmd`, `CmdRest`, `Group`, `Leaf`, `LeafRest` builders |
 | `termforge/commands/key_binding_gegistry.go` | `KeyBindingRegistry` |
 | `termforge/cmd_widget.go` | `:` input, parser sync, tab; `SetOnExecute` → app |
-| `termforge/completion_bar.go` | Wildmenu chrome row; `ModeCompletion` nav |
+| `termforge/completion_popup.go` | Wildmenu floating window (`CompletionView`) |
+| `termforge/completion_bar.go` | Wildmenu chrome row — the alternative `CompletionView` |
 | `termforge/event.go` | `CompletionMsg` and other UI-generic events |
 | `cmd/gdbforge/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `termforge/platform/event_bus.go` | Typed `Subscribe` / `Publish` |

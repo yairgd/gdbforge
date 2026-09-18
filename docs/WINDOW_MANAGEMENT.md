@@ -33,13 +33,15 @@ top. For the framework mechanics see
 
 ## Top-level layout
 
-The root UI is **not** a split tree. It is a fixed vertical stack:
+The root UI is a workspace that fills the screen, with the command line pinned
+to its bottom edge inside the split tree:
 
 ```text
 Root
 ├── TabBar      (fixed height)
-├── Workspace   (remaining area — contains split tree)
-└── CmdLine     (fixed height)
+└── Workspace   (split tree)
+    ├── panes   (ratio sized)
+    └── CmdLine (pinned leaf, exactly 1 row)
 ```
 
 ```text
@@ -58,51 +60,63 @@ Root
 graph TB
     Root["Root"]
     TabBar["TabBar<br/>(fixed height)"]
-    Workspace["Workspace<br/>(remaining area)"]
-    CmdLine["CmdLine<br/>(fixed height)"]
+    Workspace["Workspace<br/>(split tree, fills the screen)"]
+    Panes["panes<br/>(ratio sized)"]
+    CmdLine["CmdLine<br/>(pinned leaf, 1 row)"]
 
     Root --> TabBar
     Root --> Workspace
-    Root --> CmdLine
+    Workspace --> Panes
+    Workspace --> CmdLine
 ```
 
 *Source: [`diagrams/top_level_ui.mermaid`](diagrams/top_level_ui.mermaid)*
 
-**Design decision:** keeping TabBar and CmdLine **outside** the split tree means:
+**Design decision:** the command line is a **pinned leaf** at the bottom of the tree, not a chrome band:
 
-- Tabs always remain visible regardless of pane layout.
-- The command line is a stable anchor (like Vim's `:` line).
-- Workspace resize math is isolated — only the middle band changes height on terminal resize.
-- Optional chrome overlays (wildmenu, future search/message bars) share the same App layer — **no popup compositor**.
+- The line above it is that split's own separator, so no layout draws a border outside its own rect.
+- It is still a stable anchor: `FixedSecond` holds it to one row at the bottom edge whatever the pane ratios do, and `CollectLeaves` hides it so focus movement, `:close`, `:only` and separator drags behave as if it were not in the tree.
+- Transient chrome (wildmenu, help, future message bars) is **not** in the tree. It goes in the App's floating tier, which reserves no space — **no popup compositor**.
 
-**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. `cmd/gdbforge/setup.go` declares the banding once; nothing assigns rects on resize:
+**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. `cmd/gdbforge/setup.go` declares the placement once; nothing assigns rects on resize:
 
 ```go
-a.AddWidget(a.Widget())         // TabWidget: fills what the rows leave over
-a.AddRowWidget(bar, 1)          // CompletionBarWidget (overlay row)
-a.AddRowWidget(a.cmdWidget, 1)  // CmdWidget (: line)
+a.AddWidget(a.Widget())                     // TabWidget: fills the screen
+a.SetCmdline(a.cmdWidget)                   // paste target in command mode
+lay.PinBottom(a.cmdWidget, 1)               // CmdWidget (: line)
+a.AddFloatingWidget(bar, completionBarRect) // wildmenu on row H-2
 ```
 
-`WidgetsList.BuildLayout` stacks the rows top to bottom in registration order and gives the fill widget everything left, so the bands are workspace `H-2`, bar at row `H-2`, cmdline at row `H-1`. `TabWidget.Draw` uses its full assigned rect. `App.Draw` paints in registration order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
+The wildmenu view is chosen by `completionAsWindow` in `setup.go`: the bar above, or `CompletionPopupWidget` centered over the workspace. Both are floating, so the switch changes nothing about the layout.
 
-Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given, which is how cmdline hit tests work.
+`WidgetsList.BuildLayout` gives the fill widget everything the rows leave over; floating widgets are placed by their callback and contribute nothing to the row math. So the workspace spans `H` rows, with the cmdline on `H-1` and its separator on `H-2` — the same row the bottom panes paint their status labels onto. `App.Draw` paints in registration order, so the wildmenu window covers the workspace.
+
+Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given; the cmdline is the exception, since it lives in the tree — `cmdLineRect()` reads `WidgetTree.PinnedBottomRect()`.
 
 ### Extending chrome (no popup layer)
 
-Reuse the same pattern for future overlays (search bar, confirm strip, message line):
+Three placements, and the choice is about lifetime, not looks:
 
-1. Register a chrome widget at App level (same event/draw layer as tab + cmdline).
-2. Pick its placement there: `AddRowWidget` for a band, `AddFloatingWidget` for a window.
-3. Own keys with a `platform.Mode` (like `ModeCompletion`) or forward when `Active()`.
-4. `Draw` only when needed so idle overlays do not cover status lines.
+| Chrome | Placement | Example |
+|--------|-----------|---------|
+| Transient window or overlaid row | `AddFloatingWidget` at App level | wildmenu (`CompletionBarWidget` on `H-2`, or `CompletionPopupWidget`) |
+| Permanent full-width edge | pinned tree leaf via `PinBottom` | the `:` command line |
+| Permanent band outside the workspace | `AddRowWidget` | a future tab bar or status bar |
 
-Do **not** introduce a separate popup/z-order system for one-line chrome.
+For an overlay:
+
+1. Register it with `AddFloatingWidget`, last, so it paints over the workspace.
+2. Gate on your own visibility flag in **both** `Draw` and `HandleEvent` — `WidgetsList.HandleEvent` broadcasts to every registered widget.
+3. Own keys with a `platform.Mode` (like `ModeCompletion`), not with tree position.
+4. Paint the frame with `SetContent`, never `DrawHorizontalLocal` / `DrawVerticalLocal`: those run border composition and would fuse the window frame into the pane separators underneath.
+
+Do **not** introduce a separate popup/z-order system. Registration order is the z-order, and a floating widget already costs no layout space.
 
 ---
 
 ## Workspace concept
 
-The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. gdbforge also has a **`LayoutShell` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above the layout — see [LayoutShell (gdbforge) vs Tab](#layoutshell-gdbforge-vs-tab-termforge).
+The **Workspace** is everything below the TabBar, cmdline row included. It is the **only** place where recursive splits exist. gdbforge also has a **`LayoutShell` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above the layout — see [LayoutShell (gdbforge) vs Tab](#layoutshell-gdbforge-vs-tab-termforge).
 
 Workspace panes are **widgets** — views bound to application **models** owned by `*Ctl` controllers. Typical models and their views:
 

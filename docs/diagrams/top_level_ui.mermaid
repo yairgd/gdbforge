@@ -1,9 +1,11 @@
 flowchart TB
     Root["Root"]
     TabBar["TabBar<br/>(fixed height)"]
-    Workspace["Workspace<br/>(remaining area)"]
-    CmdLine["CmdLine<br/>(fixed height)"]
+    Workspace["Workspace<br/>(split tree, fills the screen)"]
+    Panes["panes<br/>(ratio sized)"]
+    CmdLine["CmdLine<br/>(pinned leaf, 1 row)"]
 
     Root --> TabBar
     Root --> Workspace
-    Root --> CmdLine
+    Workspace --> Panes
+    Workspace --> CmdLine

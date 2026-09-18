@@ -41,6 +41,10 @@ func (w *FileListWidget) SetAppState(st *debugstate.State) { w.state = st }
 func (w *FileListWidget) initKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.move(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.move(1) }, "<Down>", "j")
+	w.BindKeyFunc("page-up", func(args ...any) { w.move(-w.PageRows()) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.move(w.PageRows()) }, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("home", func(args ...any) { w.moveTo(0) }, "<Home>", "g")
+	w.BindKeyFunc("end", func(args ...any) { w.moveTo(len(w.paths) - 1) }, "<End>", "G")
 	w.BindKeyFunc("scroll-left", func(args ...any) { w.PanLeft() }, "<Left>")
 	w.BindKeyFunc("scroll-right", func(args ...any) { w.PanRight() }, "<Right>")
 	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>", "<C-m>")
@@ -87,6 +91,14 @@ func (w *FileListWidget) move(delta int) {
 		return
 	}
 	w.MoveSelection(delta)
+}
+
+func (w *FileListWidget) moveTo(row int) {
+	if len(w.paths) == 0 {
+		return
+	}
+	w.SetSelectedRow(row)
+	w.EnsureRowVisible()
 }
 
 func (w *FileListWidget) openSelected() {

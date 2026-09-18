@@ -17,6 +17,9 @@ type layoutHost interface {
 	SetMode(mode platform.Mode)
 	EnterInsertMode(args ...any)
 	GDBWidget() *widgets.GDBWidget
+	// CmdWidget is re-pinned into every freshly built layout (it is a leaf of
+	// the tree, not App chrome).
+	CmdWidget() *termforge.CmdWidget
 	LogoWidget() *widgets.LogoWidget
 	SetLogoWidget(w *widgets.LogoWidget)
 	FocusedWidget() termforge.NodeWidget

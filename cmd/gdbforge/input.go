@@ -449,18 +449,29 @@ func (a *DebuggerApp) leaveCommandMode() {
 	a.RequestFrame()
 }
 
+// cmdLineRect is the cmdline's screen rect. It comes from the layout, not the
+// App chrome list, because the cmdline is a leaf pinned to the bottom of the
+// workspace tree. The zero Rect contains no point, so hit tests fail closed.
+func (a *DebuggerApp) cmdLineRect() termforge.Rect {
+	lay := a.Layout()
+	if lay == nil {
+		return termforge.Rect{}
+	}
+	return lay.PinnedBottomRect()
+}
+
 func (a *DebuggerApp) cmdLineContains(x, y int) bool {
 	if a.cmdWidget == nil {
 		return false
 	}
-	return a.WidgetRect(a.cmdWidget).Contains(x, y)
+	return a.cmdLineRect().Contains(x, y)
 }
 
 func (a *DebuggerApp) clickCmdLine(screenX int) {
 	if a.cmdWidget == nil {
 		return
 	}
-	originX := a.WidgetRect(a.cmdWidget).X()
+	originX := a.cmdLineRect().X()
 	if a.Mode() == platform.ModeCompletion {
 		a.comp.setForGDB(false)
 		a.comp.clear()

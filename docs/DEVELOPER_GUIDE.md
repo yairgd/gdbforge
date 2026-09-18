@@ -199,7 +199,7 @@ sequenceDiagram
 | **Init** | `NewApp` | Opens screen, enables mouse |
 | **Canvas setup** | `UpdateCanvas` | Allocates grids at terminal size, rebuilds chrome rects |
 | **Register widgets** | `AddWidget` / `AddRowWidget` | Appends to the `WidgetsList` with its placement |
-| **Layout** | `WidgetsList.BuildLayout` per frame | Tab + completion bar (`H-2`) + cmdline (`H-1`) |
+| **Layout** | `WidgetsList.BuildLayout` per frame | Tab fills the screen; cmdline is a pinned tree leaf (`H-1`); wildmenu floats on `H-2` |
 | **Run** | `Run` | Blocks until `Ctrl+D` |
 | **Close** | `Close` / defer | Restores terminal |
 
@@ -246,7 +246,7 @@ layout.NewSplit(Vertical, NewMyWidget(myModel))
 a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
 a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
-bar := termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+bar := termforge.NewCompletionBarWidget(a.ctx) // the wildmenu CompletionView
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 

@@ -29,14 +29,13 @@ type completionHost interface {
 	RequestFrame()
 }
 
-// completionCtl owns the wildmenu domain: candidate menu, its chrome view, and
-// the GDB / cmdline completion queries. Mode entry decisions stay on
-// DebuggerApp (handleCompletionKey); the ctl owns the domain.
+// completionCtl owns the wildmenu domain: candidate menu, its view, and the
+// GDB / cmdline completion queries. Mode entry decisions stay on DebuggerApp
+// (handleCompletionKey); the ctl owns the domain.
 type completionCtl struct {
 	host completionHost
 	menu *termforge.CompletionMenu
 	view termforge.CompletionView
-	bar  *termforge.CompletionBarWidget // concrete chrome; also CompletionView
 	// forGDB is true while ModeCompletion is driven by GDB Tab
 	// (apply/cancel return to insert mode instead of command mode).
 	forGDB bool
@@ -44,11 +43,12 @@ type completionCtl struct {
 	forLua bool
 }
 
-// attach takes ownership of the wildmenu model and its chrome widget.
-func (c *completionCtl) attach(menu *termforge.CompletionMenu, bar *termforge.CompletionBarWidget) {
+// attach takes ownership of the wildmenu model and the view that paints it.
+// The view is an interface so a host can swap the floating window for a chrome
+// row (CompletionBarWidget) without the ctl knowing.
+func (c *completionCtl) attach(menu *termforge.CompletionMenu, view termforge.CompletionView) {
 	c.menu = menu
-	c.bar = bar
-	c.view = bar
+	c.view = view
 }
 
 func (c *completionCtl) Register(bus *platform.EventBus) {

@@ -30,6 +30,7 @@ type DebuggerApp struct {
 	completionKeys *commands.KeyBindingRegistry
 
 	cmdWidget *termforge.CmdWidget
+	compPopup *termforge.CompletionPopupWidget
 	ctx       platform.AppContext
 	cfg       SessionConfig
 	fileLog   *platform.FileSink

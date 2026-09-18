@@ -56,6 +56,7 @@ func (w *LayoutShell) finishLayoutApply(name string) {
 	lay.SetStatusClipboard(h.ClipboardIO())
 	lay.SetOnResize(h.RequestFrame)
 	lay.SetEqualAlways(true)
+	lay.PinBottom(h.CmdWidget(), 1)
 	lay.FocusWidget(h.GDBWidget())
 	lay.SetLeafMark(leafMarkCode, lay.FindLeaf(isCodeSlot))
 	lay.SetLeafMark(leafMarkGDB, lay.FindLeaf(func(wid termforge.Widget) bool { return wid == h.GDBWidget() }))

@@ -113,7 +113,7 @@ flowchart TB
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
-    Comp["CompletionBarWidget"]
+    Comp["CompletionView"]
 
     Select --> Poll --> Batch
     Batch -->|"EventKey / Mouse / Resize"| TermHandler
@@ -335,7 +335,7 @@ flowchart LR
 Flow:
 
 1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/gdbforge/input.go`).
-2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; `CompletionBarWidget` shows the wildmenu and app enters `ModeCompletion`.
+2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; the wildmenu window opens and app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
 4. Tree is built at startup via DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`).
 

@@ -166,7 +166,6 @@ func buildAboutLines(version string, b vcsBuildInfo) []string {
 		"    • Terminal UI debugger",
 		"    • Multi-pane interface",
 		"    • Command mode",
-		"    • AI-assisted workflows (experimental)",
 		"",
 		"License:",
 		"    MIT License",

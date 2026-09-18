@@ -832,7 +832,7 @@ flowchart TB
 
 | Message | Publisher | Subscriber |
 |---------|-----------|------------|
-| `CompletionMsg` | `CmdWidget` (Tab) | `CompletionBarWidget` |
+| `CompletionMsg` | `CmdWidget` (Tab) | `completionCtl` → its `CompletionView` |
 | `BreakpointsChangedMsg` | `onBreakpointsChanged` (MI / MCP / `:e`) | `DebuggerApp.onBreakpointsChangedMsg` → coalesced `-break-list` |
 
 Breakpoint sync details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync).
@@ -1088,7 +1088,8 @@ a.ExapData()  // cmd/gdbforge/command_tree.go
 
 a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
-a.completionBar = termforge.NewCompletionBarWidget(a.ctx) // Subscribes to CompletionMsg
+bar := termforge.NewCompletionBarWidget(a.ctx)          // or CompletionPopupWidget
+a.comp.attach(&termforge.CompletionMenu{}, bar)         // ctl subscribes to CompletionMsg
 ```
 
 Implementation: `termforge/commands/`, `termforge/cmd_widget.go`, `termforge/platform/event_bus.go`, `cmd/gdbforge/`.
@@ -1109,7 +1110,7 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Platform layer | `Buffer`, EventBus, Logger in platform package | Partial — `platform.EventBus` + `PostInterrupt` in use |
 | Viewport ownership | Viewport in termforge; Buffer in Platform | **Partial** — tabular lists migrated to `TableWidget`; Code/Help/FileList still Viewport |
 | TableWidget | Columnar lists off Viewport | **Done** — `termforge/table_*.go`; BP/threads/callstack adapters |
-| Root layout | Tab + CompletionBar + CmdLine | Flat `WidgetsList` layout; placement declared at `AddWidget` / `AddRowWidget` |
+| Root layout | Tab fills the screen; CmdLine pinned in the tree; wildmenu floating | Flat `WidgetsList` for chrome placement; `PinBottom` for the cmdline |
 | TabBar | Multi-tab with header render | `TabWidget` — single tab, no header |
 | LayoutShell | Split tree + pane policy | **Done** — embedded; was `Workspace` |
 | CmdLine | Global `:` command input | `CmdWidget`; **Execute via app** (`SetOnExecute`) |
