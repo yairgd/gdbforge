@@ -54,7 +54,7 @@ type searchHost interface {
 	State() *platform.AppState
 	RequestFrame()
 	CmdWidget() *termforge.CmdWidget
-	FocusedWidget() termforge.Widget
+	FocusedWidget() termforge.NodeWidget
 	ActiveCodeWidget() *widgets.CodeWidget
 }
 
@@ -173,14 +173,14 @@ func (a *DebuggerApp) CmdWidget() *termforge.CmdWidget     { return a.cmdWidget 
 func (a *DebuggerApp) LogoWidget() *widgets.LogoWidget     { return a.logoWidget }
 func (a *DebuggerApp) OutputWidget() *widgets.OutputWidget { return a.outputWidget }
 func (a *DebuggerApp) ExecWidget() *widgets.ExecWidget     { return a.execWidget }
-func (a *DebuggerApp) FocusedWidget() termforge.Widget     { return a.focusedWidget() }
+func (a *DebuggerApp) FocusedWidget() termforge.NodeWidget { return a.focusedWidget() }
 func (a *DebuggerApp) ActiveCodeWidget() *widgets.CodeWidget {
 	return a.activeCodeWidget()
 }
 func (a *DebuggerApp) FileListWidget() *widgets.FileListWidget {
 	return a.fileListWidget
 }
-func (a *DebuggerApp) Builtins() map[string]termforge.Widget { return a.builtins }
+func (a *DebuggerApp) Builtins() map[string]termforge.NodeWidget { return a.builtins }
 
 // LogError writes a controller-side error to the named log area (nil-safe).
 func (a *DebuggerApp) LogError(area, msg string) {
@@ -305,7 +305,7 @@ func (a *DebuggerApp) ConsoleSuspend() { a.console.onGdbConsoleSuspend() }
 
 func (a *DebuggerApp) sendInferior(tty *ptyx.TTY, send func()) { a.inferiorIO.send(tty, send) }
 
-func (a *DebuggerApp) LuaEnterBuffer(w termforge.Widget) { a.lua.maybeEnterBuffer(w) }
+func (a *DebuggerApp) LuaEnterBuffer(w termforge.NodeWidget) { a.lua.maybeEnterBuffer(w) }
 func (a *DebuggerApp) LuaEnsureBuffer(name string, from *luahost.Runtime) bool {
 	return a.lua.ensureBuffer(name, from)
 }

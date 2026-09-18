@@ -41,7 +41,7 @@ type asmHost interface {
 	FocusCode()
 	findCodeLeaf() *termforge.Node
 	focusedLeaf() *termforge.Node
-	focusedWidget() termforge.Widget
+	focusedWidget() termforge.NodeWidget
 	isGdbLeaf(leaf *termforge.Node) bool
 	rememberCodeLeafFromFocus()
 	CodeBufferForB() *widgets.CodeWidget

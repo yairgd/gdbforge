@@ -47,4 +47,4 @@ require (
 tool golang.org/x/tools/cmd/callgraph
 
 // Uncomment to build against the local termforge checkout instead of the published module.
-// replace github.com/yairgd/termforge => ../termforge
+replace github.com/yairgd/termforge => ../termforge

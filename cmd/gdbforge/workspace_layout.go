@@ -27,7 +27,7 @@ func (w *LayoutShell) ApplyLayout(name string) {
 	w.finishLayoutApply(name)
 }
 
-func (w *LayoutShell) buildLayout(name string) *termforge.SplitLayout {
+func (w *LayoutShell) buildLayout(name string) *termforge.WidgetTree {
 	h := w.host
 	code := h.LayoutCodePane()
 	panes := h.DebugPanes(code)

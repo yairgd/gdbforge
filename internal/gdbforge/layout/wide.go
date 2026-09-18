@@ -17,7 +17,7 @@ type WideSpec struct{}
 
 func (WideSpec) Name() string { return Wide }
 
-func (WideSpec) Build(panes Panes) *termforge.SplitLayout {
+func (WideSpec) Build(panes Panes) *termforge.WidgetTree {
 	return BuildWide(panes)
 }
 
@@ -25,8 +25,8 @@ func (WideSpec) Build(panes Panes) *termforge.SplitLayout {
 //
 //	Horizontal: top = Code | Output; bottom = GDB | side.
 //	Side: (Threads | Callstack) over Breakpoints — top pair 2/3, BP 1/3.
-func BuildWide(panes Panes) *termforge.SplitLayout {
-	tree := termforge.NewSplitLayout(panes.Code)
+func BuildWide(panes Panes) *termforge.WidgetTree {
+	tree := termforge.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termforge.Horizontal, panes.GDB)
 	tree.FocusWidget(panes.Code)

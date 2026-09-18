@@ -28,18 +28,18 @@ func AsmSplitRight(name string) bool {
 // Panes are the singleton widgets a layout may place. Unused fields may be nil
 // (e.g. Classic ignores Output / list panes).
 type Panes struct {
-	Code        termforge.Widget
-	GDB         termforge.Widget
-	Output      termforge.Widget
-	Breakpoints termforge.Widget
-	Threads     termforge.Widget
-	Callstack   termforge.Widget
+	Code        termforge.NodeWidget
+	GDB         termforge.NodeWidget
+	Output      termforge.NodeWidget
+	Breakpoints termforge.NodeWidget
+	Threads     termforge.NodeWidget
+	Callstack   termforge.NodeWidget
 }
 
 // Spec builds the split layout for one named layout.
 type Spec interface {
 	Name() string
-	Build(panes Panes) *termforge.SplitLayout
+	Build(panes Panes) *termforge.WidgetTree
 }
 
 func clampRatio(r float64) float64 {

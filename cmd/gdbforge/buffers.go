@@ -22,7 +22,7 @@ type bufferHost interface {
 	Shell() *LayoutShell
 	AppContext() platform.AppContext
 	ClipboardIO() termforge.ClipboardIO
-	Builtins() map[string]termforge.Widget
+	Builtins() map[string]termforge.NodeWidget
 	FileListWidget() *widgets.FileListWidget
 	PublishBreakpointsChanged()
 	PaintCodeBreaks(w *widgets.CodeWidget, path string)
@@ -34,8 +34,8 @@ type bufferHost interface {
 	RequestFrame()
 	ensureSourceFiles()
 	syncFileListViews()
-	swapFocusedWidget(w termforge.Widget) bool
-	LuaEnterBuffer(w termforge.Widget)
+	swapFocusedWidget(w termforge.NodeWidget) bool
+	LuaEnterBuffer(w termforge.NodeWidget)
 	LuaEnsureBuffer(name string, from *luahost.Runtime) bool
 	OpenLuaConsole()
 	LogError(area, msg string)
@@ -399,7 +399,7 @@ func (c *bufferCtl) editCompletions(prefix string, _ bool) []string {
 	return names
 }
 
-func (c *bufferCtl) focusBufferWidget(w termforge.Widget) {
+func (c *bufferCtl) focusBufferWidget(w termforge.NodeWidget) {
 	h := c.host
 	if w == nil || h == nil || h.Shell().Layout() == nil {
 		return

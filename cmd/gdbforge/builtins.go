@@ -34,7 +34,7 @@ func (a *DebuggerApp) initBuiltins() error {
 	if a.backend == nil {
 		return fmt.Errorf("debugger backend not initialized")
 	}
-	a.builtins = make(map[string]termforge.Widget)
+	a.builtins = make(map[string]termforge.NodeWidget)
 
 	a.aboutWidget = widgets.NewAboutWidget(version)
 	a.registerBuiltin("about", a.aboutWidget)
@@ -52,9 +52,9 @@ func (a *DebuggerApp) initBuiltins() error {
 	return a.DebugSession.init(a)
 }
 
-func (a *DebuggerApp) registerBuiltin(name string, w termforge.Widget) {
+func (a *DebuggerApp) registerBuiltin(name string, w termforge.NodeWidget) {
 	if a.builtins == nil {
-		a.builtins = make(map[string]termforge.Widget)
+		a.builtins = make(map[string]termforge.NodeWidget)
 	}
 	a.builtins[name] = w
 }

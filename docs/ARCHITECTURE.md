@@ -31,7 +31,7 @@ consumer, which is why the two read like siblings.
 | `DebuggerApp`, the composition root | `termforge.App` — event loop, screen, draw orchestration |
 | Debugger panes (Code, Assembly, Breakpoints, Threads) | `DocumentView`, `TableWidget`, `CompositeTerminal` to build them from |
 | The `:gdb …` command tree and debugger key bindings | `CommandParser`, `CommandRegistry`, `KeyBindingRegistry` |
-| Named debugger workspaces and pane policy | `SplitLayout` / `WidgetTree` geometry, focus, and marks |
+| Named debugger workspaces and pane policy | `WidgetTree` geometry, focus, and marks |
 | GDB MI and Delve rpc2 clients | `ptyx` PTY plumbing the backends read and write through |
 
 Concretely: `DebuggerApp` embeds `*termforge.App` and implements `termforge.AppApi`,
@@ -634,7 +634,7 @@ Platform components do not import terminal or widget packages. Today many of the
 | **Grid** | Off-screen cell framebuffer |
 | **Viewport** | Scroll window over line `Buffer`; cursor, selection, ANSI path |
 | **TableWidget** | Columnar grid over `CellBuffer` + `RectViewport`; row selection, `/search` |
-| **Widget** | View interface (`Draw`, `DrawStatusLine`, `HandleEvent`) |
+| **Widget** | View interface (`Draw`, `HandleEvent`); panes add `DrawStatusLine` as `NodeWidget` |
 | **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
 

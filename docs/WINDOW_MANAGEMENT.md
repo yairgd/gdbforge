@@ -302,7 +302,7 @@ gdbforge owns a **`LayoutShell`** layer (`cmd/gdbforge/workspace*.go`) above `te
 | **`TabWidget`** | Tab list chrome; hands the active tab's `Layout` its canvas and events |
 | **`DebuggerApp` / `*Ctl`** | Debugger domain (breakpoints, stops, threads, buffers, …) |
 
-`LayoutShell` is **workspace policy**, not debugger policy. Split-tree ops go straight to the layout via `LayoutShell.Layout()` / `DebuggerApp.Layout()`, which returns `*termforge.SplitLayout` concretely — no forwarding through `Tab`.
+`LayoutShell` is **workspace policy**, not debugger policy. Split-tree ops go straight to the layout via `LayoutShell.Layout()` / `DebuggerApp.Layout()`, which returns `*termforge.WidgetTree` concretely — no forwarding through `Tab`.
 
 The generic side of this — `Tab` as a `Layout` container, the interface, and why `Tab` carries no forwarding methods — is documented in [termforge: Tab is a generic Layout container](https://yairgd.github.io/termforge/WINDOW_MANAGEMENT/#tab-is-a-generic-layout-container).
 
@@ -310,7 +310,7 @@ The generic side of this — `Tab` as a `Layout` container, the interface, and w
 
 ## Tab management
 
-**Tab** is chrome: a title plus a `Layout`. For a `SplitLayout`, focus and named leaf marks live on the embedded **`WidgetTree`**. Mark **names** and focus policy are **app-private** on `LayoutShell`. termforge itself stays free of debugger roles so other apps can reuse it.
+**Tab** is chrome: a title plus a `Layout`. For the tiling layout, focus and named leaf marks live on the **`WidgetTree`** itself. Mark **names** and focus policy are **app-private** on `LayoutShell`. termforge itself stays free of debugger roles so other apps can reuse it.
 
 ```mermaid
 flowchart LR
@@ -338,13 +338,13 @@ type TabWidget struct {
 }
 ```
 
-Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent`, `DrawStatusLine` and the two constructors.
+Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent` and the two constructors.
 
 | Feature | Status |
 |---------|--------|
 | Single tab container | Implemented |
 | Hand events/draw to active tab's Layout | Implemented |
-| Named leaf marks on WidgetTree | Implemented (on `SplitLayout`) |
+| Named leaf marks on WidgetTree | Implemented |
 | Generic non-tree tab content | Implemented (`Layout` interface); no second implementation yet |
 | Nested layout inside a leaf | Structurally supported; focus arbitration not implemented |
 | Tab header rendering | Not implemented |
@@ -354,7 +354,7 @@ Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent`, `DrawStat
 
 **Design decision:** gdbforge tabs are **workspace presets**, not separate debugger sessions (initially). A tab might represent "source + console" vs "registers + memory". Multi-session tabs may come later with backend association per tab.
 
-Named layout builders (`internal/gdbforge/layout`) return a `*termforge.SplitLayout`; `LayoutShell.ApplyLayout` mounts it via `TabWidget.SetLayout` and then re-applies the startup wiring (status clipboard, resize hook, equalalways, marks) that a freshly built layout does not carry.
+Named layout builders (`internal/gdbforge/layout`) return a `*termforge.WidgetTree`; `LayoutShell.ApplyLayout` mounts it via `TabWidget.SetLayout` and then re-applies the startup wiring (status clipboard, resize hook, equalalways, marks) that a freshly built layout does not carry.
 
 ---
 

@@ -29,7 +29,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `Widget` interface | Done | `HandleEvent` + `Draw` + `DrawStatusLine` |
+| `Widget` interface | Done | `HandleEvent` + `Draw`; panes add `DrawStatusLine` (`NodeWidget`) |
 | Per-pane status line | Done | Focus bar via `BaseWidget.PaneName`; grid restore before paint |
 | Split tree (`Node`, `WidgetTree`) | Done | Binary splits, ratio layout |
 | `Canvas` / `Rect` | Done | Local coordinates |

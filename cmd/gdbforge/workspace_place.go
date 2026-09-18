@@ -96,7 +96,7 @@ func (w *LayoutShell) placeLogoInCodeSlot() {
 	}
 }
 
-func (w *LayoutShell) swapFocusedWidget(wid termforge.Widget) bool {
+func (w *LayoutShell) swapFocusedWidget(wid termforge.NodeWidget) bool {
 	lay := w.Layout()
 	h := w.host
 	if lay == nil || wid == nil || h == nil {
@@ -119,7 +119,7 @@ func (w *LayoutShell) swapFocusedWidget(wid termforge.Widget) bool {
 	return true
 }
 
-func (w *LayoutShell) pushWidgetJump(wid termforge.Widget) {
+func (w *LayoutShell) pushWidgetJump(wid termforge.NodeWidget) {
 	if wid == nil {
 		return
 	}

@@ -45,7 +45,7 @@ type DebuggerApp struct {
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
 
-	builtins    map[string]termforge.Widget
+	builtins    map[string]termforge.NodeWidget
 	aboutWidget *widgets.AboutWidget
 	helpWidget  *widgets.HelpWidget
 	logoWidget  *widgets.LogoWidget

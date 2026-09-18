@@ -25,7 +25,7 @@ func newGdbLeafApp() *DebuggerApp {
 	tab := termforge.NewTabTwoHozSplitWins("test", code, gdb)
 	a := &DebuggerApp{
 		DebugSession: DebugSession{gdbWidget: gdb},
-		builtins:     map[string]termforge.Widget{"other": other},
+		builtins:     map[string]termforge.NodeWidget{"other": other},
 	}
 	initLayoutShell(a, tab)
 	a.Layout().FocusWidget(gdb)
@@ -81,7 +81,7 @@ func TestSwapFocusedWidgetAllowsOtherLeaf(t *testing.T) {
 func TestJumpBackRefusesGdbLeaf(t *testing.T) {
 	a := newGdbLeafApp()
 	other := a.builtins["other"]
-	a.widgetJump = []termforge.Widget{other}
+	a.widgetJump = []termforge.NodeWidget{other}
 
 	a.JumpBack()
 	if a.focusedWidget() != a.gdbWidget {

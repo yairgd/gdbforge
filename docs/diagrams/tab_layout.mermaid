@@ -1,25 +1,23 @@
-%% Tab is a generic Layout container: two separate routes to SplitLayout.
-%% Solid arrows are runtime use (call / field / embed); dotted arrows are
+%% Tab is a generic Layout container: two separate routes to the split tree.
+%% Solid arrows are runtime use (call / field); dotted arrows are
 %% the implements relationship. Stadium node = interface, double-barred
 %% node = a set of call sites rather than a type.
 flowchart TD
-    TFApp["termforge.App frame loop"]
+    App["App frame loop"]
     TabW["TabWidget"]
     Tab["Tab<br/>Title + Content Layout"]
     Iface(["Layout interface<br/>Widget + BuildLayout"])
-    SL["SplitLayout<br/>embeds *WidgetTree"]
     WT["WidgetTree<br/>topology, geometry, focus, marks"]
     FutureA["future layout"]
     FutureB["future layout"]
-    Shell["LayoutShell.Layout()<br/>the one type assertion"]
-    AppCode[["many cmd/gdbforge call sites<br/>focus, placement, splits, marks<br/>(not a type)"]]
+    Shell["application shell .Layout()<br/>the one type assertion"]
+    AppCode[["many application call sites<br/>focus, placement, splits, marks<br/>(not a type)"]]
 
-    TFApp -->|"calls Draw"| TabW
+    App -->|"calls Draw"| TabW
     TabW -->|"active tab"| Tab
     Tab -->|"Content field"| Iface
-    Iface -.->|"implemented by"| SL
+    Iface -.->|"implemented by"| WT
     Iface -.->|"implemented by"| FutureA
     Iface -.->|"implemented by"| FutureB
-    SL -->|"embeds"| WT
     AppCode -->|"calls"| Shell
-    Shell -->|"returns concrete type"| SL
+    Shell -->|"returns concrete type"| WT

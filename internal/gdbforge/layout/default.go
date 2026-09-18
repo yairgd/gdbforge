@@ -13,18 +13,18 @@ type DefaultSpec struct {
 
 func (s DefaultSpec) Name() string { return Default }
 
-func (s DefaultSpec) Build(panes Panes) *termforge.SplitLayout {
+func (s DefaultSpec) Build(panes Panes) *termforge.WidgetTree {
 	return BuildDefault(panes, s.Ratios)
 }
 
 // BuildDefault builds:
 //
 //	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.
-func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termforge.SplitLayout {
+func BuildDefault(panes Panes, ratios platform.DefaultLayoutRatios) *termforge.WidgetTree {
 	ratios.Left = clampRatio(ratios.Left)
 	ratios.Output = clampRatio(ratios.Output)
 	ratios.BottomFirst = clampRatio(ratios.BottomFirst)
-	tree := termforge.NewSplitLayout(panes.Code)
+	tree := termforge.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termforge.Vertical, panes.Output)
 	tree.FocusWidget(panes.Code)

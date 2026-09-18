@@ -86,7 +86,7 @@ func (a *DebuggerApp) layoutCompletions(prefix string, _ bool) []string {
 	return out
 }
 
-func (a *DebuggerApp) layoutCodePane() termforge.Widget {
+func (a *DebuggerApp) layoutCodePane() termforge.NodeWidget {
 	if w := a.layoutCodeWidget(); w != nil {
 		return w
 	}
@@ -113,7 +113,7 @@ func (a *DebuggerApp) registerLayouts() {
 	a.State().SetCurrentLayout(layout.Wide)
 }
 
-func (a *DebuggerApp) debugPanes(code termforge.Widget) layout.Panes {
+func (a *DebuggerApp) debugPanes(code termforge.NodeWidget) layout.Panes {
 	return layout.Panes{
 		Code:        code,
 		GDB:         a.gdbWidget,
@@ -125,6 +125,6 @@ func (a *DebuggerApp) debugPanes(code termforge.Widget) layout.Panes {
 }
 
 // newStartupTab builds the initial wide workspace tab.
-func (a *DebuggerApp) newStartupTab(code termforge.Widget) *termforge.TabWidget {
+func (a *DebuggerApp) newStartupTab(code termforge.NodeWidget) *termforge.TabWidget {
 	return termforge.NewTabWidget("wide", layout.BuildWide(a.debugPanes(code)))
 }

@@ -7,7 +7,7 @@ import (
 
 // focusedWidget returns the focused leaf widget via Tab (generic shell only).
 // Debugger-specific type knowledge lives in the helpers below, not at call sites.
-func (a *DebuggerApp) focusedWidget() termforge.Widget {
+func (a *DebuggerApp) focusedWidget() termforge.NodeWidget {
 	if lay := a.Layout(); lay != nil {
 		return lay.FocusedWidget()
 	}

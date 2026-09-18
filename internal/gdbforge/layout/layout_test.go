@@ -18,7 +18,7 @@ func (s *stubPane) HandleEvent(tcell.Event) {}
 func (s *stubPane) Draw(termforge.Canvas)   {}
 
 func stubPanes() Panes {
-	mk := func(id string) termforge.Widget { return &stubPane{id: id} }
+	mk := func(id string) termforge.NodeWidget { return &stubPane{id: id} }
 	return Panes{
 		Code: mk("code"), GDB: mk("gdb"), Output: mk("out"),
 		Breakpoints: mk("bp"), Threads: mk("th"), Callstack: mk("cs"),

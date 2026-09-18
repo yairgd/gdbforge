@@ -7,13 +7,13 @@ type ClassicSpec struct{}
 
 func (ClassicSpec) Name() string { return Classic }
 
-func (ClassicSpec) Build(panes Panes) *termforge.SplitLayout {
+func (ClassicSpec) Build(panes Panes) *termforge.WidgetTree {
 	return BuildClassic(panes)
 }
 
 // BuildClassic builds a single horizontal split: Code over GDB.
-func BuildClassic(panes Panes) *termforge.SplitLayout {
-	tree := termforge.NewSplitLayout(panes.Code)
+func BuildClassic(panes Panes) *termforge.WidgetTree {
+	tree := termforge.NewWidgetTree(panes.Code)
 	tree.SetEqualAlways(true)
 	tree.Split(termforge.Horizontal, panes.GDB)
 	tree.FocusWidget(panes.GDB)

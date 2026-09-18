@@ -34,12 +34,12 @@ type luaHost interface {
 	Mode() platform.Mode
 	SetMode(mode platform.Mode)
 	RequestFrame()
-	Layout() *termforge.SplitLayout
+	Layout() *termforge.WidgetTree
 	Screen() tcell.Screen
-	FocusedWidget() termforge.Widget
+	FocusedWidget() termforge.NodeWidget
 	OutputWidget() *widgets.OutputWidget
 	LuaConsoleWidget() *widgets.LuaConsoleWidget
-	SwapFocusedWidget(w termforge.Widget) bool
+	SwapFocusedWidget(w termforge.NodeWidget) bool
 	GDBWidget() *widgets.GDBWidget
 	ActiveCodeWidget() *widgets.CodeWidget
 	CodeBufferForB() *widgets.CodeWidget
@@ -64,10 +64,10 @@ type luaHost interface {
 	PlaceCodeInSlot(w *widgets.CodeWidget)
 	FocusCode()
 	FindGdbLeaf() *termforge.Node
-	FocusBufferWidget(w termforge.Widget)
+	FocusBufferWidget(w termforge.NodeWidget)
 	OpenOrCreateBuffer(name string, from *luahost.Runtime)
-	RegisterBuiltin(name string, w termforge.Widget)
-	BuiltinWidget(name string) termforge.Widget
+	RegisterBuiltin(name string, w termforge.NodeWidget)
+	BuiltinWidget(name string) termforge.NodeWidget
 	Serial() luaSerialHost
 }
 
@@ -124,7 +124,7 @@ func (a *DebuggerApp) SendGdbExec(cmd string) {
 func (a *DebuggerApp) PlaceCodeInSlot(w *widgets.CodeWidget) { a.placeCodeInSlot(w) }
 func (a *DebuggerApp) FindGdbLeaf() *termforge.Node          { return a.findGdbLeaf() }
 
-func (a *DebuggerApp) FocusBufferWidget(w termforge.Widget) {
+func (a *DebuggerApp) FocusBufferWidget(w termforge.NodeWidget) {
 	if a != nil {
 		a.bufs.focusBufferWidget(w)
 	}
@@ -136,9 +136,11 @@ func (a *DebuggerApp) OpenOrCreateBuffer(name string, from *luahost.Runtime) {
 	}
 }
 
-func (a *DebuggerApp) RegisterBuiltin(name string, w termforge.Widget) { a.registerBuiltin(name, w) }
+func (a *DebuggerApp) RegisterBuiltin(name string, w termforge.NodeWidget) {
+	a.registerBuiltin(name, w)
+}
 
-func (a *DebuggerApp) BuiltinWidget(name string) termforge.Widget {
+func (a *DebuggerApp) BuiltinWidget(name string) termforge.NodeWidget {
 	if a == nil || a.builtins == nil {
 		return nil
 	}
@@ -151,7 +153,7 @@ func (a *DebuggerApp) TrackChild(pid int) {
 	}
 }
 
-func (a *DebuggerApp) SwapFocusedWidget(w termforge.Widget) bool { return a.swapFocusedWidget(w) }
+func (a *DebuggerApp) SwapFocusedWidget(w termforge.NodeWidget) bool { return a.swapFocusedWidget(w) }
 
 func (a *DebuggerApp) SetKgdbMode(on bool) { a.setKgdbMode(on) }
 

@@ -5,7 +5,7 @@ import (
 	"github.com/yairgd/termforge"
 )
 
-// Named leaf marks on the active SplitLayout (workspace role names).
+// Named leaf marks on the active split tree (workspace role names).
 const (
 	leafMarkCode = "code"
 	leafMarkGDB  = "gdb"
@@ -18,7 +18,7 @@ const (
 
 const widgetJumpMax = 32
 
-// LayoutShell owns gdbforge workspace policy above a termforge.SplitLayout:
+// LayoutShell owns gdbforge workspace policy above a termforge.WidgetTree:
 // pane marks, placement, focus activation (Code/GDB/last), layout apply, and
 // focused-pane widget swap / jump-back.
 //
@@ -32,7 +32,7 @@ const widgetJumpMax = 32
 type LayoutShell struct {
 	tab        *termforge.TabWidget
 	host       layoutHost
-	widgetJump []termforge.Widget
+	widgetJump []termforge.NodeWidget
 }
 
 func initLayoutShell(app *DebuggerApp, tab *termforge.TabWidget) {
@@ -57,14 +57,13 @@ func (w *LayoutShell) Tab() *termforge.TabWidget {
 // forwarding methods.
 //
 // Returns nil before the shell is wired and when the tab hosts a non-split
-// Layout. Callers must nil-check: SplitLayout embeds *WidgetTree, so calling a
-// promoted method on a nil *SplitLayout panics when the embedded field is read,
-// before any nil receiver check inside WidgetTree can run.
-func (w *LayoutShell) Layout() *termforge.SplitLayout {
+// Layout. Callers must nil-check: only some WidgetTree methods guard a nil
+// receiver, so the navigation and split calls panic on a nil layout.
+func (w *LayoutShell) Layout() *termforge.WidgetTree {
 	if w == nil || w.tab == nil {
 		return nil
 	}
-	lay, _ := w.tab.Layout().(*termforge.SplitLayout)
+	lay, _ := w.tab.Layout().(*termforge.WidgetTree)
 	return lay
 }
 

@@ -105,7 +105,7 @@ Async path:
 | **Controller host** | Narrow iface (`breakHost`, `luaHost`, …) — ctl dependency surface |
 | **Widget host** | List widget intents (`BreakpointHost`, …); app forwards to `*Ctl` |
 | **Model** | Domain state on `*Ctl` / `internal/gdbforge/models` (e.g. `BreakpointList`) |
-| **Widget** | View — `HandleEvent`, `Draw`, `DrawStatusLine`; host intents / callbacks only; no `Send` |
+| **Widget** | View — `HandleEvent`, `Draw` (panes also `DrawStatusLine`); host intents / callbacks only; no `Send` |
 | **Backend** | `gdbforge/backend.Backend` — semantic debugger ops + capability flags; `GDBBackend` / `DLVBackend` |
 | **ConsoleUpdate** | `debugger.ConsoleUpdate` — unified console/stop delta from `PushConsoleOutput` |
 | **StopInfo** | `debugger.StopInfo` — normalized stop event for the stop pipeline |
