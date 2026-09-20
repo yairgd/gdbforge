@@ -7,13 +7,13 @@ import (
 
 func TestIndexFindsHandleInsertKey(t *testing.T) {
 	root := "../.."
-	idx, err := loadFuncIndex(root, []string{"./cmd/gdbforge"})
+	idx, err := loadFuncIndex(root, []string{"./internal/app"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	link := chainSpec{
 		Symbol: "handleInsertKey",
-		Pkg:    "cmd/gdbforge",
+		Pkg:    "internal/app",
 		Recv:   "(*DebuggerApp)",
 		Name:   "handleInsertKey",
 	}

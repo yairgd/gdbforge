@@ -109,7 +109,7 @@ flowchart TB
 | `:b gdb` bridge | `WireCLI` → `CompositeTerminal` | CLI PTY bytes + keys |
 | `:b io` bridge | `WireInferior` → `CompositeTerminal` | Inferior PTY bytes + keys |
 | Serial console | `serialmux.TermTTY()` → IO pane | UART console leg as `*ptyx.TTY` |
-| External / headless | `cmd/gdbforge/inferior_tty.go` | Opens real terminals; rewires or restarts |
+| External / headless | `internal/app/inferior_tty.go` | Opens real terminals; rewires or restarts |
 
 ---
 
@@ -261,7 +261,7 @@ flowchart TB
 
 1. `OpenExternalTTY` / `:set inferior-tty` / Lua `open_external_tty`
 2. Spawn `GDBFORGE_TERMINAL` (e.g. `mate-terminal`) running `sh -c 'exec gdbforge --hold-inferior-tty <path-file> <pid-file>'`
-3. The hold helper (`cmd/gdbforge/inferior_tty_hold.go`) **releases the pts from its own session** (`TIOCNOTTY`), then writes `/dev/pts/N` and its pid to the temp files and sleeps until gdbforge signals it
+3. The hold helper (`internal/ttyhold/hold.go`) **releases the pts from its own session** (`TIOCNOTTY`), then writes `/dev/pts/N` and its pid to the temp files and sleeps until gdbforge signals it
 4. Read `/dev/pts/N` from the temp file
 5. GDB: live `-inferior-tty-set` pointing at that path; close internal `ptyx.TTY`
 6. Unwire `:b io` (shows a note — type in the other window)
@@ -358,7 +358,7 @@ So: **control plane = TCP** (plus a local PTY only for the connect CLI); **stdio
 | Fact | Detail |
 |------|--------|
 | Widget | `OutputWidget` — does **not** own `*ptyx.TTY` |
-| Wiring | `cmd/gdbforge/io_console.go` — `wireInferiorIO` / `unwireInferiorIO` |
+| Wiring | `internal/app/io_console.go` — `wireInferiorIO` / `unwireInferiorIO` |
 | Read path | Inferior master → `WireTTY` → `CompositeTerminal` (xterm paint) |
 | Write path | Enter → `TTY.Send`; Ctrl-C → `^C` on **inferior** master (not the debugger PTY) |
 | External / headless | Unwired; note text only |
@@ -372,7 +372,7 @@ It is a **line console** (ANSI, newlines) — not a full VT. Curses / alternate-
 | Fact | Detail |
 |------|--------|
 | Widget | `GDBWidget` / console pane |
-| Wiring | `cmd/gdbforge/gdb_console.go` |
+| Wiring | `internal/app/gdb_console.go` |
 | Backend | `gdb.GDBClient` (MI `*ptyx.TTY`) or `dlv.Client` over CLI `*ptyx.TTY` |
 | Read path | Debugger master → parser (`GdbInputState` / `dlv.InputState`) → paint |
 | Write path | Enter → `Send(cmd)`; Tab completion / queries also use this PTY (with write lock) |
@@ -446,9 +446,9 @@ Bare `:set inferior-tty` opens `GDBFORGE_TERMINAL` and points GDB at that pts (`
 | Delve `--tty` / connect | `internal/dlv/client.go` |
 | IO / GDB / exec widgets | `internal/gdbforge/widgets/{output,gdb,exec}_widget.go` |
 | Serial mux | `internal/serialmux/mux.go` |
-| External tty / headless / restart | `cmd/gdbforge/inferior_tty.go` |
-| IO bridge | `cmd/gdbforge/io_console.go` |
-| GDB/Delve console bridge | `cmd/gdbforge/gdb_console.go` |
+| External tty / headless / restart | `internal/app/inferior_tty.go` |
+| IO bridge | `internal/app/io_console.go` |
+| GDB/Delve console bridge | `internal/app/gdb_console.go` |
 | Lua: open tty / spawn / dlv | `internal/luahost/user_scripts.go`, `lua/dlv_ext_port`, `lua/remotegdb` |
 
 ---

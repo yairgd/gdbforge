@@ -78,7 +78,7 @@ graph TB
 - It is still a stable anchor: `FixedSecond` holds it to one row at the bottom edge whatever the pane ratios do, and `CollectLeaves` hides it so focus movement, `:close`, `:only` and separator drags behave as if it were not in the tree.
 - Transient chrome (wildmenu, help, future message bars) is **not** in the tree. It goes in the App's floating tier, which reserves no space — **no popup compositor**.
 
-**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. `cmd/gdbforge/setup.go` declares the placement once; nothing assigns rects on resize:
+**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. `internal/app/setup.go` declares the placement once; nothing assigns rects on resize:
 
 ```go
 a.AddWidget(a.Widget())                     // TabWidget: fills the screen
@@ -116,7 +116,7 @@ Do **not** introduce a separate popup/z-order system. Registration order is the 
 
 ## Workspace concept
 
-The **Workspace** is everything below the TabBar, cmdline row included. It is the **only** place where recursive splits exist. gdbforge also has a **`LayoutShell` type** (`cmd/gdbforge/workspace*.go`) that owns pane policy above the layout — see [LayoutShell (gdbforge) vs Tab](#layoutshell-gdbforge-vs-tab-termforge).
+The **Workspace** is everything below the TabBar, cmdline row included. It is the **only** place where recursive splits exist. gdbforge also has a **`LayoutShell` type** (`internal/app/workspace*.go`) that owns pane policy above the layout — see [LayoutShell (gdbforge) vs Tab](#layoutshell-gdbforge-vs-tab-termforge).
 
 Workspace panes are **widgets** — views bound to application **models** owned by `*Ctl` controllers. Typical models and their views:
 
@@ -301,13 +301,13 @@ What happens:
 | **`default`** | Left Code/GDB **2/3**; right IO / Breakpoints / Threads / Call stack (`DefaultLayoutRatios`) |
 | **`classic`** | Full-width Code over GDB (original cgdb) |
 
-Per-layout normal-mode key policy is registered in `cmd/gdbforge/layout_behavior.go` (not in termforge Tab).
+Per-layout normal-mode key policy is registered in `internal/app/layout_behavior.go` (not in termforge Tab).
 
 ---
 
 ## LayoutShell (gdbforge) vs Tab (termforge)
 
-gdbforge owns a **`LayoutShell`** layer (`cmd/gdbforge/workspace*.go`) above `termforge.TabWidget`:
+gdbforge owns a **`LayoutShell`** layer (`internal/app/workspace*.go`) above `termforge.TabWidget`:
 
 | Layer | Owns |
 |-------|------|

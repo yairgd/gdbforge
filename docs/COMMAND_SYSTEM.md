@@ -208,7 +208,7 @@ The DSL in `termforge/commands/dsl.go` builds the tree declaratively instead of 
 | `(n *CommandNode).Group(name, children...)` | Inserts a group into `n`, returns `n` for chaining |
 | `(n *CommandNode).Leaf` / `LeafRest` | Insert leaf (or rest-args leaf) into `n`, return `n` |
 
-### Example (`DebuggerApp.ExapData` in `cmd/gdbforge/command_tree.go`)
+### Example (`DebuggerApp.ExapData` in `internal/app/command_tree.go`)
 
 ```go
 func (a *DebuggerApp) ExapData() {
@@ -337,7 +337,7 @@ sequenceDiagram
     Parser->>Tree: current.Action()
 ```
 
-Wiring in `cmd/gdbforge/setup.go`:
+Wiring in `internal/app/setup.go`:
 
 ```go
 a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
@@ -395,7 +395,7 @@ Key chords use the **same `CommandNode` type** but a **different registry**:
 | Key chords | `KeyBindingRegistry` trie | `SearchPartial(key)` per keypress |
 
 ```go
-// cmd/gdbforge/keybindings.go
+// internal/app/keybindings.go
 func (a *DebuggerApp) InitKeyBindings() {
     a.keyBindings = commands.NewKeyBindingRegistry()
     a.keyBindings.Bind(
@@ -417,13 +417,13 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Colon command (tree)
 
-1. Add a `Cmd` or nested `Group` in `ExapData()` (`cmd/gdbforge/command_tree.go`).
-2. Implement the handler on `DebuggerApp` in `cmd/gdbforge/actions.go`.
+1. Add a `Cmd` or nested `Group` in `ExapData()` (`internal/app/command_tree.go`).
+2. Implement the handler on `DebuggerApp` in `internal/app/actions.go`.
 3. No `CommandID` or event-bus wiring needed for tree leaves — `Execute()` calls `Action` directly.
 
 ### Key chord
 
-1. Add `a.keyBindings.Bind(…)` in `cmd/gdbforge/keybindings.go`.
+1. Add `a.keyBindings.Bind(…)` in `internal/app/keybindings.go`.
 
 ### Tab completion feedback
 
@@ -443,13 +443,13 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 | `termforge/completion_popup.go` | Wildmenu floating window (`CompletionView`) |
 | `termforge/completion_bar.go` | Wildmenu chrome row — the alternative `CompletionView` |
 | `termforge/event.go` | `CompletionMsg` and other UI-generic events |
-| `cmd/gdbforge/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
+| `internal/app/events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `termforge/platform/event_bus.go` | Typed `Subscribe` / `Publish` |
 | `termforge/logger_widget.go` | Log sink pane |
-| `cmd/gdbforge/command_tree.go` | `ExapData` DSL |
-| `cmd/gdbforge/keybindings.go` | `InitKeyBindings` |
-| `cmd/gdbforge/actions.go` | Command action methods |
-| `cmd/gdbforge/setup.go` | `InitB` wiring (`SetOnExecute`) |
+| `internal/app/command_tree.go` | `ExapData` DSL |
+| `internal/app/keybindings.go` | `InitKeyBindings` |
+| `internal/app/actions.go` | Command action methods |
+| `internal/app/setup.go` | `InitB` wiring (`SetOnExecute`) |
 
 ---
 

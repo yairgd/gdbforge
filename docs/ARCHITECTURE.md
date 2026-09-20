@@ -103,11 +103,11 @@ flowchart TB
 | Layer | Owns | Lives in |
 |-------|------|----------|
 | **Composition root** | Wire App, hosts, modes, stop orchestration | `DebuggerApp` (`app.go`, `facade.go`, `controllers.go`) |
-| **LayoutShell** | Pane marks, Code/GDB placement, layout apply, focus/jump-back | `cmd/gdbforge/workspace*.go`, `layout_host.go` (embedded on app) |
+| **LayoutShell** | Pane marks, Code/GDB placement, layout apply, focus/jump-back | `internal/app/workspace*.go`, `layout_host.go` (embedded on app) |
 | **DebugSession** | Backend, debug state, GDB/DLV widgets, debug `*Ctl` group | `debug_session.go` (embedded on app) |
 | **Backend** | GDB vs Delve policy; owns concrete client | `internal/gdbforge/backend` |
 | **Model** | Session + domain snapshots (on `*Ctl`, not app fields) | `breakCtl.list`, `debugInfoCtl`, `asmCtl`, `internal/gdbforge/models` |
-| **Domain surface** | Peer ops for AI / future Lua | `internal/gdbforge/domain` · `cmd/gdbforge/debug_domain.go` |
+| **Domain surface** | Peer ops for AI / future Lua | `internal/gdbforge/domain` · `internal/app/debug_domain.go` |
 | **Controller** | Intents → mutate model → paint / `Send`; `Register` on EventBus | GUI: `*Ctl` · MCP: `internal/mcp` |
 | **View** | Paint + host intents / callbacks | `internal/gdbforge/widgets`, `termforge` |
 
@@ -189,7 +189,7 @@ DebuggerApp
 
 `LayoutShell` uses `layoutHost` (not `*DebuggerApp`) for pane policy — same decoupling pattern as controller hosts.
 
-See `cmd/gdbforge/facade.go` for the in-code summary.
+See `internal/app/facade.go` for the in-code summary.
 
 ### UI event path (why refactoring was possible)
 
@@ -226,8 +226,8 @@ Global job-control keys are **not** Mode policy. Three orthogonal mini-machines 
 | Machine | Owns | Lives in |
 |---------|------|----------|
 | **Mode** | Keymaps, Esc, `:` / `/`, ModeLua | `platform.Mode` + mode handlers |
-| **Activity** | Ctrl-C / Ctrl-Z from inferior + Lua job busy | `cmd/gdbforge/activity.go` |
-| **Confirm** | Ctrl-D quit / y-n gates; confirming interrupt | `cmd/gdbforge/confirm_router.go` + QuitGate / ConfirmGate |
+| **Activity** | Ctrl-C / Ctrl-Z from inferior + Lua job busy | `internal/app/activity.go` |
+| **Confirm** | Ctrl-D quit / y-n gates; confirming interrupt | `internal/app/confirm_router.go` + QuitGate / ConfirmGate |
 
 See [INPUT.md](INPUT.md) § Dispatch.
 
@@ -241,7 +241,7 @@ The Go type `DebugDomain` is **not** “the whole domain” and **not** “many 
 |-------|------|
 | `models/` (`BreakpointList`, …) | Domain **data** (shared truth) |
 | `domain.DebugDomain` interface | Domain **operations** exposed to peers |
-| `cmd/gdbforge/debug_domain.go` | **One** real implementation (same BP path as GUI Space) |
+| `internal/app/debug_domain.go` | **One** real implementation (same BP path as GUI Space) |
 | GUI widgets | May call app helpers directly; they do not need the interface |
 | AI / future Lua | Call through `DebugDomain` only |
 
@@ -656,7 +656,7 @@ flowchart TB
         Render["Canvas → Grid → tcell"]
     end
 
-    subgraph Application["Application · cmd/gdbforge + internal/gdbforge"]
+    subgraph Application["Application · internal/app + internal/gdbforge"]
         DebuggerApp["DebuggerApp · composition root"]
         Ctls["*Ctl · break · asm · console · …"]
         WS["Workspace · pane policy"]
@@ -694,10 +694,10 @@ flowchart TB
 
 | Subsystem | Package | Responsibility |
 |-----------|---------|----------------|
-| **Services** | App layer (`cmd/gdbforge`, `internal/gdb`, `internal/dlv`, …) | Communicate with external systems; produce events |
+| **Services** | App layer (`internal/app`, `internal/gdb`, `internal/dlv`, …) | Communicate with external systems; produce events |
 | **Event bus** | `platform.EventBus` | Distribute typed messages to controller subscribers |
 | **Models** | `internal/gdbforge/models` on `*Ctl` | Own application state; controllers push `SetItems` / paint |
-| **Workspace** | `cmd/gdbforge/workspace*.go` | Pane marks, placement, focus policy, layout apply above Tab |
+| **Workspace** | `internal/app/workspace*.go` | Pane marks, placement, focus policy, layout apply above Tab |
 | **Window manager** | `termforge` (`WidgetTree`, `TabWidget`) | Generic layout / focus / splits (no debugger roles) |
 | **Terminal application** | `termforge.App` | Event loop, screen init, widget registry, redraw orchestration |
 | **Root layout** | `termforge` (planned `RootLayout`) | Fixed TabBar, flexible Workspace band, fixed CmdLine |
@@ -712,7 +712,7 @@ flowchart TB
 | **App modes** | `platform.AppState` | Interaction mode + PTY owner + layout policy (`equalalways`) |
 | **Debugger backend** | `gdbforge/backend`, `ptyx`, `gdb` / `dlv`, `ptyx.Session` | Policy surface + MI/Delve PTY + inferior stdio PTY |
 | **AI / tools** | `mcp.GdbMcpService` | Same-process `:AI` on live Session |
-| **Application shell** | `cmd/gdbforge` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleInterrupt` |
+| **Application shell** | `internal/app` (`DebuggerApp` + `*Ctl`) | Composition root: UI, Backend, controllers, MCP; modes + `HandleInterrupt` |
 
 ---
 
@@ -803,7 +803,7 @@ flowchart TB
         Screen["Terminal screen"]
     end
 
-    subgraph AppLayer["Application layer · cmd/gdbforge"]
+    subgraph AppLayer["Application layer · internal/app"]
         HI["DebuggerApp.HandleInterrupt"]
         Bus["platform.EventBus.Dispatch"]
         Ctls["*Ctl typed handlers"]
@@ -906,7 +906,7 @@ Controllers subscribe in `registerUIComponents()`; the app shell no longer switc
 - `tcell.Screen` lifecycle, Canvas, Grid, WidgetTree, poll/draw loop.
 - Must **not** parse GDB MI — delegates to app/controllers + `internal/gdb`.
 
-### Application (`cmd/gdbforge` + `internal/gdbforge`)
+### Application (`internal/app` + `internal/gdbforge`)
 
 - Declares available models and services at startup.
 - `DebuggerApp` embeds `termforge.App`, **`LayoutShell`**, and **`DebugSession`**, implements `AppApi` and all **host interfaces**:
@@ -925,7 +925,7 @@ See [Platform layer](#platform-layer). Today `termforge/ptyx` holds platform pri
 
 - **`termforge.Event` bus types** — `Event`, `CommandEvent`, `SubmitMsg` (`termforge/event.go`, `command.go`).
 - **`core` PTY events** — `PtyOutputMsg` (`termforge/ptyx/events.go`); `GdbOutputMsg` in `internal/gdbforge/events`.
-- **`CommandID`** — infra constant `CmdUnknown` in `termforge`; app-specific command IDs live in `cmd/gdbforge`.
+- **`CommandID`** — infra constant `CmdUnknown` in `termforge`; app-specific command IDs live in `internal/app`.
 - `Buffer` — line-oriented storage (Platform; no UI knowledge).
 - `History`, `AutoCompleter` for command-line UX (`termforge`).
 - `Debugger` / `Session` / `PTYWriter` — send API, exclusive write, shared Subscribe.
@@ -1082,9 +1082,9 @@ Legacy **`termforge.CommandID`** / `SubmitMsg` remain for infra events (`CmdExit
 ### Wiring (current)
 
 ```go
-// cmd/gdbforge/setup.go
+// internal/app/setup.go
 a.commandReg = commands.NewCommandRegistry()
-a.ExapData()  // cmd/gdbforge/command_tree.go
+a.ExapData()  // internal/app/command_tree.go
 
 a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 a.cmdWidget.Ctx = a.ctx
@@ -1092,7 +1092,7 @@ bar := termforge.NewCompletionBarWidget(a.ctx)          // or CompletionPopupWid
 a.comp.attach(&termforge.CompletionMenu{}, bar)         // ctl subscribes to CompletionMsg
 ```
 
-Implementation: `termforge/commands/`, `termforge/cmd_widget.go`, `termforge/platform/event_bus.go`, `cmd/gdbforge/`.
+Implementation: `termforge/commands/`, `termforge/cmd_widget.go`, `termforge/platform/event_bus.go`, `internal/app/`.
 
 ---
 
@@ -1122,7 +1122,7 @@ The debugger app follows **MVC** today (see [MVC (current)](#mvc-current)). Rema
 | Split commands | `:vs`, `:split` | **Partial** — colon tree + `LayoutShell` |
 | Debugger | App-owned `Session` via Backend; MCP peer; view-only consoles | **Working** — GDB + Delve (`-g`); [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
 
-Entry point: `cmd/gdbforge/` (`main.go` + `app.go`, `setup.go`, …).
+Entry point: `cmd/gdbforge/main.go`, which wires argv to `internal/app` (`app.go`, `setup.go`, …).
 
 Detailed tracker: [ROADMAP.md](ROADMAP.md).
 

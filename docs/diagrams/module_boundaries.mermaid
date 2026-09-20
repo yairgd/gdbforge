@@ -8,7 +8,7 @@ flowchart TB
         Bus["platform.EventBus"]
     end
 
-    subgraph Shell["Orchestration · cmd/gdbforge"]
+    subgraph Shell["Orchestration · internal/app"]
         DebuggerApp["DebuggerApp · composition root"]
         Ctls["*Ctl · typed bus subscribers"]
     end

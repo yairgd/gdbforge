@@ -48,7 +48,7 @@ flowchart TB
         Wire["WireTTY · xterm emulator"]
     end
 
-    subgraph App["Application · cmd/gdbforge"]
+    subgraph App["Application · internal/app"]
         Ctrl["consoleCtl · MI bridge + quit"]
         InfCtl["inferiorIOCtl · wire/unwire IO"]
         Models["models · BreakpointList ThreadList CallStack"]
@@ -105,7 +105,7 @@ flowchart TB
 - `internal/gdb`, `internal/dlv`, and `termforge/ptyx` must not import `termforge`
 - `DebuggerApp` owns `backend.Backend` (concrete GDB or Delve client); views never hold `Session`
 - External APIs use `app.GDB() ptyx.Session` (works for `-g dlv` too)
-- Controllers use **`Backend` semantic ops** (`InsertBreakpoint`, `SelectFrame`, `Exec`, …) and **capability flags** (`NavigationAsync`, `WireCLILineTap`, `DeferBreakpointRefresh`, …) — not `isDLV()` / `isGDB()` branches or MI string literals in `cmd/gdbforge/`
+- Controllers use **`Backend` semantic ops** (`InsertBreakpoint`, `SelectFrame`, `Exec`, …) and **capability flags** (`NavigationAsync`, `WireCLILineTap`, `DeferBreakpointRefresh`, …) — not `isDLV()` / `isGDB()` branches or MI string literals in `internal/app/`
 - Never `Close()` the session from MCP/AI — the app owns lifetime
 
 ---
@@ -380,7 +380,7 @@ Do not hold an internal PTY master and point `-inferior-tty-set` / `--tty` at an
 | Pane resize | `CompositeTerminal.Resize` → `tty.SetSize` |
 | Serial kgdb console | `:terminal` wires `serialmux.TermTTY()` to IO pane (or `GDBFORGE_EXTERNAL_SERIAL=1` for minicom) |
 
-Wiring policy lives in `cmd/gdbforge/io_console.go` (`inferiorIOCtl`); the widget holds `CompositeTerminal` only.
+Wiring policy lives in `internal/app/io_console.go` (`inferiorIOCtl`); the widget holds `CompositeTerminal` only.
 
 **Separation rules:**
 
@@ -412,7 +412,7 @@ flowchart LR
 
 ## Breakpoints and source sync
 
-Breakpoints are coordinated across the debugger console, CodeWidget, AssemblyWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`cmd/gdbforge/events.go`) on `platform.EventBus`; `breakCtl` refreshes from that event (coalesced; no sleep/timer debounce).
+Breakpoints are coordinated across the debugger console, CodeWidget, AssemblyWidget, BreakpointWidget, and MCP. GDB/MCP notifies publish **`BreakpointsChangedMsg`** (`internal/app/events.go`) on `platform.EventBus`; `breakCtl` refreshes from that event (coalesced; no sleep/timer debounce).
 
 ## Breakpoints while the inferior is running
 
@@ -460,7 +460,7 @@ Disabled rows are **kept** across `-break-list` refresh (they are intentionally 
 
 ### Host / callback chain
 
-Wired in `cmd/gdbforge/builtins.go` / `breakpoints.go` (`breakCtl`):
+Wired in `internal/app/builtins.go` / `breakpoints.go` (`breakCtl`):
 
 | Hook | Handler |
 |------|---------|
@@ -704,7 +704,7 @@ Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
 
 ## GDB console bridge
 
-`GDBWidget` is a **dumb terminal view** (`CompositeTerminal` + `WireCLI`). The app owns MI policy on PTY #2 (`cmd/gdbforge/gdb_console.go`):
+`GDBWidget` is a **dumb terminal view** (`CompositeTerminal` + `WireCLI`). The app owns MI policy on PTY #2 (`internal/app/gdb_console.go`):
 
 ```text
 User keys  →  CompositeTerminal.HandleKey  →  WireTTYInput  →  CLI PTY
@@ -741,7 +741,7 @@ sequenceDiagram
 | `CompositeTerminal` | `termforge/composite_terminal.go` | xterm emulator + key trie + `WireTTY` |
 | `WireTTY` | `termforge/wire_tty.go` | PTY bytes ↔ terminal controller |
 | `GDBWidget` | `widgets/gdb_widget.go` | View — `WireCLI`, `Draw`, focus cursor |
-| `consoleCtl` | `cmd/gdbforge/gdb_console.go` | MI bridge, quit, `OnExit`, Send on MI PTY |
+| `consoleCtl` | `internal/app/gdb_console.go` | MI bridge, quit, `OnExit`, Send on MI PTY |
 | `GdbInputState` | `gdb/mi_state.go` | Stream `PushRaw` → `MiUpdate` (MI PTY only) |
 | `ptyx.TTY` | `termforge/ptyx/tty.go` | Unified PTY: `Start` / `Open` / `AttachPath` |
 

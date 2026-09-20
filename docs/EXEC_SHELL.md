@@ -104,7 +104,7 @@ Copy/paste: mouse selection + clipboard bridge (same as other panes); paste send
 |-----|------|
 | `pushWidgetJump` | Append (dedupe consecutive, cap 32) — on `Workspace` |
 | `JumpBack` | Pop and `ReplaceFocusedWidget` without pushing |
-| Binding | `<C-o>` in `cmd/gdbforge/keybindings.go` (normal mode) |
+| Binding | `<C-o>` in `internal/app/keybindings.go` (normal mode) |
 
 Example: GDB → `:b about` → `<C-o>` → GDB again.
 
@@ -123,10 +123,10 @@ Example: GDB → `:b about` → `<C-o>` → GDB again.
 
 | Path | Responsibility |
 |------|----------------|
-| `cmd/gdbforge/command_tree.go` | `LeafRest("!", a.OnRun)` |
-| `cmd/gdbforge/actions.go` | `OnRun`, `startExecSession` |
-| `cmd/gdbforge/workspace_place.go` | `swapFocusedWidget`, `JumpBack`, jump list |
-| `cmd/gdbforge/keybindings.go` | `<C-o>` |
+| `internal/app/command_tree.go` | `LeafRest("!", a.OnRun)` |
+| `internal/app/actions.go` | `OnRun`, `startExecSession` |
+| `internal/app/workspace_place.go` | `swapFocusedWidget`, `JumpBack`, jump list |
+| `internal/app/keybindings.go` | `<C-o>` |
 | `termforge/execcli/exec_client.go` | `ptyx.Start` wrapper |
 | `internal/gdbforge/widgets/exec_widget.go` | Exec terminal view |
 | `termforge/composite_terminal.go` | xterm + `WireTTY` |

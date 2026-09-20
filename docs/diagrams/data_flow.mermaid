@@ -13,7 +13,7 @@ flowchart TB
         Screen["Terminal screen"]
     end
 
-    subgraph AppLayer["Application layer · cmd/gdbforge + internal/gdbforge"]
+    subgraph AppLayer["Application layer · internal/app + internal/gdbforge"]
         HI["DebuggerApp.HandleInterrupt"]
         Bus["platform.EventBus.Dispatch"]
         Ctls["*Ctl typed handlers"]

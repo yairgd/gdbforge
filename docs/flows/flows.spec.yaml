@@ -16,13 +16,13 @@ flows:
     trigger: "Focus :b gdb (debugger console), insert mode, type e.g. b main., press Tab"
     backend: [dlv]
     chain:
-      - { symbol: handleInsertKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0, note: "Tab intercepted; not forwarded to Delve PTY" }
-      - { symbol: gdbTabComplete, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: gdbTabComplete, indent: 1 }
+      - { symbol: handleInsertKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0, note: "Tab intercepted; not forwarded to Delve PTY" }
+      - { symbol: gdbTabComplete, pkg: internal/app, recv: "(*completionCtl)", name: gdbTabComplete, indent: 1 }
       - { symbol: GDBWidget.InputText, pkg: internal/gdbforge/widgets, recv: "(*GDBWidget)", name: InputText, indent: 2, note: "Prefix scraped from xterm grid" }
       - { symbol: DLVBackend.Complete, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: Complete, indent: 2, branch: dlv }
       - { symbol: dlv.Complete, pkg: internal/dlv, name: Complete, indent: 3, branch: dlv }
       - { symbol: ListFunctionsFilter, pkg: internal/dlv, recv: "(*Client)", name: ListFunctionsFilter, indent: 4, branch: dlv, note: "rpc2 ListFunctions — not CLI funcs on PTY" }
-      - { symbol: publishGDBMenu → CompletionMsg, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: publishGDBMenu, indent: 2, note: "Wildmenu + ModeCompletion when multiple matches" }
+      - { symbol: publishGDBMenu → CompletionMsg, pkg: internal/app, recv: "(*completionCtl)", name: publishGDBMenu, indent: 2, note: "Wildmenu + ModeCompletion when multiple matches" }
     breakpoints:
       - main.(*completionCtl).gdbTabComplete
       - github.com/yairgd/gdbforge/internal/dlv.Complete
@@ -34,8 +34,8 @@ flows:
     trigger: "Focus :b gdb, insert mode, press Tab on console input line"
     backend: [gdb]
     chain:
-      - { symbol: handleInsertKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0 }
-      - { symbol: gdbTabComplete, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: gdbTabComplete, indent: 1 }
+      - { symbol: handleInsertKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0 }
+      - { symbol: gdbTabComplete, pkg: internal/app, recv: "(*completionCtl)", name: gdbTabComplete, indent: 1 }
       - { symbol: GDBBackend.Complete, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: Complete, indent: 2, branch: gdb }
       - { symbol: gdb.Complete, pkg: internal/gdb, name: Complete, indent: 3, branch: gdb, note: "Sends -complete on MI PTY" }
     breakpoints:
@@ -48,9 +48,9 @@ flows:
     trigger: "Ctrl-C while gdbforge focused (any mode); copy selection wins if terminal has selection"
     backend: [gdb, dlv]
     chain:
-      - { symbol: tryGlobalInterrupt, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: tryGlobalInterrupt, indent: 0 }
-      - { symbol: onActivityCtrlC, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onActivityCtrlC, indent: 1 }
-      - { symbol: onGdbConsoleInterrupt, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 2, note: "Or onConfirmInterrupt if confirming" }
+      - { symbol: tryGlobalInterrupt, pkg: internal/app, recv: "(*DebuggerApp)", name: tryGlobalInterrupt, indent: 0 }
+      - { symbol: onActivityCtrlC, pkg: internal/app, recv: "(*DebuggerApp)", name: onActivityCtrlC, indent: 1 }
+      - { symbol: onGdbConsoleInterrupt, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 2, note: "Or onConfirmInterrupt if confirming" }
       - { symbol: DLVBackend.Interrupt, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: Interrupt, indent: 3, branch: dlv, note: "Delve: rpc2 Halt only" }
       - { symbol: Client.Interrupt, pkg: internal/dlv, recv: "(*Client)", name: Interrupt, indent: 4, branch: dlv }
     breakpoints:
@@ -63,11 +63,11 @@ flows:
     trigger: "Debugger stops (breakpoint, step, signal); MI/Delve output parsed on UI thread"
     backend: [gdb, dlv]
     chain:
-      - { symbol: handleDebuggerOutputMsg, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
-      - { symbol: applyConsoleUpdate, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 1 }
-      - { symbol: applyStopAndPromptSideEffects, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 2 }
-      - { symbol: onGdbStopped, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 3 }
-      - { symbol: runRefresh, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: runRefresh, indent: 3, note: "Coalesced threads/stack refresh" }
+      - { symbol: handleDebuggerOutputMsg, pkg: internal/app, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
+      - { symbol: applyConsoleUpdate, pkg: internal/app, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 1 }
+      - { symbol: applyStopAndPromptSideEffects, pkg: internal/app, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 2 }
+      - { symbol: onGdbStopped, pkg: internal/app, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 3 }
+      - { symbol: runRefresh, pkg: internal/app, recv: "(*debugInfoCtl)", name: runRefresh, indent: 3, note: "Coalesced threads/stack refresh" }
     breakpoints:
       - main.(*DebuggerApp).onGdbStopped
       - main.(*consoleCtl).applyConsoleUpdate
@@ -78,8 +78,8 @@ flows:
     trigger: "Normal/command mode, CmdWidget active, press Tab on : line"
     backend: [both]
     chain:
-      - { symbol: handleCommandKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Tab in ModeCommand" }
-      - { symbol: refreshCmdMenu, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: refreshCmdMenu, indent: 1, note: "Names come from termforge CmdWidget.CompletionNames (command trie, not debugger MI)" }
+      - { symbol: handleCommandKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Tab in ModeCommand" }
+      - { symbol: refreshCmdMenu, pkg: internal/app, recv: "(*completionCtl)", name: refreshCmdMenu, indent: 1, note: "Names come from termforge CmdWidget.CompletionNames (command trie, not debugger MI)" }
     breakpoints:
       - main.(*completionCtl).refreshCmdMenu
 
@@ -89,8 +89,8 @@ flows:
     trigger: "User runs :gdb continue or bound key — resume inferior"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbContinue, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbContinue, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbContinue, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbContinue, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
       - { symbol: GDBBackend.ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 2, branch: gdb, note: "MI -exec-continue when available" }
       - { symbol: DLVBackend.ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 2, branch: dlv, note: "CLI continue on connect PTY" }
     breakpoints:
@@ -103,8 +103,8 @@ flows:
     trigger: ":gdb run or :gdb start from command mode"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbRun, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbRun, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbRun, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbRun, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 2, branch: gdb }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 2, branch: dlv }
     breakpoints:
@@ -116,9 +116,9 @@ flows:
     trigger: "Breakpoint key in Code widget or gutter click"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onCodeBreakToggle, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: onCodeBreakToggle, indent: 0 }
-      - { symbol: applyBreakIntent, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: applyBreakIntent, indent: 1 }
-      - { symbol: sendBreakpointCmd, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: sendBreakpointCmd, indent: 2 }
+      - { symbol: onCodeBreakToggle, pkg: internal/app, recv: "(*breakCtl)", name: onCodeBreakToggle, indent: 0 }
+      - { symbol: applyBreakIntent, pkg: internal/app, recv: "(*breakCtl)", name: applyBreakIntent, indent: 1 }
+      - { symbol: sendBreakpointCmd, pkg: internal/app, recv: "(*breakCtl)", name: sendBreakpointCmd, indent: 2 }
     breakpoints:
       - main.(*breakCtl).onCodeBreakToggle
 
@@ -128,10 +128,10 @@ flows:
     trigger: "Activate a row in the Call Stack pane"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onCallStackActivate, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: onCallStackActivate, indent: 0 }
-      - { symbol: activateCallStack, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: activateCallStack, indent: 1 }
+      - { symbol: onCallStackActivate, pkg: internal/app, recv: "(*debugInfoCtl)", name: onCallStackActivate, indent: 0 }
+      - { symbol: activateCallStack, pkg: internal/app, recv: "(*debugInfoCtl)", name: activateCallStack, indent: 1 }
       - { symbol: SelectFrame, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: SelectFrame, indent: 2, branch: gdb }
-      - { symbol: showFrameSource, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
+      - { symbol: showFrameSource, pkg: internal/app, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
     breakpoints:
       - main.(*debugInfoCtl).activateCallStack
 
@@ -141,8 +141,8 @@ flows:
     trigger: "Activate a row in the Threads pane"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onThreadActivate, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: onThreadActivate, indent: 0 }
-      - { symbol: activateThread, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: activateThread, indent: 1 }
+      - { symbol: onThreadActivate, pkg: internal/app, recv: "(*debugInfoCtl)", name: onThreadActivate, indent: 0 }
+      - { symbol: activateThread, pkg: internal/app, recv: "(*debugInfoCtl)", name: activateThread, indent: 1 }
       - { symbol: SelectThread, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: SelectThread, indent: 2, branch: gdb }
       - { symbol: SelectThread, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: SelectThread, indent: 2, branch: dlv }
     breakpoints:
@@ -154,9 +154,9 @@ flows:
     trigger: "Focus Lua console, insert mode, press Tab"
     backend: [both]
     chain:
-      - { symbol: handleInsertKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0, note: "Lua console branch" }
-      - { symbol: luaTabComplete, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: luaTabComplete, indent: 1 }
-      - { symbol: LuaGdbforgeComplete, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: LuaGdbforgeComplete, indent: 2 }
+      - { symbol: handleInsertKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleInsertKey, indent: 0, note: "Lua console branch" }
+      - { symbol: luaTabComplete, pkg: internal/app, recv: "(*completionCtl)", name: luaTabComplete, indent: 1 }
+      - { symbol: LuaGdbforgeComplete, pkg: internal/app, recv: "(*DebuggerApp)", name: LuaGdbforgeComplete, indent: 2 }
     breakpoints:
       - main.(*completionCtl).luaTabComplete
 
@@ -166,8 +166,8 @@ flows:
     trigger: "Ctrl-C while quit or Delve multiclient confirm is open"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onConfirmInterrupt, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onConfirmInterrupt, indent: 0 }
-      - { symbol: onConfirmingInterrupt, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onConfirmingInterrupt, indent: 1 }
+      - { symbol: onConfirmInterrupt, pkg: internal/app, recv: "(*DebuggerApp)", name: onConfirmInterrupt, indent: 0 }
+      - { symbol: onConfirmingInterrupt, pkg: internal/app, recv: "(*consoleCtl)", name: onConfirmingInterrupt, indent: 1 }
     breakpoints:
       - main.(*DebuggerApp).onConfirmInterrupt
 
@@ -177,8 +177,8 @@ flows:
     trigger: ":set inferior-tty internal or equivalent — route inferior I/O to :b io pane"
     backend: [gdb, dlv]
     chain:
-      - { symbol: SetInferiorInternal, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: SetInferiorInternal, indent: 0 }
-      - { symbol: syncInferiorIOView, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: syncInferiorIOView, indent: 1 }
+      - { symbol: SetInferiorInternal, pkg: internal/app, recv: "(*DebuggerApp)", name: SetInferiorInternal, indent: 0 }
+      - { symbol: syncInferiorIOView, pkg: internal/app, recv: "(*DebuggerApp)", name: syncInferiorIOView, indent: 1 }
     breakpoints:
       - main.(*DebuggerApp).SetInferiorInternal
 
@@ -188,8 +188,8 @@ flows:
     trigger: "Ctrl-D on debugger console or quit flow opening confirm gate"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onConfirmCtrlD, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onConfirmCtrlD, indent: 0 }
-      - { symbol: onGdbConsoleEOF, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleEOF, indent: 1 }
+      - { symbol: onConfirmCtrlD, pkg: internal/app, recv: "(*DebuggerApp)", name: onConfirmCtrlD, indent: 0 }
+      - { symbol: onGdbConsoleEOF, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleEOF, indent: 1 }
     breakpoints:
       - main.(*DebuggerApp).onConfirmCtrlD
 
@@ -199,9 +199,9 @@ flows:
     trigger: ":layout command selects a named workspace layout"
     backend: [both]
     chain:
-      - { symbol: OnLayout, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnLayout, indent: 0 }
-      - { symbol: ApplyLayout, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: ApplyLayout, indent: 1 }
-      - { symbol: buildLayout, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: buildLayout, indent: 2 }
+      - { symbol: OnLayout, pkg: internal/app, recv: "(*DebuggerApp)", name: OnLayout, indent: 0 }
+      - { symbol: ApplyLayout, pkg: internal/app, recv: "(*LayoutShell)", name: ApplyLayout, indent: 1 }
+      - { symbol: buildLayout, pkg: internal/app, recv: "(*LayoutShell)", name: buildLayout, indent: 2 }
     breakpoints:
       - main.(*DebuggerApp).OnLayout
 
@@ -211,8 +211,8 @@ flows:
     trigger: ":gdb interrupt or interrupt keybinding"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbInterrupt, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbInterrupt, indent: 0 }
-      - { symbol: onGdbConsoleInterrupt, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 1 }
+      - { symbol: GdbInterrupt, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbInterrupt, indent: 0 }
+      - { symbol: onGdbConsoleInterrupt, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 1 }
     breakpoints:
       - main.(*DebuggerApp).GdbInterrupt
 
@@ -222,8 +222,8 @@ flows:
     trigger: "Bound key or :gdb next while stopped"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbNext, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbNext, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbNext, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbNext, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 2, branch: gdb }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 2, branch: dlv }
 
@@ -233,8 +233,8 @@ flows:
     trigger: "Bound key or :gdb step while stopped"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbStep, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbStep, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbStep, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbStep, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 2, branch: gdb }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 2, branch: dlv }
 
@@ -244,7 +244,7 @@ flows:
     trigger: "Normal mode with focus on a pane (not insert/command)"
     backend: [both]
     chain:
-      - { symbol: handleNormalKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleNormalKey, indent: 0 }
+      - { symbol: handleNormalKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleNormalKey, indent: 0 }
 
   - id: show-code-at-stop
     title: Stop → Code pane highlight
@@ -252,9 +252,9 @@ flows:
     trigger: "After onGdbStopped when stop has file:line"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onGdbStopped, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 0 }
-      - { symbol: updateCodeAfterStop, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: updateCodeAfterStop, indent: 1 }
-      - { symbol: showCodeAt, pkg: cmd/gdbforge, recv: "(*bufferCtl)", name: showCodeAt, indent: 2 }
+      - { symbol: onGdbStopped, pkg: internal/app, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 0 }
+      - { symbol: updateCodeAfterStop, pkg: internal/app, recv: "(*DebuggerApp)", name: updateCodeAfterStop, indent: 1 }
+      - { symbol: showCodeAt, pkg: internal/app, recv: "(*bufferCtl)", name: showCodeAt, indent: 2 }
 
   - id: breakpoint-refresh
     title: Breakpoint list refresh
@@ -262,10 +262,10 @@ flows:
     trigger: "After stop or break command — BP pane sync"
     backend: [gdb, dlv]
     chain:
-      - { symbol: refreshAfterStop, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: refreshAfterStop, indent: 0 }
-      - { symbol: fetchInfos, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: fetchInfos, indent: 1 }
-      - { symbol: applyBreakInfos, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: applyBreakInfos, indent: 2 }
-      - { symbol: syncViews, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: syncViews, indent: 3 }
+      - { symbol: refreshAfterStop, pkg: internal/app, recv: "(*breakCtl)", name: refreshAfterStop, indent: 0 }
+      - { symbol: fetchInfos, pkg: internal/app, recv: "(*breakCtl)", name: fetchInfos, indent: 1 }
+      - { symbol: applyBreakInfos, pkg: internal/app, recv: "(*breakCtl)", name: applyBreakInfos, indent: 2 }
+      - { symbol: syncViews, pkg: internal/app, recv: "(*breakCtl)", name: syncViews, indent: 3 }
 
   - id: exec-shell-cmd
     title: ":! exec shell"
@@ -273,8 +273,8 @@ flows:
     trigger: ":! command opens or focuses exec pane"
     backend: [both]
     chain:
-      - { symbol: OnRun, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnRun, indent: 0 }
-      - { symbol: startExecSession, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: startExecSession, indent: 1 }
+      - { symbol: OnRun, pkg: internal/app, recv: "(*DebuggerApp)", name: OnRun, indent: 0 }
+      - { symbol: startExecSession, pkg: internal/app, recv: "(*DebuggerApp)", name: startExecSession, indent: 1 }
   # --- Session startup & teardown ---
   - id: session-gdb-backend
     title: GDB backend startup (pre-TUI)
@@ -282,7 +282,7 @@ flows:
     trigger: "Launch gdbforge with GDB (default); initBackend before TUI"
     backend: [gdb]
     chain:
-      - { symbol: initBackend, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: initBackend, indent: 0 }
+      - { symbol: initBackend, pkg: internal/app, recv: "(*DebuggerApp)", name: initBackend, indent: 0 }
       - { symbol: NewGDBClientOpts, pkg: internal/gdb, name: NewGDBClientOpts, indent: 1, branch: gdb }
       - { symbol: NewGDB, pkg: internal/gdbforge/backend, name: NewGDB, indent: 2, branch: gdb, note: "Wraps client as GDBBackend" }
 
@@ -292,7 +292,7 @@ flows:
     trigger: "Launch gdbforge with Delve backend (--dlv / config)"
     backend: [dlv]
     chain:
-      - { symbol: initBackend, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: initBackend, indent: 0 }
+      - { symbol: initBackend, pkg: internal/app, recv: "(*DebuggerApp)", name: initBackend, indent: 0 }
       - { symbol: NewClientOpts, pkg: internal/dlv, name: NewClientOpts, indent: 1, branch: dlv }
       - { symbol: NewDLV, pkg: internal/gdbforge/backend, name: NewDLV, indent: 2, branch: dlv }
 
@@ -302,10 +302,10 @@ flows:
     trigger: "After initBackend — DebugSession.init registers panes and starts PTY bridge"
     backend: [gdb, dlv]
     chain:
-      - { symbol: initBuiltins, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: initBuiltins, indent: 0 }
-      - { symbol: DebugSession.init, pkg: cmd/gdbforge, recv: "(*DebugSession)", name: init, indent: 1 }
-      - { symbol: startGdbConsoleBridge, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: startGdbConsoleBridge, indent: 2 }
-      - { symbol: restoreSaved, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: restoreSaved, indent: 2, note: ".gdbforge/breakpoints.yaml" }
+      - { symbol: initBuiltins, pkg: internal/app, recv: "(*DebuggerApp)", name: initBuiltins, indent: 0 }
+      - { symbol: DebugSession.init, pkg: internal/app, recv: "(*DebugSession)", name: init, indent: 1 }
+      - { symbol: startGdbConsoleBridge, pkg: internal/app, recv: "(*consoleCtl)", name: startGdbConsoleBridge, indent: 2 }
+      - { symbol: restoreSaved, pkg: internal/app, recv: "(*breakCtl)", name: restoreSaved, indent: 2, note: ".gdbforge/breakpoints.yaml" }
 
   - id: session-quit-save
     title: Quit — save breakpoints snapshot
@@ -313,7 +313,7 @@ flows:
     trigger: "App Close() — persist breakpoint list to .gdbforge/breakpoints.yaml"
     backend: [gdb, dlv]
     chain:
-      - { symbol: saveOnQuit, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: saveOnQuit, indent: 0 }
+      - { symbol: saveOnQuit, pkg: internal/app, recv: "(*breakCtl)", name: saveOnQuit, indent: 0 }
 
   # --- Console I/O & stop pipeline ---
   - id: gdb-console-bridge
@@ -322,9 +322,9 @@ flows:
     trigger: "Background read on debugger CLI PTY posts GdbOutputMsg to UI thread"
     backend: [gdb, dlv]
     chain:
-      - { symbol: startGdbConsoleBridge, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: startGdbConsoleBridge, indent: 0 }
-      - { symbol: handleDebuggerOutputMsg, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 1 }
-      - { symbol: applyConsoleUpdate, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 2 }
+      - { symbol: startGdbConsoleBridge, pkg: internal/app, recv: "(*consoleCtl)", name: startGdbConsoleBridge, indent: 0 }
+      - { symbol: handleDebuggerOutputMsg, pkg: internal/app, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 1 }
+      - { symbol: applyConsoleUpdate, pkg: internal/app, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 2 }
 
   - id: console-parse-gdb
     title: GDB MI/CLI output parsing
@@ -332,7 +332,7 @@ flows:
     trigger: "Coalesced chunk from GDB PTY parsed into ConsoleUpdate"
     backend: [gdb]
     chain:
-      - { symbol: handleDebuggerOutputMsg, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
+      - { symbol: handleDebuggerOutputMsg, pkg: internal/app, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
       - { symbol: PushConsoleOutput, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: PushConsoleOutput, indent: 1, branch: gdb }
       - { symbol: PushRaw, pkg: internal/gdb, recv: "(*GdbInputState)", name: PushRaw, indent: 2, branch: gdb, note: "*stopped, ^running, stream records" }
 
@@ -342,7 +342,7 @@ flows:
     trigger: "Coalesced chunk from Delve connect PTY parsed into ConsoleUpdate"
     backend: [dlv]
     chain:
-      - { symbol: handleDebuggerOutputMsg, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
+      - { symbol: handleDebuggerOutputMsg, pkg: internal/app, recv: "(*consoleCtl)", name: handleDebuggerOutputMsg, indent: 0 }
       - { symbol: PushConsoleOutput, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: PushConsoleOutput, indent: 1, branch: dlv }
       - { symbol: PushRaw, pkg: internal/dlv, recv: "(*InputState)", name: PushRaw, indent: 2, branch: dlv }
 
@@ -352,10 +352,10 @@ flows:
     trigger: "ConsoleUpdate after parse — applies stop, frame sync, BP changed, running flag"
     backend: [gdb, dlv]
     chain:
-      - { symbol: applyConsoleUpdate, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 0 }
-      - { symbol: applyStopAndPromptSideEffects, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 1 }
-      - { symbol: onGdbStopped, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 2, note: "When Stopped != nil" }
-      - { symbol: PublishBreakpointsChanged, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: PublishBreakpointsChanged, indent: 2, note: "When BreakpointsChanged" }
+      - { symbol: applyConsoleUpdate, pkg: internal/app, recv: "(*consoleCtl)", name: applyConsoleUpdate, indent: 0 }
+      - { symbol: applyStopAndPromptSideEffects, pkg: internal/app, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 1 }
+      - { symbol: onGdbStopped, pkg: internal/app, recv: "(*DebuggerApp)", name: onGdbStopped, indent: 2, note: "When Stopped != nil" }
+      - { symbol: PublishBreakpointsChanged, pkg: internal/app, recv: "(*DebuggerApp)", name: PublishBreakpointsChanged, indent: 2, note: "When BreakpointsChanged" }
 
   - id: frame-sync-after-nav
     title: Frame sync after MI/Delve navigation
@@ -363,9 +363,9 @@ flows:
     trigger: "Prompt ready after frame/thread command — sync Code pane to selected frame"
     backend: [gdb, dlv]
     chain:
-      - { symbol: applyStopAndPromptSideEffects, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 0 }
-      - { symbol: onGdbFrameSelected, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onGdbFrameSelected, indent: 1 }
-      - { symbol: showFrameSource, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
+      - { symbol: applyStopAndPromptSideEffects, pkg: internal/app, recv: "(*consoleCtl)", name: applyStopAndPromptSideEffects, indent: 0 }
+      - { symbol: onGdbFrameSelected, pkg: internal/app, recv: "(*DebuggerApp)", name: onGdbFrameSelected, indent: 1 }
+      - { symbol: showFrameSource, pkg: internal/app, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
 
   - id: debug-info-refresh
     title: Threads/stack refresh after stop
@@ -373,8 +373,8 @@ flows:
     trigger: "Coalesced debug-info refresh scheduled after stop or thread switch"
     backend: [gdb, dlv]
     chain:
-      - { symbol: runRefresh, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: runRefresh, indent: 0 }
-      - { symbol: refreshThreadsAndStack, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: refreshThreadsAndStack, indent: 1 }
+      - { symbol: runRefresh, pkg: internal/app, recv: "(*debugInfoCtl)", name: runRefresh, indent: 0 }
+      - { symbol: refreshThreadsAndStack, pkg: internal/app, recv: "(*debugInfoCtl)", name: refreshThreadsAndStack, indent: 1 }
       - { symbol: RefreshThreadsAndStack, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: RefreshThreadsAndStack, indent: 2, branch: gdb }
       - { symbol: RefreshThreadsAndStack, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: RefreshThreadsAndStack, indent: 2, branch: dlv, note: "rpc2 ListGoroutines + Stacktrace" }
 
@@ -385,8 +385,8 @@ flows:
     trigger: "Bound key or :gdb finish while stopped"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbFinish, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbFinish, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbFinish, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbFinish, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 2, branch: gdb }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 2, branch: dlv }
 
@@ -396,8 +396,8 @@ flows:
     trigger: ":gdb nexti or bound key"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbNexti, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbNexti, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbNexti, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbNexti, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
 
   - id: gdb-stepi
     title: ":gdb stepi (step instruction)"
@@ -405,8 +405,8 @@ flows:
     trigger: ":gdb stepi or bound key"
     backend: [gdb, dlv]
     chain:
-      - { symbol: GdbStepi, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbStepi, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: GdbStepi, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbStepi, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
 
   - id: gdb-info-registers
     title: ":gdb info registers"
@@ -414,8 +414,8 @@ flows:
     trigger: ":gdb info registers — show register dump in console"
     backend: [gdb, dlv]
     chain:
-      - { symbol: ShowRegisters, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: ShowRegisters, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: ShowRegisters, pkg: internal/app, recv: "(*DebuggerApp)", name: ShowRegisters, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
 
   - id: gdb-info-threads
     title: ":gdb info threads"
@@ -423,8 +423,8 @@ flows:
     trigger: ":gdb info threads — thread listing in console"
     backend: [gdb, dlv]
     chain:
-      - { symbol: ShowThreads, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: ShowThreads, indent: 0 }
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
+      - { symbol: ShowThreads, pkg: internal/app, recv: "(*DebuggerApp)", name: ShowThreads, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 1 }
 
   - id: dlv-rpc-exec
     title: Delve rpc2 run control
@@ -432,7 +432,7 @@ flows:
     trigger: ":gdb continue/next/… with Delve headless — prefers rpc2 over CLI PTY"
     backend: [dlv]
     chain:
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 0 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: ExecUI, indent: 1, branch: dlv }
       - { symbol: execViaRPC, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: execViaRPC, indent: 2, branch: dlv }
 
@@ -442,7 +442,7 @@ flows:
     trigger: "sendGdbExec(continue|next|step|…) maps to MI -exec-* when MI available"
     backend: [gdb]
     chain:
-      - { symbol: sendGdbExec, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 0 }
+      - { symbol: sendGdbExec, pkg: internal/app, recv: "(*DebuggerApp)", name: sendGdbExec, indent: 0 }
       - { symbol: ExecUI, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: ExecUI, indent: 1, branch: gdb }
       - { symbol: CLIExecToMI, pkg: internal/gdb, name: CLIExecToMI, indent: 2, branch: gdb }
 
@@ -453,7 +453,7 @@ flows:
     trigger: "Backend.Interrupt when inferior running vs idle at prompt"
     backend: [gdb]
     chain:
-      - { symbol: onGdbConsoleInterrupt, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 0 }
+      - { symbol: onGdbConsoleInterrupt, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 0 }
       - { symbol: Interrupt, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: Interrupt, indent: 1, branch: gdb }
       - { symbol: Interrupt, pkg: internal/gdb, recv: "(*GDBClient)", name: Interrupt, indent: 2, branch: gdb, note: "Running: -exec-interrupt" }
 
@@ -463,7 +463,7 @@ flows:
     trigger: "Ctrl-C or interrupt while Delve target running — rpc2 Halt, not CLI ^C"
     backend: [dlv]
     chain:
-      - { symbol: onGdbConsoleInterrupt, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 0 }
+      - { symbol: onGdbConsoleInterrupt, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleInterrupt, indent: 0 }
       - { symbol: Interrupt, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: Interrupt, indent: 1, branch: dlv }
       - { symbol: Interrupt, pkg: internal/dlv, recv: "(*Client)", name: Interrupt, indent: 2, branch: dlv, note: "RPC.Halt()" }
 
@@ -473,9 +473,9 @@ flows:
     trigger: "Ctrl-Z globally — SIGTSTP inferior if running, else suspend app"
     backend: [gdb, dlv]
     chain:
-      - { symbol: tryGlobalSuspend, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: tryGlobalSuspend, indent: 0 }
-      - { symbol: onActivityCtrlZ, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onActivityCtrlZ, indent: 1 }
-      - { symbol: onGdbConsoleSuspend, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleSuspend, indent: 2 }
+      - { symbol: tryGlobalSuspend, pkg: internal/app, recv: "(*DebuggerApp)", name: tryGlobalSuspend, indent: 0 }
+      - { symbol: onActivityCtrlZ, pkg: internal/app, recv: "(*DebuggerApp)", name: onActivityCtrlZ, indent: 1 }
+      - { symbol: onGdbConsoleSuspend, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleSuspend, indent: 2 }
 
   - id: lua-job-cancel-ctrl-c
     title: Ctrl-C cancels async Lua job
@@ -483,8 +483,8 @@ flows:
     trigger: "Ctrl-C while async :lua script running — cancels job before debugger interrupt"
     backend: [both]
     chain:
-      - { symbol: onActivityCtrlC, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: onActivityCtrlC, indent: 0 }
-      - { symbol: cancelJob, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: cancelJob, indent: 1 }
+      - { symbol: onActivityCtrlC, pkg: internal/app, recv: "(*DebuggerApp)", name: onActivityCtrlC, indent: 0 }
+      - { symbol: cancelJob, pkg: internal/app, recv: "(*luaCtl)", name: cancelJob, indent: 1 }
 
   # --- Breakpoints (extended) ---
   - id: bp-list-toggle
@@ -493,8 +493,8 @@ flows:
     trigger: "Press e on selected row in Breakpoints pane"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onBreakpointToggleMsg, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: onBreakpointToggleMsg, indent: 0 }
-      - { symbol: Toggle, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: Toggle, indent: 1 }
+      - { symbol: onBreakpointToggleMsg, pkg: internal/app, recv: "(*breakCtl)", name: onBreakpointToggleMsg, indent: 0 }
+      - { symbol: Toggle, pkg: internal/app, recv: "(*breakCtl)", name: Toggle, indent: 1 }
       - { symbol: DisableBreakpoint, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: DisableBreakpoint, indent: 2, branch: gdb }
       - { symbol: DisableBreakpoint, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: DisableBreakpoint, indent: 2, branch: dlv }
 
@@ -504,8 +504,8 @@ flows:
     trigger: "Press d on selected row in Breakpoints pane"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onBreakpointDeleteMsg, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: onBreakpointDeleteMsg, indent: 0 }
-      - { symbol: Delete, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: Delete, indent: 1 }
+      - { symbol: onBreakpointDeleteMsg, pkg: internal/app, recv: "(*breakCtl)", name: onBreakpointDeleteMsg, indent: 0 }
+      - { symbol: Delete, pkg: internal/app, recv: "(*breakCtl)", name: Delete, indent: 1 }
 
   - id: bp-list-activate
     title: Breakpoint list — navigate to location
@@ -514,8 +514,8 @@ flows:
     backend: [gdb, dlv]
     chain:
       - { symbol: activateSelected, pkg: internal/gdbforge/widgets, recv: "(*BreakpointWidget)", name: activateSelected, indent: 0 }
-      - { symbol: onBreakpointActivateMsg, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: onBreakpointActivateMsg, indent: 1 }
-      - { symbol: ActivateBreakpoint, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: ActivateBreakpoint, indent: 2 }
+      - { symbol: onBreakpointActivateMsg, pkg: internal/app, recv: "(*breakCtl)", name: onBreakpointActivateMsg, indent: 1 }
+      - { symbol: ActivateBreakpoint, pkg: internal/app, recv: "(*DebuggerApp)", name: ActivateBreakpoint, indent: 2 }
 
   - id: bp-code-enable-toggle
     title: Toggle breakpoint enable in Code pane
@@ -523,8 +523,8 @@ flows:
     trigger: "e key in Code pane — toggle enabled/disabled without deleting"
     backend: [gdb, dlv]
     chain:
-      - { symbol: toggleCodeBreakEnable, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: toggleCodeBreakEnable, indent: 0 }
-      - { symbol: toggleCodeBreakEnableOn, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: toggleCodeBreakEnableOn, indent: 1 }
+      - { symbol: toggleCodeBreakEnable, pkg: internal/app, recv: "(*DebuggerApp)", name: toggleCodeBreakEnable, indent: 0 }
+      - { symbol: toggleCodeBreakEnableOn, pkg: internal/app, recv: "(*breakCtl)", name: toggleCodeBreakEnableOn, indent: 1 }
 
   - id: bp-asm-toggle
     title: Toggle breakpoint in Assembly pane
@@ -532,8 +532,8 @@ flows:
     trigger: "Breakpoint key in Assembly pane at PC/disasm line"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onAsmBreakToggleMsg, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: onAsmBreakToggleMsg, indent: 0 }
-      - { symbol: ToggleAsm, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: ToggleAsm, indent: 1 }
+      - { symbol: onAsmBreakToggleMsg, pkg: internal/app, recv: "(*breakCtl)", name: onAsmBreakToggleMsg, indent: 0 }
+      - { symbol: ToggleAsm, pkg: internal/app, recv: "(*breakCtl)", name: ToggleAsm, indent: 1 }
 
   - id: bp-fetch-sync
     title: Fetch breakpoints from debugger
@@ -541,10 +541,10 @@ flows:
     trigger: "refreshAfterStop or manual refresh — query live BP list from backend"
     backend: [gdb, dlv]
     chain:
-      - { symbol: refreshAfterStop, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: refreshAfterStop, indent: 0 }
-      - { symbol: fetchInfos, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: fetchInfos, indent: 1 }
+      - { symbol: refreshAfterStop, pkg: internal/app, recv: "(*breakCtl)", name: refreshAfterStop, indent: 0 }
+      - { symbol: fetchInfos, pkg: internal/app, recv: "(*breakCtl)", name: fetchInfos, indent: 1 }
       - { symbol: FetchBreakpoints, pkg: internal/gdbforge/backend, recv: "(*GDBBackend)", name: FetchBreakpoints, indent: 2, branch: gdb }
-      - { symbol: applyBreakInfos, pkg: cmd/gdbforge, recv: "(*breakCtl)", name: applyBreakInfos, indent: 2 }
+      - { symbol: applyBreakInfos, pkg: internal/app, recv: "(*breakCtl)", name: applyBreakInfos, indent: 2 }
 
   - id: space-break-callstack
     title: Space — breakpoint at call-stack frame
@@ -552,8 +552,8 @@ flows:
     trigger: "Space with Call Stack pane focused — break at frame file:line"
     backend: [gdb, dlv]
     chain:
-      - { symbol: trySpaceBreak, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: trySpaceBreak, indent: 0 }
-      - { symbol: toggleCallstackBreak, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: toggleCallstackBreak, indent: 1 }
+      - { symbol: trySpaceBreak, pkg: internal/app, recv: "(*DebuggerApp)", name: trySpaceBreak, indent: 0 }
+      - { symbol: toggleCallstackBreak, pkg: internal/app, recv: "(*DebuggerApp)", name: toggleCallstackBreak, indent: 1 }
 
   # --- Navigation (extended) ---
   - id: callstack-select-backend
@@ -562,10 +562,10 @@ flows:
     trigger: "Activate call-stack row — SelectFrame + show source (Delve async nav)"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onCallStackActivate, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: onCallStackActivate, indent: 0 }
-      - { symbol: activateCallStack, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: activateCallStack, indent: 1 }
+      - { symbol: onCallStackActivate, pkg: internal/app, recv: "(*debugInfoCtl)", name: onCallStackActivate, indent: 0 }
+      - { symbol: activateCallStack, pkg: internal/app, recv: "(*debugInfoCtl)", name: activateCallStack, indent: 1 }
       - { symbol: SelectFrame, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: SelectFrame, indent: 2, branch: dlv }
-      - { symbol: showFrameSource, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
+      - { symbol: showFrameSource, pkg: internal/app, recv: "(*DebuggerApp)", name: showFrameSource, indent: 2 }
 
   - id: thread-select-backend
     title: Threads row → backend SelectThread
@@ -573,8 +573,8 @@ flows:
     trigger: "Activate Threads pane row — switch thread/goroutine and refresh stack"
     backend: [gdb, dlv]
     chain:
-      - { symbol: onThreadActivate, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: onThreadActivate, indent: 0 }
-      - { symbol: activateThread, pkg: cmd/gdbforge, recv: "(*debugInfoCtl)", name: activateThread, indent: 1 }
+      - { symbol: onThreadActivate, pkg: internal/app, recv: "(*debugInfoCtl)", name: onThreadActivate, indent: 0 }
+      - { symbol: activateThread, pkg: internal/app, recv: "(*debugInfoCtl)", name: activateThread, indent: 1 }
       - { symbol: SelectThread, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: SelectThread, indent: 2, branch: dlv }
 
   - id: buffer-switch
@@ -583,9 +583,9 @@ flows:
     trigger: ":b foo.c or buffer picker — focus/open source buffer"
     backend: [both]
     chain:
-      - { symbol: OnBuffer, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnBuffer, indent: 0 }
-      - { symbol: onBuffer, pkg: cmd/gdbforge, recv: "(*bufferCtl)", name: onBuffer, indent: 1 }
-      - { symbol: showCodeAt, pkg: cmd/gdbforge, recv: "(*bufferCtl)", name: showCodeAt, indent: 2 }
+      - { symbol: OnBuffer, pkg: internal/app, recv: "(*DebuggerApp)", name: OnBuffer, indent: 0 }
+      - { symbol: onBuffer, pkg: internal/app, recv: "(*bufferCtl)", name: onBuffer, indent: 1 }
+      - { symbol: showCodeAt, pkg: internal/app, recv: "(*bufferCtl)", name: showCodeAt, indent: 2 }
 
   - id: buffer-edit
     title: ":edit — open/create buffer"
@@ -593,8 +593,8 @@ flows:
     trigger: ":edit path — open or create editable code buffer"
     backend: [both]
     chain:
-      - { symbol: OnEdit, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnEdit, indent: 0 }
-      - { symbol: onEdit, pkg: cmd/gdbforge, recv: "(*bufferCtl)", name: onEdit, indent: 1 }
+      - { symbol: OnEdit, pkg: internal/app, recv: "(*DebuggerApp)", name: OnEdit, indent: 0 }
+      - { symbol: onEdit, pkg: internal/app, recv: "(*bufferCtl)", name: onEdit, indent: 1 }
 
   - id: asm-refresh-at-frame
     title: Assembly pane refresh at frame PC
@@ -602,9 +602,9 @@ flows:
     trigger: "After stack reload — sync Assembly pane to frame PC"
     backend: [gdb, dlv]
     chain:
-      - { symbol: refreshAfterStackReload, pkg: cmd/gdbforge, recv: "(*asmCtl)", name: refreshAfterStackReload, indent: 0 }
-      - { symbol: syncToFrame, pkg: cmd/gdbforge, recv: "(*asmCtl)", name: syncToFrame, indent: 1 }
-      - { symbol: runRefresh, pkg: cmd/gdbforge, recv: "(*asmCtl)", name: runRefresh, indent: 2 }
+      - { symbol: refreshAfterStackReload, pkg: internal/app, recv: "(*asmCtl)", name: refreshAfterStackReload, indent: 0 }
+      - { symbol: syncToFrame, pkg: internal/app, recv: "(*asmCtl)", name: syncToFrame, indent: 1 }
+      - { symbol: runRefresh, pkg: internal/app, recv: "(*asmCtl)", name: runRefresh, indent: 2 }
 
   - id: file-list-sync
     title: Source file list sync
@@ -612,7 +612,7 @@ flows:
     trigger: "After stop or source query — populate Files pane from AppState"
     backend: [gdb, dlv]
     chain:
-      - { symbol: syncFileListViews, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: syncFileListViews, indent: 0 }
+      - { symbol: syncFileListViews, pkg: internal/app, recv: "(*DebuggerApp)", name: syncFileListViews, indent: 0 }
 
   # --- Search ---
   - id: search-live-preview
@@ -621,8 +621,8 @@ flows:
     trigger: "Type in / search cmdline — live highlight on focused pane"
     backend: [both]
     chain:
-      - { symbol: handleSearchKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleSearchKey, indent: 0 }
-      - { symbol: onSearchTextChanged, pkg: cmd/gdbforge, recv: "(*searchCtl)", name: onSearchTextChanged, indent: 1 }
+      - { symbol: handleSearchKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleSearchKey, indent: 0 }
+      - { symbol: onSearchTextChanged, pkg: internal/app, recv: "(*searchCtl)", name: onSearchTextChanged, indent: 1 }
       - { symbol: SetSearchPattern, pkg: internal/gdbforge/widgets, recv: "(*CodeWidget)", name: SetSearchPattern, indent: 2, note: "Or other SearchHost pane" }
 
   - id: search-commit
@@ -631,8 +631,8 @@ flows:
     trigger: "Enter in / search line — commit pattern and jump to first match"
     backend: [both]
     chain:
-      - { symbol: handleSearchKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleSearchKey, indent: 0 }
-      - { symbol: onSearchSubmitted, pkg: cmd/gdbforge, recv: "(*searchCtl)", name: onSearchSubmitted, indent: 1 }
+      - { symbol: handleSearchKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleSearchKey, indent: 0 }
+      - { symbol: onSearchSubmitted, pkg: internal/app, recv: "(*searchCtl)", name: onSearchSubmitted, indent: 1 }
       - { symbol: CommitSearch, pkg: internal/gdbforge/widgets, recv: "(*CodeWidget)", name: CommitSearch, indent: 2 }
 
   - id: search-next
@@ -641,8 +641,8 @@ flows:
     trigger: "n or * in normal mode — next match in active search target"
     backend: [both]
     chain:
-      - { symbol: trySearchOrGdbNext, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: trySearchOrGdbNext, indent: 0 }
-      - { symbol: nextMatch, pkg: cmd/gdbforge, recv: "(*searchCtl)", name: nextMatch, indent: 1 }
+      - { symbol: trySearchOrGdbNext, pkg: internal/app, recv: "(*DebuggerApp)", name: trySearchOrGdbNext, indent: 0 }
+      - { symbol: nextMatch, pkg: internal/app, recv: "(*searchCtl)", name: nextMatch, indent: 1 }
 
   # --- Command mode & wildmenu ---
   - id: colon-gdb-continue
@@ -651,8 +651,8 @@ flows:
     trigger: "Enter on :gdb continue — CommandParser.Execute → GdbContinue"
     backend: [gdb, dlv]
     chain:
-      - { symbol: handleCommandKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Enter submits cmdline" }
-      - { symbol: GdbContinue, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: GdbContinue, indent: 1, note: "Dispatched by termforge commands.CommandParser.Execute" }
+      - { symbol: handleCommandKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleCommandKey, indent: 0, note: "Enter submits cmdline" }
+      - { symbol: GdbContinue, pkg: internal/app, recv: "(*DebuggerApp)", name: GdbContinue, indent: 1, note: "Dispatched by termforge commands.CommandParser.Execute" }
 
   - id: colon-quit
     title: ":quit confirm"
@@ -660,8 +660,8 @@ flows:
     trigger: ":quit or :q — confirm when inferior alive (same as Ctrl-D path)"
     backend: [gdb, dlv]
     chain:
-      - { symbol: Quit, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: Quit, indent: 0 }
-      - { symbol: onGdbConsoleEOF, pkg: cmd/gdbforge, recv: "(*consoleCtl)", name: onGdbConsoleEOF, indent: 1 }
+      - { symbol: Quit, pkg: internal/app, recv: "(*DebuggerApp)", name: Quit, indent: 0 }
+      - { symbol: onGdbConsoleEOF, pkg: internal/app, recv: "(*consoleCtl)", name: onGdbConsoleEOF, indent: 1 }
 
   - id: colon-goto-line
     title: ":42 vim goto line"
@@ -669,8 +669,8 @@ flows:
     trigger: "Bare :N in command mode — tryGotoLineCmd jumps Code pane"
     backend: [both]
     chain:
-      - { symbol: onSubmit, pkg: cmd/gdbforge, recv: "(*cmdCtl)", name: onSubmit, indent: 0, note: "CmdUnknown from empty/unknown parse" }
-      - { symbol: tryGotoLineCmd, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: tryGotoLineCmd, indent: 1 }
+      - { symbol: onSubmit, pkg: internal/app, recv: "(*cmdCtl)", name: onSubmit, indent: 0, note: "CmdUnknown from empty/unknown parse" }
+      - { symbol: tryGotoLineCmd, pkg: internal/app, recv: "(*DebuggerApp)", name: tryGotoLineCmd, indent: 1 }
 
   - id: enter-command-mode
     title: Enter command mode (:)
@@ -678,7 +678,7 @@ flows:
     trigger: "Press : in normal mode — ModeCommand, focus cmdline"
     backend: [both]
     chain:
-      - { symbol: enterCommandMode, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: enterCommandMode, indent: 0 }
+      - { symbol: enterCommandMode, pkg: internal/app, recv: "(*DebuggerApp)", name: enterCommandMode, indent: 0 }
 
   - id: enter-search-mode
     title: Enter search mode (/)
@@ -686,8 +686,8 @@ flows:
     trigger: "Press / in normal mode — ModeSearch, capture search target pane"
     backend: [both]
     chain:
-      - { symbol: enterSearchMode, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: enterSearchMode, indent: 0 }
-      - { symbol: captureFocused, pkg: cmd/gdbforge, recv: "(*searchCtl)", name: captureFocused, indent: 1 }
+      - { symbol: enterSearchMode, pkg: internal/app, recv: "(*DebuggerApp)", name: enterSearchMode, indent: 0 }
+      - { symbol: captureFocused, pkg: internal/app, recv: "(*searchCtl)", name: captureFocused, indent: 1 }
 
   - id: wildmenu-apply
     title: Wildmenu apply selection
@@ -695,8 +695,8 @@ flows:
     trigger: "Enter or Tab in wildmenu — apply longest match to source line"
     backend: [both]
     chain:
-      - { symbol: handleCompletionKey, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: handleCompletionKey, indent: 0 }
-      - { symbol: applySelected, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: applySelected, indent: 1 }
+      - { symbol: handleCompletionKey, pkg: internal/app, recv: "(*DebuggerApp)", name: handleCompletionKey, indent: 0 }
+      - { symbol: applySelected, pkg: internal/app, recv: "(*completionCtl)", name: applySelected, indent: 1 }
 
   - id: dlv-tab-commands
     title: Delve Tab — command names (empty prefix)
@@ -704,7 +704,7 @@ flows:
     trigger: "Tab on empty Delve console prefix — complete command names only"
     backend: [dlv]
     chain:
-      - { symbol: gdbTabComplete, pkg: cmd/gdbforge, recv: "(*completionCtl)", name: gdbTabComplete, indent: 0 }
+      - { symbol: gdbTabComplete, pkg: internal/app, recv: "(*completionCtl)", name: gdbTabComplete, indent: 0 }
       - { symbol: Complete, pkg: internal/gdbforge/backend, recv: "(*DLVBackend)", name: Complete, indent: 1, branch: dlv }
       - { symbol: CompleteCommands, pkg: internal/dlv, name: CompleteCommands, indent: 2, branch: dlv }
 
@@ -715,8 +715,8 @@ flows:
     trigger: ":lua myscript.lua args — background Lua worker"
     backend: [both]
     chain:
-      - { symbol: OnCmd, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: OnCmd, indent: 0 }
-      - { symbol: startJob, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: startJob, indent: 1 }
+      - { symbol: OnCmd, pkg: internal/app, recv: "(*luaCtl)", name: OnCmd, indent: 0 }
+      - { symbol: startJob, pkg: internal/app, recv: "(*luaCtl)", name: startJob, indent: 1 }
 
   - id: lua-repl-eval
     title: Lua REPL line eval
@@ -724,8 +724,8 @@ flows:
     trigger: "Enter in :b lua REPL — evaluate one line"
     backend: [both]
     chain:
-      - { symbol: onReplSubmit, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: onReplSubmit, indent: 0 }
-      - { symbol: startReplEval, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: startReplEval, indent: 1 }
+      - { symbol: onReplSubmit, pkg: internal/app, recv: "(*luaCtl)", name: onReplSubmit, indent: 0 }
+      - { symbol: startReplEval, pkg: internal/app, recv: "(*luaCtl)", name: startReplEval, indent: 1 }
 
   - id: lua-repl-interrupt
     title: Lua REPL Ctrl-C
@@ -733,7 +733,7 @@ flows:
     trigger: "Ctrl-C in Lua REPL while eval running"
     backend: [both]
     chain:
-      - { symbol: onReplInterrupt, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: onReplInterrupt, indent: 0 }
+      - { symbol: onReplInterrupt, pkg: internal/app, recv: "(*luaCtl)", name: onReplInterrupt, indent: 0 }
 
   - id: lua-console-open
     title: ":lua console / :b lua"
@@ -741,7 +741,7 @@ flows:
     trigger: ":lua console or focus Lua REPL pane"
     backend: [both]
     chain:
-      - { symbol: openConsole, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: openConsole, indent: 0 }
+      - { symbol: openConsole, pkg: internal/app, recv: "(*luaCtl)", name: openConsole, indent: 0 }
 
   - id: lua-pane-mode
     title: Lua game pane ModeLua
@@ -749,8 +749,8 @@ flows:
     trigger: "Focus Lua script pane — ModeLua, DispatchKey to script hooks"
     backend: [both]
     chain:
-      - { symbol: enterMode, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: enterMode, indent: 0 }
-      - { symbol: handleKey, pkg: cmd/gdbforge, recv: "(*luaCtl)", name: handleKey, indent: 1 }
+      - { symbol: enterMode, pkg: internal/app, recv: "(*luaCtl)", name: enterMode, indent: 0 }
+      - { symbol: handleKey, pkg: internal/app, recv: "(*luaCtl)", name: handleKey, indent: 1 }
 
   # --- Inferior I/O & exec ---
   - id: inferior-external
@@ -759,8 +759,8 @@ flows:
     trigger: "Route inferior I/O to external terminal (GDB)"
     backend: [gdb]
     chain:
-      - { symbol: SetInferiorExternal, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: SetInferiorExternal, indent: 0 }
-      - { symbol: syncInferiorIOView, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: syncInferiorIOView, indent: 1 }
+      - { symbol: SetInferiorExternal, pkg: internal/app, recv: "(*DebuggerApp)", name: SetInferiorExternal, indent: 0 }
+      - { symbol: syncInferiorIOView, pkg: internal/app, recv: "(*DebuggerApp)", name: syncInferiorIOView, indent: 1 }
 
   - id: exec-shell-run
     title: ":! shell command"
@@ -768,8 +768,8 @@ flows:
     trigger: ":! argv — open/focus exec pane and run shell command"
     backend: [both]
     chain:
-      - { symbol: OnRun, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnRun, indent: 0 }
-      - { symbol: startExecSession, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: startExecSession, indent: 1 }
+      - { symbol: OnRun, pkg: internal/app, recv: "(*DebuggerApp)", name: OnRun, indent: 0 }
+      - { symbol: startExecSession, pkg: internal/app, recv: "(*DebuggerApp)", name: startExecSession, indent: 1 }
 
   - id: gdb-focus-insert
     title: Focus GDB console insert mode
@@ -777,7 +777,7 @@ flows:
     trigger: "i or click :b gdb — insert mode for debugger console input"
     backend: [both]
     chain:
-      - { symbol: activateGdbInsertMode, pkg: cmd/gdbforge, recv: "(*LayoutShell)", name: activateGdbInsertMode, indent: 0 }
+      - { symbol: activateGdbInsertMode, pkg: internal/app, recv: "(*LayoutShell)", name: activateGdbInsertMode, indent: 0 }
 
   - id: mouse-focus-insert
     title: Mouse click → pane focus
@@ -785,7 +785,7 @@ flows:
     trigger: "Click a pane — focus tree + optional insert mode for consoles"
     backend: [both]
     chain:
-      - { symbol: HandleMouse, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: HandleMouse, indent: 0 }
+      - { symbol: HandleMouse, pkg: internal/app, recv: "(*DebuggerApp)", name: HandleMouse, indent: 0 }
 
   - id: serial-kgdb-switch
     title: Serial / kgdb console switch
@@ -793,7 +793,7 @@ flows:
     trigger: ":serial or Lua serial API — mux between GDB and serial console"
     backend: [both]
     chain:
-      - { symbol: OnSerialSwitchCmd, pkg: cmd/gdbforge, recv: "(*DebuggerApp)", name: OnSerialSwitchCmd, indent: 0 }
+      - { symbol: OnSerialSwitchCmd, pkg: internal/app, recv: "(*DebuggerApp)", name: OnSerialSwitchCmd, indent: 0 }
 
 # Automatic discovery — analysis performed by the official Go call-graph tool:
 #   golang.org/x/tools/cmd/callgraph  (pinned in go.mod, run as `go tool callgraph`)
@@ -804,13 +804,13 @@ discover:
   analyze_packages:
     - ./cmd/gdbforge        # rta/vta need a main package for reachability
   entry_prefixes:           # which packages become flow roots
-    - cmd/gdbforge
+    - internal/app
     - internal/gdbforge
     - internal/dlv
     - internal/gdb
     - internal/luahost
   include_prefixes:         # edges kept in the rendered trees
-    - cmd/gdbforge
+    - cmd/gdbforge          # main() entry edges into internal/app
     - internal
   skip_prefixes:
     - internal/luahost/embedded

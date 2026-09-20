@@ -5,6 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/yairgd/gdbforge/internal/app"
+	"github.com/yairgd/gdbforge/internal/ttyhold"
 )
 
 // version is set at link time by release builds / task build from a git tag:
@@ -19,10 +22,10 @@ func main() {
 		fmt.Println(version)
 		os.Exit(0)
 	}
-	if wantsInferiorTTYHold(os.Args[1:]) {
-		os.Exit(runInferiorTTYHold(os.Args[1:]))
+	if ttyhold.Wants(os.Args[1:]) {
+		os.Exit(ttyhold.Run(os.Args[1:]))
 	}
-	cfg, err := parseFlags(os.Args[1:])
+	cfg, err := app.ParseFlags(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(0)
@@ -31,13 +34,13 @@ func main() {
 		os.Exit(2)
 	}
 
-	app, err := NewDebuggerApp(cfg)
+	dbg, err := app.NewDebuggerApp(cfg, version)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gdbforge: %v\n", err)
 		os.Exit(1)
 	}
-	defer app.Close()
-	app.Run()
+	defer dbg.Close()
+	dbg.Run()
 }
 
 func wantsVersion(args []string) bool {

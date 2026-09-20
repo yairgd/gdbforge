@@ -34,7 +34,7 @@ description: Set up a gdbforge development environment, understand the codebase,
 
 | Order | File | Why |
 |-------|------|-----|
-| 1 | `cmd/gdbforge/main.go` → `app.go` → `setup.go` | Entry + app wiring |
+| 1 | `cmd/gdbforge/main.go` → `internal/app/app.go` → `setup.go` | Entry + app wiring |
 | 2 | `termforge/term_app.go` | Event loop, grids, draw flush |
 | 3 | `termforge/widget.go` | Widget contract |
 | 4 | `termforge/widget_tree.go`, `layout_tree.go` | Split layout |
@@ -42,7 +42,7 @@ description: Set up a gdbforge development environment, understand the codebase,
 | 6 | `termforge/grid.go`, `cell.go` | Border composition |
 | 7 | `termforge/input_line.go`, `console_pane.go` | Shared REPL editor + transcript |
 | 8 | `internal/gdbforge/widgets/gdb_widget.go` | GDB console view (paint + callbacks) |
-| 9 | `cmd/gdbforge/gdb_console.go` | GDB controller (owns Session / MI) |
+| 9 | `internal/app/gdb_console.go` | GDB controller (owns Session / MI) |
 | 10 | `internal/gdb/gdb_client.go` | PTY backend |
 | 11 | `docs/ARCHITECTURE.md` | Big picture (MVC) |
 
@@ -250,7 +250,7 @@ bar := termforge.NewCompletionBarWidget(a.ctx) // the wildmenu CompletionView
 // initBuiltins also: platform.Subscribe(ctx.Bus, a.onBreakpointsChangedMsg)
 ```
 
-5. Build the command tree with the DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
+5. Build the command tree with the DSL in `ExapData()` (`internal/app/command_tree.go`) — see [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md).
 
 6. Subscribe a controller to the messages it cares about, one typed handler each:
 
@@ -395,7 +395,7 @@ dlv debug ./cmd/docserve -- --port 8765
 
 | Task | Start here |
 |------|------------|
-| New application model | App startup in `cmd/gdbforge`; subscribe to event bus |
+| New application model | App startup in `internal/app`; subscribe to event bus |
 | New debugger pane | Model + widget pair; register builtin in `initBuiltins` or open via `:e` / layout |
 | New service / backend | Implement `ptyx.Session` (or wrap `ptyx`), new `internal/<backend>/` |
 | New `:` command | Add `Cmd` / `Group` / `LeafRest` in `command_tree.go`; implement action in `actions.go` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
@@ -414,9 +414,9 @@ Always update docs when changing architecture-visible behavior.
 | Feature | Files |
 |---------|-------|
 | Event loop + bus | `termforge/app.go`, `termforge/platform/event_bus.go` |
-| App API / dispatch | `termforge/app.go` (`AppApi`), `cmd/gdbforge/app.go` + `input.go` |
+| App API / dispatch | `termforge/app.go` (`AppApi`), `internal/app/app.go` + `input.go` |
 | Interaction modes | `termforge/platform/mode.go` (via `App` / `AppState`) — includes `ModeSearch` |
-| Key-sequence bindings | `termforge/commands` + `cmd/gdbforge/keybindings.go` |
+| Key-sequence bindings | `termforge/commands` + `internal/app/keybindings.go` |
 | Widget interface | `widget.go` |
 | Per-pane status line | `status_line.go`, `base_widget.go` |
 | Split tree | `node.go`, `layout_tree.go`, `widget_tree.go`, `tab.go` |
@@ -424,18 +424,18 @@ Always update docs when changing architecture-visible behavior.
 | Tabs | `tab.go` |
 | Command tree / parser / DSL | `termforge/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command / search line | `cmd_widget.go` (`CmdKindCommand` / `CmdKindSearch`), `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
-| Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `cmd/gdbforge/search.go` — [INPUT.md](INPUT.md) |
+| Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `internal/app/search.go` — [INPUT.md](INPUT.md) |
 | TableWidget lists | `table_widget.go`, `table_search.go`; BP/threads/callstack embed; `/search` via `SearchHost` |
 | Table paint stack | `rect_viewport.go`, `cell_buffer.go`, `table.go`, `table_paint.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
-| Debugger panes | `termforge/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `cmd/gdbforge/gdb_console.go`; `logger_widget.go` |
+| Debugger panes | `termforge/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `internal/app/gdb_console.go`; `logger_widget.go` |
 | Shared models | `internal/gdbforge/models/`; sync in `breakpoints.go`, `debug_info.go` |
 | GDB backend | `gdb/gdb_client.go`, `gdb/mi*.go` |
 | Text model | `core/buffer.go`, `core/viewport.go` |
 | UI events / commands | `termforge/event.go`, `termforge/command.go` |
 | Debugger events | `core/events.go` |
-| Entry point | `cmd/gdbforge/` (`main.go` + companions) |
+| Entry point | `cmd/gdbforge/main.go` → `internal/app` (`app.go` + companions) |
 | Docs server | `cmd/docserve/main.go` |
 
 ---

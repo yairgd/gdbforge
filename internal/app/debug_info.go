@@ -1,0 +1,381 @@
+package app
+
+import (
+	"context"
+	"github.com/yairgd/termforge"
+	"time"
+
+	tcell "github.com/gdamore/tcell/v2"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
+	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/ptyx"
+)
+
+// debugInfoHost is the narrow surface debugInfoCtl needs from the composition
+// root. DebuggerApp implements it; debugInfoCtl must not depend on *DebuggerApp.
+type debugInfoHost interface {
+	Backend() backend.Backend
+	Session() ptyx.Session
+	State() *platform.AppState
+	Debug() *debugstate.State
+	GdbMcp() *mcp.GdbMcpService
+	GDBWidget() *widgets.GDBWidget
+	Screen() tcell.Screen
+	RequestFrame()
+	BumpCodeNav()
+	NoteStackNavGDB()
+	SuppressDlvStopUI()
+	showFrameSource(fr models.StackFrame)
+	ShowCodeAt(file string, line int) *widgets.CodeWidget
+	LogError(area, msg string)
+	ApplyDebugInfoUI(stackOnly bool)
+	FocusCode()
+}
+
+// debugInfoCtl owns the Threads / Call Stack domain: shared models, their
+// views, the coalesced background refresh, and row activation.
+// DebuggerApp wires it; the ctl owns the domain.
+type debugInfoCtl struct {
+	host     debugInfoHost
+	threads  *models.ThreadList
+	stack    *models.CallStack
+	threadW  *widgets.ThreadWidget
+	stackW   *widgets.CallStackWidget
+	coalesce termforge.CoalesceRunner
+}
+
+func (c *debugInfoCtl) Register(bus *platform.EventBus) {
+	platform.Subscribe(bus, c.onUIMsg)
+	platform.Subscribe(bus, c.onThreadActivate)
+	platform.Subscribe(bus, c.onCallStackActivate)
+}
+
+func (c *debugInfoCtl) onThreadActivate(msg events.ThreadActivateMsg) {
+	c.activateThread(msg.Thread)
+}
+
+func (c *debugInfoCtl) onCallStackActivate(msg events.CallStackActivateMsg) {
+	c.activateCallStack(msg.Frame)
+	if msg.FocusCode {
+		if h := c.host; h != nil {
+			h.FocusCode()
+		}
+	}
+}
+
+func (c *debugInfoCtl) onUIMsg(msg debugInfoUIMsg) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	h.ApplyDebugInfoUI(msg.stackOnly)
+}
+
+// Threads returns the shared ThreadList (may be nil before InitB).
+func (c *debugInfoCtl) Threads() *models.ThreadList { return c.threads }
+
+// Stack returns the shared CallStack (may be nil before InitB).
+func (c *debugInfoCtl) Stack() *models.CallStack { return c.stack }
+
+// ThreadWidget returns the Threads view.
+func (c *debugInfoCtl) ThreadWidget() *widgets.ThreadWidget { return c.threadW }
+
+// CallStackWidget returns the Call Stack view.
+func (c *debugInfoCtl) CallStackWidget() *widgets.CallStackWidget { return c.stackW }
+
+// syncThreadViews pushes the shared ThreadList to the Threads view.
+func (c *debugInfoCtl) syncThreadViews() {
+	if c.threads == nil || c.threadW == nil {
+		return
+	}
+	c.threadW.SetItems(c.threads.Items())
+}
+
+// syncCallStackViews pushes the shared CallStack to the Call Stack view.
+func (c *debugInfoCtl) syncCallStackViews() {
+	if c.stack == nil || c.stackW == nil {
+		return
+	}
+	c.stackW.SetItems(c.stack.Items())
+}
+
+func (c *debugInfoCtl) applyThreadInfos(items []models.ThreadInfo) {
+	c.setThreadInfos(items)
+	c.syncThreadViews()
+}
+
+func (c *debugInfoCtl) applyStackFrames(frames []models.StackFrame) {
+	c.setStackFrames(frames)
+	c.syncCallStackViews()
+}
+
+func (c *debugInfoCtl) setThreadInfos(items []models.ThreadInfo) {
+	if c.threads == nil {
+		c.threads = &models.ThreadList{}
+	}
+	c.threads.Set(items)
+}
+
+func (c *debugInfoCtl) setStackFrames(frames []models.StackFrame) {
+	if c.stack == nil {
+		c.stack = &models.CallStack{}
+	}
+	c.stack.Set(frames)
+}
+
+// clearModels empties Threads / Call Stack models and their views
+// (inferior exit / kill).
+func (c *debugInfoCtl) clearModels() {
+	c.setThreadInfos(nil)
+	c.setStackFrames(nil)
+	c.syncThreadViews()
+	c.syncCallStackViews()
+}
+
+// selectLevel highlights a stack level in the Call Stack view.
+func (c *debugInfoCtl) selectLevel(level int) {
+	if c.stackW == nil {
+		return
+	}
+	c.stackW.SelectLevel(level)
+}
+
+// selectedLevel returns the highlighted Call Stack level (0 when none).
+func (c *debugInfoCtl) selectedLevel() int {
+	if c == nil || c.stackW == nil {
+		return 0
+	}
+	if fr, ok := c.stackW.SelectedFrame(); ok {
+		return fr.Level
+	}
+	return 0
+}
+
+// scheduleRefresh coalesces -thread-info / -stack-list-frames on stop.
+func (c *debugInfoCtl) scheduleRefresh() {
+	c.coalesce.Schedule(c.runRefresh)
+}
+
+func (c *debugInfoCtl) scheduleStackRefresh() {
+	c.coalesce.Schedule(c.runStackRefresh)
+}
+
+func (c *debugInfoCtl) cmdEnv() backend.CommandEnv {
+	h := c.host
+	if h == nil {
+		return backend.CommandEnv{}
+	}
+	return backend.CommandEnv{
+		Session:  h.Session(),
+		App:      h.State(),
+		Inferior: h.Debug(),
+	}
+}
+
+func (c *debugInfoCtl) runStackRefresh() {
+	h := c.host
+	if h == nil || h.GdbMcp() == nil || h.Backend() == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Second)
+	defer cancel()
+	longCap := h.Debug() != nil && h.Debug().KgdbMode()
+	var frames []models.StackFrame
+	var ok bool
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			time.Sleep(80 * time.Millisecond)
+		}
+		frames, ok = h.Backend().FetchStackList(ctx, h.GdbMcp(), longCap)
+		if ok && len(frames) > 0 {
+			break
+		}
+	}
+	if ok && len(frames) > 0 {
+		c.setStackFrames(frames)
+	}
+	if scr := h.Screen(); scr != nil {
+		_ = scr.PostEvent(tcell.NewEventInterrupt(debugInfoUIMsg{stackOnly: true}))
+	}
+}
+
+func (c *debugInfoCtl) runRefresh() {
+	// Retries: right after *stopped the first -thread-info capture can still
+	// be empty/stale; a click later works because GDB is idle. Retry briefly
+	// so the Threads pane updates without needing a mouse event.
+	var threadsOK, stackOK bool
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			time.Sleep(40 * time.Millisecond)
+		}
+		threadsOK, stackOK = c.refreshThreadsAndStack()
+		if threadsOK && stackOK {
+			break
+		}
+	}
+	if h := c.host; h != nil {
+		if scr := h.Screen(); scr != nil {
+			_ = scr.PostEvent(tcell.NewEventInterrupt(debugInfoUIMsg{}))
+		}
+	}
+}
+
+// refreshThreadsAndStack queries the debugger and updates shared models only.
+// Views are synced on the UI thread via debugInfoUIMsg (or sync*Views callers).
+// Returns whether each query produced a usable payload.
+func (c *debugInfoCtl) refreshThreadsAndStack() (threadsOK, stackOK bool) {
+	h := c.host
+	if h == nil || h.GdbMcp() == nil || h.Backend() == nil {
+		return false, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	logFn := backend.LogFn(func(area, msg string) { h.LogError(area, msg) })
+	threads, frames, threadsOK, stackOK := h.Backend().RefreshThreadsAndStack(ctx, h.GdbMcp(), logFn)
+	if threadsOK {
+		c.setThreadInfos(threads)
+		if len(threads) == 0 {
+			c.setStackFrames(nil)
+		}
+	}
+	if stackOK {
+		c.setStackFrames(frames)
+	}
+	return threadsOK, stackOK
+}
+
+// activateCallStack selects a stack frame in GDB/Delve and shows its source.
+// Uses MI for GDB so the console does not print CLI frame listings.
+func (c *debugInfoCtl) activateCallStack(fr models.StackFrame) {
+	h := c.host
+	if h == nil {
+		return
+	}
+	// User is browsing — cancel any in-flight stop refresh that would snap
+	// Code back to frame 0.
+	h.BumpCodeNav()
+
+	// Drive Code from the selected row first — do not wait on the debugger PTY
+	// (Delve `stack` / `goroutines` queries hold the write lock for a long time).
+	h.showFrameSource(fr)
+	h.RequestFrame()
+
+	if h.GDBWidget() == nil || h.Backend() == nil {
+		return
+	}
+	be := h.Backend()
+	if be.NavigationAsync() {
+		// Selecting a call-stack row must update Code from the row's file:line.
+		// Sending `frame N` makes Delve re-emit "> …" and dump source, which we
+		// used to treat as a new stop (goroutines/stack refresh → snap to frame 0).
+		h.SuppressDlvStopUI()
+	}
+	be.SelectFrame(c.cmdEnv(), fr.Level, backend.NavigationOpts{Async: be.NavigationAsync()})
+}
+
+// activateThread switches GDB to the selected thread and refreshes stack/threads
+// after the MI prompt (=thread-selected), not before the switch completes.
+func (c *debugInfoCtl) activateThread(th models.ThreadInfo) {
+	h := c.host
+	if h == nil || h.GDBWidget() == nil || th.ID == "" || h.Backend() == nil {
+		return
+	}
+	be := h.Backend()
+	env := c.cmdEnv()
+	navAsync := be.NavigationAsync()
+
+	if navAsync {
+		h.BumpCodeNav()
+		h.SuppressDlvStopUI()
+		be.SelectThread(env, th.ID, backend.NavigationOpts{Async: true})
+		c.scheduleRefresh()
+		return
+	}
+	if h.Debug() != nil && h.Debug().KgdbMode() {
+		// kgdb: legacy path unchanged — no frame-sync deferral (slow serial constraints).
+		be.SelectThread(env, th.ID, backend.NavigationOpts{})
+		c.refreshThreadsAndStack()
+		c.syncThreadViews()
+		c.syncCallStackViews()
+
+		file, line := th.File, th.Line
+		if c.stack != nil {
+			if frames := c.stack.Items(); len(frames) > 0 {
+				if frames[0].File != "" {
+					file, line = frames[0].File, frames[0].Line
+				}
+			}
+		}
+		if file != "" {
+			w := h.ShowCodeAt(file, line)
+			if w != nil && w.Unavailable() {
+				fn := th.Func
+				if c.stack != nil {
+					if frames := c.stack.Items(); len(frames) > 0 && frames[0].Func != "" {
+						fn = frames[0].Func
+					}
+				}
+				w.ShowUnavailable(file, formatUnavailableExtra(fn, line))
+			}
+		}
+		h.RequestFrame()
+		return
+	}
+	// Zephyr / OpenOCD / local GDB: wait for =thread-selected + prompt.
+	h.BumpCodeNav()
+	h.NoteStackNavGDB()
+	be.SelectThread(env, th.ID, backend.NavigationOpts{})
+
+	// Optimistic Code from the thread row until GDB confirms the frame.
+	file, line := th.File, th.Line
+	if file != "" {
+		w := h.ShowCodeAt(file, line)
+		if w != nil && w.Unavailable() {
+			w.ShowUnavailable(file, formatUnavailableExtra(th.Func, line))
+		}
+	}
+	h.RequestFrame()
+}
+
+// --- Host adapters (ThreadHost / CallStackHost need *DebuggerApp methods) ---
+
+// syncFileListViews pushes AppState source files to the FileList view.
+func (a *DebuggerApp) syncFileListViews() {
+	if a.fileListWidget == nil {
+		return
+	}
+	if files := a.Debug().SourceFiles(); len(files) > 0 {
+		a.fileListWidget.SetItems(files)
+	}
+}
+
+// clearDebugInfoPanes resets Threads, Call Stack, Code pane, and breakpoints
+// after the inferior exits (kill / exit).
+func (a *DebuggerApp) clearDebugInfoPanes() {
+	a.debugInfo.clearModels()
+	a.clearCodePane()
+	a.clearBreakpointViews()
+}
+
+// clearBreakpointViews empties the shared BP model and gutters (UI only).
+// Does not clear breakCtl.snapshot — that is saved on quit after kill/exit reset.
+func (a *DebuggerApp) clearBreakpointViews() {
+	a.breaks.clearModel()
+}
+
+// clearCodePane empties Code widgets and restores the logo splash in the code leaf.
+func (a *DebuggerApp) clearCodePane() {
+	a.bufs.clearAll()
+	if a.State() != nil {
+		a.Debug().SetCurrentLocation("", 0)
+		a.Debug().ClearStopLocation()
+	}
+	a.placeLogoInCodeSlot()
+}

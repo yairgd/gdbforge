@@ -43,18 +43,19 @@ it does not depend on this module. The remaining rules below are about keeping t
 - Anything generic you add belongs upstream in termforge, not here. If you find
   yourself writing a reusable widget or layout primitive in `internal/gdbforge`,
   that is a signal it should be contributed to termforge instead.
-- Only three packages import the termforge engine root: `cmd/gdbforge`,
+- Only three packages import the termforge engine root: `internal/app`,
   `internal/gdbforge/widgets`, and `internal/gdbforge/layout`. Everything else uses
   the headless subpackages (`platform`, `commands`, `ptyx`, …) or no termforge at all.
 - Backends stay headless. `internal/gdb` and `internal/dlv` must not import the
   termforge engine root, so they can be tested with no terminal. They do use
   `termforge/ptyx` and `termforge/platform`, which carry no tcell dependency.
 
-**Composition root:** only `cmd/gdbforge` (and tests) wires application packages into
-framework surfaces.
+**Composition root:** only `internal/app` (and tests) wires application packages into
+framework surfaces. `cmd/gdbforge` holds `main.go` alone and imports nothing but
+`internal/app` and `internal/ttyhold`.
 
 **Lua:** `internal/luahost` installs the generic script APIs. Debugger Lua bindings
-(`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `cmd/gdbforge` via
+(`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `internal/app` via
 `internal/gdbforge/luadebug.Install`, which keeps `luahost` free of debugger knowledge.
 
 ---
@@ -65,7 +66,7 @@ Module path: `github.com/yairgd/gdbforge`
 
 | Dependency | Used by | Purpose |
 |------------|---------|---------|
-| [`github.com/yairgd/termforge`](https://github.com/yairgd/termforge) | `cmd/gdbforge`, widgets, layout, backends | Terminal UI framework |
+| [`github.com/yairgd/termforge`](https://github.com/yairgd/termforge) | `internal/app`, widgets, layout, backends | Terminal UI framework |
 | [`github.com/gdamore/tcell/v2`](https://github.com/gdamore/tcell) | `internal/gdbforge/widgets` | Terminal screen, input, styles |
 | [`github.com/creack/pty`](https://github.com/creack/pty) | `internal/serialmux` | Pseudo-terminal allocation for the serial multiplexer |
 | [`github.com/go-delve/delve`](https://github.com/go-delve/delve) | `internal/dlv` | Delve rpc2 client types |
@@ -73,7 +74,7 @@ Module path: `github.com/yairgd/gdbforge`
 | [`github.com/alecthomas/chroma/v2`](https://github.com/alecthomas/chroma) | `internal/gdbforge/widgets` | Source syntax highlighting |
 | [`github.com/yuin/goldmark`](https://github.com/yuin/goldmark) | `cmd/docserve` | Markdown rendering for the local docs server |
 | [`gopkg.in/yaml.v3`](https://gopkg.in/yaml.v3) | `internal/gdbforge/persist` | Breakpoint and history persistence |
-| [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) | `cmd/gdbforge`, `internal/serialmux` | `unix` syscalls for terminal and process control |
+| [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) | `internal/app`, `internal/ttyhold`, `internal/serialmux` | `unix` syscalls for terminal and process control |
 | [`golang.org/x/tools`](https://pkg.go.dev/golang.org/x/tools) | `cmd/flowdoc` | Callgraph analysis for flow docs (build-time only) |
 
 **System tools (not Go modules):**
@@ -116,7 +117,7 @@ flowchart BT
     luadebug["gdbforge/luadebug"]
     persist["gdbforge/persist"]
 
-    app["cmd/gdbforge"]
+    app["internal/app"]
     docserve["cmd/docserve"]
 
     gdb --> termforge
@@ -183,7 +184,8 @@ tcell into a package that must stay testable without a terminal.
 | **`internal/gdbforge/backend`** | `gdb`, `dlv`, `models`, `termforge/ptyx`, `termforge/platform` | `termforge` (engine root), `tcell`, widgets |
 | **`internal/gdbforge/widgets`** | `termforge`, `termforge/platform`, `termforge/ptyx`, `tcell`, `chroma`, `events`, `models`, `debugstate`, `luahost`, stdlib | `gdb`, `mcp` |
 | **`internal/gdbforge/layout`** | `termforge`, `termforge/platform` | widgets, backends, `mcp` |
-| **`cmd/gdbforge`** | everything | — (composition root) |
+| **`internal/app`** | everything | — (composition root) |
+| **`cmd/gdbforge`** | `internal/app`, `internal/ttyhold`, stdlib | every other application package |
 | **`cmd/docserve`** | stdlib, `goldmark` | application packages |
 | **`cmd/flowdoc`** | stdlib, `golang.org/x/tools` | application packages |
 
@@ -196,7 +198,7 @@ termforge engine root.
 
 | Binary | Path | Pulls in |
 |--------|------|----------|
-| **`gdbforge`** | `cmd/gdbforge` | `termforge`, widgets, `layout`, `backend`, `gdb`, `dlv`, `mcp`, `luahost`, `persist`, `tcell` |
+| **`gdbforge`** | `cmd/gdbforge` → `internal/app` | `termforge`, widgets, `layout`, `backend`, `gdb`, `dlv`, `mcp`, `luahost`, `persist`, `tcell` |
 | **`docserve`** | `cmd/docserve` | `goldmark` |
 | **`flowdoc`** | `cmd/flowdoc` | `golang.org/x/tools` (build-time doc generation) |
 
@@ -219,11 +221,11 @@ These four checks are exactly what `scripts/check_imports.sh` enforces.
 **Why:** backends stay UI-agnostic and testable without a terminal; widgets render
 state and raise intents rather than driving the debugger or MCP directly; `luahost`
 stays a generic script host so the debugger bindings remain an application concern,
-registered from `cmd/gdbforge`.
+registered from `internal/app`.
 
 **How data crosses the boundary:** generic PTY bytes as `ptyx.PtyOutputMsg`; debugger MI
 payloads as `GdbOutputMsg` in `internal/gdbforge/events`; terminal pane bytes via
-`WireTTY` → `CompositeTerminal`; all composition in `cmd/gdbforge`.
+`WireTTY` → `CompositeTerminal`; all composition in `internal/app`.
 
 **Automated check:** `task check-imports` (or `./scripts/check_imports.sh`).
 
@@ -240,7 +242,7 @@ go list -m all
 # Per-package imports
 for pkg in ./internal/gdb ./internal/dlv ./internal/mcp ./internal/luahost \
            ./internal/gdbforge/backend ./internal/gdbforge/widgets \
-           ./cmd/gdbforge ./cmd/docserve; do
+           ./internal/app ./cmd/gdbforge ./cmd/docserve; do
   echo "=== $pkg ==="
   go list -f '{{join .Imports "\n"}}' $pkg | sort -u
 done

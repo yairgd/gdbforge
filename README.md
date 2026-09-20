@@ -129,7 +129,7 @@ go run github.com/yairgd/termforge/cmd/demo@latest   # runnable example
 |-------|-------|
 | **Framework** | `github.com/yairgd/termforge` — widgets, window manager, commands, PTY plumbing |
 | **Example app** | [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo) in that repo |
-| **Debugger app** | this repo: `cmd/gdbforge` + `internal/gdb` / `dlv` / `mcp` / `gdbforge/*` |
+| **Debugger app** | this repo: `internal/app` + `internal/gdb` / `dlv` / `mcp` / `gdbforge/*` |
 
 Import rules for this repo: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)
 (`task check-imports`).

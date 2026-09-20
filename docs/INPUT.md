@@ -90,8 +90,8 @@ sequenceDiagram
 2. `App.HandleKey` — dispatches to the handler registered for `AppState.Mode()` via `RegisterModeHandler`:
    - **Global (every mode)** — `withGlobalKeys` in `setup.go` runs first. Job-control is three orthogonal mini-machines (not Mode):
      - **Mode** — keymaps / Esc / `:` `/` / ModeLua pane keys (`platform.Mode`).
-     - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`App.Suspend`).
-     - **Confirm** — [`confirm_router.go`](https://github.com/yairgd/gdbforge/blob/main/cmd/gdbforge/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
+     - **Activity** — [`activity.go`](https://github.com/yairgd/gdbforge/blob/main/internal/app/activity.go): snapshot of `InferiorRunning` + Lua job busy. **Ctrl-C**: Lua job → cancel; else if Confirm Asking → confirming interrupt; else debugger PTY interrupt. **Ctrl-Z**: inferior running → suspend inferior; else Lua job → cancel; else suspend gdbforge (`App.Suspend`).
+     - **Confirm** — [`confirm_router.go`](https://github.com/yairgd/gdbforge/blob/main/internal/app/confirm_router.go): **Ctrl-D** quit / y-n gates (GDB `QuitGate` / Delve `ConfirmGate`). Mode may stay Insert while typing y/n.
      Works with any focused pane (Code, GDB, cmdline, Lua, …).
    - **`ModeNormal`** — `:` enters command mode; `/` enters search mode; **Esc** restores the last non-Code/non-GDB pane when one was focused (e.g. Breakpoints), else focuses the CodeWidget leaf when `:set esctocode` (default); **`i`** focuses the remembered GDB leaf and enters insert; **Up/Down/Space/e/n/s/c** are global for Code/GDB (`n` → search-next when a pattern is active, else MI `-exec-next`; `s`/`c` → `-exec-step`/`-exec-continue`); **`*`/`#`** search word under cursor forward/back; **`N`** previous search match; other panes keep their own Up/Down/Space; other keys go through the **Trie** then the focused widget.
    - **`ModeInsert`** — GDB console (after `i`); Esc → normal (+ last non-Code/non-GDB pane, or CodeWidget when `esctocode`). If a **CodeWidget** is focused, **`n`/`s`/`c`** still send next/step/continue (Handled fallthrough — not when GDB or another pane owns focus).
@@ -140,7 +140,7 @@ GDB / Delve console keys are handled by shared termforge pieces, then backend-sp
 | `InputLine` | `termforge/input_line.go` | Editing + history chords |
 | `ConsolePane` | `termforge/console_pane.go` | Enter / Ctrl-L / PgUp / selection; walking prompt Draw |
 | `GDBWidget` | `internal/gdbforge/widgets/gdb_widget.go` | `OnSubmit` → echo + `Debugger.Send`; Ctrl-C/D → interrupt/quit |
-| `cmd/gdbforge/input.go` | Tab → `gdbTabComplete` | GDB: MI `-complete`; Delve: `dlv.Complete` (commands + `funcs`) |
+| `internal/app/input.go` | Tab → `gdbTabComplete` | GDB: MI `-complete`; Delve: `dlv.Complete` (commands + `funcs`) |
 | `ExecWidget` | `internal/gdbforge/widgets/exec_widget.go` | Line submit → PTY `Send`; ANSI scrollback; live bash/ssh prompt |
 
 When the GDB pane is focused (insert):
@@ -198,7 +198,7 @@ On Enter, `CmdWidget` resolves the first token against `AutoCompleter`, sets `Cm
 
 ## Key-sequence bindings
 
-Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`cmd/gdbforge/keybindings.go`).
+Multi-key bindings (Vim-style `<C-w>h`, etc.) are registered on a **`commands.KeyBindingRegistry`** owned by `DebuggerApp` (`internal/app/keybindings.go`).
 
 ```go
 func (a *DebuggerApp) InitKeyBindings() {
@@ -210,7 +210,7 @@ func (a *DebuggerApp) InitKeyBindings() {
 }
 ```
 
-In **normal mode** (`cmd/gdbforge/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`/`c`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. **Ctrl-Z** is not on the trie — it is intercepted by `withGlobalKeys` for every mode. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
+In **normal mode** (`internal/app/input.go`), key→action maps live on a **mode key trie** (`keyBindings` via `InitKeyBindings`): Esc, `:`, `i`, Up/Down/Space/`e`/`n`/`s`/`c`, and window chords. Gated binds use `Handled` fallthrough so list panes keep Up/Down/Space. **Ctrl-Z** is not on the trie — it is intercepted by `withGlobalKeys` for every mode. Insert and completion modes use `insertKeys` / `completionKeys` the same way.
 
 **Current bindings:**
 
@@ -334,10 +334,10 @@ flowchart LR
 
 Flow:
 
-1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`cmd/gdbforge/input.go`).
+1. User presses `:` → `DebuggerApp` sets `ModeCommand`, `CmdWidget.Activate()` (`internal/app/input.go`).
 2. User types `:b `, presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; the wildmenu window opens and app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
-4. Tree is built at startup via DSL in `ExapData()` (`cmd/gdbforge/command_tree.go`).
+4. Tree is built at startup via DSL in `ExapData()` (`internal/app/command_tree.go`).
 
 ### Legacy note
 
@@ -354,7 +354,7 @@ Older docs described a flat `termforge.AutoCompleter` + `CommandID` + `SubmitMsg
 
 The `:buffer <name>` command displays an application model, not a file. Each `<name>` must be declared at startup (e.g. `code`, `breakpoints`, `console`). There is no `:attach` command — all models exist from initialization. See [ARCHITECTURE.md](ARCHITECTURE.md#buffer-concept).
 
-**Design decision:** UI commands and GDB CLI commands share familiar ideas (`:gdb break file`), but routing stays out of the widgets. A widget publishes an intent; the command tree or a bus subscriber in `cmd/gdbforge` decides whether to mutate layout, talk to services, or exit.
+**Design decision:** UI commands and GDB CLI commands share familiar ideas (`:gdb break file`), but routing stays out of the widgets. A widget publishes an intent; the command tree or a bus subscriber in `internal/app` decides whether to mutate layout, talk to services, or exit.
 
 ---
 

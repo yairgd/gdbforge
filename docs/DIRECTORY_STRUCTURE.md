@@ -35,7 +35,8 @@ debugger application.
 | Kind | Where | Notes |
 |------|-------|-------|
 | Framework | `github.com/yairgd/termforge` (+ `/platform`, `/commands`, `/collections`, `/ptyx`, `/execcli`, `/devport`) | Reusable TUI — see [termforge docs](https://yairgd.github.io/termforge/) |
-| Application | `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*`, `cmd/gdbforge` | Debugger-only |
+| Application | `internal/app`, `internal/gdb`, `internal/dlv`, `internal/mcp`, `internal/gdbforge/*` | Debugger-only |
+| Entry point | `cmd/gdbforge/main.go` | Version stamp + argv dispatch only — no application logic |
 | App events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
 | App state | `internal/gdbforge/debugstate` | Debugger session fields |
 | App DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers / string helpers |
@@ -50,10 +51,12 @@ Import guardrails: `task check-imports`.
 ```text
 gdbforge/
 ├── cmd/
-│   ├── gdbforge/          # Debugger app — composition root
+│   ├── gdbforge/          # main.go only — version, argv dispatch, exit codes
 │   ├── docserve/          # Documentation HTTP server
 │   └── flowdoc/           # Code-flow catalog generator (build-time)
 ├── internal/
+│   ├── app/               # Debugger app — composition root (DebuggerApp + *Ctl)
+│   ├── ttyhold/           # --hold-inferior-tty helper (re-executed binary)
 │   ├── gdbforge/          # Debugger app layer
 │   │   ├── models/        # Break/thread/stack DTOs
 │   │   ├── parse/         # MI parsers
@@ -91,21 +94,25 @@ The UI framework is **not** in this tree — it is the `termforge` module. See
 
 | Path | Binary | Purpose |
 |------|--------|---------|
-| `cmd/gdbforge/` | `gdbforge` | **gdbforge** debugger app (`package main`, split across files) |
+| `cmd/gdbforge/main.go` | `gdbforge` | Thin entry point: version stamp, argv dispatch, exit codes — all logic is in `internal/app` |
 | `cmd/docserve/main.go` | `docserve` | Serves `docs/` as HTML with Mermaid |
 | `cmd/flowdoc/` | `flowdoc` | Generates and validates `docs/flows/flows.json` |
 
 A framework showcase binary lives in the termforge repository at
 [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo).
 
-### `cmd/gdbforge` layout
+### `internal/app` layout
 
 `DebuggerApp` is a **composition root**: it wires `backend.Backend` and host-backed `*Ctl` controllers (`initControllers`). Domain state lives on controllers; orchestration (stop pipeline, modes, layouts) stays on the app. See `facade.go`.
 
+`cmd/gdbforge/main.go` only stamps `version`, dispatches `-version` and
+`--hold-inferior-tty` (`internal/ttyhold`), then calls `app.ParseFlags` and
+`app.NewDebuggerApp`. Everything below lives in `internal/app`; the package is
+still one Go package, so controllers keep their unexported host interfaces.
+
 | File | Responsibility |
 |------|----------------|
-| `main.go` | `main()` entry |
-| `flags.go` | `SessionConfig`, `-g gdb\|dlv` |
+| `flags.go` | `ParseFlags`, `SessionConfig`, `-g gdb\|dlv` |
 | `app.go` | `DebuggerApp` — embeds `LayoutShell` + `DebugSession`; `NewDebuggerApp`, `Close` |
 | `facade.go` | Composition-root comment (layers + hosts) |
 | `debug_session.go` | `DebugSession` — backend init, GDB widgets, debug `*Ctl` lifecycle |
@@ -137,12 +144,19 @@ A framework showcase binary lives in the termforge repository at
 | `workspace_place.go` | `placeCodeInSlot`, logo slot, sticky-GDB swap / JumpBack |
 | `workspace_layout.go` | `ApplyLayout` mounts layout `WidgetTree` onto Tab |
 | `code_nav.go` | Thin Workspace delegates; `activeCodeWidget`; `sendGdbExec` via `Backend.MapExec` |
-| `inferior_tty.go` | `:set inferior-tty` (GDB live / DLV restart) |
-| `inferior_tty_hold.go` | `--hold-inferior-tty` helper — keeps the external window open and releases its pts so the inferior gets a controlling terminal |
+| `inferior_tty.go` | `:set inferior-tty` (GDB live / DLV restart); builds the `internal/ttyhold` command line |
 | `events.go` | Debugger domain events (`BreakpointsChangedMsg`) |
 | `stopped.go` | Stop pipeline; `presentLocation` (Code vs autoAsm); thread/frame select |
 | `lua.go` | `luaCtl` — ModeLua; `:lua` / embedded script builtins |
 | `debug_domain.go` | `appDebugDomain` → `domain.DebugDomain` for MCP |
+
+### `internal/ttyhold`
+
+`--hold-inferior-tty` helper. gdbforge re-executes its own binary inside the
+external terminal; the helper keeps that window open and releases its pts
+(`TIOCNOTTY`) so the inferior can claim it as a controlling terminal. It is
+argv-level plumbing dispatched from `main()`, holds no application state, and
+must not import `internal/app` (enforced by `scripts/check_imports.sh`).
 
 Build all commands:
 
@@ -235,7 +249,7 @@ See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) 
 
 **Rule:** no imports from `termforge`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
 
-Application orchestration for gdbforge lives in **`cmd/gdbforge`** (`DebuggerApp` embeds `termforge.App` and implements `termforge.AppApi`).
+Application orchestration for gdbforge lives in **`internal/app`** (`DebuggerApp` embeds `termforge.App` and implements `termforge.AppApi`); `cmd/gdbforge/main.go` only wires argv to it.
 
 ---
 
@@ -301,7 +315,8 @@ flowchart BT
     backend["internal/gdbforge/backend"]
     gdb["internal/gdb"]
     dlv["internal/dlv"]
-    app["cmd/gdbforge"]
+    app["internal/app"]
+    mainpkg["cmd/gdbforge/main.go"]
 
     widgets --> tf
     layoutpkg --> tf
@@ -311,6 +326,7 @@ flowchart BT
     backend --> gdb
     backend --> dlv
 
+    mainpkg --> app
     app --> tf
     app --> widgets
     app --> layoutpkg
@@ -321,7 +337,7 @@ flowchart BT
     widgets -.->|"must NOT import"| gdb
 ```
 
-Only `cmd/gdbforge`, `internal/gdbforge/widgets`, and `internal/gdbforge/layout` touch
+Only `internal/app`, `internal/gdbforge/widgets`, and `internal/gdbforge/layout` touch
 the termforge engine root. Backends reach the headless subpackages only, so they stay
 testable without a terminal.
 
@@ -332,17 +348,17 @@ testable without a terminal.
 | Question | Package |
 |----------|---------|
 | Application model (domain state)? | `internal/gdbforge/models` |
-| Peer control surface (AI / Lua)? | `internal/gdbforge/domain` (+ `cmd/gdbforge/debug_domain.go` impl) |
+| Peer control surface (AI / Lua)? | `internal/gdbforge/domain` (+ `internal/app/debug_domain.go` impl) |
 | Service (external I/O)? | `internal/gdb`, `internal/dlv`, or a new backend package |
 | GDB MI parsing? | `internal/gdb` + `internal/gdbforge/parse` |
 | Debugger pane (view of a model)? | `internal/gdbforge/widgets` |
 | Named workspace preset? | `internal/gdbforge/layout` |
-| Key binding in normal mode? | `cmd/gdbforge/keybindings.go` + `input.go` |
+| Key binding in normal mode? | `internal/app/keybindings.go` + `input.go` |
 | Debugger session state? | `internal/gdbforge/debugstate` |
 | Breakpoint / history persistence? | `internal/gdbforge/persist` |
 | Debugger Lua binding? | `internal/gdbforge/luadebug` |
-| Colon command for the debugger? | `cmd/gdbforge/command_tree.go` |
-| Compose backends + controllers + UI? | `cmd/gdbforge/setup.go` |
+| Colon command for the debugger? | `internal/app/command_tree.go` |
+| Compose backends + controllers + UI? | `internal/app/setup.go` |
 | Split pane layout / window manager? | **termforge** — not this repo |
 | Generic widget, scroll primitive, box borders? | **termforge** — not this repo |
 | Interaction mode plumbing? | **termforge** (`platform.AppState` via `App`) |
