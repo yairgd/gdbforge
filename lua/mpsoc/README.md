@@ -24,11 +24,14 @@ export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
 None of these scripts initialise the PS, and none of them can put an A53 back at EL3. If the board is not running an FSBL that did the `psu_init` work, or if it booted all the way to U-Boot (which leaves the A53 at EL2, where a standalone-BSP app spins silently in `boot.S`), run the host-side helper first, from a shell, with no gdbforge session open:
 
 ```bash
-scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl
+scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl               # Digilent / Xilinx cable
+scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl --jtag jlink  # SEGGER J-Link
 pkill hw_server          # release the JTAG cable, then start gdbforge
 ```
 
-It resets the board into JTAG boot mode so no FSBL, ATF or U-Boot runs, runs `psu_init` over the DAP, and leaves an A53 halted at EL3. gdbforge cannot do this itself — `xsdb` needs `hw_server` to own the one JTAG cable, and a live session is holding it. Afterwards do not let the debugger reset the target, and remember `--clear-boot-mode` to give the board back its normal boot. Full explanation: [MPSOC_DEBUG.md — Before you attach](../../docs/MPSOC_DEBUG.md#before-you-attach-park-the-board-host-side).
+It resets the board into JTAG boot mode so no FSBL, ATF or U-Boot runs, runs `psu_init` over the DAP, and leaves an A53 halted at EL3. gdbforge cannot do this itself — `xsdb` needs `hw_server` to own the one JTAG cable, and a live session is holding it. Afterwards do not let the debugger reset the target, and remember `--clear-boot-mode` to give the board back its normal boot.
+
+`--jtag` picks the cable. The default `digilent` covers everything `hw_server` drives itself; `jlink` bridges a SEGGER J-Link in over Xilinx Virtual Cable, because `hw_server` has no driver for one and will not see it otherwise. Full explanation of both: [MPSOC_DEBUG.md — Before you attach](../../docs/MPSOC_DEBUG.md#before-you-attach-park-the-board-host-side).
 
 The kernel and OpenAMP scripts are the opposite case: they attach to a board running Linux, so they need a normal boot.
 

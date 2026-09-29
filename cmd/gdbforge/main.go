@@ -18,6 +18,15 @@ import (
 var version = "dev"
 
 func main() {
+	// Before anything else reads argv. Everything after the script name belongs
+	// to the script, and wantsVersion below scans the whole of argv, so it would
+	// otherwise answer a --version that was meant for the script.
+	if name, rest, ok := app.WantsRunScript(os.Args[1:]); ok {
+		os.Exit(app.RunBundledScript(name, rest, os.Stdin, os.Stdout, os.Stderr))
+	}
+	if app.WantsListScripts(os.Args[1:]) {
+		os.Exit(app.ListBundledScripts(os.Stdout))
+	}
 	if wantsVersion(os.Args[1:]) {
 		fmt.Println(version)
 		os.Exit(0)

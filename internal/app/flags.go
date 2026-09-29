@@ -119,7 +119,14 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  -version          Print version and exit\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help        Print help and exit\n")
 		fmt.Fprintf(os.Stderr, "  --                End of gdbforge options; rest passed to the debugger\n\n")
+		// Handled in main before this FlagSet ever runs, like -version, because
+		// everything after the script name has to reach the script untouched.
+		fmt.Fprintf(os.Stderr, "Bundled scripts:\n")
+		fmt.Fprintf(os.Stderr, "  --list-scripts               List bundled scripts and their descriptions\n")
+		fmt.Fprintf(os.Stderr, "  --run-script NAME [ARGS...]  Run a bundled script without starting the TUI\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge --list-scripts\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge --run-script zynqmp-park-el3.sh --help\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g gdb              # start without a program (attach/kernel debug)\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")

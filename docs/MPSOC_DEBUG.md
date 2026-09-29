@@ -59,20 +59,66 @@ flowchart TB
 Run it **from a shell, before gdbforge, with no debug session open**:
 
 ```bash
-scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl
+scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl               # Digilent / Xilinx cable
+scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl --jtag jlink  # SEGGER J-Link
 pkill hw_server          # release the cable, then start gdbforge
 ```
 
+The script also ships inside the binary, which is the way to reach it when gdbforge was installed as a release build rather than cloned:
+
+```bash
+gdbforge --list-scripts                                                   # what is bundled
+gdbforge --run-script zynqmp-park-el3.sh --help                           # its own options
+gdbforge --run-script zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl --jtag jlink
+```
+
+Everything after the script name is passed through untouched, and no TUI or probe server is started. Bundling changes nothing else: `xsdb` still has to be on `PATH`, and the cable rule below still applies.
+
 It is a separate script, and gdbforge cannot run it for you: it drives `xsdb`, which needs `hw_server` to own the JTAG cable, and openocd or JLinkGDBServer is holding that cable for as long as a session is open. Sharing does not fail cleanly — small transfers get through and a bulk one corrupts with `ftdi_read_data returned 69, expected 70`.
+
+### Which cable — `--jtag digilent` or `--jtag jlink`
+
+`hw_server` only drives cables AMD ships a driver for: the Platform Cable USB II and the Digilent FTDI modules, which covers the JTAG-HS2/HS3/SMT2 dongles and the ones soldered onto the ZCU10x boards. That is the default, `--jtag digilent`, and it needs nothing extra.
+
+A **J-Link is not one of them**, and plugging one in does not make it appear in `jtag targets` however it is wired — `hw_server` never looks for it. It can still be used, through **Xilinx Virtual Cable**. XVC is a small TCP protocol that says no more than "shift these bits through the TAP", and `hw_server` speaks it as a client, so anything serving XVC becomes a cable it accepts. SEGGER ship exactly that server with the J-Link tools, as `JLinkXVCDServer`:
+
+```
+xsdb → hw_server → XVC over TCP → JLinkXVCDServer → J-Link → board
+```
+
+Nothing above that socket can tell the difference: the PSU and A53 targets enumerate, `psu_init`'s DAP writes land, `rst -system` resets the chip. It is only slower, because every JTAG shift becomes a TCP round trip, so expect `psu_init` to take seconds rather than milliseconds.
+
+`--jtag jlink` starts `JLinkXVCDServer` unless something already serves `--xvc-url` (default `TCP:127.0.0.1:2542`), adds `-xvc-url` to the `xsdb` connect, and kills the server again on the way out — but only the one it started, so a server you left running is left alone. Use `--jlink-serial <SN>` to pick between several probes.
+
+Two J-Link-specific traps:
+
+- **The probe has to be on the PS JTAG pins.** A PL-only chain has no DAP, so there is no A53 to park and no path for `psu_init`.
+- **VTREF must be wired.** The J-Link refuses to drive JTAG at all if its reference-voltage input reads 0 V, and fails with `Target voltage too low` before the XVC port ever opens — wiring only TCK/TMS/TDI/TDO/GND is not enough, VTREF needs the PS JTAG bank supply (1.8 V on ZynqMP). Check what the probe sees with `JLinkExe` and `ShowHWStatus`. Larger J-Links can be told to assume a voltage with the `VTREF` command; the small ones answer *"does not support setting a fixed VTref"* and have to see the real thing.
+
+Either way, the same rule about sharing applies, and more sharply with a J-Link: `JLinkGDBServer` and `JLinkXVCDServer` both want the one probe, so the park has to finish and release it before gdbforge starts.
 
 Two things to know afterwards:
 
 - **Do not let the debugger reset the target.** `monitor halt` is fine; `monitor reset` discards `psu_init` and leaves a board with no clocks.
 - **The board stays in JTAG boot mode**, so it will not boot from QSPI/SD and looks bricked to anyone who power-cycles it and waits for a console. A power-on reset clears it; `scripts/zynqmp-park-el3.sh --clear-boot-mode` clears it deliberately.
 
-`--help` on the script carries the full rationale, plus `--no-serdes` for boards whose gigabit-transceiver bring-up takes the JTAG session with it.
+`--help` on the script carries the full rationale, plus `--no-serdes` for boards whose gigabit-transceiver bring-up takes the JTAG session with it, and a `CABLES` section on the XVC bridge.
 
 This applies to the **bare-metal** scripts only. `a53_kernel_*` and `r5_openamp_*` attach to a board running Linux, where JTAG boot mode is exactly the wrong thing — those need a normal boot.
+
+## TCM ECC: why the R5 scripts zero TCM before `load`
+
+The R5 TCMs are ECC-protected, and a store narrower than the ECC granule is a read-modify-write. Aim one at a granule that has never been written since power-on and the read half finds no valid syndrome, which the core reports as a **synchronous parity error** data abort — `DFSR.FS = 0b11001`, and in Zephyr `K_ERR_ARM_SYNC_PARITY_ERROR`, fatal reason 52.
+
+`load` cannot avoid this on its own. An ELF's `bss` and `noinit` are `NOBITS`: they have an address and a size but no bytes in the file, so no loader writes them. The first thing a Zephyr app does is `arch_bss_zero()`, whose very first `strb` lands on `__bss_start` — the first address `load` did not touch — and aborts before `main`.
+
+Nothing else fills that gap over JTAG. On a normally booted board the FSBL's `XFsbl_TcmEccInit` writes the whole TCM, and under Linux the `zynqmp_r5_remoteproc` driver zeroes the TCM carveouts before loading firmware. Park the board with `zynqmp-park-el3.sh` and there is no FSBL by design, so neither happens.
+
+So `r5_baremetal_jlink` and `r5_baremetal_openocd_digilent` write 64 KB of zeros over ATCM at `0x0` between `monitor halt` and `load`. The ordering is the whole trick: `load` then rewrites everything the fill touched, which also resyncs anything gdb had cached for breakpoints in that range. Run it after `load` instead and it erases the image.
+
+`GDBFORGE_R5_TCM_INIT` picks the banks. `atcm` is the default and is enough for an image that fits in ATCM; `all` adds BTCM at `0x20000`, and `btcm` does that bank alone. **Only ask for a bank your image actually uses.** BTCM is not always powered or mapped, and writing one that is not there fails silently at the probe, after which unrelated memory access — including inserting a breakpoint — starts reporting `Cannot access memory at address …`. The scripts verify each write via `gdb_query` and warn rather than carry on quietly. `0` disables the fill entirely, for firmware that has already turned ECC checking off in `ACTLR` (Zephyr's `CONFIG_DISABLE_TCM_ECC=y`) or a core whose TCM someone else initialises.
+
+The `r5_openamp_*` scripts do not do this and do not need to: they attach without `load`, to firmware remoteproc has already placed in a TCM it cleared first.
 
 ## Script catalog
 
@@ -97,19 +143,25 @@ This applies to the **bare-metal** scripts only. `a53_kernel_*` and `r5_openamp_
 | `GDBFORGE_JLINK_CHIP` | Chip prefix (`XCZU3CG`) |
 | `GDBFORGE_JLINK_DEVICE` | Full device override |
 | `GDBFORGE_JLINK_PORT` | GDB port (`2334`) |
+| `GDBFORGE_JLINK_NORESET` | start `JLinkGDBServer` with `-noreset`, so connecting keeps the clocks, resets and PLLs that `psu_init` set up |
 | `GDBFORGE_R5_CORE` | RPU core `0`/`1` |
+| `GDBFORGE_R5_TCM_INIT` | TCM banks to zero before `load`: `atcm` (default), `btcm`, `all`, or `0` for none — see [TCM ECC](#tcm-ecc-why-the-r5-scripts-zero-tcm-before-load) |
 | `GDBFORGE_A53_CORE` | APU core `0`–`3` |
 | `GDBFORGE_OPENOCD` | `openocd` on PATH |
 | `GDBFORGE_OPENOCD_PORT` | GDB port (`3333`) |
 
 Edit defaults at the top of any script, or export before running. Each script implements `help()` — run `:lua <name>` and check the Lua pane output.
 
-These two belong to `zynqmp-park-el3.sh`, not to gdbforge, and are read only by that script:
+These belong to `zynqmp-park-el3.sh`, not to gdbforge, and are read only by that script:
 
 | Variable | Default / meaning |
 |----------|-------------------|
 | `ZYNQMP_PSU_INIT` | `psu_init.tcl` for the board, instead of `-p` |
 | `ZYNQMP_HW_SERVER_URL` | `hw_server` URL (`TCP:127.0.0.1:3121`) |
+| `ZYNQMP_JTAG` | Cable kind, `digilent` (default) or `jlink`, instead of `--jtag` |
+| `ZYNQMP_XVC_URL` | XVC server address (`TCP:127.0.0.1:2542`), `--jtag jlink` only |
+| `ZYNQMP_JLINK_SERIAL` | Which J-Link, when several are plugged in |
+| `ZYNQMP_JLINK_XVCD` | Full path to `JLinkXVCDServer`, if it is not in `PATH` or under `/opt/SEGGER/JLink*/` or `/opt/JLink*/` |
 
 The A53 kernel scripts stop the CPU through JTAG; for day-to-day kernel work over a serial line or Ethernet, [kgdb](KERNEL_KGDB.md) is usually easier.
 

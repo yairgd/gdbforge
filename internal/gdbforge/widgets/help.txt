@@ -344,6 +344,23 @@ About (:b about):
     Breakpoints YAML: ./.gdbforge/breakpoints.yaml (cwd).
     Cmdline history: ./.gdbforge/cmdline_history.yaml (cwd).
 
+=== Bundled scripts (CLI, not in a session) ===
+
+    Host-side helper scripts ship inside the binary. They are run from
+    a shell, not from here, and there is no : command for them.
+
+    gdbforge --list-scripts            names and descriptions
+    gdbforge --run-script NAME --help  that script's own options
+    gdbforge --run-script NAME [args]  run it; no TUI, no probe server
+
+    Everything after NAME goes to the script untouched.
+
+    Why not a : command: zynqmp-park-el3.sh drives xsdb, which needs
+    hw_server to own the JTAG cable, and openocd or JLinkGDBServer is
+    holding that cable for as long as a session is open. Bundling the
+    script does not change what it needs — its external tools still
+    have to be installed.
+
 === Clipboard and mouse ===
 
     Ctrl-C / Ctrl-X   copy / cut selection (viewports) or cmdline text
