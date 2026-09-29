@@ -79,7 +79,7 @@ gdbforge/
 ├── docs/                  # gdbforge documentation
 ├── lua/                   # Shipped Lua workflows (embedded via lua/fs.go)
 ├── examples/              # Sample programs to debug
-├── scripts/               # check_imports.sh and friends
+├── scripts/               # check_imports.sh, zynqmp-park-el3.sh (ZynqMP JTAG prep)
 ├── go.mod                 # requires github.com/yairgd/termforge
 ├── Taskfile.yml
 └── CONTRIBUTING.md

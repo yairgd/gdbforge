@@ -19,6 +19,19 @@ export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
 :lua r5_baremetal_jlink
 ```
 
+## Prerequisite for bare metal — the board has to be parked first
+
+None of these scripts initialise the PS, and none of them can put an A53 back at EL3. If the board is not running an FSBL that did the `psu_init` work, or if it booted all the way to U-Boot (which leaves the A53 at EL2, where a standalone-BSP app spins silently in `boot.S`), run the host-side helper first, from a shell, with no gdbforge session open:
+
+```bash
+scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl
+pkill hw_server          # release the JTAG cable, then start gdbforge
+```
+
+It resets the board into JTAG boot mode so no FSBL, ATF or U-Boot runs, runs `psu_init` over the DAP, and leaves an A53 halted at EL3. gdbforge cannot do this itself — `xsdb` needs `hw_server` to own the one JTAG cable, and a live session is holding it. Afterwards do not let the debugger reset the target, and remember `--clear-boot-mode` to give the board back its normal boot. Full explanation: [MPSOC_DEBUG.md — Before you attach](../../docs/MPSOC_DEBUG.md#before-you-attach-park-the-board-host-side).
+
+The kernel and OpenAMP scripts are the opposite case: they attach to a board running Linux, so they need a normal boot.
+
 ## Who is this for?
 
 Embedded developers debugging **ZynqMP** firmware or Linux on the A53 application cores, or **R5 lock-step / OpenAMP** workloads. Scripts spawn the probe GDB server in the background so the gdbforge Code pane stays usable.
@@ -60,6 +73,10 @@ Use `a53_baremetal_jlink` or `r5_baremetal_jlink` depending on the core. Select 
 ### OpenAMP / remoteproc debug on R5?
 
 After Linux has loaded the R5 firmware via remoteproc, use `:lua r5_openamp_jlink ./firmware.elf` (or the OpenOCD variant).
+
+### My bare-metal app loads but prints nothing
+
+Almost always the board state, not the ELF or the probe. On the A53, check `p/x $cpsr` after `monitor halt`: mode nibble `d` is EL3 and will run, `9` is EL2 and `boot.S` will spin at `b error` before `main`, with no UART output. Nothing in GDB fixes that — a core cannot raise its own exception level. On the R5, the usual cause is that no FSBL ran, so there are no clocks, PLLs or MIO. Both are fixed by `scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl` before starting gdbforge — see the prerequisite section above.
 
 ## Key environment variables
 

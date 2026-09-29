@@ -12,6 +12,9 @@
 -- Kills any existing openocd, then gdbforge.spawn (background — Code pane stays).
 -- wait_port waits until OpenOCD listens before target remote.
 -- Optional: :b exec to watch OpenOCD logs.
+--
+-- Nothing here initialises the PS. If the board is not booting an FSBL that does it, see
+-- PARK below: a companion xsdb script the user runs by hand, outside gdbforge, before this.
 
 local OPENOCD = os.getenv("GDBFORGE_OPENOCD") or "openocd"
 local CFG = os.getenv("GDBFORGE_OPENOCD_CFG")
@@ -19,6 +22,10 @@ local CFG = os.getenv("GDBFORGE_OPENOCD_CFG")
 local PORT = os.getenv("GDBFORGE_OPENOCD_PORT") or "3333"
 local TDESC = os.getenv("GDBFORGE_TDESC")
   or (gdbforge.lua_dir() .. "/r5_target.xml")
+
+-- Mentioned in help(), never run from here: it drives xsdb, which needs hw_server to own the
+-- JTAG cable, and openocd is holding that cable for as long as a session is open.
+local PARK = "scripts/zynqmp-park-el3.sh"
 
 -- Parse GDBFORGE_R5_CORE → 0 or 1 (default 0). Accepts 0|1|R0|R1.
 local function r5_core()
@@ -68,6 +75,18 @@ function help()
   gdbforge.print("  FSBL already ran from boot.bin (board booted normally).")
   gdbforge.print("  This script only uploads your app ELF over OpenOCD (load + break main).")
   gdbforge.print("  It does NOT load FSBL or init DDR/clocks like Xilinx XSCT does.")
+  gdbforge.print("")
+  gdbforge.print("No FSBL running on the board? Then nothing set the clocks, PLLs and MIO,")
+  gdbforge.print("and the app loads but prints nothing. Fix it before debugging, from a")
+  gdbforge.print("shell, with no gdbforge session open:")
+  gdbforge.print("    " .. PARK .. " -p <platform>/hw/psu_init.tcl")
+  gdbforge.print("  That resets the board into JTAG boot mode — no FSBL, ATF or U-Boot runs")
+  gdbforge.print("  at all — and then runs psu_init over the DAP, which is the part the R5")
+  gdbforge.print("  needs; the A53 it parks at EL3 matters only for A53 bare metal. With no")
+  gdbforge.print("  FSBL nothing releases the RPU from reset either, so the probe has to do")
+  gdbforge.print("  that before load lands. It needs the JTAG cable to itself, which is why")
+  gdbforge.print("  gdbforge cannot run it for you. Afterwards do not let the debugger reset")
+  gdbforge.print("  the target: a reset discards psu_init. --clear-boot-mode to boot normally.")
   gdbforge.print("")
   gdbforge.print("Setup (copy-paste into shell / script):")
   gdbforge.print("  export GDBFORGE_R5_CORE=0          # or 1 / R0 / R1 (default R0)")

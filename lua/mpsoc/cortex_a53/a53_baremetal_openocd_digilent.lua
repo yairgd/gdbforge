@@ -2,11 +2,17 @@
 -- Install: cp -r lua/mpsoc/cortex_a53 .gdbforge/lua/
 -- Usage:   :lua a53_baremetal_openocd_digilent
 --
+-- Prerequisite: the core must already be at EL3, which a normally booted board is not by the
+-- time you can halt it. scripts/zynqmp-park-el3.sh gets it there. It is run by hand from a
+-- shell, before and outside gdbforge, with no debug session open — this script only points
+-- at it. See a53_common.PARK_SCRIPT and that script's --help.
+--
 -- Env:
 --   GDBFORGE_A53_CORE       APU core: 0|1|2|3|A0|A1|A2|A3 (default 0)
 --   GDBFORGE_OPENOCD        path to openocd (default: openocd on PATH)
 --   GDBFORGE_OPENOCD_CFG    OpenOCD config (default: script dir a53_openocd_digilent.cfg)
 --   GDBFORGE_OPENOCD_PORT   GDB listen port (default 3333)
+--   GDBFORGE_A53_ENTRY      where to resume after load (default &_boot)
 
 local C = dofile(gdbforge.lua_dir() .. "/a53_common.lua")
 
@@ -21,7 +27,11 @@ function help()
   gdbforge.print("")
   gdbforge.print("What this assumes:")
   gdbforge.print("  Digilent JTAG-HS2 (FTDI 0403:6014) connected to ZynqMP.")
-  gdbforge.print("  FSBL already ran from boot.bin (board booted normally).")
+  gdbforge.print("  The PS is already initialised — FSBL ran from boot.bin, or the park")
+  gdbforge.print("  script below ran psu_init. This one does neither.")
+  gdbforge.print("  The core is already at EL3 — it prints cpsr after halt so you can check.")
+  gdbforge.print("")
+  C.park_help()
   gdbforge.print("")
   gdbforge.print("Setup:")
   gdbforge.print("  export GDBFORGE_A53_CORE=0")
@@ -58,8 +68,9 @@ function main()
   gdbforge.gdb("set architecture aarch64")
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
+  C.el3_note()
   gdbforge.gdb("load")
-  gdbforge.gdb("set $pc = 0x0")
+  gdbforge.gdb("set $pc = " .. C.bare_metal_entry())
   gdbforge.gdb("break main")
   gdbforge.print("a53_baremetal_openocd_digilent done — :b exec for OpenOCD logs")
 end
