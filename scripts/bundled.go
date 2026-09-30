@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-//go:embed zynqmp-park-el3.sh
+//go:embed zynqmp-park-el3.sh rtt.sh
 var FS embed.FS
 
 // Script is one bundled script.
@@ -36,6 +36,11 @@ var catalog = []Script{
 		Name:     "zynqmp-park-el3.sh",
 		Desc:     "Park a ZynqMP A53 core at EL3 with psu_init done, for bare-metal JTAG debug",
 		Requires: []string{"xsdb"},
+	},
+	{
+		Name:     "rtt.sh",
+		Desc:     "Open the target's SEGGER RTT console as a terminal, over the debugger's JTAG cable",
+		Requires: []string{"socat", "ss", "minicom"},
 	},
 }
 

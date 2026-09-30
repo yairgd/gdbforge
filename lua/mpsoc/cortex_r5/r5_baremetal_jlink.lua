@@ -25,12 +25,18 @@ local JLINK = os.getenv("GDBFORGE_JLINK")
   or "/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer"
 local CHIP = os.getenv("GDBFORGE_JLINK_CHIP") or "XCZU3CG"
 local PORT = os.getenv("GDBFORGE_JLINK_PORT") or "2334"
+local SPEED = os.getenv("GDBFORGE_JLINK_SPEED") or "4000"
 local TDESC = os.getenv("GDBFORGE_TDESC")
   or (gdbforge.lua_dir() .. "/r5_target.xml")
 
 -- Mentioned in help(), never run from here: it drives xsdb, which needs hw_server to own the
 -- JTAG cable, and JLinkGDBServer is holding that cable for as long as a session is open.
 local PARK = "scripts/zynqmp-park-el3.sh"
+
+-- Also only mentioned in help(): the RTT console bridge, bundled in this binary. It ends in
+-- minicom, so it wants a terminal of its own, and it attaches to the server started here
+-- rather than spawning one. Its own --help covers RTT itself in full.
+local RTT = os.getenv("GDBFORGE_RTT_SH") or "gdbforge --run-script rtt.sh"
 
 -- TCM as the R5 itself addresses it. 64KB per bank per core in split mode. ATCM alone by
 -- default: an image that fits in it never touches BTCM, and BTCM is not always powered or
@@ -200,6 +206,69 @@ function help()
   gdbforge.print("default, all adds BTCM at 0x20000 (only if your image uses it: writing a")
   gdbforge.print("bank that is not mapped fails and breaks later memory access), 0 disables.")
   gdbforge.print("")
+  gdbforge.print("Console over SEGGER RTT, for when uart0 belongs to Linux on the APU. The R5")
+  gdbforge.print("writes into a ring buffer in RAM and the probe pulls it out over the same")
+  gdbforge.print("JTAG cable — no serial port, no contention for uart0. RTT is plain C with no")
+  gdbforge.print("OS underneath, so this works in a bare metal app exactly as it does under")
+  gdbforge.print("Zephyr; only how you turn it on differs:")
+  gdbforge.print("  bare metal  compile SEGGER_RTT.c and your own SEGGER_RTT_Conf.h (the one")
+  gdbforge.print("              shipped with Zephyr reads its sizes from Kconfig, so replace")
+  gdbforge.print("              those six values with plain numbers). Add Syscalls_GCC.c and")
+  gdbforge.print("              printf() works; otherwise SEGGER_RTT_WriteString(0, ...).")
+  gdbforge.print("              Locking needs nothing: the ARMv7-R path just saves CPSR and")
+  gdbforge.print("              does cpsid i.")
+  gdbforge.print("  Zephyr      CONFIG_USE_SEGGER_RTT and CONFIG_RTT_CONSOLE, and the board")
+  gdbforge.print("              Kconfig must select HAS_SEGGER_RTT — no Cortex-R SoC upstream")
+  gdbforge.print("              does, and without it both are dropped from prj.conf in")
+  gdbforge.print("              silence.")
+  gdbforge.print("Either way emit \\r\\n yourself, or turn on Add Carriage Return in minicom:")
+  gdbforge.print("nothing in the RTT path converts a bare \\n the way a UART console does.")
+  gdbforge.print("Run the bridge by hand, in its own terminal, since it ends in minicom:")
+  gdbforge.print("    " .. RTT)
+  gdbforge.print("  It attaches to the RTT port (19021) of the server started here and")
+  gdbforge.print("  bridges it to a pty with socat, so the JTAG session is left alone.")
+  gdbforge.print("  Its --help is the long version of everything below.")
+  gdbforge.print("")
+  gdbforge.print("Then point the probe at the RTT control block. Auto-search will not find")
+  gdbforge.print("it: the R5's TCM is outside the ranges J-Link scans for this device. The")
+  gdbforge.print("address moves whenever .bss shifts, so read it back from your app's map")
+  gdbforge.print("file — zephyr/zephyr.map here, whatever your link step emits elsewhere:")
+  gdbforge.print([[    awk '$2=="_SEGGER_RTT" {print $1}' zephyr/zephyr.map]])
+  gdbforge.print("  prints e.g. 0x0000000000008120 — then, at the gdb prompt:")
+  gdbforge.print("    monitor exec SetRTTAddr 0x8120")
+  gdbforge.print("    continue")
+  gdbforge.print("  continue is not optional: RTT only flows while the core is executing.")
+  gdbforge.print("  That address is the _SEGGER_RTT block — a 16-byte \"SEGGER RTT\" marker")
+  gdbforge.print("  plus the ring descriptors (pBuffer, SizeOfBuffer, WrOff, RdOff) that the")
+  gdbforge.print("  probe follows to the real up and down buffers. It writes RdOff back into")
+  gdbforge.print("  target RAM after each read; that is the only thing the target ever learns")
+  gdbforge.print("  about the host.")
+  gdbforge.print("  The block lives in bss, so the TCM ECC init above has to have run first,")
+  gdbforge.print("  or the very first RTT write aborts.")
+  gdbforge.print("  A core parked in WFI cannot answer those reads: the probe halts it to")
+  gdbforge.print("  poll, and gdb reports that halt as SIGTRAP. Bare metal loops usually spin")
+  gdbforge.print("  and never see it; if yours does wfi, drop it while RTT is the console.")
+  gdbforge.print("  Under Zephyr the idle thread always wfi's — select")
+  gdbforge.print("  ARM_ON_ENTER_CPU_IDLE_HOOK and return false from z_arm_on_enter_cpu_idle().")
+  gdbforge.print("")
+  gdbforge.print("JTAG speed matters more for RTT than for anything else here. -speed is the")
+  gdbforge.print("TCK clock in kHz, and load is a handful of big transfers while RTT is a")
+  gdbforge.print("continuous background poll — thousands of small reads, so a bit error rate")
+  gdbforge.print("too low to spoil a load still shows up as a console that stops and later")
+  gdbforge.print("resumes. The usable ceiling is a property of the whole path (probe, ribbon,")
+  gdbforge.print("and every TAP in the chain), not of the probe alone, so an entry-level")
+  gdbforge.print("EDU Mini on a long ribbon can be marginal at 4000 and solid at 1000. The")
+  gdbforge.print("cost is nothing worth measuring: a 60KB image still loads in well under a")
+  gdbforge.print("second, and RTT needs a few hundred bytes per second.")
+  gdbforge.print("Export it before starting gdbforge. The value is read once, when this")
+  gdbforge.print("script loads, so exporting it afterwards in another terminal changes")
+  gdbforge.print("nothing — that is the usual reason the spawn line still says 4000:")
+  gdbforge.print("    export GDBFORGE_JLINK_SPEED=1000   # then restart gdbforge")
+  gdbforge.print("  On a server that is already up, gdb changes it live without a restart:")
+  gdbforge.print("    monitor speed 1000")
+  gdbforge.print("  Use it to rule the link in or out: if lowering it stops the stalls it was")
+  gdbforge.print("  signal integrity; if not, suspect WFI above before touching speed again.")
+  gdbforge.print("")
   gdbforge.print("Setup (copy-paste into shell / script):")
   gdbforge.print("  export GDBFORGE_R5_CORE=0          # or 1 / R0 / R1 (default R0)")
   gdbforge.print("  export GDBFORGE_JLINK_CHIP=" .. CHIP)
@@ -208,6 +277,8 @@ function help()
   gdbforge.print("  export GDBFORGE_JLINK_PORT=" .. PORT)
   gdbforge.print("  export GDBFORGE_TDESC=" .. TDESC)
   gdbforge.print("  export GDBFORGE_JLINK_NORESET=1    # keep psu_init state across connect")
+  gdbforge.print("  export GDBFORGE_JLINK_SPEED=" .. SPEED .. "   # kHz; drop it if JTAG looks flaky")
+  gdbforge.print("  export GDBFORGE_RTT_SH=" .. RTT)
   gdbforge.print("After: :b exec for JLink logs")
 end
 
@@ -237,7 +308,7 @@ function main()
       JLINK,
       "-device", device,
       "-if", "JTAG",
-      "-speed", "4000",
+      "-speed", SPEED,
       "-port", PORT,
       "-noreset"
     )
@@ -246,7 +317,7 @@ function main()
       JLINK,
       "-device", device,
       "-if", "JTAG",
-      "-speed", "4000",
+      "-speed", SPEED,
       "-port", PORT
     )
   end
