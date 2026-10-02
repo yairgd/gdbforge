@@ -172,7 +172,7 @@ func (w *ThreadWidget) SetItems(items []models.ThreadInfo) {
 		prevID = w.items[row].ID
 	}
 	w.items = append([]models.ThreadInfo(nil), items...)
-	w.RectViewport().Origin.X = 0
+	w.ResetHorizontalPan()
 	sel := 0
 	if prevID != "" {
 		for i, it := range w.items {
@@ -290,5 +290,5 @@ func (w *ThreadWidget) LinesForTest() []string {
 }
 
 func (w *ThreadWidget) ViewportLeftForTest() int {
-	return w.RectViewport().Origin.X
+	return w.HorizontalPan()
 }

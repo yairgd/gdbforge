@@ -60,7 +60,7 @@ func (w *BreakpointWidget) SetItems(items []models.BreakInfo) {
 	if row < 0 {
 		row = 0
 	}
-	w.RectViewport().Origin.X = 0
+	w.ResetHorizontalPan()
 	w.SetSelectedRow(row)
 	w.EnsureRowVisible()
 }

@@ -188,7 +188,7 @@ func (w *CallStackWidget) SetItems(items []models.StackFrame) {
 		prevLevel = w.items[row].Level
 	}
 	w.items = append([]models.StackFrame(nil), items...)
-	w.RectViewport().Origin.X = 0
+	w.ResetHorizontalPan()
 	sel := 0
 	if prevLevel >= 0 {
 		for i, it := range w.items {

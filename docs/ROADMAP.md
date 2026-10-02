@@ -44,7 +44,7 @@ gdbforge is an **architecture prototype**, not a production debugger. The split-
 | `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
 | `BreakpointWidget` | Working | `:b breakpoint`; `TableWidget` (3 cols); `e`/`d`; syncs with GDB + CodeWidget |
 | `ThreadWidget` / `CallStackWidget` | Working | Default right panes; `TableWidget` lists; refreshed on GDB stop |
-| `TableWidget` (termforge) | Working | `RectViewport` + `CellBuffer`; selection, search, copy; used by BP/threads/stack |
+| `TableWidget` (termforge) | Working | `RectViewport`; paints straight to the Canvas; selection, search, copy; used by BP/threads/stack |
 | `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
 | `GDBWidget` | Working | `CompositeTerminal` + `WireCLI`; app owns MI on PTY #2 |
 | `ExecWidget` / `:!` | Working | `CompositeTerminal` + `WireExec`; PTY via `ptyx.Start` |

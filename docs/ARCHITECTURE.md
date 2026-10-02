@@ -491,7 +491,7 @@ Widgets are **views**. A widget should contain little or no business logic. It r
 | `TreeWidget` | Hierarchical data |
 | `TextWidget` | Line-oriented text |
 
-Widgets should be **reusable across applications** whenever possible. **`TableWidget`** is implemented (`RectViewport`, `CellBuffer`, columns, `SetFill`); gdbforge debugger list panes embed it with thin adapters. A future generic `TableModel` interface remains aspirational.
+Widgets should be **reusable across applications** whenever possible. **`TableWidget`** is implemented (`RectViewport`, columns, `SetFill`); gdbforge debugger list panes embed it with thin adapters. A future generic `TableModel` interface remains aspirational.
 
 ---
 
@@ -633,7 +633,7 @@ Platform components do not import terminal or widget packages. Today many of the
 | **Canvas** | Local-coordinate drawing context |
 | **Grid** | Off-screen cell framebuffer |
 | **Viewport** | Scroll window over line `Buffer`; cursor, selection, ANSI path |
-| **TableWidget** | Columnar grid over `CellBuffer` + `RectViewport`; row selection, `/search` |
+| **TableWidget** | Columnar grid over `RectViewport`; row selection, `/search` |
 | **Widget** | View interface (`Draw`, `HandleEvent`); panes add `DrawStatusLine` as `NodeWidget` |
 | **WidgetTree** | Split-tree geometry + focus |
 | **Window manager** | Tabs, splits, model-to-widget binding |
