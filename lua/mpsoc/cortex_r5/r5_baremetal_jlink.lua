@@ -1,6 +1,10 @@
 -- Cortex-R5 / J-Link bring-up.
 -- Install: copy lua/mpsoc/cortex_r5 into .gdbforge/lua/ (keeps r5_target.xml beside the script)
--- Usage:   :lua r5_baremetal_jlink
+-- Usage:   :lua r5_baremetal_jlink [baremetal|zephyr|freertos]
+--
+-- The profile picks the SEGGER RTOS plugin JLinkGDBServer loads, so RTOS threads reach GDB.
+-- Read the Cortex-M caveat in r5_common.lua before trusting what those plugins report on
+-- an ARMv7-R core; for Zephyr, r5_baremetal_openocd_digilent is the accurate path.
 --
 -- Env:
 --   GDBFORGE_R5_CORE       RPU core: 0|1|R0|R1 (default 0 / R0)
@@ -13,6 +17,9 @@
 --   GDBFORGE_R5_TCM_INIT   TCM banks to zero before load: atcm (default) | btcm | all | 0
 --   GDBFORGE_JLINK_NORESET pass -noreset to JLinkGDBServer, so connecting keeps whatever
 --                          PARK/psu_init left behind (clocks, resets, PLLs)
+--   GDBFORGE_JLINK_RTOS    RTOS plugin for the zephyr/freertos profiles, when the stock
+--                          GDBServer/RTOSPlugin_*.so beside JLinkGDBServer is not what you want
+--   ZEPHYR_BASE            kernel tree, for GDB source paths under profile zephyr
 --
 -- Kills any existing JLinkGDBServer, then gdbforge.spawn (background — Code pane stays).
 -- wait_port waits until JLink listens before target remote.
@@ -20,6 +27,8 @@
 --
 -- Nothing here initialises the PS. If the board is not booting an FSBL that does it, see
 -- PARK below: a companion xsdb script the user runs by hand, outside gdbforge, before this.
+
+local C = dofile(gdbforge.lua_dir() .. "/r5_common.lua")
 
 local JLINK = os.getenv("GDBFORGE_JLINK")
   or "/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer"
@@ -170,11 +179,17 @@ local function jlink_alive()
   return st == 0
 end
 
+C.register_complete(C.complete_profile_only)
+
 function help()
   local core = r5_core() or 0
   local device = jlink_device(core)
   gdbforge.print("r5_baremetal_jlink — kill old JLink, spawn, target remote, load, break main")
-  gdbforge.print("Usage: :lua r5_baremetal_jlink")
+  gdbforge.print("Usage: :lua r5_baremetal_jlink [baremetal|zephyr|freertos]")
+  gdbforge.print("")
+  C.profile_help_lines("r5_baremetal_jlink", "jlink")
+  gdbforge.print("")
+  C.zephyr_help_lines()
   gdbforge.print("")
   gdbforge.print("What this assumes:")
   gdbforge.print("  FSBL already ran from boot.bin (board booted normally).")
@@ -278,14 +293,21 @@ function help()
   gdbforge.print("  export GDBFORGE_TDESC=" .. TDESC)
   gdbforge.print("  export GDBFORGE_JLINK_NORESET=1    # keep psu_init state across connect")
   gdbforge.print("  export GDBFORGE_JLINK_SPEED=" .. SPEED .. "   # kHz; drop it if JTAG looks flaky")
+  gdbforge.print("  export GDBFORGE_JLINK_RTOS=/path/to/RTOSPlugin.so  # zephyr/freertos profiles")
   gdbforge.print("  export GDBFORGE_RTT_SH=" .. RTT)
   gdbforge.print("After: :b exec for JLink logs")
 end
 
-function main()
+function main(profile_arg)
   local core, bad = r5_core()
   if not core then
     gdbforge.print("ERROR: GDBFORGE_R5_CORE must be 0|1|R0|R1 (got " .. tostring(bad) .. ")")
+    return
+  end
+  local profile, bad_profile = C.normalize_profile(profile_arg)
+  if not profile then
+    gdbforge.print("ERROR: unknown profile " .. tostring(bad_profile) ..
+      " (use baremetal, zephyr, or freertos)")
     return
   end
   local device = jlink_device(core)
@@ -299,28 +321,28 @@ function main()
   gdbforge.print("R5 core: R" .. core .. "  device: " .. device)
   gdbforge.print("tdesc: " .. TDESC)
 
+  C.check_profile(profile, gdbforge.program())
+  local rtos_args, rtos = C.jlink_rtos_args(profile, JLINK)
+  gdbforge.print(C.describe(profile, rtos))
+
   stop_jlink()
 
   local noreset = truthy(os.getenv("GDBFORGE_JLINK_NORESET"))
   gdbforge.print("starting JLinkGDBServer …" .. (noreset and " (-noreset)" or ""))
+  local argv = {
+    JLINK,
+    "-device", device,
+    "-if", "JTAG",
+    "-speed", SPEED,
+    "-port", PORT,
+  }
   if noreset then
-    gdbforge.spawn(
-      JLINK,
-      "-device", device,
-      "-if", "JTAG",
-      "-speed", SPEED,
-      "-port", PORT,
-      "-noreset"
-    )
-  else
-    gdbforge.spawn(
-      JLINK,
-      "-device", device,
-      "-if", "JTAG",
-      "-speed", SPEED,
-      "-port", PORT
-    )
+    argv[#argv + 1] = "-noreset"
   end
+  for _, a in ipairs(rtos_args) do
+    argv[#argv + 1] = a
+  end
+  gdbforge.spawn(unpack(argv))
 
   gdbforge.print("waiting for port " .. PORT .. " …")
   if not gdbforge.wait_port(PORT, 15) then
@@ -337,6 +359,7 @@ function main()
   gdbforge.open_buffer("gdb")
   gdbforge.gdb("set architecture arm")
   gdbforge.gdb("set tdesc filename " .. TDESC)
+  C.gdb_setup(profile)
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
   tcm_ecc_init()

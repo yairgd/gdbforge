@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Both symbols below are promptless, so they cannot be set from prj.conf or from
+# a snippet .conf — they need a default here, in the application's Kconfig root.
+
+# A bare `bool` in zephyr/modules/segger/Kconfig with no default and no
+# dependencies. No Cortex-A/R SoC upstream selects it, so USE_SEGGER_RTT has an
+# unmet dependency and is dropped from the configuration in silence, taking
+# RTT_CONSOLE with it and leaving the jtag-console snippet with no console at all.
+config HAS_SEGGER_RTT
+	default y
+
+# A core parked in WFI cannot answer the probe's RTT reads: the probe halts it to
+# poll the ring buffer, and gdb reports that halt as SIGTRAP, which stops the
+# program. The hook lets z_arm_on_enter_cpu_idle() return false and spin instead.
+# Costs idle power, so it follows RTT_CONSOLE and is absent from a uart0 build.
+config ARM_ON_ENTER_CPU_IDLE_HOOK
+	default y if RTT_CONSOLE
+
+source "Kconfig.zephyr"

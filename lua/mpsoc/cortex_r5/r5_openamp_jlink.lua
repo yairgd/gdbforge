@@ -3,6 +3,12 @@
 -- Usage:
 --   :lua r5_openamp_jlink
 --   :lua r5_openamp_jlink ./firmware
+--   :lua r5_openamp_jlink ./firmware zephyr
+--   :lua r5_openamp_jlink zephyr                 (firmware from env / gdbforge.program())
+--
+-- The profile picks the SEGGER RTOS plugin JLinkGDBServer loads, so RTOS threads reach GDB.
+-- Read the Cortex-M caveat in r5_common.lua before trusting what those plugins report on
+-- an ARMv7-R core; for Zephyr, r5_openamp_openocd_digilent is the accurate path.
 --
 -- On the target (A53 / Linux):
 --   1) scp R5 firmware → /lib/firmware/
@@ -26,6 +32,11 @@
 --   GDBFORGE_R5_FW         local R5 firmware path (or pass as :lua arg / gdbforge.program())
 --   GDBFORGE_R5_FW_NAME    remoteproc firmware name under /lib/firmware
 --                          (default: basename of the firmware file)
+--   GDBFORGE_JLINK_RTOS    RTOS plugin for the zephyr/freertos profiles, when the stock
+--                          GDBServer/RTOSPlugin_*.so beside JLinkGDBServer is not what you want
+--   ZEPHYR_BASE            kernel tree, for GDB source paths under profile zephyr
+
+local C = dofile(gdbforge.lua_dir() .. "/r5_common.lua")
 
 local JLINK = os.getenv("GDBFORGE_JLINK")
   or "/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer"
@@ -59,13 +70,20 @@ local function jlink_device(core)
   return d
 end
 
+C.register_complete(C.complete_fw_and_profile)
+
 function help()
   local core = r5_core() or 0
   local device = jlink_device(core)
   gdbforge.print("r5_openamp_jlink — remoteproc bring-up + J-Link attach (no reset/load)")
-  gdbforge.print("Usage: :lua r5_openamp_jlink [firmware]")
-  gdbforge.print("  :lua r5_openamp_jlink ./firmware")
+  gdbforge.print("Usage: :lua r5_openamp_jlink [firmware] [baremetal|zephyr|freertos]")
+  gdbforge.print("  :lua r5_openamp_jlink ./firmware zephyr")
   gdbforge.print("Attach: JLinkGDBServer -noreset -noir → target remote → halt → break main")
+  gdbforge.print("")
+  C.profile_help_lines("r5_openamp_jlink ./firmware", "jlink")
+  gdbforge.print("")
+  C.zephyr_help_lines()
+  gdbforge.print("")
   gdbforge.print("Setup (copy-paste into shell / script):")
   gdbforge.print("  export GDBFORGE_R5_CORE=0          # or 1 / R0 / R1 (default R0)")
   gdbforge.print("  export GDBFORGE_JLINK_CHIP=" .. CHIP)
@@ -77,6 +95,7 @@ function help()
   gdbforge.print("  export GDBFORGE_REMOTE_USER=" .. DEFAULT_USER)
   gdbforge.print("  export GDBFORGE_R5_FW=./firmware")
   gdbforge.print("  export GDBFORGE_R5_FW_NAME=firmware")
+  gdbforge.print("  export GDBFORGE_JLINK_RTOS=/path/to/RTOSPlugin.so  # zephyr/freertos profiles")
 end
 
 local function trim(s)
@@ -133,10 +152,16 @@ local function remote_sh(user, host, script)
   return run_cmd(cmd)
 end
 
-function main(fw_arg)
+function main(fw_arg, profile_arg)
   local core, bad = r5_core()
   if not core then
     gdbforge.print("ERROR: GDBFORGE_R5_CORE must be 0|1|R0|R1 (got " .. tostring(bad) .. ")")
+    return
+  end
+  local fw_in, profile, perr = C.parse_fw_and_profile(fw_arg, profile_arg)
+  if not profile then
+    gdbforge.print("ERROR: " .. tostring(perr))
+    gdbforge.print("Usage: :lua r5_openamp_jlink [firmware] [baremetal|zephyr|freertos]")
     return
   end
   local device = jlink_device(core)
@@ -145,7 +170,7 @@ function main(fw_arg)
   local host = env("GDBFORGE_REMOTE_HOST", DEFAULT_HOST)
   local user = env("GDBFORGE_REMOTE_USER", DEFAULT_USER)
 
-  local fw = trim(fw_arg)
+  local fw = trim(fw_in)
   if fw == "" then
     fw = env("GDBFORGE_R5_FW", "")
   end
@@ -164,6 +189,7 @@ function main(fw_arg)
   gdbforge.print("r5_openamp_jlink: " .. fw .. " → " .. user .. "@" .. host)
   gdbforge.print("R5 core: R" .. core .. "  " .. rproc .. "  device: " .. device)
   gdbforge.print("remoteproc firmware name: " .. fw_name)
+  C.check_profile(profile, fw)
 
   -- 1) copy R5 image into /lib/firmware on the target
   if not scp_to(fw, user, host, remote_fw) then
@@ -193,16 +219,22 @@ function main(fw_arg)
   gdbforge.sleep(1)
 
   -- 3) J-Link attach mode (no reset) + target remote — unlike baremetal (load).
+  local rtos_args, rtos = C.jlink_rtos_args(profile, JLINK)
+  gdbforge.print(C.describe(profile, rtos))
   gdbforge.print("starting JLinkGDBServer (attach: -noreset -noir) …")
-  gdbforge.spawn(
+  local argv = {
     JLINK,
     "-device", device,
     "-if", "JTAG",
     "-speed", "4000",
     "-port", PORT,
     "-noreset",
-    "-noir"
-  )
+    "-noir",
+  }
+  for _, a in ipairs(rtos_args) do
+    argv[#argv + 1] = a
+  end
+  gdbforge.spawn(unpack(argv))
 
   gdbforge.print("waiting for port " .. PORT .. " …")
   if not gdbforge.wait_port(PORT, 15) then
@@ -216,6 +248,7 @@ function main(fw_arg)
   gdbforge.gdb("file " .. fw)
   gdbforge.gdb("set architecture arm")
   gdbforge.gdb("set tdesc filename " .. TDESC)
+  C.gdb_setup(profile)
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
   gdbforge.gdb("break main")

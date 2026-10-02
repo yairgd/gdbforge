@@ -1,0 +1,14 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The image runs from ATCM, which is 64K per core in split mode, and that is
+ * all a debugger load reaches at address 0. Upstream kv260_r5.dts declares
+ * sram0 as 64M, so an image that overruns the TCM links without complaint and
+ * only fails on the target. Sizing sram0 to the real bank turns that into a
+ * link error, and lets CONFIG_SRAM_BASE_ADDRESS / CONFIG_SRAM_SIZE come from
+ * devicetree instead of being hardcoded in prj.conf.
+ */
+
+&sram0 {
+	reg = <0x0 DT_SIZE_K(64)>;
+};

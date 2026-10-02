@@ -16,7 +16,7 @@ Standalone diagram sources live under [`diagrams/`](https://github.com/yairgd/gd
 
 ## Demos
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack (`gdbforge.spawn` → JLinkGDBServer → attach). Samples: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c) bare metal, [`examples/zephyr_cortex_r5/`](https://github.com/yairgd/gdbforge/tree/main/examples/zephyr_cortex_r5) for Zephyr with thread awareness. [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
 ![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
 

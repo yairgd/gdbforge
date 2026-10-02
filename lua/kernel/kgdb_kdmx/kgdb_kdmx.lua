@@ -7,17 +7,21 @@
 --          :lua kgdb_load_module      reload module symbols (see kgdb_load_module/)
 --          :lua kgdb_kdmx help
 --
--- All settings via env (defaults match typical board setup):
+-- All settings via env (defaults match a typical board setup; the kernel tree has none):
+--   KERNEL_PATH=/path/to/kernel-source   kernel build tree. No default: export it, or set
+--                          the three paths below one by one. Without either there are no
+--                          symbols, and the script says so and carries on.
 --   GDBFORGE_KGDB_UART=/dev/ttyUSB0
 --   GDBFORGE_KGDB_BOARD_TTY=ttyPS0
 --   GDBFORGE_KGDB_HOST=192.168.20.50
 --   GDBFORGE_KGDB_SSH_USER=root
 --   GDBFORGE_KGDB_BAUD=115200
 --   GDBFORGE_KGDB_MODULE=8250_of
---   GDBFORGE_KGDB_KO=/home/yair/merlin/kernel-source/drivers/tty/serial/8250/8250_of.ko
---   GDBFORGE_KGDB_VMLINUX=/home/yair/merlin/kernel-source/vmlinux
---   GDBFORGE_KGDB_MODULES=/home/yair/merlin/kernel-source
---   GDBFORGE_KGDB_SCRIPTS=/home/yair/merlin/kernel-source
+--   GDBFORGE_KGDB_KO=     optional .ko override; by default the module named above is
+--                          searched for as <module>.ko under GDBFORGE_KGDB_MODULES
+--   GDBFORGE_KGDB_VMLINUX=$KERNEL_PATH/vmlinux
+--   GDBFORGE_KGDB_MODULES=$KERNEL_PATH
+--   GDBFORGE_KGDB_SCRIPTS=$KERNEL_PATH
 --   GDBFORGE_KGDB_SETUP=1          SSH kgdboc (step 1), default on
 --   GDBFORGE_KGDB_SYSRQ=1          SSH sysrq-g during target remote (step 5)
 --   GDBFORGE_KGDB_SYSRQ_WAIT=1     Seconds before sysrq after target remote starts
@@ -33,6 +37,13 @@
 --
 -- Manual cleanup only: :lua kgdb_detach
 
+-- The kernel tree is whatever the user built, and a wrong guess at it is worse than none,
+-- so there is no default: KERNEL_PATH supplies it and everything below hangs off that.
+-- Read with os.getenv rather than kgdb_common.env, because this runs before load_common().
+local KERNEL_PATH = (os.getenv("KERNEL_PATH") or ""):gsub("^%s+", ""):gsub("%s+$", ""):gsub("/+$", "")
+
+-- Empty, not a half-built path, when KERNEL_PATH is unset: the helpers downstream all treat
+-- "" as "not configured" and skip the step, which is the behaviour we want here.
 local defaults = {
   uart = "/dev/ttyUSB0",
   board_tty = "ttyPS0",
@@ -40,15 +51,10 @@ local defaults = {
   user = "root",
   baud = "115200",
   module = "8250_of",
-  module_ko = "/home/yair/merlin/kernel-source/drivers/tty/serial/8250/8250_of.ko",
   verify_pattern = "of_serial",
-  kernel_tree = "/home/yair/merlin/kernel-source",
-  vmlinux = "/home/yair/merlin/kernel-source/vmlinux",
+  kernel_tree = KERNEL_PATH,
+  vmlinux = KERNEL_PATH ~= "" and (KERNEL_PATH .. "/vmlinux") or "",
 }
-
-local function default_module_ko()
-  return defaults.module_ko
-end
 
 local function common_candidates()
   local rel = "/kgdb_common/kgdb_common.lua"
@@ -86,6 +92,15 @@ local function env_bool(name, default_on)
   return v == "1" or v == "true" or v == "yes" or v == "on"
 end
 
+-- What a KERNEL_PATH-derived default would be, for the help text, since the value itself
+-- reads back empty until KERNEL_PATH is exported and a blank line explains nothing.
+local function shown(value, when_unset)
+  if value == "" then
+    return when_unset
+  end
+  return value
+end
+
 function help()
   gdbforge.print("kgdb_kdmx — one script: kgdboc + kdmx + minicom + sysrq + GDB")
   gdbforge.print("Usage:")
@@ -95,15 +110,17 @@ function help()
   gdbforge.print("  :lua kgdb_load_module 8250 alias for 8250_of")
   gdbforge.print("After attach: set breakpoints in :b gdb yourself, then continue")
   gdbforge.print("Defaults (override with export):")
+  gdbforge.print("  KERNEL_PATH=" .. shown(KERNEL_PATH,
+    "/path/to/kernel-source   NOT SET — no symbols until it is"))
   gdbforge.print("  GDBFORGE_KGDB_UART=" .. defaults.uart)
   gdbforge.print("  GDBFORGE_KGDB_BOARD_TTY=" .. defaults.board_tty)
   gdbforge.print("  GDBFORGE_KGDB_HOST=" .. defaults.host)
   gdbforge.print("  GDBFORGE_KGDB_SSH_USER=" .. defaults.user)
   gdbforge.print("  GDBFORGE_KGDB_BAUD=" .. defaults.baud)
   gdbforge.print("  GDBFORGE_KGDB_MODULE=" .. defaults.module)
-  gdbforge.print("  GDBFORGE_KGDB_KO=" .. defaults.module_ko)
-  gdbforge.print("  GDBFORGE_KGDB_VMLINUX=" .. defaults.vmlinux)
-  gdbforge.print("  GDBFORGE_KGDB_SCRIPTS=" .. defaults.kernel_tree)
+  gdbforge.print("  GDBFORGE_KGDB_KO=        .ko override; else found by module name")
+  gdbforge.print("  GDBFORGE_KGDB_VMLINUX=" .. shown(defaults.vmlinux, "$KERNEL_PATH/vmlinux"))
+  gdbforge.print("  GDBFORGE_KGDB_SCRIPTS=" .. shown(defaults.kernel_tree, "$KERNEL_PATH"))
   gdbforge.print("  GDBFORGE_KGDB_VERIFY=     optional info functions check after add-symbol-file")
   gdbforge.print("  GDBFORGE_KGDB_CLEANUP=1   (auto before start; :lua kgdb_detach)")
   gdbforge.print("  GDBFORGE_KGDB_SYSRQ=1      sysrq during target remote (step 5)")
@@ -118,8 +135,10 @@ local function module_symbol_opts(C, module_name, user, host, modules, scripts, 
     scripts = scripts,
     vmlinux = vmlinux,
     module_name = module_name,
-    ko_path = C.resolve_module_ko(modules, module_name,
-      C.env("GDBFORGE_KGDB_KO", default_module_ko())),
+    -- No default .ko: it would have to name one specific driver, and the module being
+    -- debugged is a parameter. Left empty, resolve_module_ko searches the tree for
+    -- <module>.ko instead, which works for whatever GDBFORGE_KGDB_MODULE names.
+    ko_path = C.resolve_module_ko(modules, module_name, C.env("GDBFORGE_KGDB_KO", "")),
     ssh_user = user,
     ssh_host = host,
     verify_pattern = C.env("GDBFORGE_KGDB_VERIFY", defaults.verify_pattern),
@@ -220,7 +239,7 @@ function main(arg)
       return
     end
   else
-    gdbforge.print("WARN: vmlinux not set — export GDBFORGE_KGDB_VMLINUX")
+    gdbforge.print("WARN: vmlinux not set — export KERNEL_PATH, or GDBFORGE_KGDB_VMLINUX")
   end
 
   gdb_pty = C.read_file(status .. "_gdb") or gdb_pty

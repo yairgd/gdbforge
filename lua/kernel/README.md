@@ -64,13 +64,14 @@ export GDBFORGE_REMOTE_HOST=192.168.20.50
 
 ### Debug Linux kernel modules with lx-symbols
 
-Set `GDBFORGE_KGDB_VMLINUX` and `GDBFORGE_KGDB_MODULES` (kernel build tree). After attach, run `lx-symbols` in GDB (scripts source kernel `vmlinux-gdb.py` when configured).
+Export `KERNEL_PATH=/path/to/kernel-source` and `kgdb_kdmx` / `kgdb_load_module` derive `vmlinux` and the module search tree from it; `GDBFORGE_KGDB_VMLINUX` and `GDBFORGE_KGDB_MODULES` set either one directly. Nothing is guessed if neither is set — the scripts say what is missing and run on without symbols. After attach, run `lx-symbols` in GDB (scripts source kernel `vmlinux-gdb.py` when configured).
 
 ## Key environment variables
 
 | Variable | Meaning |
 |----------|---------|
 | `GDBFORGE_KGDB_UART` | Host serial device |
+| `KERNEL_PATH` | Kernel build tree, no default. `kgdb_kdmx` and `kgdb_load_module` take the two below from it unless set individually |
 | `GDBFORGE_KGDB_VMLINUX` | Path to `vmlinux` |
 | `GDBFORGE_KGDB_MODULES` | Kernel build tree for symbols |
 | `GDBFORGE_REMOTE_HOST` | Board IP (net kgdb) |

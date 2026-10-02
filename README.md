@@ -26,7 +26,7 @@
 
 Screencasts ([YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g)). Order: embedded MCU → everyday Linux → dogfooding → **Linux kernel (`kgdb_uart`)**.
 
-**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`:lua r5_baremetal_jlink`](lua/mpsoc/cortex_r5/) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Sample: [`examples/stack_demo.c`](examples/stack_demo.c). Guide: [docs/MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
+**Cortex-R5 / J-Link** — multi-pane UI stepping a deep call stack, with [`:lua r5_baremetal_jlink`](lua/mpsoc/cortex_r5/) bring-up (`gdbforge.spawn` → JLinkGDBServer → attach). Samples: [`examples/stack_demo.c`](examples/stack_demo.c) bare metal, [`examples/zephyr_cortex_r5/`](examples/zephyr_cortex_r5/) for Zephyr with thread awareness. Guide: [docs/MPSOC_DEBUG.md](docs/MPSOC_DEBUG.md). [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g).
 
 [![Cortex-R5 / J-Link demo](https://img.youtube.com/vi/jbS5SE7Xu3g/hqdefault.jpg)](https://www.youtube.com/watch?v=jbS5SE7Xu3g)
 

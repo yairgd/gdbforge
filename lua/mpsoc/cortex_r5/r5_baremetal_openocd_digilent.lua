@@ -1,14 +1,19 @@
 -- Cortex-R5 / Digilent HS2 OpenOCD bring-up.
 -- Install: copy lua/mpsoc/cortex_r5 into .gdbforge/lua/ (keeps cfg + r5_target.xml)
--- Usage:   :lua r5_baremetal_openocd_digilent
+-- Usage:   :lua r5_baremetal_openocd_digilent [baremetal|zephyr|freertos]
+--
+-- The profile picks the RTOS OpenOCD decodes into GDB threads. zephyr works on this core,
+-- freertos does not (OpenOCD has no cortex_r4 FreeRTOS support) — see r5_common.lua.
 --
 -- Env:
 --   GDBFORGE_R5_CORE       RPU core: 0|1|R0|R1 (default 0 / R0)
 --   GDBFORGE_OPENOCD       path to openocd (default: openocd on PATH)
 --   GDBFORGE_OPENOCD_CFG   OpenOCD config (default: script dir r5_openocd_digilent.cfg)
 --   GDBFORGE_OPENOCD_PORT  GDB listen port (default 3333)
+--   GDBFORGE_OPENOCD_TARGET  target name the cfg publishes, for -rtos (default _TARGETNAME)
 --   GDBFORGE_TDESC         target description XML (default: script dir r5_target.xml)
 --   GDBFORGE_R5_TCM_INIT   TCM banks to zero before load: atcm (default) | btcm | all | 0
+--   ZEPHYR_BASE            kernel tree, for GDB source paths under profile zephyr
 --
 -- Kills any existing openocd, then gdbforge.spawn (background — Code pane stays).
 -- wait_port waits until OpenOCD listens before target remote.
@@ -16,6 +21,8 @@
 --
 -- Nothing here initialises the PS. If the board is not booting an FSBL that does it, see
 -- PARK below: a companion xsdb script the user runs by hand, outside gdbforge, before this.
+
+local C = dofile(gdbforge.lua_dir() .. "/r5_common.lua")
 
 local OPENOCD = os.getenv("GDBFORGE_OPENOCD") or "openocd"
 local CFG = os.getenv("GDBFORGE_OPENOCD_CFG")
@@ -142,9 +149,15 @@ local function openocd_alive()
   return st == 0
 end
 
+C.register_complete(C.complete_profile_only)
+
 function help()
   gdbforge.print("r5_baremetal_openocd_digilent — Digilent HS2 OpenOCD → load + break main")
-  gdbforge.print("Usage: :lua r5_baremetal_openocd_digilent")
+  gdbforge.print("Usage: :lua r5_baremetal_openocd_digilent [baremetal|zephyr|freertos]")
+  gdbforge.print("")
+  C.profile_help_lines("r5_baremetal_openocd_digilent", "openocd")
+  gdbforge.print("")
+  C.zephyr_help_lines()
   gdbforge.print("")
   gdbforge.print("What this assumes:")
   gdbforge.print("  Digilent JTAG-HS2 (FTDI 0403:6014) connected to ZynqMP.")
@@ -183,10 +196,17 @@ function help()
   gdbforge.print("After: :b exec for OpenOCD logs")
 end
 
-function main()
+function main(profile_arg)
   local core, bad = r5_core()
   if not core then
     gdbforge.print("ERROR: GDBFORGE_R5_CORE must be 0|1|R0|R1 (got " .. tostring(bad) .. ")")
+    return
+  end
+
+  local profile, bad_profile = C.normalize_profile(profile_arg)
+  if not profile then
+    gdbforge.print("ERROR: unknown profile " .. tostring(bad_profile) ..
+      " (use baremetal, zephyr, or freertos)")
     return
   end
 
@@ -204,11 +224,21 @@ function main()
   gdbforge.print("cfg: " .. CFG)
   gdbforge.print("tdesc: " .. TDESC)
 
+  C.check_profile(profile, gdbforge.program())
+  local rtos_args, rtos = C.openocd_rtos_args(profile)
+  gdbforge.print(C.describe(profile, rtos))
+
   stop_openocd()
 
   gdbforge.print("starting openocd (Digilent HS2, R" .. core .. ") …")
-  -- -c before -f so the cfg can read R5_CORE when selecting the GDB target.
-  gdbforge.spawn(OPENOCD, "-c", "set R5_CORE " .. core, "-f", CFG)
+  -- -c before -f so the cfg can read R5_CORE when selecting the GDB target; the RTOS -c
+  -- after it, because "configure -rtos" needs the target to exist — still config stage,
+  -- which is the only time OpenOCD accepts it.
+  local argv = { OPENOCD, "-c", "set R5_CORE " .. core, "-f", CFG }
+  for _, a in ipairs(rtos_args) do
+    argv[#argv + 1] = a
+  end
+  gdbforge.spawn(unpack(argv))
 
   gdbforge.print("waiting for port " .. PORT .. " …")
   if not gdbforge.wait_port(PORT, 20) then
@@ -225,6 +255,7 @@ function main()
   gdbforge.open_buffer("gdb")
   gdbforge.gdb("set architecture arm")
   gdbforge.gdb("set tdesc filename " .. TDESC)
+  C.gdb_setup(profile)
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
   tcm_ecc_init()

@@ -3,6 +3,11 @@
 -- Usage:
 --   :lua r5_openamp_openocd_digilent
 --   :lua r5_openamp_openocd_digilent ./firmware
+--   :lua r5_openamp_openocd_digilent ./firmware zephyr
+--   :lua r5_openamp_openocd_digilent zephyr      (firmware from env / gdbforge.program())
+--
+-- The profile picks the RTOS OpenOCD decodes into GDB threads. zephyr works on this core,
+-- freertos does not (OpenOCD has no cortex_r4 FreeRTOS support) — see r5_common.lua.
 --
 -- On the target (A53 / Linux):
 --   1) scp R5 firmware → /lib/firmware/
@@ -24,6 +29,10 @@
 --   GDBFORGE_R5_FW         local R5 firmware path (or pass as :lua arg / gdbforge.program())
 --   GDBFORGE_R5_FW_NAME    remoteproc firmware name under /lib/firmware
 --                          (default: basename of the firmware file)
+--   GDBFORGE_OPENOCD_TARGET  target name the cfg publishes, for -rtos (default _TARGETNAME)
+--   ZEPHYR_BASE            kernel tree, for GDB source paths under profile zephyr
+
+local C = dofile(gdbforge.lua_dir() .. "/r5_common.lua")
 
 local OPENOCD = os.getenv("GDBFORGE_OPENOCD") or "openocd"
 local CFG = os.getenv("GDBFORGE_OPENOCD_CFG")
@@ -46,11 +55,18 @@ local function r5_core()
   return nil, v
 end
 
+C.register_complete(C.complete_fw_and_profile)
+
 function help()
   gdbforge.print("r5_openamp_openocd_digilent — remoteproc + Digilent OpenOCD attach (no load)")
-  gdbforge.print("Usage: :lua r5_openamp_openocd_digilent [firmware]")
-  gdbforge.print("  :lua r5_openamp_openocd_digilent ./firmware")
+  gdbforge.print("Usage: :lua r5_openamp_openocd_digilent [firmware] [baremetal|zephyr|freertos]")
+  gdbforge.print("  :lua r5_openamp_openocd_digilent ./firmware zephyr")
   gdbforge.print("Attach: openocd → target remote → halt → break main (no load)")
+  gdbforge.print("")
+  C.profile_help_lines("r5_openamp_openocd_digilent ./firmware", "openocd")
+  gdbforge.print("")
+  C.zephyr_help_lines()
+  gdbforge.print("")
   gdbforge.print("Setup (copy-paste into shell / script):")
   gdbforge.print("  export GDBFORGE_R5_CORE=0          # or 1 / R0 / R1 (default R0)")
   gdbforge.print("  export GDBFORGE_OPENOCD=" .. OPENOCD)
@@ -139,10 +155,16 @@ local function openocd_alive()
   return st == 0
 end
 
-function main(fw_arg)
+function main(fw_arg, profile_arg)
   local core, bad = r5_core()
   if not core then
     gdbforge.print("ERROR: GDBFORGE_R5_CORE must be 0|1|R0|R1 (got " .. tostring(bad) .. ")")
+    return
+  end
+  local fw_in, profile, perr = C.parse_fw_and_profile(fw_arg, profile_arg)
+  if not profile then
+    gdbforge.print("ERROR: " .. tostring(perr))
+    gdbforge.print("Usage: :lua r5_openamp_openocd_digilent [firmware] [baremetal|zephyr|freertos]")
     return
   end
   local rproc = "remoteproc" .. core
@@ -150,7 +172,7 @@ function main(fw_arg)
   local host = env("GDBFORGE_REMOTE_HOST", DEFAULT_HOST)
   local user = env("GDBFORGE_REMOTE_USER", DEFAULT_USER)
 
-  local fw = trim(fw_arg)
+  local fw = trim(fw_in)
   if fw == "" then
     fw = env("GDBFORGE_R5_FW", "")
   end
@@ -181,6 +203,7 @@ function main(fw_arg)
   gdbforge.print("R5 core: R" .. core .. "  " .. rproc)
   gdbforge.print("remoteproc firmware name: " .. fw_name)
   gdbforge.print("cfg: " .. CFG)
+  C.check_profile(profile, fw)
 
   -- 1) copy R5 image into /lib/firmware on the target
   if not scp_to(fw, user, host, remote_fw) then
@@ -209,9 +232,17 @@ function main(fw_arg)
   gdbforge.sleep(1)
 
   -- 3) OpenOCD attach (no load — unlike baremetal)
+  local rtos_args, rtos = C.openocd_rtos_args(profile)
+  gdbforge.print(C.describe(profile, rtos))
   stop_openocd()
   gdbforge.print("starting openocd (Digilent HS2 attach, R" .. core .. ") …")
-  gdbforge.spawn(OPENOCD, "-c", "set R5_CORE " .. core, "-f", CFG)
+  -- RTOS -c after -f: "configure -rtos" needs the target the cfg creates, and openocd only
+  -- accepts it during the config stage.
+  local argv = { OPENOCD, "-c", "set R5_CORE " .. core, "-f", CFG }
+  for _, a in ipairs(rtos_args) do
+    argv[#argv + 1] = a
+  end
+  gdbforge.spawn(unpack(argv))
 
   gdbforge.print("waiting for port " .. PORT .. " …")
   if not gdbforge.wait_port(PORT, 20) then
@@ -230,6 +261,7 @@ function main(fw_arg)
   gdbforge.gdb("file " .. fw)
   gdbforge.gdb("set architecture arm")
   gdbforge.gdb("set tdesc filename " .. TDESC)
+  C.gdb_setup(profile)
   gdbforge.gdb("target remote localhost:" .. PORT)
   gdbforge.gdb("monitor halt")
   gdbforge.gdb("break main")

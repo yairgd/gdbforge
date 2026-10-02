@@ -19,6 +19,10 @@ Scripts live in two folders (copy what you need into `.gdbforge/lua/`):
 
 ![Cortex-R5 / J-Link debugging demo](media/gdbforge-demo-r5.gif){ loading=lazy }
 
+### Zephyr on the R5
+
+[`examples/zephyr_cortex_r5/`](https://github.com/yairgd/gdbforge/tree/main/examples/zephyr_cortex_r5) is a ready-to-build Zephyr application for the same core: a main loop, two worker threads, a mutex-guarded struct and a recursive call chain worth a backtrace, configured for the `zephyr` profile so RPU threads show up in the Threads pane. It builds against upstream `kv260_r5` on an unmodified Zephyr tree, and a snippet picks the console — `-S jtag-console` for SEGGER RTT over the probe, `-S uart0-console` for PS UART0. Its `build.sh` will either adopt a Zephyr you already have (`init --use <dir>`) or fetch one (`init --download`), then `build -c jtag|uart0` and `debug`.
+
 ## Quick start — Cortex-R5 + J-Link
 
 ```bash
@@ -61,8 +65,9 @@ Run it **from a shell, before gdbforge, with no debug session open**:
 ```bash
 scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl               # Digilent / Xilinx cable
 scripts/zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl --jtag jlink  # SEGGER J-Link
-pkill hw_server          # release the cable, then start gdbforge
 ```
+
+It starts its own `hw_server` and stops it again before it returns, so the cable is free for gdbforge as soon as the summary is printed — no `pkill hw_server` in between. A `hw_server` that was already running when it started is left alone, and the summary then says so and how to release it.
 
 The script also ships inside the binary, which is the way to reach it when gdbforge was installed as a release build rather than cloned:
 
@@ -157,7 +162,8 @@ These belong to `zynqmp-park-el3.sh`, not to gdbforge, and are read only by that
 | Variable | Default / meaning |
 |----------|-------------------|
 | `ZYNQMP_PSU_INIT` | `psu_init.tcl` for the board, instead of `-p` |
-| `ZYNQMP_HW_SERVER_URL` | `hw_server` URL (`TCP:127.0.0.1:3121`) |
+| `ZYNQMP_HW_SERVER_URL` | Where `hw_server` is, or where to start one (`TCP:127.0.0.1:3121`) |
+| `ZYNQMP_HW_SERVER_BIN` | Full path to `hw_server`, if it is not in `PATH` or beside `xsdb` |
 | `ZYNQMP_JTAG` | Cable kind, `digilent` (default) or `jlink`, instead of `--jtag` |
 | `ZYNQMP_XVC_URL` | XVC server address (`TCP:127.0.0.1:2542`), `--jtag jlink` only |
 | `ZYNQMP_JLINK_SERIAL` | Which J-Link, when several are plugged in |

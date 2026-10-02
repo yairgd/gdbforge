@@ -4,9 +4,10 @@
 # then get out of the way so gdbforge (or any other bare-metal debugger) can attach.
 #
 # Everything here runs under the AMD/Xilinx tools: xsdb talks to hw_server, which owns the
-# JTAG cable for the duration and is disconnected before this script exits. gdbforge is not
-# involved and does not need to be — see --help for why this cannot be done from the
-# debugger side.
+# JTAG cable for the duration. The hw_server is started here and stopped again before this
+# script returns, so the cable is free for the debugger that comes next; one that was
+# already running is left alone. gdbforge is not involved and does not need to be — see
+# --help for why this cannot be done from the debugger side.
 #
 # The cable is either one hw_server drives itself (Digilent/Xilinx FTDI, the default) or a
 # SEGGER J-Link bridged in over Xilinx Virtual Cable with --jtag jlink. Everything after
@@ -56,11 +57,17 @@ JTAG="${ZYNQMP_JTAG:-digilent}"
 XVC_URL="${ZYNQMP_XVC_URL:-TCP:127.0.0.1:2542}"
 JLINK_SERIAL="${ZYNQMP_JLINK_SERIAL:-}"
 XVCD_BIN="${ZYNQMP_JLINK_XVCD:-}"
+HW_SERVER_BIN="${ZYNQMP_HW_SERVER_BIN:-}"
 
-# Set by start_xvcd only when this script is the one that started the server, so that
-# cleanup never kills an XVC server that was already there and belongs to someone else.
+# Set by start_xvcd and start_hw_server only when this script is the one that started the
+# server in question, so that cleanup never kills a server that was already there and
+# belongs to someone else.
 XVCD_PID=""
 XVCD_LOG=""
+HW_SERVER_PID=""
+HW_SERVER_PGID=""
+HW_SERVER_LOG=""
+HW_SERVER_ORPHANED=0
 TCL_FILE=""
 
 usage() {
@@ -119,19 +126,26 @@ USAGE
      expected 70" under a page of Tcl that blames everything except the cause.
      Close the gdbforge session first. --force skips the check.
 
-  2. Writes 0x100 to CRL_APB.BOOT_MODE_USER (0xFF5E0200). Bit 8 is USE_ALT,
+  2. Starts a hw_server, unless something already answers on --url. xsdb is only
+     a client; hw_server is the process that opens the cable, and "connect"
+     fails outright if there is none. It is stopped again before this script
+     prints its last line, so the probe is free for whatever attaches next —
+     but only if this script started it, since a hw_server that was already
+     there belongs to whoever started it.
+
+  3. Writes 0x100 to CRL_APB.BOOT_MODE_USER (0xFF5E0200). Bit 8 is USE_ALT,
      which tells the BootROM to take ALT_BOOT_MODE from bits [15:12] instead of
      reading the mode pins, and 0 in that field means JTAG. The result is that
      no FSBL, no ATF and no U-Boot runs at all, and the cores come out of reset
      at EL3 and stay there.
 
-     The bit survives a system reset by design, which is what makes step 3
+     The bit survives a system reset by design, which is what makes step 4
      possible, and is cleared by power-on reset.
 
-  3. rst -system, issued against the PSU target rather than a core, so it is a
+  4. rst -system, issued against the PSU target rather than a core, so it is a
      real system reset and the BootROM re-reads the boot mode it was just told.
 
-  4. Sources your psu_init.tcl and runs psu_init — against the PSU target, not
+  5. Sources your psu_init.tcl and runs psu_init — against the PSU target, not
      a core. This is the step that is easy to get wrong. Every mask_write in
      psu_init is a read-modify-write, and after a system reset every A53 sits in
      "APU Reset" where reads fail. Run against a core it dies part-way through
@@ -146,13 +160,13 @@ USAGE
      configured. Skip it and the core runs with no clocks and the UART prints
      nothing.
 
-  5. rst -processor on the chosen A53, then stop. The core comes out of APU
+  6. rst -processor on the chosen A53, then stop. The core comes out of APU
      Reset at its reset vector, at EL3, with psu_init's clocks intact, and is
      parked there.
 
-  6. Prints cpsr, disconnects, and leaves the board in JTAG boot mode so that
-     whatever attaches next can reset the core again without a bootloader
-     racing it.
+  7. Prints cpsr, disconnects, stops the servers it started in step 2, and
+     leaves the board in JTAG boot mode so that whatever attaches next can
+     reset the core again without a bootloader racing it.
 
 ────────────────────────────────────────────────────────────────────────────────
  CABLES — Digilent directly, J-Link over XVC
@@ -182,15 +196,17 @@ USAGE
 
   Two things it cannot do for you. The J-Link has to be on the PS JTAG pins,
   since the PL-only chain has no DAP and therefore no A53 to park. And hw_server
-  is still required: XVC replaces the cable driver, not the debug server.
+  is still required: XVC replaces the cable driver, not the debug server. It is
+  started for you the same way, and the two are stopped in the right order,
+  hw_server first so it is not left talking to a socket that has gone away.
 
 ────────────────────────────────────────────────────────────────────────────────
  THEN — attaching gdbforge
 ────────────────────────────────────────────────────────────────────────────────
-  hw_server still holds the cable when this script returns. Release it, start
-  your own probe, and in gdb:
+  Both servers this script started — hw_server, and the XVC one under
+  --jtag jlink — are stopped before it returns, so the cable is free by the time
+  you see the summary. Start your own probe and, in gdb:
 
-      pkill hw_server
       # start openocd / JLinkGDBServer, attach gdbforge, then:
       monitor halt
       p/x $cpsr                 # mode nibble must be d (EL3h), not 9 (EL2h)
@@ -199,13 +215,13 @@ USAGE
       break main
       continue
 
-  With --jtag jlink the XVC server this script started is already gone, so the
-  J-Link is free for JLinkGDBServer. One it did not start is still holding the
-  probe and has to go too:
+  A server that was already running when this script started is a different
+  matter: it was not this script's to stop, so it is still there holding the
+  cable, and the summary says which ones and how to get rid of them:
 
       pkill hw_server ; pkill -9 JLinkXVCDServer
 
-  SIGTERM is not enough for that one — see --xvc-url below.
+  SIGTERM is not enough for the XVC one — see --xvc-url below.
 
   Do not let the debugger reset the target. A reset discards psu_init and you
   are back to a board with no clocks. "monitor halt" is fine; "monitor reset"
@@ -233,8 +249,14 @@ USAGE
                         publish it beside the images under its own name.
                         It must match the silicon — a psu_init from a different
                         part programs the wrong PLL dividers.
-  -u, --url URL         hw_server URL. Default TCP:127.0.0.1:3121, or
-                        $ZYNQMP_HW_SERVER_URL.
+  -u, --url URL         Where hw_server is, or where to start one. Default
+                        TCP:127.0.0.1:3121, or $ZYNQMP_HW_SERVER_URL. If
+                        something already answers there it is used as-is and
+                        left running; otherwise a hw_server is started on that
+                        port and stopped again on exit, which is what hands the
+                        cable to your debugger. Only a loopback address can be
+                        started for you, since the server has to run on the
+                        machine the cable is plugged into.
   -c, --core N          A53 core to park. Default 0.
   -j, --jtag KIND       Which cable to reach the board through. "digilent"
                         (default, or $ZYNQMP_JTAG) for anything hw_server drives
@@ -291,7 +313,7 @@ USAGE
   # a board whose serdes bring-up kills the JTAG session
   zynqmp-park-el3.sh -p ~/platform/hw/psu_init.tcl --no-serdes
 
-  # remote hw_server, core 1
+  # a hw_server already running on another machine, core 1
   zynqmp-park-el3.sh -p ./psu_init.tcl -u TCP:10.0.0.9:3121 -c 1
 
   # see exactly what would be sent to xsdb
@@ -303,6 +325,10 @@ USAGE
  REQUIREMENTS
   xsdb in PATH. Source the Vitis settings if it is not:
       source /tools/xilinx/Vitis/2024.2/settings64.sh
+
+  hw_server comes with it and is taken from PATH, or from the directory xsdb
+  itself was found in; $ZYNQMP_HW_SERVER_BIN overrides both with a full path.
+  Nothing needs to be running before this script: it starts its own.
 
   For --jtag jlink, JLinkXVCDServer as well. It is looked for in PATH, then in
   /opt/SEGGER/JLink*/ and /opt/JLink*/, under either of the names SEGGER have
@@ -370,15 +396,16 @@ require_cable() {
     fi
 }
 
-# Both halves of a --xvc-url, defaulted the way xsdb defaults them.
-parse_xvc_url() {
-    local u="$1"
+# Both halves of a TCP:host:port, defaulted the way xsdb defaults them. Answers in
+# TCP_HOST/TCP_PORT for the caller to copy out, since there are two such URLs here.
+parse_tcp_url() {
+    local u="$1" what="$2"
     [[ "$u" =~ ^[Tt][Cc][Pp]: ]] && u="${u:4}"
-    XVC_HOST="${u%%:*}"
-    XVC_PORT="${u##*:}"
-    [[ -n "$XVC_HOST" ]] || XVC_HOST="127.0.0.1"
-    [[ "$XVC_PORT" =~ ^[0-9]+$ ]] || {
-        echo "Error: --xvc-url must be TCP:host:port, got '$1'" >&2
+    TCP_HOST="${u%%:*}"
+    TCP_PORT="${u##*:}"
+    [[ -n "$TCP_HOST" ]] || TCP_HOST="127.0.0.1"
+    [[ "$TCP_PORT" =~ ^[0-9]+$ ]] || {
+        echo "Error: $what must be TCP:host:port, got '$1'" >&2
         exit 1
     }
 }
@@ -409,6 +436,140 @@ find_xvcd() {
     return 1
 }
 
+# hw_server ships beside xsdb, which require_xsdb has already found, so fall back to
+# looking there — both where xsdb was found and where it resolves to, since an install is
+# often reached through a symlink into the Vitis bin directory.
+find_hw_server() {
+    local x c
+    if [[ -n "$HW_SERVER_BIN" ]]; then
+        [[ -x "$HW_SERVER_BIN" ]] || { echo "Error: ZYNQMP_HW_SERVER_BIN is not executable -> $HW_SERVER_BIN" >&2; exit 1; }
+        return 0
+    fi
+    if command -v hw_server >/dev/null 2>&1; then HW_SERVER_BIN="$(command -v hw_server)"; return 0; fi
+    x="$(command -v xsdb 2>/dev/null)" || return 1
+    for c in "$(dirname "$x")/hw_server" "$(dirname "$(readlink -f "$x")")/hw_server"; do
+        if [[ -x "$c" && ! -d "$c" ]]; then HW_SERVER_BIN="$c"; return 0; fi
+    done
+    return 1
+}
+
+# Is any of it still there? The whole group, not just the pid, since the process that holds
+# the cable is two levels below the one that was started.
+hw_server_alive() {
+    if [[ -n "$HW_SERVER_PGID" ]]; then
+        kill -0 -- "-$HW_SERVER_PGID" 2>/dev/null
+    else
+        kill -0 "$HW_SERVER_PID" 2>/dev/null
+    fi
+}
+
+hw_server_signal() {
+    if [[ -n "$HW_SERVER_PGID" ]]; then
+        kill "-$1" -- "-$HW_SERVER_PGID" 2>/dev/null || true
+    else
+        kill "-$1" "$HW_SERVER_PID" 2>/dev/null || true
+    fi
+}
+
+# The thing that actually owns the cable. xsdb is only a client of it, and "connect" fails
+# outright if nothing is listening, so one has to exist before any of the Tcl below runs.
+# Reuses a server that is already there, and in that case leaves it alone on the way out.
+start_hw_server() {
+    local i
+
+    parse_tcp_url "$URL" "--url"
+    HW_HOST="$TCP_HOST"
+    HW_PORT="$TCP_PORT"
+
+    if port_open "$HW_HOST" "$HW_PORT"; then
+        echo "[INFO] hw_server -> $HW_HOST:$HW_PORT, already served (left running on exit)"
+        return 0
+    fi
+
+    case "$HW_HOST" in
+        127.0.0.1|localhost|::1) ;;
+        *)
+            echo "Error: nothing answers on $HW_HOST:$HW_PORT, and that is not this machine," >&2
+            echo "       so hw_server cannot be started from here. On $HW_HOST, run:" >&2
+            echo "           hw_server -s TCP::$HW_PORT" >&2
+            exit 1 ;;
+    esac
+
+    find_hw_server || {
+        echo "Error: hw_server is not in PATH and is not beside xsdb. It ships with Vitis;" >&2
+        echo "       source the settings script, or point \$ZYNQMP_HW_SERVER_BIN at it." >&2
+        exit 1
+    }
+
+    HW_SERVER_LOG="$(mktemp -t zynqmp-hw_server-XXXXXX.log)"
+    echo "[INFO] hw_server -> $HW_SERVER_BIN, port $HW_PORT"
+    # "set -m" so the server lands in a process group of its own, because what Vitis puts in
+    # bin/hw_server is a shell wrapper that runs bin/loader, which runs
+    # unwrapped/lnx64.o/hw_server: three live processes, no exec anywhere and no signal
+    # forwarding. Kill the pid that $! hands back and only the outer wrapper dies — the real
+    # server keeps running and keeps the cable, which is the exact failure this script
+    # exists to prevent. A group can be signalled whole.
+    set -m
+    "$HW_SERVER_BIN" -s "TCP::$HW_PORT" >"$HW_SERVER_LOG" 2>&1 </dev/null &
+    HW_SERVER_PID=$!
+    set +m
+
+    # Only ever signal the group if the child really did become its own leader. If it is
+    # still in this script's group, "kill -- -PGID" would take the script down with it.
+    HW_SERVER_PGID="$(ps -o pgid= -p "$HW_SERVER_PID" 2>/dev/null | tr -d ' ')"
+    [[ "$HW_SERVER_PGID" == "$HW_SERVER_PID" ]] || HW_SERVER_PGID=""
+
+    # Same reasoning as the XVC wait below: watch the port, not the process, and let the
+    # server's own output be the error message if it never gets there. The port first, since
+    # with the wrapper chain the pid that is being watched is not the one that opens it.
+    for ((i = 0; i < 60; i++)); do
+        if port_open "$HW_HOST" "$HW_PORT"; then
+            echo "[INFO] hw_server -> serving on $HW_HOST:$HW_PORT (pid $HW_SERVER_PID)"
+            return 0
+        fi
+        hw_server_alive || break
+        sleep 0.25
+    done
+
+    echo "Error: hw_server never opened $HW_HOST:$HW_PORT. It said:" >&2
+    sed 's/^/       /' "$HW_SERVER_LOG" >&2
+    if grep -qi 'address already in use\|bind' "$HW_SERVER_LOG" 2>/dev/null; then
+        echo "       The port is taken by something that is not accepting connections the way" >&2
+        echo "       a hw_server does. Find it with: ss -ltnp sport = :$HW_PORT" >&2
+    fi
+    exit 1
+}
+
+# SIGTERM first, so it closes the cable on its own: a USB probe left half-claimed by a
+# killed server often will not open again until it is replugged. SIGKILL only if it stays.
+# The port is the thing actually waited on — it is the one piece of evidence that the
+# process holding the cable, rather than just its wrapper, has gone.
+stop_hw_server() {
+    local i
+    if [[ -n "$HW_SERVER_PID" ]]; then
+        hw_server_signal TERM
+        for ((i = 0; i < 40; i++)); do
+            hw_server_alive || break
+            port_open "$HW_HOST" "$HW_PORT" || break
+            sleep 0.1
+        done
+        if hw_server_alive && port_open "$HW_HOST" "$HW_PORT"; then
+            hw_server_signal KILL
+        fi
+        wait "$HW_SERVER_PID" 2>/dev/null || true
+        if port_open "$HW_HOST" "$HW_PORT"; then
+            HW_SERVER_ORPHANED=1
+            echo "[WARNING] hw_server is still listening on $HW_HOST:$HW_PORT, so it still has the" >&2
+            echo "          cable. Stop it with: pkill hw_server" >&2
+        fi
+        HW_SERVER_PID=""
+        HW_SERVER_PGID=""
+    fi
+    [[ -n "$HW_SERVER_LOG" ]] && rm -f "$HW_SERVER_LOG"
+    HW_SERVER_LOG=""
+    return 0
+}
+
 # SIGKILL, not SIGTERM: while the server is still opening the J-Link it does not handle
 # signals, so a TERM leaves it running and holding the probe.
 stop_xvcd() {
@@ -419,21 +580,32 @@ stop_xvcd() {
     XVCD_PID=""
 }
 
+# hw_server before the XVC server it is a client of, so it lets go of the socket before the
+# far end disappears underneath it.
 cleanup() {
     [[ -n "$TCL_FILE" ]] && rm -f "$TCL_FILE"
+    stop_hw_server
     stop_xvcd
 }
 # One EXIT trap for the lot, set before anything can create state. Not RETURN traps in the
 # functions that own each thing: set -e aborts the whole script when xsdb fails, and a
 # RETURN trap would never fire.
 trap cleanup EXIT
+# Ctrl-C has to arrive at the EXIT trap rather than go around it. The servers are started
+# in process groups of their own so they can be signalled as one, which also means an
+# interrupt sent to this script's group no longer reaches them: without this they would
+# outlive the Ctrl-C, still holding the cable.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Put a J-Link on the far end of an XVC socket, so hw_server — which has no driver for one
 # and never will — can use it as a cable. Reuses a server that is already there.
 start_xvcd() {
     local p st held="" i
 
-    parse_xvc_url "$XVC_URL"
+    parse_tcp_url "$XVC_URL" "--xvc-url"
+    XVC_HOST="$TCP_HOST"
+    XVC_PORT="$TCP_PORT"
 
     if port_open "$XVC_HOST" "$XVC_PORT"; then
         echo "[INFO] xvc       -> $XVC_HOST:$XVC_PORT, already served (left running on exit)"
@@ -541,6 +713,7 @@ if [[ "$CLEAR_ONLY" -eq 1 ]]; then
         require_xsdb
         require_cable
         [[ "$JTAG" == "jlink" ]] && start_xvcd
+        start_hw_server
         echo "[INFO] Clearing CRL_APB.BOOT_MODE_USER — the board will boot normally again."
     fi
     run_tcl <<EOF
@@ -567,9 +740,11 @@ PSU_INIT="$(cd "$(dirname "$PSU_INIT")" && pwd)/$(basename "$PSU_INIT")"
 if [[ "$DRY_RUN" -eq 0 ]]; then
     require_xsdb
     require_cable
-    echo "[INFO] hw_server -> $URL"
     echo "[INFO] cable     -> $JTAG"
+    # The XVC server first: it is the cable, and hw_server is only told to open it later,
+    # but there is no reason to have a debug server up while the probe is still unclaimed.
     [[ "$JTAG" == "jlink" ]] && start_xvcd
+    start_hw_server
     echo "[INFO] psu_init  -> $PSU_INIT"
     echo "[INFO] core      -> Cortex-A53 #$CORE"
     [[ "$FULL_PSU_INIT" -eq 0 ]] && \
@@ -650,12 +825,36 @@ EOF
 
 [[ "$DRY_RUN" -eq 1 ]] && exit 0
 
-# Who is still holding the probe depends on how it got there. The server this script
-# started is about to be killed by the EXIT trap, so it is not in the list; one that was
-# already running is, because it was not ours to stop.
-RELEASE="pkill hw_server"
-if [[ "$JTAG" == "jlink" && -z "$XVCD_PID" ]]; then
-    RELEASE="pkill hw_server ; pkill -9 JLinkXVCDServer   # the XVC server was already up, and still has the J-Link"
+# Which servers were this script's to stop has to be noted before stopping them, since
+# that is what clears the pids it is read from.
+HW_SERVER_WAS_OURS=0
+[[ -n "$HW_SERVER_PID" ]] && HW_SERVER_WAS_OURS=1
+XVCD_WAS_OURS=0
+[[ -n "$XVCD_PID" ]] && XVCD_WAS_OURS=1
+
+# Hand the cable back before saying it is free, rather than leaving it to the EXIT trap:
+# the text below is an instruction to start a probe, and it would otherwise be printed
+# while the cable was still held.
+stop_hw_server
+stop_xvcd
+
+# What is left holding the probe is whatever was already running when this started, plus
+# anything the stop above failed to see off.
+RELEASE=""
+[[ "$HW_SERVER_WAS_OURS" -eq 0 || "$HW_SERVER_ORPHANED" -eq 1 ]] && RELEASE="pkill hw_server"
+if [[ "$JTAG" == "jlink" && "$XVCD_WAS_OURS" -eq 0 ]]; then
+    RELEASE="${RELEASE:+${RELEASE} ; }pkill -9 JLinkXVCDServer   # was already up, and still has the J-Link"
+fi
+
+if [[ -n "$RELEASE" ]]; then
+    CABLE_NOTE="     A debug server is still holding the JTAG cable: one that was already running
+     when this started and so was never this script's to stop, or one that would
+     not stop when it was asked. Release it, start your probe, then in gdb:
+
+         ${RELEASE}"
+else
+    CABLE_NOTE="     The servers this script started are stopped, so the JTAG cable is free. Start
+     your probe, then in gdb:"
 fi
 
 cat <<EOF
@@ -663,9 +862,7 @@ cat <<EOF
 [OK] Cortex-A53 #${CORE} is halted at EL3 with the clocks up. Check the cpsr above:
      the mode nibble must be d (EL3h). A 9 means EL2 and the app will not run.
 
-     hw_server still owns the JTAG cable. Release it, start your probe, then in gdb:
-
-         ${RELEASE}
+${CABLE_NOTE}
          monitor halt
          load
          set \$pc = &_boot

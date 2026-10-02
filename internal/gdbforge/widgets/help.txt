@@ -292,8 +292,20 @@ Examples:
     Screencasts: docs/media/gdbforge-demo-r5.mp4,
                  docs/media/gdbforge-demo-linux-app.mp4
     Demo target: Cortex-R5 on MPSoC via SEGGER J-Link;
-      Lua bring-up: lua/r5_debug (:lua r5_debug)
-      (spawn JLinkGDBServer, wait_port, target remote, load).
+      Lua bring-up: lua/mpsoc/cortex_r5/r5_baremetal_jlink
+      (:lua r5_baremetal_jlink — spawn JLinkGDBServer, wait_port,
+      target remote, load).
+    Bare metal on MPSoC (no Linux, no FSBL): park the board FIRST,
+    from a shell, with no gdbforge session open:
+      gdbforge --run-script zynqmp-park-el3.sh \
+        -p <platform>/hw/psu_init.tcl --jtag jlink
+      Skip it and nothing has set the clocks, PLLs and MIO: the ELF
+      loads, the core runs, and there is no output at all — which
+      looks exactly like a bad image or a dead probe. On an A53 it is
+      worse: a booted board is at EL2, and an EL3-built app spins in
+      boot.S at "b error" before main. Drop --jtag jlink for a
+      Digilent/Xilinx cable; --help on the script has the rest.
+      A board booting Linux or an FSBL needs none of this.
     Deep stack sample: examples/stack_demo.c
       gcc -g -O0 -o stack_demo examples/stack_demo.c
       ./bin/gdbforge ./stack_demo

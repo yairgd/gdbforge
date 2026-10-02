@@ -79,6 +79,7 @@ gdbforge/
 ├── docs/                  # gdbforge documentation
 ├── lua/                   # Shipped Lua workflows (embedded via lua/fs.go)
 ├── examples/              # Sample programs to debug
+│   └── zephyr_cortex_r5/  # Zephyr app for kv260_r5 (RTT or UART0 console)
 ├── scripts/               # check_imports.sh, zynqmp-park-el3.sh (ZynqMP JTAG prep)
 ├── go.mod                 # requires github.com/yairgd/termforge
 ├── Taskfile.yml

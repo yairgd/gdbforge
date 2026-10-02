@@ -6,14 +6,22 @@
 --   :lua kgdb_load_module 8250_of
 --
 -- Env:
---   GDBFORGE_KGDB_MODULES=/path/to/kernel-source   search tree for module.ko
+--   KERNEL_PATH=/path/to/kernel-source             kernel build tree. No default: export
+--                                                  it, or set the paths below one by one
+--   GDBFORGE_KGDB_MODULES=$KERNEL_PATH             search tree for module.ko
+--   GDBFORGE_KGDB_VMLINUX=$KERNEL_PATH/vmlinux     vmlinux, for the kernel gdb scripts
 --   GDBFORGE_KGDB_KO=/path/to/as6221.ko            override .ko path
 --   GDBFORGE_KGDB_VERIFY=as6221                    optional info functions check
 --   GDBFORGE_KGDB_MODPROBE=1                       ssh modprobe if missing (default on)
 
+-- The kernel tree is whatever the user built, and a wrong guess at it is worse than none,
+-- so there is no default: KERNEL_PATH supplies it and vmlinux hangs off that. Read with
+-- os.getenv rather than kgdb_common.env, because this runs before load_common().
+local KERNEL_PATH = (os.getenv("KERNEL_PATH") or ""):gsub("^%s+", ""):gsub("%s+$", ""):gsub("/+$", "")
+
 local defaults = {
-  kernel_tree = "/home/yair/merlin/kernel-source",
-  vmlinux = "/home/yair/merlin/kernel-source/vmlinux",
+  kernel_tree = KERNEL_PATH,
+  vmlinux = KERNEL_PATH ~= "" and (KERNEL_PATH .. "/vmlinux") or "",
 }
 
 -- Optional short names (module must exist as modprobe name on target).
@@ -79,7 +87,10 @@ function help()
   gdbforge.print("  :lua kgdb_load_module 8250_of")
   gdbforge.print("Then in :b gdb: break <function>  or  break path/to/driver.c:line")
   gdbforge.print("Env:")
-  gdbforge.print("  GDBFORGE_KGDB_MODULES=" .. defaults.kernel_tree)
+  gdbforge.print("  KERNEL_PATH=" .. (KERNEL_PATH ~= "" and KERNEL_PATH or
+    "/path/to/kernel-source   NOT SET — no .ko can be found without it"))
+  gdbforge.print("  GDBFORGE_KGDB_MODULES=" .. (defaults.kernel_tree ~= "" and
+    defaults.kernel_tree or "$KERNEL_PATH"))
   gdbforge.print("  GDBFORGE_KGDB_KO=/path/to/module.ko     (optional override)")
   gdbforge.print("  GDBFORGE_KGDB_VERIFY=pattern            (optional info functions check)")
   gdbforge.print("  GDBFORGE_KGDB_MODPROBE=1                (default: ssh modprobe if needed)")
@@ -125,7 +136,12 @@ function main(arg)
 
   local ko = C.resolve_module_ko(modules, module_name, ko_override)
   if ko == "" then
-    gdbforge.print("ERROR: no .ko for " .. module_name .. " under " .. modules)
+    if modules == "" then
+      gdbforge.print("ERROR: no kernel tree to search for " .. module_name .. ".ko")
+      gdbforge.print("  export KERNEL_PATH=/path/to/kernel-source")
+    else
+      gdbforge.print("ERROR: no .ko for " .. module_name .. " under " .. modules)
+    end
     gdbforge.print("  export GDBFORGE_KGDB_KO=/path/to/" .. module_name .. ".ko")
     return
   end
