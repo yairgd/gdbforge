@@ -1,8 +1,9 @@
 ---
+title: Debugging the Linux Kernel with kgdb — One UART, Two UARTs or Ethernet
 description: Debug the Linux kernel and loadable modules with gdbforge and kgdb over two UARTs, a shared serial link with kdmx, an in-process mux, or Ethernet.
 ---
 
-# Kernel / module debugging (kgdb)
+# Debugging the Linux kernel with kgdb — one UART, two UARTs or Ethernet
 
 gdbforge treats **kernel and module debug** as a first-class workflow. **v1** is implemented as **Lua extensions** that orchestrate existing tools; the UI stays the normal GDB MI console (`:b gdb`). A future option is an in-process UART mux that replaces external `kdmx` without changing the user command.
 
@@ -27,9 +28,29 @@ Scripts (catalog under [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua
 
 See **[Path 0 — Two UARTs (manual)](#path-0--two-uarts-manual-recommended)** when the board has separate console and kgdb cables (**no mux, no Lua script**) — includes a [two-UART screencast](#path-0--two-uarts-manual-recommended).
 
-See **[Path 1 — UART + kdmx (`kgdb_uart`)](#path-1--uart--kdmx)** for the [main kernel demo screencast](README.md#demos) — one UART, kdmx split, **~2 s break-in**, `lx-symbols`, driver read breakpoint.
+See **[Path 1 — UART + kdmx (`kgdb_uart`)](#path-1--uart--kdmx)** for the [main kernel demo screencast](README.md#linux-kernel-and-modules) — one UART, kdmx split, **~2 s break-in**, `lx-symbols`, driver read breakpoint.
 
 See **[Path 1b — One UART, in-process mux](#path-1b--one-uart-in-process-mux-semi-automatic)** for the in-process alternative (`:lua kgdb_serial` / `:lua kgdb_trigger`).
+
+## Prerequisites (all paths)
+
+Each path below repeats its own specifics; these apply to every one of them.
+
+| Need | Why |
+|------|-----|
+| gdbforge installed | [install](README.md#install) — verify with `gdbforge -version` |
+| A **cross GDB for the target architecture** | e.g. `aarch64-linux-gnu-gdb` for a 64-bit ARM board. Select it with `gdbforge -d <gdb>` |
+| Kernel built with `CONFIG_KGDB` (+ `CONFIG_KGDB_SERIAL_CONSOLE` for the UART paths) and `CONFIG_DEBUG_INFO` | without debug info there are no line numbers and no `lx-symbols` |
+| The **matching, unstripped `vmlinux`** on the host | gdbforge is launched on `vmlinux`, not on the stripped `Image`. A mismatch gives plausible-looking but wrong line numbers |
+| The kernel tree's `vmlinux-gdb.py` | provides `lx-symbols`, which loads module symbols. gdbforge does not vendor it |
+| `CONFIG_GDB_SCRIPTS` | builds those helper scripts |
+| Serial access to the board without `sudo` | be in `dialout` (or equivalent) for `/dev/ttyUSB*` |
+| For [Path 1](#path-1--uart--kdmx): `kdmx` from **agent-proxy** | splits one UART into a console PTY and a gdb PTY |
+| For [Path 2](#path-2--ethernet--separate-console-no-mux): a kgdb-over-network transport | mainline has no `kgdboe`; this path assumes your kernel carries one |
+
+Because a kernel breakpoint **stops the whole machine**, the console freezes while you are
+stopped — that is expected, not a hang. To debug an ordinary process on the same board
+instead, use [Debugging Linux applications](EMBEDDED_LINUX_DEBUG.md).
 
 ---
 

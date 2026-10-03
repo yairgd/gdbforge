@@ -1,5 +1,5 @@
 site_name: gdbforge
-site_description: Vim-inspired multi-pane terminal debugger for GDB and Delve, with workflows for local, remote, embedded, and kernel debugging
+site_description: gdbforge is a keyboard-driven, multi-pane terminal debugger that drives GDB and Delve — for Linux applications, remote boards over gdbserver, STM32 and Zynq MPSoC firmware, and the Linux kernel over kgdb.
 site_url: https://yairgd.github.io/gdbforge/
 repo_url: https://github.com/yairgd/gdbforge
 repo_name: yairgd/gdbforge
@@ -7,8 +7,19 @@ edit_uri: edit/main/docs/
 
 docs_dir: docs
 site_dir: _site
+# Helper scripts, notes, and the pre-MkDocs (Jekyll) viewer assets live in docs/ but
+# must not be published as part of the site.
 exclude_docs: |
   overrides/
+  _includes/
+  www/
+  info.txt
+  serve.sh
+  setup-docs-venv.sh
+  # Stray encoder leftovers in docs/media/ — gitignored, but a local build would
+  # otherwise copy tens of MB of them into _site/.
+  media/*.junk
+  media/*.mp4.*
 
 theme:
   name: material
@@ -41,32 +52,35 @@ theme:
 
 nav:
   - Home: README.md
-  - User guide:
-      - User Guide: USER_GUIDE.md
+  - Getting started:
+      - User guide: USER_GUIDE.md
       - FAQ: FAQ.md
-      - Embedded Linux debug: EMBEDDED_LINUX_DEBUG.md
-      - MPSoC debug: MPSOC_DEBUG.md
-      - STM32 debug: STM32_DEBUG.md
+  - Debugging guides:
+      - Linux applications (local and remote): EMBEDDED_LINUX_DEBUG.md
+      - STM32 and Zephyr firmware: STM32_DEBUG.md
+      - Zynq MPSoC (Cortex-A53 / R5): MPSOC_DEBUG.md
+      - Linux kernel and kgdb: KERNEL_KGDB.md
+  - Scripting:
       - Lua API: LUA_API.md
       - Plugins: PLUGINS.md
-      - Command System: COMMAND_SYSTEM.md
-      - Exec Shell: EXEC_SHELL.md
-      - Input: INPUT.md
-      - Window Management: WINDOW_MANAGEMENT.md
+  - Reference:
+      - Command system: COMMAND_SYSTEM.md
+      - Input and keys: INPUT.md
+      - Window management: WINDOW_MANAGEMENT.md
+      - Exec shell: EXEC_SHELL.md
   - Architecture:
       - Overview: OVERVIEW.md
       - Architecture: ARCHITECTURE.md
-      - PTY Architecture: PTY_ARCHITECTURE.md
-      - Debugger Integration: DEBUGGER_INTEGRATION.md
-      - Kernel / kgdb: KERNEL_KGDB.md
+      - PTY architecture: PTY_ARCHITECTURE.md
+      - Debugger integration: DEBUGGER_INTEGRATION.md
       - Dependencies: DEPENDENCIES.md
-      - Directory Structure: DIRECTORY_STRUCTURE.md
+      - Directory structure: DIRECTORY_STRUCTURE.md
   - Code flows:
       - Flow browser: flows/browser.md
   - Framework:
       - termforge documentation: https://yairgd.github.io/termforge/
   - Development:
-      - Developer Guide: DEVELOPER_GUIDE.md
+      - Developer guide: DEVELOPER_GUIDE.md
       - Changelog: CHANGELOG.md
       - Roadmap: ROADMAP.md
       - Releasing: RELEASING.md

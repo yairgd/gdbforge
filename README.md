@@ -156,7 +156,36 @@ Import rules for this repo: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md)
 
 ## Install and run (PC)
 
-**Requirements:** Linux (or similar) terminal, [Go](https://go.dev/dl/), `gdb` + `gcc` on `PATH`.
+**Requirements:** a Linux or macOS terminal with `gdb` on `PATH` (plus `gcc` for the hello
+world below). [Go](https://go.dev/dl/) is needed only for the last two options.
+
+**Prebuilt binary** — no toolchain needed. Asset names embed the version, so set it
+explicitly; see [Releases](https://github.com/yairgd/gdbforge/releases/latest) for the
+newest tag:
+
+```bash
+VERSION=v1.3.0
+OS=linux          # or: darwin
+ARCH=amd64        # or: arm64
+
+curl -fL -o gdbforge \
+  "https://github.com/yairgd/gdbforge/releases/download/${VERSION}/gdbforge-${VERSION}-${OS}-${ARCH}"
+chmod +x gdbforge
+sudo mv gdbforge /usr/local/bin/
+gdbforge -version
+```
+
+Every asset has a matching `.sha256` file if you want to verify the download.
+
+**With Go** — `go install github.com/yairgd/gdbforge/cmd/gdbforge@latest` puts the binary in
+`$(go env GOPATH)/bin`. It reports its version as `dev`, because the real version is stamped
+in only by the release build.
+
+The Lua workflow catalog under [`lua/`](lua/) and the helper shell scripts
+(`gdbforge --list-scripts`) are embedded in the binary, so every install option above can
+run `:lua r5_baremetal_jlink` and friends without a checkout.
+
+**From source** — for development, or to edit the bundled scripts:
 
 ```bash
 git clone https://github.com/yairgd/gdbforge.git

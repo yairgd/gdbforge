@@ -1,4 +1,5 @@
 ---
+title: gdbforge Roadmap — What Works Today and What Is Planned
 description: Track implemented, in-progress, and planned gdbforge features across debugging, UI, plugins, rendering, and documentation.
 ---
 
@@ -23,52 +24,56 @@ This document tracks **current implementation state**, **planned features**, and
 
 ## Current state
 
-gdbforge is an **architecture prototype**, not a production debugger. The split-tree UI and rendering pipeline exist; debugger integration and user-facing polish are early.
+gdbforge is **released and versioned** — see the [releases page](https://github.com/yairgd/gdbforge/releases) and [CHANGELOG.md](CHANGELOG.md). The GDB and Delve backends, the pane workspace, breakpoint persistence, and the Lua target workflows are used for real debugging.
 
-### Component status
+It is not finished. There is only ever one tab, there are no register or memory panes, the assembly pane is GDB-only, there is no native OpenOCD backend, and the Lua API is not frozen. The [home page](README.md#project-status) has the short version; the tables below are per-component.
+
+Since the [termforge extraction](ARCHITECTURE.md#built-on-termforge), the generic UI machinery — widgets, canvas, grid, split tree, rendering, PTY plumbing, the command DSL — is no longer tracked here. It lives in [termforge](https://yairgd.github.io/termforge/) and has its own roadmap.
+
+### Debugger components (this repository)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `Widget` interface | Done | `HandleEvent` + `Draw`; panes add `DrawStatusLine` (`NodeWidget`) |
-| Per-pane status line | Done | Focus bar via `BaseWidget.PaneName`; grid restore before paint |
-| Split tree (`Node`, `WidgetTree`) | Done | Binary splits, ratio layout |
-| `Canvas` / `Rect` | Done | Local coordinates |
-| `Grid` / `Cell` borders | Done | Unicode box drawing |
-| `App` event loop | Done | Poll, draw, flush |
-| Root layout (Tab / CompletionBar / CmdLine) | Done | Flat `AddWidget` chrome; completion overlays status row only when active |
-| `TabWidget` | Stub | Single tab, no header; `NewTabTwoHozSplitWins` does not yet wire second widget |
-| `CmdWidget` | Partial | Draw, history, tab complete, mode activation; emits `SubmitMsg` |
-| `PostInterrupt` → `EventBus` → `*Ctl` | Working | `CmdWidget`, GDB output, Lua jobs wired |
-| Key-sequence trie | Partial | `Ctrl+W` focus chords bound in `DebuggerApp` |
-| Interaction modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
-| `CodeWidget` | Working | Viewport source; `━━▶` PC; Space break toggle; red BP marks |
-| `BreakpointWidget` | Working | `:b breakpoint`; `TableWidget` (3 cols); `e`/`d`; syncs with GDB + CodeWidget |
-| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; `TableWidget` lists; refreshed on GDB stop |
-| `TableWidget` (termforge) | Working | `RectViewport`; paints straight to the Canvas; selection, search, copy; used by BP/threads/stack |
-| `LoggerWidget` | Prototype | Viewport + log sink; `PaneName: "Log"` |
-| `GDBWidget` | Working | `CompositeTerminal` + `WireCLI`; app owns MI on PTY #2 |
-| `ExecWidget` / `:!` | Working | `CompositeTerminal` + `WireExec`; PTY via `ptyx.Start` |
-| `OutputWidget` / `:b io` | Working | `CompositeTerminal` + `WireInferior`; serial mux optional |
-| `InputLine` / `ConsolePane` | Working | Lua REPL only; shared readline + walking prompt |
-| `ptyx.TTY` | Working | Unified PTY: `Start` / `Open` / `AttachPath`; GDB 3-PTY + DLV 2-PTY |
-| `CompositeTerminal` / `WireTTY` | Working | xterm bridge for GDB / IO / exec panes |
-| `GDBClient` | Working | CLI + MI + inferior `*ptyx.TTY`; `new-ui mi2` bootstrap |
-| `dlv.Client` | Working | `-g dlv` backend; inferior PTY IO |
-| `GdbMcpService` / `:AI` | Working | Same-process LLM tools on live Session |
-| Diff rendering | Partial | `BackCells` incremental diff; single `frontBuffer` |
-| Runtime splits | Partial | `:vs` / `:split` wired through the command tree |
-| Modes | Working | Normal / Insert / Command / Completion / Lua; global Ctrl-Z |
-| Mouse support | Working | Focus, scroll, select, word/line click, list activate on release, PRIMARY paste |
-| Lua plugins | Working MVP | `ModeLua`, `:b snake`/`tetris`, `./.gdbforge/lua/**/*.lua` from [`scripts/`](https://github.com/yairgd/gdbforge/tree/main/scripts) — [PLUGINS.md](PLUGINS.md) |
-| OpenOCD / JTAG | Not started | Design in [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
-| Documentation | Updated | Reflects 3-PTY, `CompositeTerminal`, `WireTTY`; see `cmd/docserve` |
+| `GDBClient` | Working | CLI + MI + inferior PTY; `new-ui mi2` bootstrap, `mi-async on` |
+| `dlv.Client` / `-g dlv` | Working | Delve headless + rpc2 + connect CLI; inferior PTY I/O |
+| Unified `backend.Backend` | Working | Controllers speak semantic ops; GDB MI and Delve rpc2 stay inside the backend |
+| `CodeWidget` | Working | Viewport source; `━━▶` PC; Space breakpoint toggle; red BP marks |
+| `AssemblyWidget` | Working — GDB only | `:b asm`, `:layout <name> asm`, `:vs asm`. `DLVBackend.SupportsAssembly()` returns false |
+| `BreakpointWidget` | Working | `:b breakpoint`; `e` / `d`; syncs with the debugger and `CodeWidget` |
+| `ThreadWidget` / `CallStackWidget` | Working | Default right panes; refreshed on every stop |
+| `GDBWidget` (`:b gdb`) | Working | Real interactive debugger console on its own PTY |
+| `OutputWidget` (`:b io`) | Working | Inferior stdio; serial mux optional; external terminal alternative |
+| `ExecWidget` (`:!`) | Working | Shell panes on their own PTY |
+| Breakpoint persistence | Working | `./.gdbforge/breakpoints.yaml`, saved on quit and restored on start |
+| `PostInterrupt` → `EventBus` → `*Ctl` | Working | Command submissions, GDB output, and Lua jobs all dispatch to controllers |
+| `GdbMcpService` / `:AI` | Working | Same-process LLM tools over the live session |
+| Lua host + workflows | Working | 25 `gdbforge.*` / `pane.*` functions and about 30 workflow scripts under [`lua/`](https://github.com/yairgd/gdbforge/tree/main/lua), embedded in the binary. The API is **not** versioned — [LUA_API.md](LUA_API.md), [PLUGINS.md](PLUGINS.md) |
+| `serialmux` (one-UART kgdb) | Working | Semi-automatic; see [KERNEL_KGDB.md](KERNEL_KGDB.md) for the limitation |
+| Register / memory panes | Not started | `:gdb info registers` prints to the console; no widget |
+| Multi-tab UI | Not started | One tab; no `:tabnew` / `:tabn`. The tab model itself is termforge's |
+| Native OpenOCD / JTAG backend | Not started | No `internal/openocd`. OpenOCD **is** usable today — the Lua scripts launch it as an external GDB server. Design: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md) |
+
+### Provided by termforge
+
+These used to be tracked in the table above. They now belong to the framework, and their state is documented on the [termforge site](https://yairgd.github.io/termforge/).
+
+| Area | Where |
+|------|-------|
+| Widget interface, canvas, grid, per-pane status line | [termforge UI architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) |
+| Split tree, tabs, three-band root layout, command line | [termforge window management](https://yairgd.github.io/termforge/WINDOW_MANAGEMENT/) |
+| Incremental cell diff and the paint loop | [termforge rendering](https://yairgd.github.io/termforge/RENDERING/) |
+| Modes, key-sequence trie, mouse, the `:` command DSL | [termforge documentation](https://yairgd.github.io/termforge/) |
+| PTY plumbing (`ptyx`), terminal emulator pane | [termforge documentation](https://yairgd.github.io/termforge/) |
 
 ### Runnable today
 
 ```bash
-go run ./cmd/gdbforge     # split-pane UI prototype
-go run ./cmd/docserve    # documentation browser
+go run ./cmd/gdbforge ./hello   # the debugger
+go run ./cmd/docserve           # documentation browser
 ```
+
+Released binaries for Linux and macOS (amd64 / arm64) are attached to each
+[GitHub release](https://github.com/yairgd/gdbforge/releases); see [README.md — Install](README.md#install).
 
 ---
 
@@ -80,103 +85,93 @@ gantt
     dateFormat YYYY-MM
     section Foundation
         Split tree + Grid           :done, m1, 2025-01, 2025-06
-        Root layout                 :active, m2, 2025-06, 2025-09
-        Diff rendering              :m3, 2025-09, 2025-12
+        Incremental cell diff       :done, m3, 2025-09, 2025-12
+        Extract termforge           :done, m15, 2026-06, 2026-09
     section Debugger
-        GDB session config          :m4, 2025-06, 2025-08
+        GDB MI2 + session config    :done, m4, 2025-06, 2025-08
         Breakpoint/source sync      :done, m5, 2025-08, 2025-11
-        OpenOCD adapter             :m6, 2026-01, 2026-06
+        Delve backend               :done, m12, 2025-11, 2026-03
+        Assembly pane under Delve   :m16, 2026-10, 2027-01
+        Register / memory panes     :m13, 2026-11, 2027-03
+        Native OpenOCD adapter      :m6, 2027-01, 2027-06
     section UX
-        Interaction modes           :m7, 2025-08, 2025-10
-        Vim command line            :m8, 2025-10, 2026-01
-        Status bar                  :m9, 2026-01, 2026-03
+        Interaction modes           :done, m7, 2025-08, 2025-10
+        Vim command line            :done, m8, 2025-10, 2026-01
+        Per-pane status line        :done, m9, 2026-01, 2026-03
+        Tab bar + multi-tab         :m2, 2026-10, 2027-03
     section Extensibility
-        Go plugin panes             :m10, 2026-03, 2026-06
-        Lua runtime                 :m11, 2026-06, 2026-12
+        Lua runtime + workflows     :done, m11, 2026-01, 2026-09
+        Stable Lua API              :m14, 2026-10, 2027-03
+        Go plugin panes             :m10, 2027-03, 2027-06
 ```
 
-Dates are indicative — adjust as development progresses.
+Dates are indicative — adjust as development progresses. Items with a start date in the
+future are not scheduled commitments. Foundation and UX rows that are marked done were
+delivered here and now live in [termforge](https://yairgd.github.io/termforge/).
 
 ---
 
 ## Planned features
 
-### M1 — Root layout and polish (near term)
+Only work that is **not** in the shipped binary is listed here. For what already works,
+see [Debugger components](#debugger-components-this-repository) above. Framework-level
+items (tabs, rendering, modes) are tracked on the
+[termforge roadmap](https://yairgd.github.io/termforge/) — the gdbforge entries below are
+the parts this repository still has to wire up.
+
+### Debugger panes and features
 
 | Feature | Description |
 |---------|-------------|
-| Application models | Explicit model types per domain; created at startup |
-| `:buffer` dispatch | Display model by name; bind widget to existing model |
-| `RootWidget` | Structured TabBar + Workspace + CmdLine |
-| Tab header rendering | Visible tab bar with switch keys |
-| CmdLine dispatch | `CommandParser` for tree leaves; `SubmitMsg` → `cmdCtl` for infra events |
-| Focus indicators | Bold border on focused pane |
-| Focus movement | `Ctrl+W` + arrow keys — **partial (trie wired)** |
-| Mode router | Normal / Command / Search — **done**; Focus mode still planned |
+| Register pane | A real widget instead of `:gdb info registers` printing into the console |
+| Memory / hex pane | Browsable memory view instead of GDB's `x` in the console |
+| Watch / locals pane | Expression and local-variable list that refreshes on stop |
+| Assembly under Delve | `DLVBackend.SupportsAssembly()` is false today, so `:b asm` is GDB-only |
+| Multi-session | One `backend.Backend` per process today (`-g gdb\|dlv`); a per-tab backend would allow several targets at once |
+| Session configuration file | Target binary, args, and working dir are command-line only; just breakpoints persist |
 
-### M2 — Rendering efficiency
+### Window management (needs termforge plumbing plus app wiring)
 
 | Feature | Description |
 |---------|-------------|
-| Separate `backBuffer` | Full double-buffered compositing |
-| Per-frame grid clear | Avoid stale cells when panes shrink |
-| Diff flush | **Partial** — `BackCells` incremental diff in `Grid.Draw` |
-| Damage regions | Per-widget dirty flags |
+| Tab bar and multi-tab | gdbforge creates exactly one tab. Needs a rendered header, switch keys, and `:tabnew` / `:tabn` / `:tabclose` |
+| Focus mode | A dedicated mode for window navigation. Today focus movement lives in normal mode behind `Ctrl+W` chords |
+| Remaining Vim window commands | `:resize`, `:wincmd =`, move/rotate. Bound today: focus left/down/up/right, `:only`, `:close`, `:vs`, `:split` |
+| Layout persistence | Save and restore the split layout across sessions |
 
-### M3 — Debugger UX
-
-| Feature | Description |
-|---------|-------------|
-| Session configuration | Target binary, args, working dir |
-| Source view | **Done** — file load, `━━▶` PC, Chroma, Space toggle |
-| Breakpoint pane | **Done** — `:b breakpoint`; `e`/`d`; GDB + CodeWidget sync; `./.gdbforge/breakpoints.yaml` save/restore |
-| Register / memory panes | Basic data display |
-| `*stopped` handling | **Partial** — PC + file buffer update |
-| Separate console/target streams | **Done** — GDB PTY vs inferior `ptyx.TTY` + IO pane; `@` still accepted as fallback |
-
-### M4 — Commands and modes
+### Backends
 
 | Feature | Description |
 |---------|-------------|
-| Normal / Focus / Command modes | Focus mode remaining; Normal + Command wired in `DebuggerApp` |
-| Window commands | `:vs`, `:split`, `:close` — **partial (`:vs` / `:split` wired)** |
-| Tab commands | `:tabnew`, `:tabn` |
-| Command completion | UI + debugger vocab |
+| Native OpenOCD adapter | A telnet/TCL client in `internal/openocd`, so `monitor`-style operations do not have to go through GDB. OpenOCD already works today as an externally launched GDB server |
 
-### M5 — Additional backends
+### Extensibility
 
 | Feature | Description |
 |---------|-------------|
-| OpenOCD telnet client | Embedded target debugging |
-| GDB remote | `target remote` sessions |
-| Multi-session / per-tab backend | Today: one `backend.Backend` per process (`-g gdb\|dlv`) |
-
-### M6 — Extensibility
-
-| Feature | Description |
-|---------|-------------|
+| Stable Lua API | Freeze and version `gdbforge.*` so scripts survive upgrades. The surface is documented in [LUA_API.md](LUA_API.md) but may still change |
+| Lua-defined panes | Scripts can print to a pane and draw cells; a first-class custom widget type is not there yet |
 | `PluginWidget` | Go-native plugin registration |
-| Lua embedding | Scriptable panes and commands |
-| Headless automation | CI-driven debug scripts |
+| Headless automation | Scripted debug runs without a terminal, for CI |
 
 ---
 
 ## Long-term vision
 
-gdbforge should become a **terminal debugger platform**:
+gdbforge aims to be a **terminal debugger platform**:
 
-1. **Primary choice** for developers who want cgdb ergonomics with modern extensibility.
-2. **Embedded-first** — OpenOCD/JTAG workflows alongside GDB.
-3. **Scriptable** — Lua plugins for custom panes and CI automation.
-4. **Efficient** — diff rendering for remote SSH sessions on large terminals.
-5. **Clean codebase** — contributors can add a pane or backend without touching unrelated layers.
+1. **Ergonomic** — cgdb-style single-screen debugging with a modern, extensible core.
+2. **Embedded-friendly** — JTAG and probe workflows treated as first-class, not afterthoughts.
+3. **Scriptable** — Lua plugins for custom panes, target bring-up, and CI automation.
+4. **Efficient** — incremental redraw that stays responsive over SSH on large terminals.
+5. **Contributable** — adding a pane or a backend should not require touching unrelated layers.
 
-Success criteria (future 1.0):
+Open goals, none of which are met yet:
 
-- Daily-driver GDB debugging for C/C++ projects.
-- Split layouts persist across sessions (config file).
-- Plugin ecosystem documented with examples.
-- Performance: < 16ms frame time on 120×40 terminal for typical updates.
+- A frozen, versioned plugin API with example plugins.
+- Split layouts that persist across sessions.
+- A measured frame-time budget (target: under 16 ms on a 120×40 terminal for a typical update) — not currently benchmarked.
+- More than one debug session per process.
 
 ---
 
@@ -184,12 +179,11 @@ Success criteria (future 1.0):
 
 | Item | Location | Priority |
 |------|----------|----------|
-| Flat widget registration | `term_app.go` | High |
-| Single `frontBuffer` (no `backBuffer`) | `term_app.go` | Medium |
-| `NewTabTwoHozSplitWins` ignores second widget | `tab.go` | Medium |
-| Grid cursor not flushed to tcell | `grid.go` | Low |
-| Empty `base_widget.go` | `termforge` | Low |
-| Global MI state variable | `mi.go` `var state` | Medium |
+| Global MI state variable alongside the per-session `GdbInputState` | `internal/gdb/mi.go` `var state` | Medium |
+| Assembly support is backend-gated rather than feature-detected | `internal/gdbforge/backend/dlv_backend.go` `SupportsAssembly` | Low |
+
+Rendering and widget-registration debt moved out with the
+[termforge extraction](ARCHITECTURE.md#built-on-termforge) and is tracked there.
 
 ---
 
@@ -199,15 +193,16 @@ Areas not yet fully documented in code or docs — track for future passes:
 
 | Area | Why document later |
 |------|-------------------|
-| Session configuration file format | Not implemented |
-| Keybinding reference (full table) | Modes not wired |
-| Plugin API reference (Lua bindings) | No runtime yet |
-| OpenOCD protocol mapping | No adapter yet |
-| Testing strategy / CI | Minimal tests today |
-| Performance profiling guide | Full double-buffer diff not implemented |
-| Migration guide from cgdb | After feature parity assessment |
+| Session configuration file format | Not implemented — only breakpoints persist, in `./.gdbforge/breakpoints.yaml` |
+| OpenOCD protocol mapping | No native adapter yet |
+| Testing strategy / CI | 94 `_test.go` files exist and `go test ./...` passes, but there is no written guidance on what to test or how CI is wired |
+| Performance profiling guide | No frame-time benchmark exists to document |
+| Migration guide from cgdb | Needs a feature-parity assessment first. [FAQ](FAQ.md#how-is-gdbforge-different-from-cgdb) covers the everyday equivalents |
 | Config / theme system | Not designed |
 | Accessibility (screen reader) | Research needed for TUI a11y |
+
+The full keybinding table lives in [USER_GUIDE.md](USER_GUIDE.md) and the Lua API in
+[LUA_API.md](LUA_API.md); both were listed here as missing and no longer are.
 
 ---
 

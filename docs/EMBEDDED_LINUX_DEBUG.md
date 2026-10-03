@@ -1,10 +1,50 @@
 ---
+title: Debugging Linux Applications — Local and Remote over gdbserver
 description: Debug embedded Linux user-space applications with gdbforge using remote gdbserver over SSH, or run local programs with an internal IO pane or external terminal.
 ---
 
-# Embedded Linux app debug
+# Debugging Linux applications — local and remote over gdbserver
 
 **gdbforge** is a Vim-inspired **GDB terminal UI** for **user-space** programs — on an **embedded Linux board** or **on the host**. This guide covers **deploy + gdbserver over SSH** (`:lua remotegdb`) and **where program stdin/stdout goes**. For the kernel or a loadable module, where a breakpoint stops the whole system, see [KERNEL_KGDB.md](KERNEL_KGDB.md).
+
+## Prerequisites
+
+Local debugging needs almost nothing; the remote path needs a little setup on both sides.
+
+| Need | Where | Why |
+|------|-------|-----|
+| gdbforge installed | host | [install](README.md#install) — verify with `gdbforge -version` |
+| `gdb` | host | the backend. For a remote board of a different architecture, a **cross** GDB (e.g. `aarch64-linux-gnu-gdb`), selected with `gdbforge -d <gdb>` |
+| Your program built with `-g` | host | source-level debugging needs DWARF |
+| `gdbserver` on the target | target | `:lua remotegdb` runs it over SSH; most Yocto/Buildroot images ship it |
+| **Key-based SSH** to the target | both | every `ssh`/`scp` in the script uses `-o BatchMode=yes`, so **password prompts fail**. Run `ssh-copy-id root@<board>` first |
+| Matching unstripped binary on the host | host | the host GDB reads symbols locally while the target runs the stripped copy |
+| `GDBFORGE_TERMINAL` (optional) | host | only for the external-terminal I/O mode below |
+
+Quick sanity check before you start:
+
+```bash
+ssh -o BatchMode=yes root@<board> 'gdbserver --version'
+```
+
+If that prints a version without asking for a password, the remote path will work.
+
+## To your first breakpoint (local program)
+
+```bash
+gdbforge ./my_app
+```
+
+1. The Code pane opens on your source. Move the cursor to a line and press
+   <kbd>Space</kbd> to set a breakpoint.
+2. Type `:b gdb` and `run` (or `start`, which breaks at `main` immediately).
+3. On the stop, `━━▶` marks the program counter and the Call Stack, Threads and
+   Breakpoints panes refresh together. There is no variables pane yet — use
+   `print` / `info locals` in `:b gdb`.
+4. <kbd>c</kbd> continues, <kbd>n</kbd> steps over, <kbd>s</kbd> steps into, <kbd>f</kbd>
+   finishes the frame. Program output lands in `:b io` unless you redirect it below.
+
+For the remote equivalent, jump to [Remote board — `:lua remotegdb`](#remote-board--lua-remotegdb).
 
 ## Demo — Linux app I/O
 

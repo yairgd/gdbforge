@@ -1,9 +1,23 @@
 {% extends "base.html" %}
 
+{#- One title for <title>, og:title and twitter:title, so they can never disagree.
+    A front-matter `title:` wins over the nav label, which is why the home page no
+    longer calls itself "Home". The site name is appended only when the title does not
+    already contain it, so "gdbforge Roadmap" does not become "gdbforge Roadmap - gdbforge". -#}
+{% if page %}
+  {% set raw_title = page.meta.title if page.meta and page.meta.title
+                     else (config.site_name if page.is_homepage else page.title) %}
+  {% set seo_title = raw_title if config.site_name|lower in raw_title|lower
+                     else raw_title ~ " | " ~ config.site_name %}
+{% endif %}
+
+{% block htmltitle %}
+  <title>{{ seo_title | default(config.site_name, true) }}</title>
+{% endblock %}
+
 {% block extrahead %}
   {{ super() }}
   {% if page %}
-  {% set seo_title = page.title ~ " | " ~ config.site_name %}
   {% set seo_description = page.meta.description if page.meta and page.meta.description else config.site_description %}
   {% set seo_image = config.extra.seo.image %}
 
@@ -35,7 +49,7 @@
         "url": {{ page.canonical_url | tojson }},
         "image": {{ seo_image | tojson }},
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Linux",
+        "operatingSystem": "Linux, macOS",
         "codeRepository": {{ config.repo_url | tojson }}
       }
     </script>
@@ -44,7 +58,7 @@
       {
         "@context": "https://schema.org",
         "@type": "TechArticle",
-        "headline": {{ page.title | tojson }},
+        "headline": {{ (page.meta.title if page.meta and page.meta.title else page.title) | tojson }},
         "description": {{ seo_description | tojson }},
         "url": {{ page.canonical_url | tojson }},
         "image": {{ seo_image | tojson }},

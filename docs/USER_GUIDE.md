@@ -1,8 +1,9 @@
 ---
+title: gdbforge User Guide — Keys, Modes, Panes and Commands
 description: Full manual for the gdbforge terminal debugger — modes, keys, colon commands, layouts, breakpoints, threads, call stack, and program I/O under GDB and Delve.
 ---
 
-# User guide
+# gdbforge user guide — keys, modes, panes and commands
 
 In-app twin: **`:help`** / **`:b help`** (source: `buildHelpLines()` in [`internal/gdbforge/widgets/help_widget.go`](https://github.com/yairgd/gdbforge/blob/main/internal/gdbforge/widgets/help_widget.go)).
 
@@ -71,6 +72,14 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
 | Ctrl-W arrows | same as hjkl |
 | Ctrl-W o | only — close other panes, keep focused |
 | Ctrl-O | jump back after `:b` / `:edit` / `:!` |
+
+!!! warning "Ctrl-W h and Ctrl-W l are currently swapped"
+
+    In the shipped binary `<C-w>h` moves focus **right** and `<C-w>l` moves focus **left**
+    — the reverse of the table above and of Vim
+    ([`internal/app/keybindings.go`](https://github.com/yairgd/gdbforge/blob/main/internal/app/keybindings.go)
+    binds `move-left` to `<C-w>l` and `move-right` to `<C-w>h`). `j` / `k` and the arrow
+    keys are correct. Use <kbd>Ctrl-W</kbd> + arrows if you want the documented direction.
 
 ### Colon commands
 

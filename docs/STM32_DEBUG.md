@@ -1,8 +1,9 @@
 ---
+title: Debugging STM32 Firmware — Bare-Metal, Zephyr and FreeRTOS
 description: Debug STM32 bare-metal, Zephyr, and FreeRTOS firmware with gdbforge using ST-Link and OpenOCD or J-Link SWD.
 ---
 
-# STM32 debug
+# Debugging STM32 firmware — bare-metal, Zephyr and FreeRTOS
 
 **gdbforge** is a Vim-inspired **GDB terminal UI** for STM32 bare-metal, Zephyr, and FreeRTOS development. Lua scripts under [`lua/stm32/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32) spawn **ST-Link + OpenOCD** or **J-Link GDB Server** over SWD, attach GDB, and stop at `main` — the ST-Link scripts with `monitor reset halt`, the J-Link script after `load`.
 
@@ -12,6 +13,24 @@ description: Debug STM32 bare-metal, Zephyr, and FreeRTOS firmware with gdbforge
 
 ![STM32 Nucleo F429ZI debug demo — bare metal then Zephyr-aware](media/gdbforge-demo-stm32-nucleo-f429zi.gif){ loading=lazy }
 
+## Prerequisites
+
+| Need | Why | Check |
+|------|-----|-------|
+| gdbforge installed | — | `gdbforge -version` ([install](README.md#install)) |
+| `arm-none-eabi-gdb` (or the Zephyr SDK's `arm-zephyr-eabi-gdb`) | Cortex-M is 32-bit ARM; the scripts run `set architecture arm`. The host `gdb` cannot debug it | `arm-none-eabi-gdb --version` |
+| **OpenOCD ≥ 0.12** (ST-Link boards) or **J-Link software** | Serves GDB over SWD | `openocd --version` |
+| ST-Link / J-Link probe, plus udev rules on Linux | Probe access without `sudo` | `lsusb` shows the probe |
+| Firmware ELF built with `-g` | Source-level debugging needs DWARF | `file build/zephyr/zephyr.elf` |
+| `ZEPHYR_BASE` exported (Zephyr only) | The scripts `dir` the Zephyr and app sources so stepping shows code | `echo $ZEPHYR_BASE` |
+| *(optional)* a clone of the gdbforge repo | The [`lua/stm32/`](https://github.com/yairgd/gdbforge/tree/main/lua/stm32) board scripts already ship **inside the binary** — clone only to edit them locally ([precedence](LUA_API.md)) | — |
+
+Point gdbforge at the cross GDB with `-d`:
+
+```bash
+gdbforge -d arm-none-eabi-gdb ./build/zephyr/zephyr.elf
+```
+
 ## Getting started (order of operations)
 
 Follow these steps once, then repeat from step 5 for each debug session.
@@ -19,7 +38,9 @@ Follow these steps once, then repeat from step 5 for each debug session.
 1. **Host tools** — install **OpenOCD** (ST-Link boards) and/or **J-Link software** (board 2 J-Link path). See [OpenOCD version and install](#openocd-version-and-install) below.
 2. **USB / udev** — plug in the board; ensure ST-Link is visible (`lsusb`). On Linux, install [OpenOCD udev rules](https://github.com/openocd-org/openocd/blob/master/contrib/60-openocd.rules) if permission denied.
 3. **gdbforge** — build or install gdbforge; verify `openocd --version` on PATH.
-4. **Board scripts** — copy the board folder into your project (no gdbforge rebuild):
+4. **Board scripts** — nothing to do: the board scripts ship inside the binary. Copy a
+   folder into your project only if you want to edit it, since project-local scripts win
+   over the embedded catalog (see [Lua API](LUA_API.md)):
 
    ```bash
    mkdir -p .gdbforge/lua
@@ -31,9 +52,29 @@ Follow these steps once, then repeat from step 5 for each debug session.
 6. **Environment** — export board-specific vars (Zephyr `ZEPHYR_BASE`, OpenOCD cfg paths — see board sections below).
 7. **Launch gdbforge** with your ELF from the build directory, e.g. `gdbforge ./zephyr/zephyr.elf`
 8. **Connect probe** — `:lua nucleo_f429zi` (or `stm32f405_stlink` / `stm32f405_jlink`).
-9. **Debug** — stopped at `main` in `:b gdb`; `continue` to run; OpenOCD log at `/tmp/gdbforge-openocd.log` (or `GDBFORGE_OPENOCD_LOG`); `:b code` for source.
+9. **Debug** — you are stopped at `main`; see [To your first breakpoint](#to-your-first-breakpoint) below.
 
 OpenOCD is started detached (like kdmx): the `:lua` job finishes and Ctrl-C no longer tears down OpenOCD. It is stopped when you run `:lua nucleo_f429zi` again or when gdbforge exits.
+
+### To your first breakpoint
+
+Unlike the MPSoC scripts, the STM32 scripts do continue for you: the ST-Link flow ends in
+`break main` + `continue`, so when `:lua nucleo_f429zi` returns, the core is **already
+stopped at `main`** and `━━▶` marks the program counter in the Code pane.
+
+1. Move the cursor to any line in the Code pane and press <kbd>Space</kbd> to toggle a
+   breakpoint there.
+2. Press <kbd>c</kbd> to continue, <kbd>n</kbd> to step over, <kbd>s</kbd> to step into,
+   <kbd>f</kbd> to finish the frame. The Call Stack, Threads and Breakpoints panes refresh
+   at every stop; for variables use `print` / `info locals` in `:b gdb`.
+3. For Zephyr thread awareness, use the `zephyr` profile (`:lua nucleo_f429zi zephyr`) and
+   run `info threads` in `:b gdb`.
+4. `:b gdb` is the real GDB console (`info registers`, `x/16x $sp`, `monitor reset halt`, …);
+   the OpenOCD log is at `/tmp/gdbforge-openocd.log` (or `GDBFORGE_OPENOCD_LOG`).
+
+If it did not stop at `main`, the usual causes are a probe that never enumerated (check
+`lsusb` and the OpenOCD log), a stale OpenOCD holding port 3333, or an ELF that does not
+match what is flashed. Each script also defines `help()` listing its environment variables.
 
 ---
 
@@ -56,7 +97,7 @@ Scripts path (for `[find board/…]` in cfg): usually **`/usr/share/openocd/scri
 **Official project**
 
 - Home: [https://openocd.org/](https://openocd.org/)
-- Getting OpenOCD: [https://openocd.org/pages/getting-openocd/](https://openocd.org/pages/getting-openocd/)
+- Getting OpenOCD: [https://openocd.org/pages/getting-openocd.html](https://openocd.org/pages/getting-openocd.html)
 - Source / releases: [https://github.com/openocd-org/openocd/releases](https://github.com/openocd-org/openocd/releases)
 
 **Linux package managers** (fastest if version ≥ 0.12)

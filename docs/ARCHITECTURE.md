@@ -304,7 +304,7 @@ flowchart LR
     GDB -.->|"inferior tty"| Target
 ```
 
-GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual-pty). Unified controller/backend layering: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#unified-backend-api).
+GDB and the inferior use **separate** PTYs: MI on PTY #1, program stdin/stdout on PTY #2 (IO console). Master/slave map, Delve `--tty` vs TCP headless, and external terminals: **[PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md)**. Protocol details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#inferior-io-dual--triple-pty). Unified controller/backend layering: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#unified-backend-api).
 
 ```mermaid
 flowchart TB

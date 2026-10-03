@@ -1,8 +1,9 @@
 ---
+title: Debugging Zynq UltraScale+ MPSoC (Cortex-A53 and Cortex-R5)
 description: MPSoC debug with gdbforge — automate Zynq UltraScale+ Cortex-A53 and Cortex-R5 GDB sessions over J-Link or Digilent OpenOCD from a terminal debugger UI.
 ---
 
-# MPSoC debug (Zynq UltraScale+)
+# Debugging Zynq UltraScale+ MPSoC (Cortex-A53 and Cortex-R5)
 
 **gdbforge** is a Vim-inspired **GDB terminal UI** for **Xilinx Zynq UltraScale+ MPSoC** development. Lua scripts under [`lua/mpsoc/`](https://github.com/yairgd/gdbforge/tree/main/lua/mpsoc) spawn **J-Link GDB Server** or **OpenOCD + Digilent JTAG-HS2**, attach with `target remote`, load your ELF, and set breakpoints — the Code pane stays usable while the probe runs in the background.
 
@@ -23,15 +24,78 @@ Scripts live in two folders (copy what you need into `.gdbforge/lua/`):
 
 [`examples/zephyr_cortex_r5/`](https://github.com/yairgd/gdbforge/tree/main/examples/zephyr_cortex_r5) is a ready-to-build Zephyr application for the same core: a main loop, two worker threads, a mutex-guarded struct and a recursive call chain worth a backtrace, configured for the `zephyr` profile so RPU threads show up in the Threads pane. It builds against upstream `kv260_r5` on an unmodified Zephyr tree, and a snippet picks the console — `-S jtag-console` for SEGGER RTT over the probe, `-S uart0-console` for PS UART0. Its `build.sh` will either adopt a Zephyr you already have (`init --use <dir>`) or fetch one (`init --download`), then `build -c jtag|uart0` and `debug`.
 
-## Quick start — Cortex-R5 + J-Link
+## Prerequisites
+
+| Need | Why | Check |
+|------|-----|-------|
+| gdbforge installed | — | `gdbforge -version` ([install](README.md#install)) |
+| A **cross GDB for the core you are debugging** | The host `gdb` cannot debug A53 or R5 code. **Cortex-A53 is AArch64** (`aarch64-none-elf-gdb`); **Cortex-R5 is 32-bit ARM** (`arm-none-eabi-gdb`) — the scripts run `set architecture aarch64` and `set architecture arm` respectively | `aarch64-none-elf-gdb --version` |
+| **J-Link software** *or* **OpenOCD** ≥ 0.12 | Serves GDB over JTAG | `JLinkGDBServer -v` / `openocd --version` |
+| A **JTAG probe on the PS pins** | SEGGER J-Link, or a Digilent JTAG-HS2 / Platform Cable for the OpenOCD and `xsdb` paths. A PL-only chain has no DAP | `lsusb` |
+| Your ELF built with `-g` | Source-level debugging needs DWARF | `file your_app.elf` |
+| USB permissions | Probes need udev rules on Linux | no "permission denied" from the server |
+| *(optional)* a clone of the gdbforge repo | The [`lua/mpsoc/`](https://github.com/yairgd/gdbforge/tree/main/lua/mpsoc) scripts already ship **inside the binary** — clone only to edit them locally ([precedence](LUA_API.md)) | — |
+| For **bare metal**: a **parked board** | Nothing has run `psu_init`, so there are no clocks and the A53 is below EL3. See [Before you attach](#before-you-attach-park-the-board-host-side) — this is the most common reason a load "works" and then nothing happens | `xsdb` on `PATH` |
+| For the `*_kernel_*` / `*_openamp_*` scripts: a **normally booted board** | Those attach to running Linux, where JTAG boot mode is exactly wrong | board at a Linux prompt |
+
+Point gdbforge at the cross GDB with `-d`:
+
+```bash
+gdbforge -d arm-none-eabi-gdb ./your_app.elf        # Cortex-R5
+gdbforge -d aarch64-none-elf-gdb ./your_app.elf     # Cortex-A53
+```
+
+## Quick start — Cortex-R5 + J-Link, to your first breakpoint
+
+```bash
+# 1. Park the board first — bare metal only (see the next section).
+#    The script is bundled in the binary; no repo checkout needed.
+gdbforge --run-script zynqmp-park-el3.sh -p <platform>/hw/psu_init.tcl --jtag jlink
+
+# 2. Point at the J-Link GDB server and pick the RPU core
+export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
+export GDBFORGE_R5_CORE=0
+
+# 3. Open your ELF with a 32-bit ARM cross GDB
+cd /path/to/your/firmware/build
+gdbforge -d arm-none-eabi-gdb ./your_app.elf
+```
+
+`r5_baremetal_jlink` and its `r5_target.xml` ship inside the binary, so there is nothing to
+install. Copy the folder into `./.gdbforge/lua/` only if you want to edit it — project-local
+scripts win over the embedded catalog (see [Lua API](LUA_API.md)):
 
 ```bash
 mkdir -p .gdbforge/lua
-cp -r lua/mpsoc/cortex_r5 .gdbforge/lua/
-export GDBFORGE_JLINK=/opt/JLink_Linux_V914a_x86_64/JLinkGDBServer
-./bin/gdbforge ./your_app.elf
+cp -r /path/to/gdbforge/lua/mpsoc/cortex_r5 .gdbforge/lua/   # keep the whole folder
+```
+
+Then, inside gdbforge:
+
+```text
 :lua r5_baremetal_jlink
 ```
+
+The script kills any stale `JLinkGDBServer`, spawns a new one in the background, waits for
+its port, then in `:b gdb` runs `set architecture arm`, applies the bundled
+`r5_target.xml`, `target remote localhost:2334`, `monitor halt`,
+[zeros the TCM](#tcm-ecc-why-the-r5-scripts-zero-tcm-before-load), `load`,
+`set $pc = 0x0`, and `break main`.
+
+It stops there. The core is **halted at the reset vector with a breakpoint pending on
+`main`** — the script does not continue for you. To reach your first breakpoint:
+
+1. Press <kbd>c</kbd> (or type `continue` in `:b gdb`). Execution runs to `main` and
+   `━━▶` marks the program counter in the Code pane.
+2. Move the cursor to any line and press <kbd>Space</kbd> to add another breakpoint.
+3. <kbd>n</kbd> steps over, <kbd>s</kbd> steps into, <kbd>f</kbd> finishes the frame. The
+   Call Stack and Threads panes refresh at every stop.
+4. `:b gdb` is the real GDB console for everything else (`info registers`, `x/16x $sp`, …).
+
+If the script stops early it prints the reason in the Lua pane; `:b exec` shows the J-Link
+server's own log. Every script also defines `help()` describing its environment variables
+and assumptions. When a load succeeds but the application produces nothing, read the next
+section before anything else.
 
 ## Before you attach: park the board (host side)
 

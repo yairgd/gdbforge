@@ -13,7 +13,7 @@ import (
 
 const (
 	// AboutEmail is the public contact shown on the About page.
-	AboutEmail = "yairgd@gmail.com"
+	AboutEmail = "yair.gadelov@gmail.com"
 	// AboutNotForRelease is shown when the binary was not stamped from a release tag.
 	AboutNotForRelease = "not for release"
 )

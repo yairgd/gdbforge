@@ -11,7 +11,8 @@ import (
 )
 
 // FileListWidget shows GDB project source files (j/k selection; Enter opens).
-// Mouse: first click selects (blue mark); second click on the marked row opens.
+// Mouse: first click selects (blue mark); second click on the marked row opens;
+// the wheel moves the selection.
 type FileListWidget struct {
 	*termforge.TableWidget
 	state *debugstate.State
@@ -142,7 +143,16 @@ func (w *FileListWidget) HandleEvent(ev tcell.Event) {
 		if w.TryDoubleClickWord(e) {
 			return
 		}
-		if e.Buttons()&tcell.ButtonPrimary == 0 {
+		btns := e.Buttons()
+		if btns&tcell.WheelUp != 0 {
+			w.move(-1)
+			return
+		}
+		if btns&tcell.WheelDown != 0 {
+			w.move(1)
+			return
+		}
+		if btns&tcell.ButtonPrimary == 0 {
 			return
 		}
 		mx, my := e.Position()

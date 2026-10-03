@@ -1,8 +1,9 @@
 ---
-description: Goals, motivation, and design direction of gdbforge, including how it compares to cgdb and the GDB TUI.
+title: gdbforge Overview — Goals, Motivation, and How It Compares
+description: Goals, motivation, and design direction of gdbforge, including a factual feature comparison with cgdb and the GDB TUI.
 ---
 
-# Project Overview
+# gdbforge overview — goals, motivation, and how it compares
 
 **gdbforge** is a terminal-native debugger front-end inspired by [cgdb](https://github.com/cgdb/cgdb) but rebuilt from first principles in Go. It aims to combine the familiarity of a curses debugger UI — source, console, breakpoints, threads, and call stack on one screen — with a modular architecture that supports multiple debugger backends and long-term extensibility.
 
@@ -27,16 +28,16 @@ gdbforge is **not a clone of Vim**. It is a debugger built on a **generic applic
 
 Vim has a single data model (text buffers). termforge supports **multiple application-specific data models** — breakpoints, registers, and console output in a debugger; orders, portfolio, and charts in a trading app. The user still works with familiar concepts (`:buffer`, `:split`, `:vsplit`, `:tab`), but `:buffer` selects which **model** to display, not which file to open.
 
-gdbforge should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal, with source views, breakpoints, registers, memory, and a GDB console — built as a **composable widget system over domain models**, not a monolithic ncurses application.
+gdbforge should feel like **cgdb for the 2020s**: a keyboard-driven debugger workspace in the terminal with source, breakpoints, threads, the call stack, assembly, and a real GDB console — built as a **composable widget system over domain models**, not a monolithic ncurses application. Register and memory panes are on the [roadmap](ROADMAP.md), not in the binary yet.
 
-The long-term vision:
+The long-term direction:
 
-- A **Vim-inspired interaction framework** (termforge) — normal mode, focus mode, and a `:` command line — applied to arbitrary application data, not only text files.
-- A **single UI codebase** that adapts to GDB and Delve today (`-g gdb|dlv`), OpenOCD/JTAG tomorrow, and other domains (trading, monitoring, …) via application-specific models and services.
-- **Scriptable automation** via Lua plugins for custom panes, workflows, and CI integration.
-- **Efficient rendering** through an off-screen grid and future diff-based terminal updates.
+- **Cover the whole debugging session**, not just source display — probe bring-up, program I/O, and run control inside one workspace.
+- **Stay backend-agnostic**: GDB and Delve today behind one `backend.Backend` interface (`-g gdb|dlv`), with room for a native OpenOCD adapter.
+- **Scriptable automation** via Lua for custom workflows, target bring-up, and CI.
+- **Efficient rendering** — an off-screen grid with an incremental cell diff, so remote SSH sessions on large terminals stay responsive. That engine is termforge's.
 
-gdbforge is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.com/cgdb/cgdb). The module path is `github.com/yairgd/gdbforge`.
+gdbforge is a **terminal debugger in Go**, inspired by [cgdb](https://github.com/cgdb/cgdb). The module path is `github.com/yairgd/gdbforge`.
 
 ---
 
@@ -48,7 +49,7 @@ gdbforge is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
 | **Backend agnostic** | `ptyx.Session` + `backend.Backend`; GDB and Delve via `-g gdb\|dlv`; `:AI` shares the live session |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
-| **Low latency feel** | Off-screen grid; path to diff rendering to minimize I/O |
+| **Low latency feel** | Off-screen grid; only changed cells are flushed to the terminal |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |
 | **Familiar UX** | `:buffer` for models, split panes, tabs, Vim-style window commands |
 
@@ -58,13 +59,13 @@ gdbforge is a **terminal debugger UI in Go**, inspired by [cgdb](https://github.
 
 ### Why not just use cgdb?
 
-[cgdb](https://github.com/cgdb/cgdb) is mature and widely used, but it carries decades of C/ncurses heritage:
+For many people, cgdb is the right answer — it is mature, widely packaged, and does its job well. gdbforge exists because of a few things cgdb does not set out to do:
 
-- UI, layout, and GDB interaction are tightly coupled.
-- Extending cgdb (custom panes, alternate backends) requires deep familiarity with its internals.
-- Rendering is tied to ncurses; swapping backends or optimizing redraw is difficult.
+- cgdb presents a fixed source/console arrangement; gdbforge wanted arbitrary splits and named layouts, plus list panes for breakpoints, threads, and the call stack.
+- cgdb's UI, layout, and GDB interaction are closely coupled, which makes adding a custom pane or a second debugger backend a deep change. gdbforge separates the UI from the backend, which is how Delve was added as a second backend.
+- Rendering is tied to ncurses, so swapping the drawing backend or changing the redraw strategy is difficult.
 
-gdbforge treats these as **architectural constraints to avoid from day one**, not as bugs to patch later.
+These are design trade-offs, not defects: cgdb's tighter coupling is part of why it is small and dependable. gdbforge takes the opposite trade and pays for it in size and youth.
 
 ### Why not Bubble Tea / Lip Gloss?
 
@@ -88,16 +89,23 @@ The gdbforge stack (`termforge`) is intentionally lower-level than Bubble Tea.
 
 gdbforge is an external front-end: GDB remains the debugger, and MI keeps the source view and list panes in step with it without filling the console with navigation commands.
 
-| Aspect | **cgdb** | **gdb TUI** (`layout src`) | **gdbforge** (target) |
-|--------|----------|----------------------------|----------------------|
-| **UI toolkit** | ncurses | readline + ANSI (limited layout) | tcell + custom Grid |
-| **Layout** | Fixed panes, configurable | Single source + status; no splits | Recursive split tree in Workspace |
-| **Command entry** | GDB console in dedicated window | Integrated in TUI | CmdLine (`:`) + per-pane input |
-| **Extensibility** | Limited | GDB Python, no UI hooks | Planned Lua plugins + widget API |
-| **Backends** | GDB only | GDB only | GDB first; OpenOCD/JTAG planned |
-| **Rendering** | ncurses direct | Minimal | Widget → Canvas → Grid → tcell |
+| Aspect | **cgdb** | **gdb TUI** (`layout src`) | **gdbforge** |
+|--------|----------|----------------------------|--------------|
+| **UI toolkit** | ncurses | readline + ANSI (limited layout) | tcell + custom Grid (via termforge) |
+| **Layout** | Fixed source/console panes, configurable sizes | Single source + status; no splits | Recursive split tree (`:vs`, `:split`, named layouts) |
+| **Tabs** | No | No | One tab only (no tab bar yet) |
+| **Command entry** | GDB console in dedicated window | Integrated in TUI | `:` command line with Tab completion, plus the GDB console pane |
+| **Program I/O** | Shares the terminal with the debugger | Shares the terminal with GDB | Dedicated `:b io` pane, or a separate terminal emulator |
+| **List views** | Breakpoint and other info via GDB commands | None | Breakpoints, threads, and call stack as panes that refresh on stop |
+| **Assembly view** | Via GDB commands | Dedicated window (`layout asm`) | Assembly pane (`:b asm`) — GDB backend only |
+| **Register / memory views** | Via GDB commands | Register window (`layout regs`) | Via GDB commands only — no pane yet |
+| **Extensibility** | Limited | GDB Python, no UI hooks | Lua scripting (`gdbforge.*`); API not yet frozen |
+| **Backends** | GDB only | GDB only | GDB and Delve (`-g gdb\|dlv`); no native OpenOCD adapter |
+| **Rendering** | ncurses direct | Minimal | Widget → Canvas → Grid → tcell, with an incremental cell diff |
 | **Language** | C | C (GDB internals) | Go |
-| **Maturity** | Production | Production (inside GDB) | Early prototype |
+| **Maturity** | Mature; packaged by most distributions | Mature; shipped inside GDB itself | v1.x releases since August 2026; small contributor base |
+
+The three tools overlap heavily and each is better at different things. The GDB TUI needs no installation at all and has a register window gdbforge lacks. cgdb is far more battle-tested and is packaged by most distributions. gdbforge adds arbitrary splits, a separate pane for the program's own I/O, list views for breakpoints, threads and the call stack, a Delve backend, and Lua scripting for target bring-up.
 
 ### What gdbforge preserves from cgdb
 
@@ -121,11 +129,13 @@ flowchart LR
     end
 
     subgraph gdbforge["gdbforge"]
-        UI["termforge"]
-        Core["core"]
-        GDB["gdb"]
-        UI --> Core
-        Core --> GDB
+        UI["termforge (UI framework)"]
+        App["internal/app (controllers + models)"]
+        Backend["backend.Backend"]
+        GDB["internal/gdb · internal/dlv"]
+        UI --> App
+        App --> Backend
+        Backend --> GDB
     end
 
     Legacy -.->|"tight coupling"| Monolith
@@ -137,7 +147,7 @@ flowchart LR
 
 | User | Needs |
 |------|-------|
-| **Embedded developers** | GDB today; OpenOCD/JTAG later; register and memory views |
+| **Embedded developers** | Probe bring-up in one command; a native OpenOCD adapter and register/memory views later |
 | **Kernel / systems hackers** | Multi-pane layout, scriptable workflows |
 | **Daily C/C++ developers** | Fast terminal debugger with cgdb-like ergonomics |
 | **Tool builders** | Clean APIs to embed or extend debugger panes |
@@ -147,8 +157,9 @@ flowchart LR
 ## Non-goals (for now)
 
 - Replacing GDB's own TUI inside the GDB project.
-- GUI or web-based debugger (terminal-first).
-- Shipping a production-ready 1.0 — the current codebase is an **architecture prototype**.
+- Reimplementing GDB. gdbforge is a front-end; the debugger stays in charge.
+- A GUI or web-based debugger — terminal-first.
+- Implementing probe drivers. OpenOCD, the J-Link GDB Server, and `gdbserver` do that job; gdbforge orchestrates them.
 - Remote debugging transport (that belongs in backend layers, not the UI).
 
 See [ROADMAP.md](ROADMAP.md) for phased delivery plans.

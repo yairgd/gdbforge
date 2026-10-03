@@ -69,6 +69,29 @@ func TestFileListWidgetMouseSelectThenOpen(t *testing.T) {
 	}
 }
 
+func TestFileListWidgetWheelMovesSelection(t *testing.T) {
+	ctx := testWidgetCtx()
+	var opened string
+	platform.Subscribe(ctx.Bus, func(msg events.OpenSourceMsg) { opened = msg.Path })
+
+	w := NewFileListWidget()
+	w.Ctx = ctx
+	w.SetFocused(true)
+	w.SetItems([]string{"/tmp/a.c", "/tmp/b.c"})
+
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelDown, 0))
+	if w.Selected() != 1 {
+		t.Fatalf("wheel down selected=%d", w.Selected())
+	}
+	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelUp, 0))
+	if w.Selected() != 0 {
+		t.Fatalf("wheel up selected=%d", w.Selected())
+	}
+	if opened != "" {
+		t.Fatalf("wheel must not open, got %q", opened)
+	}
+}
+
 func TestFileListWidgetMarkColorFromState(t *testing.T) {
 	st := debugstate.New(platform.NewAppState())
 	st.SetMarkColor(tcell.ColorNavy)
