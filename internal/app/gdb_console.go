@@ -430,7 +430,9 @@ func (c *consoleCtl) applyStopAndPromptSideEffects(upd debugger.ConsoleUpdate) {
 		} else {
 			h.onGdbFrameSync()
 		}
-	} else if kgdb && frameSelected != nil {
+	} else if frameSelected != nil {
+		// kgdb, or frame/f/up/down typed in the GDB console: nothing armed
+		// pendingFrameSync, but =thread-selected already carries the frame.
 		h.onGdbFrameSelected(*frameSelected)
 	}
 	// Drop unused frame-nav suppress tokens once Delve is idle again.
