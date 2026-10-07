@@ -1,5 +1,5 @@
 site_name: gdbforge
-site_description: gdbforge is a keyboard-driven, multi-pane terminal debugger that drives GDB and Delve — for Linux applications, remote boards over gdbserver, STM32 and Zynq MPSoC firmware, and the Linux kernel over kgdb.
+site_description: Debug MCU firmware, embedded Linux apps, the Linux kernel and desktop programs from one terminal. gdbforge is a keyboard-driven, multi-pane GDB front-end that automates target bring-up with OpenOCD, J-Link, gdbserver and kgdb — and drives Delve for Go.
 site_url: https://yairgd.github.io/gdbforge/
 repo_url: https://github.com/yairgd/gdbforge
 repo_name: yairgd/gdbforge
@@ -68,23 +68,25 @@ nav:
       - Input and keys: INPUT.md
       - Window management: WINDOW_MANAGEMENT.md
       - Exec shell: EXEC_SHELL.md
-  - Architecture:
-      - Overview: OVERVIEW.md
-      - Architecture: ARCHITECTURE.md
-      - PTY architecture: PTY_ARCHITECTURE.md
-      - Debugger integration: DEBUGGER_INTEGRATION.md
-      - Dependencies: DEPENDENCIES.md
-      - Directory structure: DIRECTORY_STRUCTURE.md
-  - Code flows:
-      - Flow browser: flows/browser.md
-  - Framework:
-      - termforge documentation: https://yairgd.github.io/termforge/
-  - Development:
-      - Developer guide: DEVELOPER_GUIDE.md
-      - Changelog: CHANGELOG.md
-      - Roadmap: ROADMAP.md
-      - Releasing: RELEASING.md
-      - Hosting: HOSTING.md
+  - Internals:
+      - Start here: INTERNALS.md
+      - Architecture:
+          - Overview: OVERVIEW.md
+          - Architecture: ARCHITECTURE.md
+          - PTY architecture: PTY_ARCHITECTURE.md
+          - Debugger integration: DEBUGGER_INTEGRATION.md
+          - Dependencies: DEPENDENCIES.md
+          - Directory structure: DIRECTORY_STRUCTURE.md
+      - Code flows:
+          - Flow browser: flows/browser.md
+      - Framework:
+          - termforge documentation: https://yairgd.github.io/termforge/
+      - Development:
+          - Developer guide: DEVELOPER_GUIDE.md
+          - Changelog: CHANGELOG.md
+          - Roadmap: ROADMAP.md
+          - Releasing: RELEASING.md
+          - Hosting: HOSTING.md
 
 markdown_extensions:
   - admonition
@@ -108,7 +110,7 @@ markdown_extensions:
       alternate_style: true
 
 extra_css:
-  - stylesheets/extra.css?v=pz-box-15
+  - stylesheets/extra.css?v=pz-box-16
   - stylesheets/flows-browser.css
 
 extra_javascript:

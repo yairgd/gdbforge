@@ -148,3 +148,10 @@ body.pz-lightbox-open {
   margin: 1rem auto;
   border-radius: 0.4rem;
 }
+
+/* Homepage hero tagline (docs/README.md) */
+.md-typeset .gf-tagline {
+  font-size: 1.25rem;
+  line-height: 1.4;
+  margin-top: -0.5rem;
+}

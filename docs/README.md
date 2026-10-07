@@ -1,33 +1,35 @@
 ---
-title: gdbforge — Terminal Debugger for GDB and Delve
-description: gdbforge is a keyboard-driven, multi-pane terminal debugger that drives GDB and Delve — for Linux applications, remote boards over gdbserver, STM32 and Zynq MPSoC firmware, and the Linux kernel over kgdb.
+title: gdbforge — Terminal Debugger for Embedded, Kernel and Linux Targets
+description: Debug MCU firmware, embedded Linux apps, the Linux kernel and desktop programs from one terminal. gdbforge is a keyboard-driven, multi-pane GDB front-end that also automates target bring-up with OpenOCD, J-Link, gdbserver and kgdb.
 ---
 
-# gdbforge — Terminal Debugger for GDB and Delve
+# gdbforge
 
-**gdbforge** is a terminal debugger front-end. It puts source, the debugger console, your
-program's own input and output, threads, the call stack, and breakpoints on one
-keyboard-driven screen, and drives **GDB** or **Delve** underneath (`-g gdb|dlv`).
+**Debug MCU firmware, embedded Linux apps, the Linux kernel and desktop programs from one
+terminal — one command from target to breakpoint.**
+{ .gf-tagline }
 
-GDB remains the debugger. gdbforge talks to it over MI on a second UI channel
-(`new-ui mi2`), so the source view and the list panes follow every stop automatically
-while `:b gdb` stays a normal, fully interactive GDB console.
+GDB stays the debugger. gdbforge is a keyboard-driven, multi-pane front-end around it —
+source, the real GDB console, program I/O, threads, call stack and breakpoints on one
+screen — and one `:lua` command brings the target up: it starts OpenOCD, the J-Link GDB
+Server, `gdbserver` over SSH, or kgdb, and attaches.
+
+**Built for:** Linux desktop applications · applications on embedded Linux boards ·
+the Linux kernel and its modules · firmware on any MCU that OpenOCD or the J-Link GDB
+Server can reach (bundled bring-up scripts cover STM32 and Zynq MPSoC Cortex-A53/R5).
 
 [Install](#install){ .md-button .md-button--primary }
 [First debugging session](#your-first-debugging-session){ .md-button }
 [User guide](USER_GUIDE.md){ .md-button }
 
----
+MIT licensed · Linux and macOS, `amd64` and `arm64` ·
+[source on GitHub](https://github.com/yairgd/gdbforge)
 
-## Watch it work
+![gdbforge debugging Cortex-R5 firmware over J-Link: source, call stack, threads, and breakpoint panes updating while stepping](media/gdbforge-demo-r5.gif)
 
-**Cortex-R5 bare-metal firmware over J-Link** — gdbforge brings up the probe with one Lua
-command (`:lua r5_baremetal_jlink` spawns JLinkGDBServer, attaches and loads the ELF),
-then steps a deep call stack with the source, call stack, and breakpoint panes updating
-together.
-
-![gdbforge debugging Cortex-R5 firmware over J-Link: source, call stack, threads, and breakpoint panes updating while stepping](media/gdbforge-demo-r5.gif){ loading=lazy }
-
+**Cortex-R5 bare-metal firmware over J-Link.** `:lua r5_baremetal_jlink` spawns
+JLinkGDBServer, attaches and loads the ELF; then a deep call stack is stepped with the
+source, call stack and breakpoint panes updating together.
 [Watch on YouTube](https://www.youtube.com/watch?v=jbS5SE7Xu3g) ·
 [Zynq MPSoC guide](MPSOC_DEBUG.md) ·
 samples: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/examples/stack_demo.c) (bare metal),
@@ -36,23 +38,25 @@ samples: [`examples/stack_demo.c`](https://github.com/yairgd/gdbforge/blob/main/
 
 ---
 
-## What you get
+## Why gdbforge
 
-- **One screen, many panes** — source, GDB/Delve console, program I/O, threads, call
-  stack, breakpoints, assembly. Named layouts (`:layout wide`, `panels`, `classic`) and a
-  recursive split tree (`:vs`, `:split`).
-- **A real GDB console** — `:b gdb` is the genuine GDB session. Anything you know how to
-  type into GDB still works.
-- **Program output that does not fight the debugger** — the inferior's stdin/stdout gets
-  its own `:b io` pane, or a real external terminal for curses/TUI programs
-  (`:set inferior-tty`).
-- **Vim-style interaction** — normal/insert/command/search modes, a `:` command line with
-  Tab completion, `Ctrl-W` focus chords, mouse and clipboard selection.
-- **Breakpoints that persist** — Space toggles one on the cursor line; they are saved to
-  `./.gdbforge/breakpoints.yaml` and restored next session.
-- **Lua automation for target bring-up** — one `:lua` command starts OpenOCD, a J-Link GDB
-  server, `gdbserver` over SSH, or kgdb, then attaches.
-- **Go programs too** — the same UI over Delve with `-g dlv`.
+| | **gdbforge** | **cgdb** | **GDB TUI** | **Vitis / Eclipse** | **VS Code + Cortex-Debug** |
+|---|---|---|---|---|---|
+| Terminal-native | Yes | Yes | Yes | No — desktop GUI | No — runs inside VS Code |
+| Works over SSH | Yes | Yes | Yes | — <!-- TODO verify --> | — <!-- TODO verify: VS Code Remote-SSH --> |
+| One-command target bring-up | `:lua` scripts start OpenOCD, J-Link GDB Server, `gdbserver` or kgdb, then attach | No | No | — <!-- TODO verify: launch configurations --> | — <!-- TODO verify: launch.json servertype --> |
+| Real GDB console | Yes — `:b gdb` is the GDB session | Yes | Yes — it is GDB | — <!-- TODO verify --> | — <!-- TODO verify: debug console with -exec --> |
+| Program I/O separate from the debugger | `:b io` pane, or an external terminal | No — shares the terminal | No — shares the terminal | — <!-- TODO verify --> | — <!-- TODO verify --> |
+| Breakpoint, thread and call-stack views | Panes that refresh on every stop | Via GDB commands | No | Yes | Yes |
+| Register and memory views | Not yet — GDB commands in the console | Via GDB commands | Register window | Yes | Yes |
+| kgdb workflow | `:lua kgdb_uart` — one UART with kdmx; also two UARTs or Ethernet | Manual GDB commands | Manual GDB commands | — <!-- TODO verify --> | — <!-- TODO verify --> |
+| Scriptable | Lua (`gdbforge.*`); API not frozen yet | Limited | GDB Python, no UI hooks | — <!-- TODO verify --> | — <!-- TODO verify --> |
+
+If you want register and peripheral views today, an IDE is the better fit; if you want
+plain GDB in a terminal, cgdb and the GDB TUI are smaller and more mature. gdbforge is for
+terminal users who also want target bring-up, program I/O and list panes in one
+workspace. More detail: [FAQ](FAQ.md#how-is-gdbforge-different-from-cgdb) ·
+[full comparison](OVERVIEW.md#comparison-to-cgdb-and-gdb-tui).
 
 ---
 
@@ -187,7 +191,7 @@ Full key and command reference: [User guide](USER_GUIDE.md) · common setup ques
 ## Demos by use case
 
 Every screencast below is a recording of a real session. The Cortex-R5 demo is at the
-[top of this page](#watch-it-work).
+[top of this page](#gdbforge).
 
 ### Embedded and bare-metal firmware
 
@@ -263,85 +267,8 @@ Planned work and known gaps: [roadmap](ROADMAP.md).
 
 ---
 
-## Documentation
-
-### Using gdbforge
-
-| Page | What is in it |
-|------|---------------|
-| [User guide](USER_GUIDE.md) | The full manual — modes, keys, colon commands, layouts, panes. Twin of the in-app `:help` |
-| [FAQ](FAQ.md) | Comparisons with cgdb and the GDB TUI, program I/O, supported targets and probes, Go/Delve |
-| [Linux applications](EMBEDDED_LINUX_DEBUG.md) | `:lua remotegdb` over SSH, `gdbserver`, `:b io` versus an external terminal |
-| [Zynq MPSoC](MPSOC_DEBUG.md) | Cortex-A53 and Cortex-R5, J-Link and OpenOCD workflows |
-| [STM32 and Zephyr](STM32_DEBUG.md) | Nucleo F429ZI and STM32F405; ST-Link, J-Link, Zephyr and FreeRTOS profiles |
-| [Kernel and kgdb](KERNEL_KGDB.md) | Two UARTs, one UART with kdmx, in-process mux, Ethernet |
-| [Lua API](LUA_API.md) | The `gdbforge.*` functions available to scripts |
-| [Plugins](PLUGINS.md) | How Lua scripts are discovered and loaded |
-| [Command system](COMMAND_SYSTEM.md) · [Input](INPUT.md) · [Window management](WINDOW_MANAGEMENT.md) · [Exec shell](EXEC_SHELL.md) | Command tree and completion, key handling, splits and tabs, `:!` panes |
-| [Changelog](CHANGELOG.md) | What changed in each release |
-
-### Developing gdbforge
-
-The architecture — the MVC split, controllers and host interfaces, the event bus, and the
-repository layout — is documented separately:
-
-| Page | What is in it |
-|------|---------------|
-| [Overview](OVERVIEW.md) | Goals, motivation, and how gdbforge compares to cgdb and the GDB TUI |
-| [Architecture](ARCHITECTURE.md) | Subsystems and data flow. Start with [MVC](ARCHITECTURE.md#mvc-current), [built on termforge](ARCHITECTURE.md#built-on-termforge), and the [design principles](ARCHITECTURE.md#design-principles) |
-| [PTY architecture](PTY_ARCHITECTURE.md) | Dual PTY master/slave, GDB versus Delve, `:b io`, external terminal |
-| [Debugger integration](DEBUGGER_INTEGRATION.md) | GDB MI2, the unified `backend.Backend`, the [Delve backend](DEBUGGER_INTEGRATION.md#delve-backend-peer-of-gdb), `:AI` / GdbMcpService |
-| [Window management](WINDOW_MANAGEMENT.md) | The three-band root layout, split trees, tabs, command line |
-| [Directory structure](DIRECTORY_STRUCTURE.md) | Repository layout and the responsibility of each package |
-| [Dependencies](DEPENDENCIES.md) | Go modules and the import rules between the debugger and the framework |
-| [Developer guide](DEVELOPER_GUIDE.md) | Onboarding, which files to read in what order, common pitfalls |
-| [Flow browser](flows/browser.md) | Curated call trees (Tab completion, Ctrl-C, the stop pipeline) with links to source. Has its own search box, separate from this site's header search |
-| [Roadmap](ROADMAP.md) · [Releasing](RELEASING.md) · [Hosting](HOSTING.md) | Planned work, how releases are cut, how these docs are built |
-
-The generic terminal UI machinery — the widget system, the rendering pipeline, and the
-split-tree engine — lives in **termforge** and is documented on its own site:
-[UI architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/) ·
-[rendering](https://yairgd.github.io/termforge/RENDERING/) ·
-[window management](https://yairgd.github.io/termforge/WINDOW_MANAGEMENT/).
-
-Mermaid diagram sources live under
-[`docs/diagrams/`](https://github.com/yairgd/gdbforge/tree/main/docs/diagrams).
-
-### Reading these docs locally
-
-```bash
-python3 -m pip install -r requirements-docs.txt
-./docs/serve.sh          # or: task docs
-```
-
-Then open <http://127.0.0.1:8765/>. Details: [Hosting](HOSTING.md).
-
----
-
-## Related project: termforge
-
-gdbforge is the debugger. The terminal UI it runs on is a separate project,
-**[termforge](https://yairgd.github.io/termforge/)** — widgets, split-tree windows, tabs,
-colon commands with tab completion, key-sequence bindings, and the terminal emulator pane,
-with **no debugger in it**. termforge was extracted *from* gdbforge once that machinery
-stood on its own, so gdbforge is both its origin and its largest consumer. This repository
-is now the debugger only.
-
-| Question | Site |
-|----------|------|
-| How do I debug something with GDB, Delve, an embedded target, or kgdb? | **This site** |
-| How does a widget, split tree, or `:command` work in general? | [termforge documentation](https://yairgd.github.io/termforge/) — [UI architecture](https://yairgd.github.io/termforge/UI_ARCHITECTURE/), [window management](https://yairgd.github.io/termforge/WINDOW_MANAGEMENT/), [rendering](https://yairgd.github.io/termforge/RENDERING/) |
-| How do I build my own terminal app on the same framework? | [termforge documentation](https://yairgd.github.io/termforge/) |
-| How does gdbforge drive GDB or Delve? | [Debugger integration](DEBUGGER_INTEGRATION.md) on this site |
-
-Source: [github.com/yairgd/termforge](https://github.com/yairgd/termforge) ·
-how the split works: [ARCHITECTURE.md — Built on termforge](ARCHITECTURE.md#built-on-termforge).
-
----
-
-## Related links
-
-- [Project README on GitHub](https://github.com/yairgd/gdbforge#readme)
-- [Releases and prebuilt binaries](https://github.com/yairgd/gdbforge/releases)
-- [CONTRIBUTING.md](https://github.com/yairgd/gdbforge/blob/main/CONTRIBUTING.md) — contribution workflow
-- [Issue tracker](https://github.com/yairgd/gdbforge/issues)
+More: [internals and contributing](INTERNALS.md) ·
+built on [termforge](https://yairgd.github.io/termforge/) ·
+[releases](https://github.com/yairgd/gdbforge/releases) ·
+[issues](https://github.com/yairgd/gdbforge/issues) ·
+[CONTRIBUTING.md](https://github.com/yairgd/gdbforge/blob/main/CONTRIBUTING.md)
