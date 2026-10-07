@@ -256,8 +256,8 @@ func (a *DebuggerApp) showFrameSource(fr models.StackFrame) {
 	case fr.File != "":
 		file := normalizeCodePath(fr.File)
 		a.Debug().SetCurrentLocation(file, fr.Line)
-		// Browse only: keep ━━▶ on the real stop PC (same as Assembly).
-		w = a.bufs.showCodeBrowse(file, fr.Line)
+		// ━━▶ follows the selected frame (f/up/down, call stack), like GDB.
+		w = a.bufs.showCodeAt(file, fr.Line)
 		if w != nil && w.Unavailable() {
 			w.ShowUnavailable(file, formatUnavailableExtra(fr.Func, fr.Line))
 		}
