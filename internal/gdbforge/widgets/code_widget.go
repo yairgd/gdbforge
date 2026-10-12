@@ -111,14 +111,14 @@ func (w *CodeWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	st := tcell.StyleDefault
 	ln := lineIdx + 1
 	if ln == w.pcLine {
-		st = st.Background(w.pcColor())
+		st = st.Background(w.state.PCColor())
 	}
 	// Browse cursor (blue): shown whenever selLine is set — including when
 	// focus is on Breakpoints after a click-to-jump (━━▶ stays on real PC).
 	if ln == w.selLine {
 		st = st.Bold(true)
 		if ln != w.pcLine {
-			st = st.Background(w.codeSelColor())
+			st = st.Background(w.state.CodeSelColor())
 		}
 	}
 	_ = line
@@ -130,7 +130,7 @@ func (w *CodeWidget) SetSearchPattern(pattern string) {
 	if w == nil || w.doc == nil {
 		return
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	w.doc.SetSearchPattern(pattern)
 }
 
@@ -139,7 +139,7 @@ func (w *CodeWidget) CommitSearch(pattern string) {
 	if w == nil || w.doc == nil {
 		return
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	// Keep viewport cursor aligned with selLine before commit jump.
 	if w.selLine >= 1 {
 		w.doc.CursorLine = w.selLine - 1
@@ -168,7 +168,7 @@ func (w *CodeWidget) SearchNext() bool {
 	if w == nil || w.doc == nil {
 		return false
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	if w.selLine >= 1 {
 		w.doc.CursorLine = w.selLine - 1
 	}
@@ -180,7 +180,7 @@ func (w *CodeWidget) SearchPrev() bool {
 	if w == nil || w.doc == nil {
 		return false
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	if w.selLine >= 1 {
 		w.doc.CursorLine = w.selLine - 1
 	}
@@ -492,34 +492,6 @@ func (w *CodeWidget) HasDisabledBreak(line int) bool {
 	return ok && !g.Enabled
 }
 
-func (w *CodeWidget) breakColor() tcell.Color {
-	return themeFrom{w.state}.Break()
-}
-
-func (w *CodeWidget) breakDisabledColor() tcell.Color {
-	return themeFrom{w.state}.BreakDisabled()
-}
-
-func (w *CodeWidget) breakCondColor() tcell.Color {
-	return themeFrom{w.state}.BreakCond()
-}
-
-func (w *CodeWidget) pcColor() tcell.Color {
-	return themeFrom{w.state}.PC()
-}
-
-func (w *CodeWidget) codeSelColor() tcell.Color {
-	return themeFrom{w.state}.CodeSel()
-}
-
-func (w *CodeWidget) searchColor() tcell.Color {
-	return themeFrom{w.state}.Search()
-}
-
-func (w *CodeWidget) mutedColor() tcell.Color {
-	return themeFrom{w.state}.Muted()
-}
-
 // cellStyle paints gutter mark / line number / │ and syntax spans (no buffer ANSI).
 func (w *CodeWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) tcell.Style {
 	if w == nil || w.unavailable {
@@ -540,7 +512,7 @@ func (w *CodeWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) tcell
 			bg := breakGutterColor(g, w.state)
 			return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
 		}
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	if absVisCol == 8 { // │
 		return st.Foreground(tcell.ColorGray)

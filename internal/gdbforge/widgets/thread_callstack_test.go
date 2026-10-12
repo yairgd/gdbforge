@@ -211,12 +211,12 @@ func TestCallStackWidgetProgramPointStyle(t *testing.T) {
 	})
 	w.move(1)
 
-	br := w.rowStyle(0, "")
+	br := w.rowStyle(0)
 	_, brBg, _ := br.Decompose()
 	if brBg != platform.DefaultStackBreakColor {
 		t.Fatalf("frame0+stopPC bg=%v want %v", brBg, platform.DefaultStackBreakColor)
 	}
-	f1 := w.rowStyle(1, "")
+	f1 := w.rowStyle(1)
 	_, f1Bg, _ := f1.Decompose()
 	if f1Bg == platform.DefaultStackBreakColor {
 		t.Fatal("frame 1 must not use stack break green")
@@ -238,12 +238,12 @@ func TestThreadWidgetProgramPointStyle(t *testing.T) {
 	})
 	w.move(1)
 
-	br := w.rowStyle(0, "")
+	br := w.rowStyle(0)
 	_, brBg, _ := br.Decompose()
 	if brBg != platform.DefaultStackBreakColor {
 		t.Fatalf("current+PC bg=%v want %v", brBg, platform.DefaultStackBreakColor)
 	}
-	other := w.rowStyle(1, "")
+	other := w.rowStyle(1)
 	_, otherBg, _ := other.Decompose()
 	if otherBg == platform.DefaultStackBreakColor {
 		t.Fatal("non-current thread must not be green")
@@ -269,44 +269,6 @@ func TestThreadWidgetWheelActivates(t *testing.T) {
 	w.HandleEvent(tcell.NewEventMouse(0, 0, tcell.WheelUp, 0))
 	if w.Selected() != 0 || got.ID != "1" {
 		t.Fatalf("wheel up selected=%d activated=%v", w.Selected(), got)
-	}
-}
-
-func TestListWidgetsMouseSyncSelection(t *testing.T) {
-	bp := NewBreakpointWidget()
-	bp.SetFocused(true)
-	bp.SetItems([]models.BreakInfo{
-		{Number: 1, Enabled: true, File: "a.c", Line: 1},
-		{Number: 2, Enabled: true, File: "a.c", Line: 2},
-	})
-	bp.SetSelectedRow(1)
-	bp.syncSelectedFromViewport()
-	if bp.Selected() != 1 {
-		t.Fatalf("bp selected=%d", bp.Selected())
-	}
-
-	th := NewThreadWidget()
-	th.SetFocused(true)
-	th.SetItems([]models.ThreadInfo{
-		{ID: "1", State: "stopped"},
-		{ID: "2", State: "running"},
-	})
-	th.SetSelectedRow(1)
-	th.syncSelectedFromViewport()
-	if th.Selected() != 1 {
-		t.Fatalf("thread selected=%d", th.Selected())
-	}
-
-	cs := NewCallStackWidget()
-	cs.SetFocused(true)
-	cs.SetItems([]models.StackFrame{
-		{Level: 0, Func: "main"},
-		{Level: 1, Func: "start"},
-	})
-	cs.SetSelectedRow(1)
-	cs.syncSelectedFromViewport()
-	if cs.Selected() != 1 {
-		t.Fatalf("callstack selected=%d", cs.Selected())
 	}
 }
 

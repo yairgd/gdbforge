@@ -430,44 +430,16 @@ func (w *AssemblyWidget) rowStyle(lineIdx int, line string) tcell.Style {
 	}
 	addr := normalizeAsmAddr(w.items[itemIdx].Addr)
 	if addr != "" && addr == w.pcAddr {
-		st = st.Background(w.pcColor())
+		st = st.Background(w.state.PCColor())
 	}
 	if itemIdx == w.selIdx {
 		st = st.Bold(true)
 		if addr == "" || addr != w.pcAddr {
-			st = st.Background(w.codeSelColor())
+			st = st.Background(w.state.CodeSelColor())
 		}
 	}
 	_ = line
 	return st
-}
-
-func (w *AssemblyWidget) breakColor() tcell.Color {
-	return themeFrom{w.state}.Break()
-}
-
-func (w *AssemblyWidget) breakDisabledColor() tcell.Color {
-	return themeFrom{w.state}.BreakDisabled()
-}
-
-func (w *AssemblyWidget) breakCondColor() tcell.Color {
-	return themeFrom{w.state}.BreakCond()
-}
-
-func (w *AssemblyWidget) pcColor() tcell.Color {
-	return themeFrom{w.state}.PC()
-}
-
-func (w *AssemblyWidget) codeSelColor() tcell.Color {
-	return themeFrom{w.state}.CodeSel()
-}
-
-func (w *AssemblyWidget) searchColor() tcell.Color {
-	return themeFrom{w.state}.Search()
-}
-
-func (w *AssemblyWidget) mutedColor() tcell.Color {
-	return themeFrom{w.state}.Muted()
 }
 
 // cellStyle paints mark / address / <+N>: / chrome via Canvas (no buffer ANSI).
@@ -477,7 +449,7 @@ func (w *AssemblyWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) t
 	}
 	itemIdx := lineIdx - w.prefix
 	if itemIdx < 0 || itemIdx >= len(w.items) {
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	it := w.items[itemIdx]
 	norm := normalizeAsmAddr(it.Addr)
@@ -500,7 +472,7 @@ func (w *AssemblyWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) t
 		offStart := addrEnd + 1                     // space after addr
 		offEnd := offStart + 2 + w.offWidth + 2 + 1 // <+N>:␠
 		if absVisCol >= offStart && absVisCol < offEnd {
-			return st.Foreground(w.mutedColor())
+			return st.Foreground(w.state.MutedColor())
 		}
 		return st
 	}
@@ -515,7 +487,7 @@ func (w *AssemblyWidget) cellStyle(lineIdx int, absVisCol int, st tcell.Style) t
 		return w.addrCellStyle(norm, st)
 	}
 	if absVisCol == addrEnd { // trailing ':'
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	return st
 }
@@ -525,7 +497,7 @@ func (w *AssemblyWidget) addrCellStyle(norm string, st tcell.Style) tcell.Style 
 		bg := breakGutterColor(g, w.state)
 		return st.Background(bg).Foreground(platform.ContrastColor(bg)).Bold(true)
 	}
-	return st.Foreground(w.mutedColor())
+	return st.Foreground(w.state.MutedColor())
 }
 
 func (w *AssemblyWidget) syncPrefix() {
@@ -815,7 +787,7 @@ func (w *AssemblyWidget) SetSearchPattern(pattern string) {
 	if w == nil || w.doc == nil {
 		return
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	w.doc.SetSearchPattern(pattern)
 }
 
@@ -823,7 +795,7 @@ func (w *AssemblyWidget) CommitSearch(pattern string) {
 	if w == nil || w.doc == nil {
 		return
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	w.doc.CursorLine = w.selIdx + w.prefix
 	w.doc.CommitSearch(pattern, w.lineCount(), w.lineAt)
 }
@@ -846,7 +818,7 @@ func (w *AssemblyWidget) SearchNext() bool {
 	if w == nil || w.doc == nil {
 		return false
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	w.doc.CursorLine = w.selIdx + w.prefix
 	ok := w.doc.SearchNext(w.lineCount(), w.lineAt)
 	if ok {
@@ -869,7 +841,7 @@ func (w *AssemblyWidget) SearchPrev() bool {
 	if w == nil || w.doc == nil {
 		return false
 	}
-	w.doc.SetSearchColor(w.searchColor())
+	w.doc.SetSearchColor(w.state.SearchColor())
 	w.doc.CursorLine = w.selIdx + w.prefix
 	ok := w.doc.SearchPrev(w.lineCount(), w.lineAt)
 	if ok {

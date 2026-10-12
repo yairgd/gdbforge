@@ -30,8 +30,7 @@ func NewFileListWidget() *FileListWidget {
 	tbl.AddColumn("File")
 
 	w := &FileListWidget{TableWidget: tw}
-	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
-	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetRowStyleFunc(w.rowStyle)
 	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
 	return w
@@ -51,36 +50,15 @@ func (w *FileListWidget) initKeyBindings() {
 	w.BindKeyFunc("open", func(args ...any) { w.openSelected() }, "<Enter>", "<C-m>")
 }
 
-func (w *FileListWidget) markColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkColor()
-	}
-	return platform.DefaultMarkColor
-}
-
-func (w *FileListWidget) markDimColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkDimColor()
-	}
-	return platform.DefaultMarkDimColor
-}
-
-func (w *FileListWidget) mutedColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MutedColor()
-	}
-	return platform.DefaultMutedColor
-}
-
-func (w *FileListWidget) rowStyle(lineIdx int, _ string) tcell.Style {
+func (w *FileListWidget) rowStyle(lineIdx int) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.paths) == 0 {
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	if lineIdx == w.SelectedRow() {
-		bg := w.markDimColor()
+		bg := w.state.MarkDimColor()
 		if w.Focused() {
-			bg = w.markColor()
+			bg = w.state.MarkColor()
 		}
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
@@ -95,9 +73,6 @@ func (w *FileListWidget) move(delta int) {
 }
 
 func (w *FileListWidget) moveTo(row int) {
-	if len(w.paths) == 0 {
-		return
-	}
 	w.SetSelectedRow(row)
 	w.EnsureRowVisible()
 }
@@ -115,15 +90,8 @@ func (w *FileListWidget) openSelected() {
 
 func (w *FileListWidget) SetItems(paths []string) {
 	w.paths = append([]string(nil), paths...)
-	row := w.SelectedRow()
-	if row >= len(w.paths) && len(w.paths) > 0 {
-		row = len(w.paths) - 1
-	}
-	if row < 0 {
-		row = 0
-	}
 	w.ResetHorizontalPan()
-	w.SetSelectedRow(row)
+	w.SetSelectedRow(w.SelectedRow()) // clamp to the new row count
 	w.EnsureRowVisible()
 }
 
@@ -168,10 +136,6 @@ func (w *FileListWidget) HandleEvent(ev tcell.Event) {
 	case *tcell.EventKey:
 		w.HandleFocusKey(e)
 	}
-}
-
-func (w *FileListWidget) SetFocused(focused bool) {
-	w.TableWidget.SetFocused(focused)
 }
 
 func (w *FileListWidget) Paths() []string {

@@ -26,9 +26,7 @@ type BreakpointWidget struct {
 
 	items []models.BreakInfo
 
-	mouseDown     bool
-	pressOnRow    bool
-	pressSelected int
+	mouseDown bool
 }
 
 func NewBreakpointWidget() *BreakpointWidget {
@@ -42,8 +40,7 @@ func NewBreakpointWidget() *BreakpointWidget {
 	tbl.AddColumn("Loc")
 
 	w := &BreakpointWidget{TableWidget: tw}
-	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
-	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetRowStyleFunc(w.rowStyle)
 	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
 	return w
@@ -53,15 +50,8 @@ func (w *BreakpointWidget) SetAppState(st *debugstate.State) { w.state = st }
 
 func (w *BreakpointWidget) SetItems(items []models.BreakInfo) {
 	w.items = append([]models.BreakInfo(nil), items...)
-	row := w.SelectedRow()
-	if row >= len(w.items) {
-		row = len(w.items) - 1
-	}
-	if row < 0 {
-		row = 0
-	}
 	w.ResetHorizontalPan()
-	w.SetSelectedRow(row)
+	w.SetSelectedRow(w.SelectedRow()) // clamp to the new row count
 	w.EnsureRowVisible()
 }
 
@@ -83,18 +73,18 @@ func (w *BreakpointWidget) initKeyBindings() {
 	}, "d")
 }
 
-func (w *BreakpointWidget) rowStyle(lineIdx int, _ string) tcell.Style {
+func (w *BreakpointWidget) rowStyle(lineIdx int) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	if lineIdx == w.SelectedRow() {
-		bg := w.markDimColor()
+		bg := w.state.MarkDimColor()
 		if w.Focused() {
-			bg = w.markColor()
+			bg = w.state.MarkColor()
 		}
 		if lineIdx >= 0 && lineIdx < len(w.items) && w.atProgramPoint(w.items[lineIdx]) {
-			bg = w.stackBreakColor()
+			bg = w.state.StackBreakColor()
 		}
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
@@ -103,7 +93,7 @@ func (w *BreakpointWidget) rowStyle(lineIdx int, _ string) tcell.Style {
 	}
 	it := w.items[lineIdx]
 	if w.atProgramPoint(it) {
-		bg := w.stackBreakColor()
+		bg := w.state.StackBreakColor()
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	bg := breakGutterColor(models.BreakGutter{
@@ -120,54 +110,11 @@ func (w *BreakpointWidget) atProgramPoint(it models.BreakInfo) bool {
 	return sameSourceLoc(it.File, it.Line, w.state.StopFile(), w.state.StopLine())
 }
 
-func (w *BreakpointWidget) markColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkColor()
-	}
-	return platform.DefaultMarkColor
-}
-
-func (w *BreakpointWidget) markDimColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkDimColor()
-	}
-	return platform.DefaultMarkDimColor
-}
-
-func (w *BreakpointWidget) stackBreakColor() tcell.Color {
-	if w.state != nil {
-		return w.state.StackBreakColor()
-	}
-	return platform.DefaultStackBreakColor
-}
-
-func (w *BreakpointWidget) mutedColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MutedColor()
-	}
-	return platform.DefaultMutedColor
-}
-
 func (w *BreakpointWidget) move(delta int) {
 	if len(w.items) == 0 {
 		return
 	}
 	w.MoveSelection(delta)
-}
-
-func (w *BreakpointWidget) syncSelectedFromViewport() {
-	n := len(w.items)
-	if n == 0 {
-		return
-	}
-	row := w.SelectedRow()
-	if row < 0 {
-		row = 0
-	}
-	if row >= n {
-		row = n - 1
-	}
-	w.SetSelectedRow(row)
 }
 
 func (w *BreakpointWidget) activateSelected(commitFocus bool) {
@@ -217,45 +164,7 @@ func (w *BreakpointWidget) fillTable(t *termforge.Table) {
 func (w *BreakpointWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		if w.TryDoubleClickWord(e) {
-			return
-		}
-		btns := e.Buttons()
-		if btns&tcell.WheelUp != 0 {
-			w.move(-1)
-			w.activateSelected(false)
-			return
-		}
-		if btns&tcell.WheelDown != 0 {
-			w.move(1)
-			w.activateSelected(false)
-			return
-		}
-		mx, my := e.Position()
-		hitRow, onRow := w.HitDataRow(mx, my)
-		if btns&tcell.ButtonPrimary != 0 {
-			if onRow {
-				w.SetSelectedRow(hitRow)
-				if !w.mouseDown {
-					w.mouseDown = true
-					w.pressOnRow = true
-					w.pressSelected = w.SelectedRow()
-				}
-			} else if !w.mouseDown {
-				w.pressOnRow = false
-			}
-			return
-		}
-		if w.mouseDown {
-			w.mouseDown = false
-			if onRow {
-				w.SetSelectedRow(hitRow)
-			}
-			if w.pressOnRow {
-				w.activateSelected(false)
-			}
-			w.pressOnRow = false
-		}
+		handleListMouse(w.TableWidget, &w.mouseDown, e, w.move, func() { w.activateSelected(false) })
 	case *tcell.EventKey:
 		w.HandleFocusKey(e)
 	}
@@ -265,23 +174,12 @@ func (w *BreakpointWidget) SetFocused(focused bool) {
 	w.TableWidget.SetFocused(focused)
 	if !focused {
 		w.mouseDown = false
-		w.pressOnRow = false
 	}
 }
 
 func (w *BreakpointWidget) Selected() int { return w.SelectedRow() }
 
 func (w *BreakpointWidget) SelectIndex(i int) {
-	if len(w.items) == 0 {
-		w.SetSelectedRow(0)
-		return
-	}
-	if i < 0 {
-		i = 0
-	}
-	if i >= len(w.items) {
-		i = len(w.items) - 1
-	}
 	w.SetSelectedRow(i)
 	w.EnsureRowVisible()
 }

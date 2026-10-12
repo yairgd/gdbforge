@@ -293,6 +293,9 @@ func (s *State) ClearStopLocation() {
 }
 
 func (s *State) BreakColor() tcell.Color {
+	if s == nil {
+		return platform.DefaultBreakColor
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.breakColor == tcell.ColorDefault {
@@ -308,6 +311,9 @@ func (s *State) SetBreakColor(c tcell.Color) {
 }
 
 func (s *State) BreakDisabledColor() tcell.Color {
+	if s == nil {
+		return platform.DefaultBreakDisabledColor
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.breakDisabledColor == tcell.ColorDefault {
@@ -323,6 +329,9 @@ func (s *State) SetBreakDisabledColor(c tcell.Color) {
 }
 
 func (s *State) BreakCondColor() tcell.Color {
+	if s == nil {
+		return platform.DefaultBreakCondColor
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.breakCondColor == tcell.ColorDefault {
@@ -338,6 +347,9 @@ func (s *State) SetBreakCondColor(c tcell.Color) {
 }
 
 func (s *State) PCColor() tcell.Color {
+	if s == nil {
+		return platform.DefaultPCColor
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.pcColor == tcell.ColorDefault {
@@ -353,6 +365,9 @@ func (s *State) SetPCColor(c tcell.Color) {
 }
 
 func (s *State) StackBreakColor() tcell.Color {
+	if s == nil {
+		return platform.DefaultStackBreakColor
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.stackBreakColor == tcell.ColorDefault {
@@ -367,37 +382,38 @@ func (s *State) SetStackBreakColor(c tcell.Color) {
 	s.mu.Unlock()
 }
 
+// Color getters are nil-safe: a nil State returns the platform defaults.
 // Mark / list-selection colors stay on platform.AppState; forwarded for widgets.
 func (s *State) MarkColor() tcell.Color {
-	if s.app != nil {
+	if s != nil && s.app != nil {
 		return s.app.MarkColor()
 	}
 	return platform.DefaultMarkColor
 }
 
 func (s *State) MarkDimColor() tcell.Color {
-	if s.app != nil {
+	if s != nil && s.app != nil {
 		return s.app.MarkDimColor()
 	}
 	return platform.DefaultMarkDimColor
 }
 
 func (s *State) CodeSelColor() tcell.Color {
-	if s.app != nil {
+	if s != nil && s.app != nil {
 		return s.app.CodeSelColor()
 	}
 	return platform.DefaultCodeSelColor
 }
 
 func (s *State) MutedColor() tcell.Color {
-	if s.app != nil {
+	if s != nil && s.app != nil {
 		return s.app.MutedColor()
 	}
 	return platform.DefaultMutedColor
 }
 
 func (s *State) SearchColor() tcell.Color {
-	if s.app != nil {
+	if s != nil && s.app != nil {
 		return s.app.SearchColor()
 	}
 	return platform.DefaultSearchColor

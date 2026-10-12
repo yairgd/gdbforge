@@ -74,25 +74,25 @@ func TestBreakpointWidgetBreakColorsFromState(t *testing.T) {
 	})
 	w.SelectIndex(0)
 
-	sel := w.rowStyle(0, "")
+	sel := w.rowStyle(0)
 	_, selBg, _ := sel.Decompose()
 	if selBg != tcell.ColorSilver {
 		t.Fatalf("unfocused selected bg=%v want silver", selBg)
 	}
 	w.SetFocused(true)
-	sel = w.rowStyle(0, "")
+	sel = w.rowStyle(0)
 	_, selBg, _ = sel.Decompose()
 	if selBg != tcell.ColorNavy {
 		t.Fatalf("focused selected bg=%v want navy", selBg)
 	}
 
-	dis := w.rowStyle(1, "")
+	dis := w.rowStyle(1)
 	_, disBg, _ := dis.Decompose()
 	if disBg != tcell.ColorAqua {
 		t.Fatalf("disabled bg=%v want aqua", disBg)
 	}
 
-	cond := w.rowStyle(2, "")
+	cond := w.rowStyle(2)
 	_, condBg, _ := cond.Decompose()
 	if condBg != tcell.ColorOrange {
 		t.Fatalf("conditional bg=%v want orange", condBg)
@@ -120,13 +120,13 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 	})
 	w.SelectIndex(0) // PC row is index 1
 
-	pc := w.rowStyle(1, "")
+	pc := w.rowStyle(1)
 	_, pcBg, _ := pc.Decompose()
 	if pcBg != platform.DefaultStackBreakColor {
 		t.Fatalf("at-PC bg=%v want %v", pcBg, platform.DefaultStackBreakColor)
 	}
 
-	other := w.rowStyle(0, "")
+	other := w.rowStyle(0)
 	_, otherBg, _ := other.Decompose()
 	if otherBg != tcell.ColorSilver {
 		t.Fatalf("selected bg=%v want silver", otherBg)
@@ -134,7 +134,7 @@ func TestBreakpointWidgetProgramPointStyle(t *testing.T) {
 
 	w.SelectIndex(1)
 	w.SetFocused(true)
-	selPC := w.rowStyle(1, "")
+	selPC := w.rowStyle(1)
 	_, selPCBg, _ := selPC.Decompose()
 	if selPCBg != platform.DefaultStackBreakColor {
 		t.Fatalf("selected at-PC bg=%v want green %v", selPCBg, platform.DefaultStackBreakColor)

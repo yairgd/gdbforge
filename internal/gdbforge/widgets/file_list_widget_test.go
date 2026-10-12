@@ -97,7 +97,7 @@ func TestFileListWidgetMarkColorFromState(t *testing.T) {
 	st.SetMarkColor(tcell.ColorNavy)
 	w := NewFileListWidget()
 	w.SetAppState(st)
-	if w.markColor() != tcell.ColorNavy {
-		t.Fatalf("mark=%v", w.markColor())
+	if w.state.MarkColor() != tcell.ColorNavy {
+		t.Fatalf("mark=%v", w.state.MarkColor())
 	}
 }

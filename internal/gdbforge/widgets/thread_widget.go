@@ -24,10 +24,9 @@ type ThreadWidget struct {
 
 	items []models.ThreadInfo
 
-	mouseDown     bool
-	pressSelected int
-	lastActID     string
-	lastActTime   time.Time
+	mouseDown   bool
+	lastActID   string
+	lastActTime time.Time
 }
 
 func NewThreadWidget() *ThreadWidget {
@@ -41,8 +40,7 @@ func NewThreadWidget() *ThreadWidget {
 	tbl.AddColumn("Loc")
 
 	w := &ThreadWidget{TableWidget: tw}
-	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
-	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetRowStyleFunc(w.rowStyle)
 	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
 	return w
@@ -58,48 +56,20 @@ func (w *ThreadWidget) initKeyBindings() {
 	w.BindKeyFunc("activate", func(args ...any) { w.activateSelected() }, "<Enter>", "<C-m>")
 }
 
-func (w *ThreadWidget) markColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkColor()
-	}
-	return platform.DefaultMarkColor
-}
-
-func (w *ThreadWidget) markDimColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkDimColor()
-	}
-	return platform.DefaultMarkDimColor
-}
-
-func (w *ThreadWidget) stackBreakColor() tcell.Color {
-	if w.state != nil {
-		return w.state.StackBreakColor()
-	}
-	return platform.DefaultStackBreakColor
-}
-
-func (w *ThreadWidget) mutedColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MutedColor()
-	}
-	return platform.DefaultMutedColor
-}
-
-func (w *ThreadWidget) rowStyle(lineIdx int, _ string) tcell.Style {
+func (w *ThreadWidget) rowStyle(lineIdx int) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	if lineIdx == w.SelectedRow() {
-		bg := w.markDimColor()
+		bg := w.state.MarkDimColor()
 		if w.Focused() {
-			bg = w.markColor()
+			bg = w.state.MarkColor()
 		}
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	if w.isCurrentThread(lineIdx) && w.atProgramPoint(lineIdx) {
-		bg := w.stackBreakColor()
+		bg := w.state.StackBreakColor()
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	return st
@@ -125,26 +95,6 @@ func (w *ThreadWidget) move(delta int) {
 		return
 	}
 	w.MoveSelection(delta)
-}
-
-func (w *ThreadWidget) syncSelectedFromViewport() {
-	w.clampSelectedToItems()
-}
-
-func (w *ThreadWidget) clampSelectedToItems() {
-	n := len(w.items)
-	if n == 0 {
-		w.SetSelectedRow(0)
-		return
-	}
-	row := w.SelectedRow()
-	if row < 0 {
-		row = 0
-	}
-	if row >= n {
-		row = n - 1
-	}
-	w.SetSelectedRow(row)
 }
 
 func (w *ThreadWidget) activateSelected() {
@@ -189,12 +139,6 @@ func (w *ThreadWidget) SetItems(items []models.ThreadInfo) {
 			}
 		}
 	}
-	if sel >= len(w.items) && len(w.items) > 0 {
-		sel = len(w.items) - 1
-	}
-	if sel < 0 {
-		sel = 0
-	}
 	w.SetSelectedRow(sel)
 	w.EnsureRowVisible()
 }
@@ -220,43 +164,7 @@ func (w *ThreadWidget) fillTable(t *termforge.Table) {
 func (w *ThreadWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		if w.TryDoubleClickWord(e) {
-			return
-		}
-		btns := e.Buttons()
-		if btns&tcell.WheelUp != 0 {
-			w.move(-1)
-			w.activateSelected()
-			return
-		}
-		if btns&tcell.WheelDown != 0 {
-			w.move(1)
-			w.activateSelected()
-			return
-		}
-		mx, my := e.Position()
-		hitRow, onRow := w.HitDataRow(mx, my)
-		if btns&tcell.ButtonPrimary != 0 {
-			if onRow {
-				w.SetSelectedRow(hitRow)
-				if !w.mouseDown {
-					w.mouseDown = true
-					w.pressSelected = w.SelectedRow()
-				}
-			}
-			return
-		}
-		if w.mouseDown {
-			w.mouseDown = false
-			if onRow {
-				w.SetSelectedRow(hitRow)
-			}
-			if w.pressSelected != w.SelectedRow() {
-				w.activateSelected()
-			} else {
-				w.activateSelected()
-			}
-		}
+		handleListMouse(w.TableWidget, &w.mouseDown, e, w.move, w.activateSelected)
 	case *tcell.EventKey:
 		w.HandleFocusKey(e)
 	}

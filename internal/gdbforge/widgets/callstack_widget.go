@@ -24,11 +24,9 @@ type CallStackWidget struct {
 
 	items []models.StackFrame
 
-	mouseDown     bool
-	pressOnRow    bool
-	pressSelected int
-	lastActLevel  int
-	lastActTime   time.Time
+	mouseDown    bool
+	lastActLevel int
+	lastActTime  time.Time
 }
 
 func NewCallStackWidget() *CallStackWidget {
@@ -42,8 +40,7 @@ func NewCallStackWidget() *CallStackWidget {
 	tbl.AddColumn("Loc")
 
 	w := &CallStackWidget{TableWidget: tw}
-	tw.SetRowStyleFunc(func(row int) tcell.Style { return w.rowStyle(row, "") })
-	tw.SetOnSearchJump(func(row int) { tw.SetSelectedRow(row) })
+	tw.SetRowStyleFunc(w.rowStyle)
 	tw.SetFill(w.fillTable)
 	w.initKeyBindings()
 	return w
@@ -64,62 +61,24 @@ func (w *CallStackWidget) initKeyBindings() {
 }
 
 func (w *CallStackWidget) moveTo(idx int) {
-	n := len(w.items)
-	if n == 0 {
-		return
-	}
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= n {
-		idx = n - 1
-	}
 	w.SetSelectedRow(idx)
 	w.EnsureRowVisible()
 }
 
-func (w *CallStackWidget) markColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkColor()
-	}
-	return platform.DefaultMarkColor
-}
-
-func (w *CallStackWidget) markDimColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MarkDimColor()
-	}
-	return platform.DefaultMarkDimColor
-}
-
-func (w *CallStackWidget) stackBreakColor() tcell.Color {
-	if w.state != nil {
-		return w.state.StackBreakColor()
-	}
-	return platform.DefaultStackBreakColor
-}
-
-func (w *CallStackWidget) mutedColor() tcell.Color {
-	if w.state != nil {
-		return w.state.MutedColor()
-	}
-	return platform.DefaultMutedColor
-}
-
-func (w *CallStackWidget) rowStyle(lineIdx int, _ string) tcell.Style {
+func (w *CallStackWidget) rowStyle(lineIdx int) tcell.Style {
 	st := tcell.StyleDefault
 	if len(w.items) == 0 {
-		return st.Foreground(w.mutedColor())
+		return st.Foreground(w.state.MutedColor())
 	}
 	if lineIdx == w.SelectedRow() {
-		bg := w.markDimColor()
+		bg := w.state.MarkDimColor()
 		if w.Focused() {
-			bg = w.markColor()
+			bg = w.state.MarkColor()
 		}
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	if w.isFrameZero(lineIdx) && w.atProgramPoint(lineIdx) {
-		bg := w.stackBreakColor()
+		bg := w.state.StackBreakColor()
 		return st.Bold(true).Background(bg).Foreground(platform.ContrastColor(bg))
 	}
 	return st
@@ -145,21 +104,6 @@ func (w *CallStackWidget) move(delta int) {
 		return
 	}
 	w.MoveSelection(delta)
-}
-
-func (w *CallStackWidget) syncSelectedFromViewport() {
-	n := len(w.items)
-	if n == 0 {
-		return
-	}
-	row := w.SelectedRow()
-	if row < 0 {
-		row = 0
-	}
-	if row >= n {
-		row = n - 1
-	}
-	w.SetSelectedRow(row)
 }
 
 func (w *CallStackWidget) activateSelected(commitFocus bool) {
@@ -198,12 +142,6 @@ func (w *CallStackWidget) SetItems(items []models.StackFrame) {
 			}
 		}
 	}
-	if sel >= len(w.items) && len(w.items) > 0 {
-		sel = len(w.items) - 1
-	}
-	if sel < 0 {
-		sel = 0
-	}
 	w.SetSelectedRow(sel)
 	w.EnsureRowVisible()
 }
@@ -239,45 +177,7 @@ func (w *CallStackWidget) fillTable(t *termforge.Table) {
 func (w *CallStackWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventMouse:
-		if w.TryDoubleClickWord(e) {
-			return
-		}
-		btns := e.Buttons()
-		if btns&tcell.WheelUp != 0 {
-			w.move(-1)
-			w.activateSelected(false)
-			return
-		}
-		if btns&tcell.WheelDown != 0 {
-			w.move(1)
-			w.activateSelected(false)
-			return
-		}
-		mx, my := e.Position()
-		hitRow, onRow := w.HitDataRow(mx, my)
-		if btns&tcell.ButtonPrimary != 0 {
-			if onRow {
-				w.SetSelectedRow(hitRow)
-				if !w.mouseDown {
-					w.mouseDown = true
-					w.pressOnRow = true
-					w.pressSelected = w.SelectedRow()
-				}
-			} else if !w.mouseDown {
-				w.pressOnRow = false
-			}
-			return
-		}
-		if w.mouseDown {
-			w.mouseDown = false
-			if onRow {
-				w.SetSelectedRow(hitRow)
-			}
-			if w.pressOnRow {
-				w.activateSelected(false)
-			}
-			w.pressOnRow = false
-		}
+		handleListMouse(w.TableWidget, &w.mouseDown, e, w.move, func() { w.activateSelected(false) })
 	case *tcell.EventKey:
 		w.HandleFocusKey(e)
 	}
@@ -287,7 +187,6 @@ func (w *CallStackWidget) SetFocused(focused bool) {
 	w.TableWidget.SetFocused(focused)
 	if !focused {
 		w.mouseDown = false
-		w.pressOnRow = false
 	}
 }
 

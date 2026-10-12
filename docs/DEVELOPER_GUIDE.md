@@ -425,8 +425,8 @@ Always update docs when changing architecture-visible behavior.
 | Command tree / parser / DSL | `termforge/commands/` — [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 | Command / search line | `cmd_widget.go` (`CmdKindCommand` / `CmdKindSearch`), `history.go`; completions via `CompletionMsg` + `completion_bar.go` |
 | Viewport `/` search | `viewport_search.go`, `SearchHost`; wired in `internal/app/search.go` — [INPUT.md](INPUT.md) |
-| TableWidget lists | `table_widget.go`, `table_search.go`; BP/threads/callstack embed; `/search` via `SearchHost` |
-| Table paint stack | `rect_viewport.go`, `cell_buffer.go`, `table.go`, `table_paint.go` |
+| TableWidget lists | `table_widget.go`; BP/threads/callstack embed; `/search` via `SearchHost` |
+| Table paint stack | `table.go`, `table_widget.go` |
 | Breakpoint sync | `stopped.go` — `Publish`/`Subscribe` `BreakpointsChangedMsg`; [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#breakpoints-and-source-sync) |
 | Breakpoint YAML | `persist/` + `saveBreakpointsOnQuit` / `restoreSavedBreakpoints`; [breakpoint persistence](DEBUGGER_INTEGRATION.md#breakpoint-persistence) |
 | Debugger panes | `termforge/input_line.go`, `console_pane.go`; `widgets/gdb_widget.go` + `internal/app/gdb_console.go`; `logger_widget.go` |
