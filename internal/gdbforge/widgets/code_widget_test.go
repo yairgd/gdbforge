@@ -271,12 +271,14 @@ func TestCodeWidgetStatusLineFullPath(t *testing.T) {
 	}
 
 	g := termforge.NewGrid(80, 5)
-	c := termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 80, 4))
+	// The status row (local y = H()) is outside the pane clip, so shift the
+	// origin up one row to land it on grid row 3.
+	c := termforge.NewCanvas(g).WithRect(termforge.NewRect(0, 0, 80, 4)).WithOrigin(termforge.Point{Y: 1})
 	w.SetFocused(true)
 	w.DrawStatusLine(c, false)
 	var b strings.Builder
 	for x := 0; x < 80; x++ {
-		ch := g.Cells[x][4].Rune
+		ch := g.Cells[x][3].Rune
 		if ch == 0 {
 			ch = ' '
 		}

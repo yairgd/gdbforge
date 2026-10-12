@@ -153,6 +153,26 @@ go build ./...      # compile check only
 go test ./...       # run tests
 ```
 
+### Check before pushing (same steps as CI)
+
+Run the CI steps in your working copy:
+
+```bash
+cd /path/to/gdbforge && \
+go build ./... && \
+go vet ./... && \
+go test ./... && \
+./scripts/check_imports.sh && \
+test -z "$(gofmt -l ./cmd ./internal)" && echo "CI OK"
+```
+
+This checks your current files, including uncommitted changes. CI builds a
+fresh checkout, so before pushing make sure everything is committed, `go.sum`
+matches `go.mod`, and the `replace => ../termforge` line is commented out
+(there is no sibling termforge in CI). After bumping termforge, also confirm the
+module proxy serves the new tag:
+`GOPROXY=https://proxy.golang.org go list -m github.com/yairgd/termforge@vX.Y.Z`.
+
 ### View docs locally
 
 ```bash
