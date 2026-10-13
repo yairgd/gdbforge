@@ -48,6 +48,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/yairgd/termforge v0.5.0 h1:HGMMertqm3ryb0TRCCw8huazbBWArTOSF3RACENU3/4=
 github.com/yairgd/termforge v0.5.0/go.mod h1:Fbx6hbyyJU9xwYqtUWdlxME59sX9ZBxg7BaevTjdFts=
+github.com/yairgd/termforge v0.6.0 h1:7pU0bknzCyaxTY6E2ERMDzMaMfv9/mD4gpp0mh9BHDs=
+github.com/yairgd/termforge v0.6.0/go.mod h1:Fbx6hbyyJU9xwYqtUWdlxME59sX9ZBxg7BaevTjdFts=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
 github.com/yuin/goldmark v1.8.2/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
