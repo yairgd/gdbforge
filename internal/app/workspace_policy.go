@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/termforge"
 	"github.com/yairgd/termforge/platform"
 )
@@ -66,6 +67,8 @@ func (w *LayoutShell) rememberCodeLeafFromFocus() {
 		lay.SetLeafMark(leafMarkLast, nil)
 	case wid == gdb:
 		lay.SetLeafMark(leafMarkGDB, leaf)
+	case isInferiorIOWidget(wid):
+		// IO/exec take typed input like GDB, so they are not an Esc target.
 	default:
 		lay.SetLeafMark(leafMarkLast, leaf)
 	}
@@ -217,4 +220,12 @@ func (w *LayoutShell) FocusCode() {
 	_ = lay.FocusLeaf(leaf)
 	lay.SetLeafMark(leafMarkCode, leaf)
 	h.RequestRedraw()
+}
+
+func isInferiorIOWidget(w termforge.Widget) bool {
+	switch w.(type) {
+	case *widgets.OutputWidget, *widgets.ExecWidget:
+		return true
+	}
+	return false
 }

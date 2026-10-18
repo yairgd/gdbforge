@@ -385,6 +385,7 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 		// still focus rather than starting a drag.
 		if lay := a.Layout(); lay != nil && lay.FocusAt(x, y) {
 			a.rememberCodeLeafFromFocus()
+			a.noteTextPane()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)
 			} else if a.focusedTakesText() {

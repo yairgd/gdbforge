@@ -47,6 +47,8 @@ type DebuggerApp struct {
 	execClient *execcli.ExecClient
 	execWidget *widgets.ExecWidget
 
+	lastTextPane termforge.NodeWidget // last text pane used; 'i' from a non-text pane returns to it
+
 	builtins    map[string]termforge.NodeWidget
 	aboutWidget *widgets.AboutWidget
 	helpWidget  *widgets.HelpWidget

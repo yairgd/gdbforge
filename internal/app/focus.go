@@ -78,8 +78,17 @@ func (a *DebuggerApp) focusedTakesText() bool {
 	return a.execWidget != nil && a.focusedWidget() == a.execWidget
 }
 
-// insertKey is 'i': type into the focused pane when it takes text, else jump to the GDB console.
+// noteTextPane remembers the focused pane when it takes text, so 'i' can return to it.
+func (a *DebuggerApp) noteTextPane() {
+	if _, ok := a.focusedWidget().(*widgets.LuaWidget); ok || a.focusedTakesText() {
+		a.lastTextPane = a.focusedWidget()
+	}
+}
+
+// insertKey is 'i': type into the focused pane when it takes text, else return to the last
+// text pane used (the GDB console until one was used).
 func (a *DebuggerApp) insertKey() {
+	a.noteTextPane()
 	if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 		a.lua.enterMode(lw)
 		return
@@ -87,6 +96,16 @@ func (a *DebuggerApp) insertKey() {
 	if a.focusedTakesText() {
 		a.EnterInsertMode()
 		return
+	}
+	if last := a.lastTextPane; last != nil && last != termforge.NodeWidget(a.gdbWidget) {
+		if lay := a.Layout(); lay != nil {
+			if leaf := lay.FindLeaf(func(w termforge.Widget) bool { return w == last }); leaf != nil {
+				a.rememberCodeLeafFromFocus()
+				lay.FocusLeaf(leaf)
+				a.insertKey()
+				return
+			}
+		}
 	}
 	a.activateGdbInsertMode()
 }
