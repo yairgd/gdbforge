@@ -65,3 +65,28 @@ func (a *DebuggerApp) focusedIsGdb() bool {
 func (a *DebuggerApp) focusedIsLuaConsole() bool {
 	return a.luaConsoleWidget != nil && a.focusedWidget() == a.luaConsoleWidget
 }
+
+// focusedTakesText reports whether the focused pane reads typed input (GDB or Lua console,
+// inferior IO / exec terminal stdin) and so needs insert mode. Every other pane works from normal mode.
+func (a *DebuggerApp) focusedTakesText() bool {
+	if a.focusedIsGdb() || a.focusedIsLuaConsole() {
+		return true
+	}
+	if a.outputWidget != nil && a.focusedWidget() == a.outputWidget {
+		return true // IO pane: inferior stdin
+	}
+	return a.execWidget != nil && a.focusedWidget() == a.execWidget
+}
+
+// insertKey is 'i': type into the focused pane when it takes text, else jump to the GDB console.
+func (a *DebuggerApp) insertKey() {
+	if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
+		a.lua.enterMode(lw)
+		return
+	}
+	if a.focusedTakesText() {
+		a.EnterInsertMode()
+		return
+	}
+	a.activateGdbInsertMode()
+}

@@ -91,3 +91,16 @@ func TestJumpBackRefusesGdbLeaf(t *testing.T) {
 		t.Fatal("JumpBack refuse must leave jump stack untouched")
 	}
 }
+
+func TestFocusedTakesText(t *testing.T) {
+	a := newGdbLeafApp()
+	if !a.focusedTakesText() {
+		t.Fatal("GDB console takes text")
+	}
+	if !a.Layout().FocusLeaf(a.Layout().LeafMark(leafMarkCode)) {
+		t.Fatal("focus code leaf failed")
+	}
+	if a.focusedTakesText() {
+		t.Fatal("a plain pane does not take text")
+	}
+}

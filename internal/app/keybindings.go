@@ -65,7 +65,7 @@ func (a *DebuggerApp) initNormalKeyBindings() {
 		"#",
 	)
 	a.keyBindings.Bind(
-		commands.NewCommand("insert-gdb", func(args ...any) { a.activateGdbInsertMode() }),
+		commands.NewCommand("insert-gdb", func(args ...any) { a.insertKey() }),
 		"i",
 	)
 

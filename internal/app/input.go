@@ -387,8 +387,14 @@ func (a *DebuggerApp) HandleMouse(ev *tcell.EventMouse) {
 			a.rememberCodeLeafFromFocus()
 			if lw, ok := a.focusedWidget().(*widgets.LuaWidget); ok {
 				a.lua.enterMode(lw)
-			} else {
+			} else if a.focusedTakesText() {
 				a.EnterInsertMode()
+			} else {
+				a.lua.leaveMode()
+				if lay := a.Layout(); lay != nil {
+					lay.SetInsertActive(false)
+				}
+				a.SetMode(platform.ModeNormal)
 			}
 		}
 	}
