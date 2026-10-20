@@ -3,6 +3,7 @@ package backend
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -16,6 +17,9 @@ type DLVBackend struct {
 	Client  *dlv.Client
 	Input   *dlv.InputState
 	Confirm dlv.ConfirmGate
+
+	// resuming is set while a resume RPC (continue/next/step/…) is in flight.
+	resuming atomic.Bool
 }
 
 func NewDLV(client *dlv.Client) *DLVBackend {

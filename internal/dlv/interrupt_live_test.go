@@ -59,7 +59,16 @@ func TestTargetRunningAndInterruptLive(t *testing.T) {
 	if err := c.Interrupt(); err != nil {
 		t.Fatalf("Interrupt: %v", err)
 	}
-	if running, ok := c.TargetRunning(); !ok || running {
-		t.Fatalf("after interrupt: running=%v ok=%v, want false/true", running, ok)
+	// Interrupt is asynchronous; wait for the halt to land.
+	deadline = time.Now().Add(3 * time.Second)
+	for {
+		running, ok := c.TargetRunning()
+		if ok && !running {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after interrupt: running=%v ok=%v, want false/true", running, ok)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

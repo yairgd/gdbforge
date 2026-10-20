@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-delve/delve/service/api"
+
 	"github.com/go-delve/delve/service/rpc2"
 
 	"github.com/yairgd/termforge/ptyx"
@@ -345,11 +347,27 @@ func (c *Client) TargetRunning() (running, ok bool) {
 	if c == nil || c.RPC == nil {
 		return false, false
 	}
-	st, err := c.RPC.GetStateNonBlocking()
-	if err != nil || st == nil {
-		return false, false
+	// Called on the UI thread (Ctrl-C): a server that is busy must not freeze
+	// the UI, and a state query that stalls means the target is running.
+	type res struct {
+		st  *api.DebuggerState
+		err error
 	}
-	return st.Running, true
+	ch := make(chan res, 1)
+	rpc := c.RPC
+	go func() {
+		st, err := rpc.GetStateNonBlocking()
+		ch <- res{st, err}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil || r.st == nil {
+			return false, false
+		}
+		return r.st.Running, true
+	case <-time.After(300 * time.Millisecond):
+		return true, true
+	}
 }
 
 func (c *Client) Interrupt() error {
@@ -358,9 +376,11 @@ func (c *Client) Interrupt() error {
 	}
 	// Headless multiclient: halt via rpc2 only. Sending ^C to the connect CLI
 	// triggers Delve's [p/q]? gate instead of returning to (dlv).
-	if c.RPC != nil {
-		_, err := c.RPC.Halt()
-		return err
+	// Async: Ctrl-C runs on the UI thread and Halt can block while the server
+	// is mid-resume.
+	if rpc := c.RPC; rpc != nil {
+		go func() { _, _ = rpc.Halt() }()
+		return nil
 	}
 	err := c.SignalInterrupt()
 	_ = c.SendRaw("\x03")
@@ -384,6 +404,7 @@ func (c *Client) Close() {
 	}
 	if c.headless != nil && c.headless.Process != nil {
 		_ = c.headless.Process.Kill()
+		go func(cmd *exec.Cmd) { _ = cmd.Wait() }(c.headless) // reap: no [dlv] zombie
 		c.headless = nil
 	}
 	c.closeInferior()

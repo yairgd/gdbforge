@@ -21,13 +21,54 @@ func (b *DLVBackend) rpcClient() *dlv.Client {
 	return c
 }
 
+// idleRPCClient is rpcClient for read-only refreshes. While the target runs,
+// Delve blocks such calls until the next stop, and they run on the UI thread
+// (e.g. `c` typed twice: the second resume starts before the stop refresh
+// finishes), so report "busy" instead.
+func (b *DLVBackend) idleRPCClient() (c *dlv.Client, busy bool) {
+	c = b.rpcClient()
+	if c == nil {
+		return nil, false
+	}
+	if running, ok := c.TargetRunning(); ok && running {
+		return c, true
+	}
+	return c, false
+}
+
+// boundedRPC runs fn but stops waiting when ctx ends, so a stalled Delve call
+// cannot freeze the caller. The call itself finishes in the background.
+func boundedRPC[T any](ctx context.Context, fn func() (T, bool)) (T, bool) {
+	type res struct {
+		v  T
+		ok bool
+	}
+	ch := make(chan res, 1)
+	go func() {
+		v, ok := fn()
+		ch <- res{v, ok}
+	}()
+	select {
+	case r := <-ch:
+		return r.v, r.ok
+	case <-ctx.Done():
+		var zero T
+		return zero, false
+	}
+}
+
 func (b *DLVBackend) FetchBreakpoints(ctx context.Context, q Querier) ([]models.BreakInfo, bool) {
-	if c := b.rpcClient(); c != nil {
-		bps, err := c.RPC.ListBreakpoints(false)
-		if err != nil {
+	if c, busy := b.idleRPCClient(); c != nil {
+		if busy {
 			return nil, false
 		}
-		return dlv.BreakpointsFromAPI(bps), true
+		return boundedRPC(ctx, func() ([]models.BreakInfo, bool) {
+			bps, err := c.RPC.ListBreakpoints(false)
+			if err != nil {
+				return nil, false
+			}
+			return dlv.BreakpointsFromAPI(bps), true
+		})
 	}
 	if q == nil {
 		return nil, false
@@ -51,8 +92,24 @@ func (b *DLVBackend) FetchBreakpoints(ctx context.Context, q Querier) ([]models.
 }
 
 func (b *DLVBackend) RefreshThreadsAndStack(ctx context.Context, q Querier, log LogFn) ([]models.ThreadInfo, []models.StackFrame, bool, bool) {
-	if c := b.rpcClient(); c != nil {
-		return b.refreshThreadsAndStackRPC(c, log)
+	if c, busy := b.idleRPCClient(); c != nil {
+		if busy {
+			return nil, nil, false, false
+		}
+		type out struct {
+			th []models.ThreadInfo
+			fr []models.StackFrame
+			a  bool
+			b  bool
+		}
+		r, ok := boundedRPC(ctx, func() (out, bool) {
+			th, fr, a, bb := b.refreshThreadsAndStackRPC(c, log)
+			return out{th, fr, a, bb}, true
+		})
+		if !ok {
+			return nil, nil, false, false
+		}
+		return r.th, r.fr, r.a, r.b
 	}
 	return ThreadsAndStack(ctx, DLV, q, log)
 }
@@ -91,24 +148,29 @@ func (b *DLVBackend) refreshThreadsAndStackRPC(c *dlv.Client, log LogFn) ([]mode
 }
 
 func (b *DLVBackend) CurrentFrame(ctx context.Context, q Querier) (models.StackFrame, bool) {
-	if c := b.rpcClient(); c != nil {
-		st, err := c.RPC.GetState()
-		if err != nil {
+	if c, busy := b.idleRPCClient(); c != nil {
+		if busy {
 			return models.StackFrame{}, false
 		}
-		gid := dlv.CurrentGoroutineID(st)
-		if gid == 0 {
-			return models.StackFrame{}, false
-		}
-		stack, err := c.RPC.Stacktrace(gid, 1, 0, api.StacktraceSimple, nil)
-		if err != nil || len(stack) == 0 {
-			return models.StackFrame{}, false
-		}
-		frames := dlv.StackFromAPI(stack)
-		if len(frames) == 0 {
-			return models.StackFrame{}, false
-		}
-		return frames[0], true
+		return boundedRPC(ctx, func() (models.StackFrame, bool) {
+			st, err := c.RPC.GetState()
+			if err != nil {
+				return models.StackFrame{}, false
+			}
+			gid := dlv.CurrentGoroutineID(st)
+			if gid == 0 {
+				return models.StackFrame{}, false
+			}
+			stack, err := c.RPC.Stacktrace(gid, 1, 0, api.StacktraceSimple, nil)
+			if err != nil || len(stack) == 0 {
+				return models.StackFrame{}, false
+			}
+			frames := dlv.StackFromAPI(stack)
+			if len(frames) == 0 {
+				return models.StackFrame{}, false
+			}
+			return frames[0], true
+		})
 	}
 	if q == nil {
 		return models.StackFrame{}, false
@@ -121,21 +183,26 @@ func (b *DLVBackend) CurrentFrame(ctx context.Context, q Querier) (models.StackF
 }
 
 func (b *DLVBackend) FetchStackList(ctx context.Context, q Querier, _ bool) ([]models.StackFrame, bool) {
-	if c := b.rpcClient(); c != nil {
-		st, err := c.RPC.GetState()
-		if err != nil {
+	if c, busy := b.idleRPCClient(); c != nil {
+		if busy {
 			return nil, false
 		}
-		gid := dlv.CurrentGoroutineID(st)
-		if gid == 0 {
-			return nil, false
-		}
-		stack, err := c.RPC.Stacktrace(gid, 50, 0, api.StacktraceSimple, nil)
-		if err != nil {
-			return nil, false
-		}
-		frames := dlv.StackFromAPI(stack)
-		return frames, len(frames) > 0
+		return boundedRPC(ctx, func() ([]models.StackFrame, bool) {
+			st, err := c.RPC.GetState()
+			if err != nil {
+				return nil, false
+			}
+			gid := dlv.CurrentGoroutineID(st)
+			if gid == 0 {
+				return nil, false
+			}
+			stack, err := c.RPC.Stacktrace(gid, 50, 0, api.StacktraceSimple, nil)
+			if err != nil {
+				return nil, false
+			}
+			frames := dlv.StackFromAPI(stack)
+			return frames, len(frames) > 0
+		})
 	}
 	return StackList(ctx, DLV, q, false, nil)
 }
@@ -169,6 +236,14 @@ func (b *DLVBackend) execViaRPC(env CommandEnv, cmd string, ui bool) bool {
 		return false
 	}
 	send, marksRunning := b.MapExec(cmd)
+	// A second resume while one is in flight would queue on the server and
+	// fire as soon as the first stops, running straight past the breakpoint.
+	switch strings.TrimSpace(send) {
+	case "continue", "next", "step", "stepout", "nexti", "stepi", "restart":
+		if !b.resuming.CompareAndSwap(false, true) {
+			return true
+		}
+	}
 	if marksRunning {
 		if rs, ok := env.Inferior.(interface{ SetInferiorRunning(bool) }); ok {
 			rs.SetInferiorRunning(true)
@@ -184,26 +259,29 @@ func (b *DLVBackend) execViaRPC(env CommandEnv, cmd string, ui bool) bool {
 }
 
 func (b *DLVBackend) runRPCExec(c *dlv.Client, cmd string) {
+	done := func() { b.resuming.Store(false) }
 	switch strings.TrimSpace(cmd) {
 	case "continue":
 		go func() {
+			defer done()
 			ch := c.RPC.Continue()
 			if ch != nil {
-				<-ch
+				for range ch {
+				}
 			}
 		}()
 	case "next":
-		go func() { _, _ = c.RPC.Next() }()
+		go func() { defer done(); _, _ = c.RPC.Next() }()
 	case "step":
-		go func() { _, _ = c.RPC.Step() }()
+		go func() { defer done(); _, _ = c.RPC.Step() }()
 	case "stepout":
-		go func() { _, _ = c.RPC.StepOut() }()
+		go func() { defer done(); _, _ = c.RPC.StepOut() }()
 	case "nexti":
-		go func() { _, _ = c.RPC.StepInstruction(false) }()
+		go func() { defer done(); _, _ = c.RPC.StepInstruction(false) }()
 	case "stepi":
-		go func() { _, _ = c.RPC.StepInstruction(true) }()
+		go func() { defer done(); _, _ = c.RPC.StepInstruction(true) }()
 	case "restart":
-		go func() { _, _ = c.RPC.Restart(false) }()
+		go func() { defer done(); _, _ = c.RPC.Restart(false) }()
 	default:
 		_ = b.SendLine(cmd)
 	}
