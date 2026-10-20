@@ -31,7 +31,7 @@ Two things the TUI has going for it: it is already inside every GDB install, so 
 
 ## Should I use the internal IO pane or an external terminal?
 
-`:b io` is the default and needs no setup; it suits line-oriented output and stdin. Switch the inferior to a real terminal emulator (`:set inferior-tty`, or `:lua terminal_debug`) when the program is a full-screen curses/TUI application, expects a proper VT, or floods stdout. Under `gdbserver`, the program's stdio belongs to gdbserver's own terminal.
+`:b io` is the default and needs no setup; it suits line-oriented output and stdin. Switch the inferior to a real terminal emulator (`:set inferior-tty`, or `:lua terminal_debug`; or at startup `gdbforge [-g dlv] -inferior-tty external -- ./prog`) when the program is a full-screen curses/TUI application, expects a proper VT, or floods stdout. Under `gdbserver`, the program's stdio belongs to gdbserver's own terminal.
 
 Both options, with the underlying GDB `-inferior-tty-set` and Delve `--tty` behavior, are covered in [EMBEDDED_LINUX_DEBUG.md — Program I/O](EMBEDDED_LINUX_DEBUG.md#program-io--internal-vs-external) and [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md).
 

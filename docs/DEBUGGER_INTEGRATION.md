@@ -352,7 +352,7 @@ For TUI inferiors (htop, games, …) or programs that need a **real** terminal e
 |--|---------|----------------------|
 | Attach stdio | `-inferior-tty-set` **live** (no restart) | `dlv exec --tty` only at **spawn**; `:set inferior-tty` **restarts** Delve |
 | Switch back | `:set inferior-tty internal` | same (restart with internal PTY) |
-| Best for TUI | `:set inferior-tty` / `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [args…]` (alias `dlv_port`) — headless dlv in another window + `dlv_connect`; stdio never leaves that window |
+| Best for TUI | `:set inferior-tty` / `:lua terminal_debug` / `gdbserver_tui` | `gdbforge -g dlv -inferior-tty external -- ./prog`, `:set inferior-tty`, or `:lua dlv_ext_port [port] [args…]` (alias `dlv_port`) — headless dlv in another window + `dlv_connect`; stdio never leaves that window |
 | Terminal picker | `GDBFORGE_TERMINAL` (kitty, xterm, mate-terminal, gnome-terminal, …) | same |
 
 **Pattern B — local GDB/dlv, external pts**

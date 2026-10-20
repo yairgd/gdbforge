@@ -119,6 +119,7 @@ After Tab with multiple matches, the wildmenu opens above `:`. Left/Right/Tab cy
   - bare `:set inferior-tty` — open a terminal (`GDBFORGE_TERMINAL`) and attach stdio there
   - `:set inferior-tty internal` — restore the in-app IO pane
   - optional `/dev/pts/N` — use an already-open slave; startup: `GDBFORGE_INFERIOR_TTY`
+  - at startup: `gdbforge -inferior-tty external -- ./prog` (or `-g dlv … ./prog-go`) opens the terminal for you
   - **GDB:** live `-inferior-tty-set` (no restart)
   - **Delve (`-g dlv`):** restarts `dlv exec --tty …` (same program args). For Go TUIs prefer `:lua dlv_port` (headless dlv in another window + `dlv connect` — stdio stays there)
   - Details: [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets)
@@ -218,8 +219,8 @@ Route program stdin/stdout to a **real terminal emulator** (`GDBFORGE_TERMINAL`)
 
 | | GDB | Delve (`-g dlv`) |
 |--|-----|------------------|
-| `:set inferior-tty` | Live `-inferior-tty-set` | Restarts session with `--tty` |
-| Recommended TUI / flood flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | `:lua dlv_ext_port [port] [prog args…]` (alias `dlv_port`) — headless dlv in another window + connect; I/O stays there |
+| `:set inferior-tty` | Live `-inferior-tty-set` | Headless dlv in another window + connect (same as `:lua dlv_ext_port`) |
+| Recommended TUI / flood flow | `:set inferior-tty` or `:lua terminal_debug` / `gdbserver_tui` | Start with `gdbforge -g dlv -inferior-tty external -- ./prog`, or `:set inferior-tty` / `:lua dlv_ext_port [port] [prog args…]` later; I/O stays in that window |
 | Env | `GDBFORGE_INFERIOR_TTY`, `GDBFORGE_TERMINAL` | same |
 
 - When external, `:b io` shows a note only (type in the other window). Closing that window does not auto-rewire — `:set inferior-tty internal`

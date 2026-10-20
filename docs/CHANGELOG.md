@@ -9,6 +9,13 @@ Release history for gdbforge. Binaries for each version are on the
 [GitHub releases page](https://github.com/yairgd/gdbforge/releases); see
 [Releasing](RELEASING.md) for how tags drive the builds.
 
+## Unreleased
+
+- **`-inferior-tty external`** — start with the program's stdio in a new terminal (`GDBFORGE_TERMINAL`), same as typing `:set inferior-tty` once the UI is up; also `GDBFORGE_INFERIOR_TTY=external`. GDB: `gdbforge -inferior-tty external -- ./prog`. Delve: `gdbforge -g dlv -inferior-tty external -- ./prog` runs the program under headless dlv in that terminal and connects to it, so Go TUI programs get a real controlling terminal instead of fighting gdbforge for `/dev/tty`. `:set inferior-tty` now works in a Delve session too (it used to refuse and point at `:lua dlv_ext_port`).
+- **Enter no longer re-runs `continue` in the Delve console** — Delve repeats the last command on an empty line, and while the target runs the keypress waits in the queue, so after the next stop (breakpoint or Ctrl-C) it resumed again and the console looked hung until the program exited. A bare Enter is ignored while the target runs.
+- **Delve UI stays responsive while the target runs** — stack/thread/breakpoint reads skip the server while it is running instead of blocking the UI thread; Ctrl-C's halt no longer waits on the server; a second resume while one is in flight is dropped.
+- **Break completion outside `main`** — `b app.Fo<Tab>` completes functions of non-main packages (listed by import path).
+
 ## v1.3.0
 
 Window management hardened: resizes no longer destroy pane proportions, tiny terminals no
