@@ -326,7 +326,7 @@ func (app *DebuggerApp) SetLogCmd(args ...any) {
 
 // SetInferiorTTYCmd handles:
 //
-//	:set inferior-tty              — GDB: open external terminal; Delve: use :lua dlv_ext_port
+//	:set inferior-tty              — GDB: open external terminal; Delve: headless dlv in an external terminal + connect (same as :lua dlv_ext_port)
 //	:set inferior-tty external     — same as bare :set inferior-tty (GDB only)
 //	:set inferior-tty internal     — restore the in-app IO pane
 //	:set inferior-tty /dev/pts/N   — GDB: use an already-open slave (advanced)

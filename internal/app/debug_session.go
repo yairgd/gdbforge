@@ -47,6 +47,9 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 		inferior      *ptyx.TTY
 		skipBreakMain bool
 		extTTY        = inferiorTTYFromEnvOrCfg(a.cfg)
+		// "external": start with the internal pts, then :set inferior-tty once the
+		// UI is up (GDB: new terminal + -inferior-tty-set; Delve: headless dlv there).
+		wantExternal = wantsExternalTTY(a.cfg)
 	)
 	if s.backend == nil {
 		if a.cfg.IsDLV() {
@@ -158,6 +161,9 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 		s.gdbMcp.SetPromptToken(dlv.PromptToken)
 	}
 	s.breaks.restoreSaved(savedBPs)
+	if wantExternal {
+		a.PostInterrupt(inferiorTTYSetMsg{path: "external"})
+	}
 	return nil
 }
 

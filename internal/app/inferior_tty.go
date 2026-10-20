@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"github.com/yairgd/termforge"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ func (a *DebuggerApp) SetInferiorTTY(path string) error {
 	}
 	if a.backend.RequiresInferiorTTYRestart() {
 		if path == "external" || (path != "" && path != "internal" && strings.HasPrefix(path, "/dev/")) {
-			return fmt.Errorf("Delve: use :lua dlv_ext_port for external stdio (not :set inferior-tty)")
+			return a.startDlvExternal()
 		}
 		return a.setDlvInferiorTTY(path)
 	}
@@ -46,6 +47,44 @@ func (a *DebuggerApp) SetInferiorTTY(path string) error {
 		return err
 	}
 	a.syncInferiorIOView()
+	return nil
+}
+
+// dlvExternalReadyMsg is posted once headless dlv listens, so ConnectDlv runs on
+// the UI thread.
+type dlvExternalReadyMsg struct {
+	addr string
+	err  error
+}
+
+// startDlvExternal runs the program under headless dlv in an external terminal
+// (the program's controlling tty, which Go TUIs need) and connects to it.
+func (a *DebuggerApp) startDlvExternal() error {
+	addr, err := dlv.PickListenAddr()
+	if err != nil {
+		return err
+	}
+	port := addr[strings.LastIndex(addr, ":")+1:]
+	if err := a.SpawnDlvHeadless(port, nil); err != nil {
+		return err
+	}
+	go func() {
+		msg := dlvExternalReadyMsg{addr: addr}
+		deadline := time.Now().Add(20 * time.Second)
+		for {
+			c, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+			if err == nil {
+				_ = c.Close()
+				break
+			}
+			if time.Now().After(deadline) {
+				msg.err = fmt.Errorf("nothing listening on %s — check the other terminal", addr)
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		a.PostInterrupt(msg)
+	}()
 	return nil
 }
 
@@ -472,8 +511,21 @@ func shellJoinArgs(argv []string) string {
 }
 
 func inferiorTTYFromEnvOrCfg(cfg SessionConfig) string {
-	if p := strings.TrimSpace(cfg.InferiorTTY); p != "" {
-		return p
+	p := strings.TrimSpace(cfg.InferiorTTY)
+	if p == "" {
+		p = strings.TrimSpace(os.Getenv("GDBFORGE_INFERIOR_TTY"))
 	}
-	return strings.TrimSpace(os.Getenv("GDBFORGE_INFERIOR_TTY"))
+	if p == "external" {
+		return "" // not a pts: handled by wantsExternalTTY after startup
+	}
+	return p
+}
+
+// wantsExternalTTY reports -inferior-tty external (or GDBFORGE_INFERIOR_TTY=external).
+func wantsExternalTTY(cfg SessionConfig) bool {
+	p := strings.TrimSpace(cfg.InferiorTTY)
+	if p == "" {
+		p = strings.TrimSpace(os.Getenv("GDBFORGE_INFERIOR_TTY"))
+	}
+	return p == "external"
 }

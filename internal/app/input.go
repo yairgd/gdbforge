@@ -26,6 +26,9 @@ func (a *DebuggerApp) withGlobalKeys(h termforge.KeyHandler) termforge.KeyHandle
 		if a.tryGlobalEOF(ev) {
 			return true
 		}
+		if a.tryDropDlvRunningEnter(ev) {
+			return true
+		}
 		return h(ev)
 	}
 }
@@ -54,6 +57,21 @@ func (a *DebuggerApp) tryGlobalInterrupt(ev *tcell.EventKey) bool {
 	}
 	a.onActivityCtrlC()
 	return true
+}
+
+// tryDropDlvRunningEnter swallows a bare Enter in the Delve console while the
+// target runs. Delve's CLI repeats the last command on an empty line, so the
+// queued Enter re-runs `continue` as soon as the target stops (breakpoint or
+// Ctrl-C) and the console stays busy until the program exits.
+func (a *DebuggerApp) tryDropDlvRunningEnter(ev *tcell.EventKey) bool {
+	if ev.Key() != tcell.KeyEnter || !a.focusedIsGdb() || a.backend == nil || !a.backend.WireCLILineTap() {
+		return false
+	}
+	if len(a.console.dlvLine.buf) > 0 {
+		return false // a typed command: let Delve queue it
+	}
+	running := a.Debug() != nil && a.Debug().InferiorRunning()
+	return running || a.backendSaysRunning()
 }
 
 // tryGlobalEOF handles Ctrl-D in any mode/focus via the Confirm facade.
@@ -520,6 +538,17 @@ func (a *DebuggerApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 			if a.ctx.Log != nil {
 				a.ctx.Log.Named("set").Error(err.Error())
 			}
+		}
+		a.RequestFrame()
+		return
+	}
+	if msg, ok := data.(dlvExternalReadyMsg); ok {
+		err := msg.err
+		if err == nil {
+			err = a.ConnectDlv(msg.addr)
+		}
+		if err != nil && a.outputWidget != nil {
+			a.outputWidget.AppendHostLine("inferior-tty: " + err.Error())
 		}
 		a.RequestFrame()
 		return
