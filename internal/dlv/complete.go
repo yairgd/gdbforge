@@ -179,8 +179,9 @@ func looksLikeFileLine(token string) bool {
 }
 
 func funcsRegex(token string) string {
-	// Prefix match: QuoteMeta so "main." → ^main\.
-	return "^" + regexp.QuoteMeta(token)
+	// Prefix match: QuoteMeta so "main." → ^main\.  Non-main packages are listed
+	// by import path (host/mod/app.Func), so also accept a match after a "/".
+	return "(^|/)" + regexp.QuoteMeta(token)
 }
 
 // CleanFuncNames sorts and de-duplicates rpc2 ListFunctions results, dropping
@@ -242,6 +243,10 @@ func filterPrefix(names []string, token string) []string {
 	for _, n := range names {
 		if strings.HasPrefix(n, token) {
 			out = append(out, n)
+		} else if i := strings.Index(n, "/"+token); i >= 0 {
+			// Import-path name: complete from the package base ("app.Func"),
+			// which Delve locspecs accept.
+			out = append(out, n[i+1:])
 		}
 	}
 	return out

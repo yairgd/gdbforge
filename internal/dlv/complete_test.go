@@ -99,7 +99,7 @@ func TestParseFuncs(t *testing.T) {
 }
 
 func TestFuncsRegex(t *testing.T) {
-	if got := funcsRegex("main."); got != `^main\.` {
+	if got := funcsRegex("main."); got != `(^|/)main\.` {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -134,4 +134,12 @@ func hasMatch(names []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestCompleteLocspecImportPath(t *testing.T) {
+	sess := &fakeSession{funcs: []string{"github.com/x/tradedeck/internal/app.Operation", "main.main"}}
+	res := Complete(sess, nil, "b app.Oper")
+	if !hasMatch(res.Matches, "b app.Operation") {
+		t.Fatalf("matches: %+v", res.Matches)
+	}
 }
