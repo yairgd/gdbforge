@@ -66,7 +66,7 @@ func TestRunToolDomainReadsAndWrites(t *testing.T) {
 func TestRunToolUnknown(t *testing.T) {
 	s := NewGdbMcpService(nil, nil)
 	out := s.runTool(context.Background(), "nope", nil)
-	if !strings.Contains(out, "unknown tool") {
+	if !strings.Contains(out, "no such service") {
 		t.Fatalf("got %q", out)
 	}
 }

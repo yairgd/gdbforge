@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	tcell "github.com/gdamore/tcell/v2"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
@@ -61,6 +62,7 @@ type luaHost interface {
 	MaybeEnableRemoteMode(cmd string)
 	WithGdbUIOwner(fn func())
 	SendGdbExec(cmd string)
+	RunControl(action string) error
 	PlaceCodeInSlot(w *widgets.CodeWidget)
 	FocusCode()
 	FindGdbLeaf() *termforge.Node
@@ -119,6 +121,23 @@ func (a *DebuggerApp) SendGdbExec(cmd string) {
 	}
 	sendCmd, _ := a.backend.MapExec(cmd)
 	a.console.withGdbUIOwner(func() { _ = a.backend.SendLine(sendCmd) })
+}
+
+// RunControl starts a run-control action the way its key or colon command does (UI thread).
+func (a *DebuggerApp) RunControl(action string) error {
+	if a == nil || a.backend == nil {
+		return fmt.Errorf("no debug session")
+	}
+	switch action {
+	case "continue", "next", "step", "finish", "stepi", "nexti", "run", "start":
+		a.sendGdbExec(action)
+	case "interrupt":
+		a.GdbInterrupt()
+	default:
+		return fmt.Errorf("unknown action %q (continue, next, step, finish, stepi, nexti, run, start, interrupt)", action)
+	}
+	a.RequestFrame()
+	return nil
 }
 
 func (a *DebuggerApp) PlaceCodeInSlot(w *widgets.CodeWidget) { a.placeCodeInSlot(w) }

@@ -12,11 +12,11 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/luadebug"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	luacatalog "github.com/yairgd/gdbforge/lua"
 	"github.com/yairgd/termforge/platform"
+	"github.com/yairgd/termforge/service"
 )
 
 // luaCtl owns Lua scripting state: pane widgets, script registry, and async jobs.
@@ -32,6 +32,8 @@ type luaCtl struct {
 	user         *luahost.Runtime
 	userRuntimes []*luahost.Runtime
 	repl         *luahost.Runtime // shared :b lua / :lua console REPL VM
+	svcOnce      sync.Once
+	svc          *service.Registry
 	jobMu        sync.Mutex
 	jobCancel    context.CancelFunc
 	jobRT        *luahost.Runtime // runtime running the current job (for KillSystem)
@@ -773,89 +775,10 @@ func (c *luaCtl) wireAPI(rt *luahost.Runtime) {
 	rt.SetOpenExternalTTY(h.OpenExternalTTY)
 	rt.SetSpawnTerminal(h.SpawnTerminal)
 	rt.SetTrackChild(func(pid int) { h.TrackChild(pid) })
-	luadebug.Install(rt, luadebug.Hooks{
-		SetInferiorTTY: func(path string) error {
-			var err error
-			c.callOnUI(func() { err = h.SetInferiorTTY(path) })
-			return err
-		},
-		DlvConnect: func(addr string) error {
-			var err error
-			c.callOnUI(func() { err = h.ConnectDlv(addr) })
-			return err
-		},
-		SpawnDlvHeadless: h.SpawnDlvHeadless,
-		Program:          h.SessionProgram,
-		DebuggerPath:     func() string { return h.DebuggerPath() },
-		CurrentFile: func() string {
-			var path string
-			c.callOnUI(func() {
-				if cw := h.ActiveCodeWidget(); cw != nil {
-					path = cw.Path()
-				}
-				if path == "" && h.Debug() != nil {
-					path = h.Debug().CurrentFile()
-				}
-			})
-			return path
-		},
-		CurrentLine: func() int {
-			var line int
-			c.callOnUI(func() {
-				if cw := h.ActiveCodeWidget(); cw != nil {
-					line = cw.SelLine()
-				}
-				if line < 1 && h.Debug() != nil {
-					line = h.Debug().CurrentLine()
-				}
-			})
-			return line
-		},
-		StopFile: func() string {
-			var path string
-			c.callOnUI(func() {
-				if h.Debug() != nil {
-					path = h.Debug().StopFile()
-				}
-				if path == "" {
-					if cw := h.ActiveCodeWidget(); cw != nil && cw.PCLine() > 0 {
-						path = cw.Path()
-					}
-				}
-			})
-			return path
-		},
-		StopLine: func() int {
-			var line int
-			c.callOnUI(func() {
-				if h.Debug() != nil {
-					line = h.Debug().StopLine()
-				}
-				if line < 1 {
-					if cw := h.ActiveCodeWidget(); cw != nil {
-						line = cw.PCLine()
-					}
-				}
-			})
-			return line
-		},
-		GDB: func(cmd string) {
-			c.callOnUI(func() {
-				cmd = strings.TrimSpace(cmd)
-				if cmd == "" {
-					return
-				}
-				if h.GDBWidget() != nil {
-					h.GDBWidget().AppendHostLine(">>> " + cmd)
-				}
-				h.SendGdbExec(cmd)
-				h.RequestFrame()
-			})
-		},
-	})
-	c.installSerialAPI(rt)
-	c.installUartAPI(rt)
-	c.installGdbAPI(rt)
+	luahost.InstallServices(rt, c.services())
+	if err := rt.LoadString(luaPrelude, "=gdbforge.services"); err != nil {
+		c.host.AppLog().Named("lua").Error("services prelude: " + err.Error())
+	}
 }
 
 // openBuffer focuses named panes without stealing the Code leaf via swap.

@@ -45,7 +45,7 @@ func (s *GdbMcpService) askAnthropic(ctx context.Context, apiKey, question strin
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
-	tools := anthropicTools()
+	tools := anthropicTools(Services(func() *GdbMcpService { return s }))
 	messages := []map[string]any{
 		{"role": "user", "content": []map[string]any{{"type": "text", "text": question}}},
 	}
@@ -150,7 +150,7 @@ func (s *GdbMcpService) askOpenAI(ctx context.Context, apiKey, question string) 
 		{"role": "system", "content": agentSystemPrompt},
 		{"role": "user", "content": question},
 	}
-	tools := openaiTools()
+	tools := openaiTools(Services(func() *GdbMcpService { return s }))
 
 	client := &http.Client{Timeout: 120 * time.Second}
 	for round := 0; round < maxToolRounds; round++ {
