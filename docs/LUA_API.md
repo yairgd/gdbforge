@@ -335,21 +335,40 @@ The token is any secret string you choose. gdbforge takes it from `-serve-token 
 flag is absent, from `GDBFORGE_TOKEN`; every client sends it as the header
 `Authorization: Bearer T`. A request without it, or with a wrong one, gets `401`.
 
+Make a token once, in any shell:
+
 ```bash
-# terminal 1: pick a token and start gdbforge (the TUI takes this terminal)
-export GDBFORGE_TOKEN=$(head -c16 /dev/urandom | xxd -p)
-echo $GDBFORGE_TOKEN                       # copy it for the clients
-gdbforge -serve 127.0.0.1:7777 ./hello     # same as: gdbforge -serve 127.0.0.1:7777 -serve-token $GDBFORGE_TOKEN ./hello
+head -c16 /dev/urandom | xxd -p
+```
 
-# terminal 2: the clients need the same token
-export GDBFORGE_TOKEN=<token from terminal 1>
-curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" localhost:7777/api          # services + JSON schema
-curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/list_frames -d '{}'
-curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/run_control -d '{"action":"next"}'
-curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/evaluate -d '{"expression":"x"}'
+Terminal 1, start gdbforge with it (the TUI takes this terminal). Replace `TOKEN` with your token:
 
-# MCP (JSON-RPC over HTTP POST at /mcp), e.g. register it with Claude Code:
-claude mcp add --transport http gdbforge http://127.0.0.1:7777/mcp --header "Authorization: Bearer $GDBFORGE_TOKEN"
+```bash
+gdbforge -serve 127.0.0.1:7777 -serve-token TOKEN ./hello
+```
+
+Or give the token in the environment instead of the flag:
+
+```bash
+export GDBFORGE_TOKEN=TOKEN
+gdbforge -serve 127.0.0.1:7777 ./hello
+```
+
+Terminal 2, the clients send the same token:
+
+```bash
+H="Authorization: Bearer TOKEN"
+curl -s -H "$H" localhost:7777/api
+curl -s -H "$H" localhost:7777/api/list_frames -d '{}'
+curl -s -H "$H" localhost:7777/api/run_control -d '{"action":"next"}'
+curl -s -H "$H" localhost:7777/api/evaluate -d '{"expression":"x"}'
+```
+
+`GET /api` lists the services with their JSON schema; `-d` makes curl send a `POST`.
+For MCP (JSON-RPC over HTTP `POST` at `/mcp`), register it with Claude Code:
+
+```bash
+claude mcp add --transport http gdbforge http://127.0.0.1:7777/mcp --header "$H"
 ```
 
 `claude mcp add` stores the header with the token, so after restarting gdbforge with a new token,
