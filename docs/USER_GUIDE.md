@@ -270,7 +270,7 @@ Full per-script recipes and env vars: [`lua/README.md`](https://github.com/yairg
 - Waits for first `(gdb)` before app MI (so `-x` remote/load can finish)
 - Injects `set pagination off` (no `--Type <RET>` during load)
 - Breakpoints YAML: `./.gdbforge/breakpoints.yaml` (cwd — usually the build dir)
-- `-serve 127.0.0.1:PORT -serve-token T` (or `GDBFORGE_TOKEN`): serve the debugger's read-only queries and the `:AI` tools over REST and MCP, loopback only, token required — see [Lua API](LUA_API.md#services-over-rest-and-mcp)
+- `-serve 127.0.0.1:PORT -serve-token T` (or `GDBFORGE_TOKEN=T`): serve the debugger's read-only queries, the typed run-control and inspection tools (`run_control`, `evaluate`, `read_memory`, `registers`) and the `:AI` tools over REST (`/api`) and MCP (`/mcp`), loopback only. The token is required; clients send it as `Authorization: Bearer T` — see [Lua API](LUA_API.md#services-over-rest-and-mcp)
 
 ### Clipboard and mouse
 

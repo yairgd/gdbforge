@@ -41,6 +41,18 @@ func TestServicesRegistry(t *testing.T) {
 	}
 }
 
+// gdbforge.help() is hand-written; every service needs an entry there.
+func TestServicesHaveLuaHelp(t *testing.T) {
+	a := &DebuggerApp{}
+	a.lua.host = a
+	help := strings.Join(luahost.APIHelp(""), "\n")
+	for _, s := range a.Services().List() {
+		if !strings.Contains(help, "gdbforge."+s.Name+"(") {
+			t.Errorf("api_help.txt has no entry for gdbforge.%s", s.Name)
+		}
+	}
+}
+
 // The old call shapes scripts use must still work on top of the services.
 func TestLuaServiceCallShapes(t *testing.T) {
 	a := &DebuggerApp{}

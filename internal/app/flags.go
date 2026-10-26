@@ -145,6 +145,9 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb -- -nx -x ./r5_debug.gdb ./zephyr.elf\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge --log gdbforge.log ./hello\n")
 		fmt.Fprintf(os.Stderr, "  GDBFORGE_INFERIOR_TTY=/dev/pts/3 gdbforge ./my_tui\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -serve 127.0.0.1:7777 -serve-token T ./hello   # REST /api + MCP /mcp;\n")
+		fmt.Fprintf(os.Stderr, "                                     # clients send: Authorization: Bearer T\n")
+		fmt.Fprintf(os.Stderr, "  GDBFORGE_TOKEN=T gdbforge -serve 127.0.0.1:7777 ./hello   # token from the environment\n")
 	}
 
 	if err := fs.Parse(before); err != nil {

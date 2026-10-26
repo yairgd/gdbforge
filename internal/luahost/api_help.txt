@@ -91,6 +91,81 @@ gdbforge.clear()
   Clear the bound Lua pane cell grid (game panes).
   Example: gdbforge.clear()
 
+gdbforge.gdb_query(cmd [, timeout_sec])
+  Run a debugger command and return its output: out, err (err is "" on success). Timeout default 120 s.
+  Example: local out, err = gdbforge.gdb_query("info threads")
+
+gdbforge.gdb_command(command)
+  Run a raw GDB/MI or Delve command and return the raw reply. [Remote]
+  Example: gdbforge.gdb_command("info frame")
+
+gdbforge.gdb_ctrl_c()
+  Interrupt the running program (^C).
+  Example: gdbforge.gdb_ctrl_c()
+
+gdbforge.run_control(action [, wait_sec])
+  continue|next|step|finish|stepi|nexti|run|start|interrupt; waits up to wait_sec (default 5, max 60)
+  for a stop. Returns {state, file, line}; state "running" = not stopped yet, no file = exited. [Remote]
+  Example: local s = gdbforge.run_control("next"); gdbforge.print(s.file, s.line)
+
+gdbforge.evaluate(expression)
+  Value of an expression in the current frame, as text (program must be stopped). [Remote]
+  Example: gdbforge.print(gdbforge.evaluate("x"))
+
+gdbforge.read_memory(address, length)
+  Read 1-4096 bytes of target memory → {address, length, hex}. GDB only. [Remote]
+  Example: gdbforge.print(gdbforge.read_memory("0x20000000", 16).hex)
+
+gdbforge.registers([name…])
+  Registers as {name = hex}. No names = general registers; "all" = every register. GDB only. [Remote]
+  Example: local r = gdbforge.registers("pc", "sp")
+
+gdbforge.list_breakpoints() / gdbforge.list_threads() / gdbforge.list_frames()
+  Breakpoints, threads or call-stack frames from the shared model (same as the panes). [Remote]
+  Example: gdbforge.print(gdbforge.list_frames())
+
+gdbforge.set_breakpoint(file, line) / gdbforge.clear_breakpoint(file, line)
+  Set or clear a breakpoint at file:line, like Space in the Code pane. [Remote]
+  Example: gdbforge.set_breakpoint("main.c", 42)
+
+gdbforge.set_kgdb_mode([on])
+  Switch kgdb mode on (default) or off.
+  Example: gdbforge.set_kgdb_mode(true)
+
+gdbforge.uart_send(device, [baud,] line)
+  Write a line (CRLF appended) to a serial device; baud default 115200.
+  Example: gdbforge.uart_send("/dev/ttyUSB0", "reboot")
+
+gdbforge.open_serial_terminal(device [, baud]) / gdbforge.close_serial_terminal()
+  Open or close the shared serial terminal (baud default 115200).
+  Example: gdbforge.open_serial_terminal("/dev/ttyUSB0", 115200)
+
+gdbforge.serial_send(line) / gdbforge.serial_owner() / gdbforge.serial_switch_owner(mode)
+  Send a line on the shared serial line, read or change its owner.
+  Example: gdbforge.print(gdbforge.serial_owner())
+
+gdbforge.serial_switch_gdb() / gdbforge.serial_switch_console() / gdbforge.begin_debug_entry()
+  Hand the serial line to the debugger (kgdb mode on) or back to the console; start the debug entry sequence.
+  Example: gdbforge.serial_switch_gdb()
+
+gdbforge.serial_sysrq_delayed([delay_sec])
+  Send SysRq-g after a delay (default 2 s).
+  Example: gdbforge.serial_sysrq_delayed(1)
+
+gdbforge.serial_debugger_pty() / gdbforge.serial_terminal_pty()
+  Pty paths of the debugger side and the terminal side of the serial line.
+  Example: gdbforge.print(gdbforge.serial_debugger_pty())
+
+gdbforge.spawn_serial_console(pty [, baud])
+  Run a serial console on a pty (baud default 115200).
+  Example: gdbforge.spawn_serial_console(gdbforge.serial_terminal_pty())
+
+Services over REST / MCP
+  Functions marked [Remote] are also served by gdbforge -serve 127.0.0.1:PORT (loopback only).
+  A bearer token is required: -serve-token T or GDBFORGE_TOKEN; clients send "Authorization: Bearer T".
+  GET /api lists them, POST /api/<name> with a JSON body calls one, /mcp is the MCP endpoint.
+  Example: curl -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/evaluate -d '{"expression":"x"}'
+
 pane.set_cell(x, y, ch [, color])
   Draw one cell in a ModeLua pane (:lua snake, etc.).
   Example: pane.set_cell(0, 0, "#", "red")

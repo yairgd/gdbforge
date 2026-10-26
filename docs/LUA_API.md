@@ -6,7 +6,7 @@ description: Reference for the gdbforge Lua API, including panes, processes, ter
 
 User-facing reference for scripting gdbforge.
 
-**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `gdb_query`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`, the `serial_*` and `uart_send` helpers, …) are **services**: each one is defined once in `internal/app/lua_services.go` and installed into every Lua runtime with `luahost.InstallServices` — they are present in the debugger app, not in a bare `luahost.New` runtime. The read-only ones (and the `:AI` tools) are also served over REST and MCP with `-serve`; see [Services over REST and MCP](#services-over-rest-and-mcp).
+**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `gdb_query`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`, the `serial_*` and `uart_send` helpers, …) are **services**: each one is defined once in `internal/app/lua_services.go` and installed into every Lua runtime with `luahost.InstallServices` — they are present in the debugger app, not in a bare `luahost.New` runtime. The read-only ones, the typed run-control/inspection tools and the `:AI` tools are also served over REST and MCP with `-serve` (bearer token required); see [Services over REST and MCP](#services-over-rest-and-mcp).
  In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 Scripts are discovered in this order (first basename wins; nested dirs OK):
@@ -331,13 +331,30 @@ the `:AI` tools (`list_breakpoints`, `list_threads`, `list_frames`, `set_breakpo
 `current_file`, `current_line`, `stop_file`, `stop_line`). Serial, UART and process-starting
 functions stay Lua-only.
 
+The token is any secret string you choose. gdbforge takes it from `-serve-token T` or, if that
+flag is absent, from `GDBFORGE_TOKEN`; every client sends it as the header
+`Authorization: Bearer T`. A request without it, or with a wrong one, gets `401`.
+
 ```bash
-export GDBFORGE_TOKEN=$(head -c16 /dev/urandom | xxd -p)   # or -serve-token
-gdbforge -serve 127.0.0.1:7777 ./hello
+# terminal 1: pick a token and start gdbforge (the TUI takes this terminal)
+export GDBFORGE_TOKEN=$(head -c16 /dev/urandom | xxd -p)
+echo $GDBFORGE_TOKEN                       # copy it for the clients
+gdbforge -serve 127.0.0.1:7777 ./hello     # same as: gdbforge -serve 127.0.0.1:7777 -serve-token $GDBFORGE_TOKEN ./hello
+
+# terminal 2: the clients need the same token
+export GDBFORGE_TOKEN=<token from terminal 1>
 curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" localhost:7777/api          # services + JSON schema
 curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/list_frames -d '{}'
+curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/run_control -d '{"action":"next"}'
+curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/evaluate -d '{"expression":"x"}'
+
+# MCP (JSON-RPC over HTTP POST at /mcp), e.g. register it with Claude Code:
 claude mcp add --transport http gdbforge http://127.0.0.1:7777/mcp --header "Authorization: Bearer $GDBFORGE_TOKEN"
 ```
+
+`claude mcp add` stores the header with the token, so after restarting gdbforge with a new token,
+remove and re-add the server (`claude mcp remove gdbforge`). Command-line flags are visible in
+`ps`; prefer `GDBFORGE_TOKEN` over `-serve-token` on shared machines.
 
 Example: start gdbforge with the service endpoint, then send a `b main` command to it from another terminal:
 

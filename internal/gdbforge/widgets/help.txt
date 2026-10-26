@@ -196,6 +196,13 @@ Other:
     gdbforge.run(...)      interactive :! (replaces focused pane)
     gdbforge.gdb(cmd)      send CLI to GDB/dlv console
     gdbforge.open_buffer("code"|"gdb"|…)  leaf-aware focus
+    gdbforge.gdb_query(cmd [, timeout])  → out, err
+    gdbforge.run_control(action [, wait])  continue/next/step/… → {state, file, line}
+    gdbforge.evaluate(expr) / read_memory(addr, n) / registers([names…])
+    gdbforge.list_breakpoints() / list_threads() / list_frames()
+    gdbforge.set_breakpoint(file, line) / clear_breakpoint(file, line)
+    gdbforge.uart_send / serial_* / set_kgdb_mode   serial + kgdb helpers
+        (full list: gdbforge.help())
     pane.set_cell / pane.clear / pane.size   full-widget draw API
     TUI debug (GDB): :lua terminal_debug [prog] [run]
     Open in gVim: :lua gvim  (same --servername, new tab)
@@ -355,6 +362,23 @@ About (:b about):
     Injects: set pagination off (no --Type <RET> during load).
     Breakpoints YAML: ./.gdbforge/breakpoints.yaml (cwd).
     Cmdline history: ./.gdbforge/cmdline_history.yaml (cwd).
+
+=== REST and MCP (-serve) ===
+
+    Off by default. Loopback addresses only; a bearer token is required.
+    gdbforge -serve 127.0.0.1:7777 -serve-token T ./prog
+    (or export GDBFORGE_TOKEN=T instead of -serve-token)
+    Clients send the header:  Authorization: Bearer T
+    GET  /api          list services + JSON schema
+    POST /api/<name>   call one, JSON body, e.g. {"expression":"x"}
+    POST /mcp          MCP endpoint (JSON-RPC), e.g.
+      claude mcp add --transport http gdbforge http://127.0.0.1:7777/mcp \
+          --header "Authorization: Bearer T"
+    Served: run_control, evaluate, read_memory, registers,
+      list_breakpoints/threads/frames, set/clear_breakpoint, gdb_command,
+      program, debugger_path, current_file/line, stop_file/line.
+    Serial, UART and process-starting functions stay Lua-only.
+    gdb_command runs any debugger command: guard T like a password.
 
 === Bundled scripts (CLI, not in a session) ===
 
