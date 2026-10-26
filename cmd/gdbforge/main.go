@@ -8,6 +8,7 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/app"
 	"github.com/yairgd/gdbforge/internal/ttyhold"
+	"github.com/yairgd/termforge/service"
 )
 
 // version is set at link time by release builds / task build from a git tag:
@@ -49,6 +50,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbg.Close()
+	if cfg.Serve != "" {
+		if err := service.ListenLoopback(cfg.Serve, service.WithToken(dbg.Services().Handler(), cfg.ServeToken)); err != nil {
+			dbg.Close() // os.Exit skips the deferred Close; do not leave the debugger running
+			fmt.Fprintf(os.Stderr, "gdbforge: -serve: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	dbg.Run()
 }
 

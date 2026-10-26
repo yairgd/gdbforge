@@ -147,3 +147,19 @@ func TestParseFlagsHelp(t *testing.T) {
 		t.Fatalf("got %v want flag.ErrHelp", err)
 	}
 }
+
+func TestParseFlagsServeNeedsToken(t *testing.T) {
+	t.Setenv("GDBFORGE_TOKEN", "")
+	if _, err := ParseFlags([]string{"-serve", "127.0.0.1:7777", "./hello"}); err == nil {
+		t.Fatal("-serve without a token must fail")
+	}
+	cfg, err := ParseFlags([]string{"-serve", "127.0.0.1:7777", "-serve-token", "t", "./hello"})
+	if err != nil || cfg.Serve != "127.0.0.1:7777" || cfg.ServeToken != "t" {
+		t.Fatalf("cfg=%+v err=%v", cfg, err)
+	}
+	t.Setenv("GDBFORGE_TOKEN", "envtok")
+	cfg, err = ParseFlags([]string{"-serve", "127.0.0.1:7777", "./hello"})
+	if err != nil || cfg.ServeToken != "envtok" {
+		t.Fatalf("env token: cfg=%+v err=%v", cfg, err)
+	}
+}

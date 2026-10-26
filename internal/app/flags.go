@@ -49,6 +49,9 @@ type SessionConfig struct {
 	// LogFile, if set, appends structured logs to that path (-log / --log).
 	// Empty means no file logging (default).
 	LogFile string
+	// Serve, if set, is a loopback address that serves the Remote services over REST and
+	// MCP (-serve); ServeToken is the bearer token it requires (-serve-token or GDBFORGE_TOKEN).
+	Serve, ServeToken string
 }
 
 func splitDashDash(args []string) (before, after []string, found bool) {
@@ -109,6 +112,8 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	debuggerPath := fs.String("d", "", "path to the debugger binary (default: matches -g)")
 	inferiorTTY := fs.String("inferior-tty", "", "external pts for program stdio, or external to open a new terminal (or GDBFORGE_INFERIOR_TTY)")
 	logFile := fs.String("log", "", "append structured logs to file (default: no file logging)")
+	serve := fs.String("serve", "", "serve debugger services over REST and MCP on this loopback address, e.g. 127.0.0.1:7777")
+	serveToken := fs.String("serve-token", "", "bearer token required by -serve (or GDBFORGE_TOKEN)")
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: gdbforge [gdbforge options] [--] [debugger options]\n\n")
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
@@ -117,6 +122,8 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  -inferior-tty pts External terminal slave for program stdio (TUI apps);\n")
 		fmt.Fprintf(os.Stderr, "                    \"external\" opens a new terminal (dlv: headless dlv runs there)\n")
 		fmt.Fprintf(os.Stderr, "  -log file         Append structured logs to file (off by default)\n")
+		fmt.Fprintf(os.Stderr, "  -serve addr       Serve debugger services over REST and MCP on a loopback address (off by default)\n")
+		fmt.Fprintf(os.Stderr, "  -serve-token tok  Bearer token that -serve requires (or GDBFORGE_TOKEN)\n")
 		fmt.Fprintf(os.Stderr, "  -version          Print version and exit\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help        Print help and exit\n")
 		fmt.Fprintf(os.Stderr, "  --                End of gdbforge options; rest passed to the debugger\n\n")
@@ -165,6 +172,15 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		cfg.InferiorTTY = strings.TrimSpace(os.Getenv("GDBFORGE_INFERIOR_TTY"))
 	}
 	cfg.LogFile = strings.TrimSpace(*logFile)
+	cfg.Serve = strings.TrimSpace(*serve)
+	cfg.ServeToken = strings.TrimSpace(*serveToken)
+	if cfg.ServeToken == "" {
+		cfg.ServeToken = strings.TrimSpace(os.Getenv("GDBFORGE_TOKEN"))
+	}
+	if cfg.Serve != "" && cfg.ServeToken == "" {
+		fs.Usage()
+		return SessionConfig{}, errors.New("-serve needs a token (-serve-token or GDBFORGE_TOKEN)")
+	}
 
 	if passThrough {
 		if len(after) == 0 {
