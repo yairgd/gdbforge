@@ -20,6 +20,10 @@ type DLVBackend struct {
 
 	// resuming is set while a resume RPC (continue/next/step/…) is in flight.
 	resuming atomic.Bool
+
+	// OnStopText, if set, receives console-style text (stop banner or exit line plus the prompt)
+	// for the end of an rpc2 resume. The app posts it to its console parser on the UI thread.
+	OnStopText func(text string)
 }
 
 func NewDLV(client *dlv.Client) *DLVBackend {

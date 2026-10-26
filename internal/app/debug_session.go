@@ -1,10 +1,13 @@
 package app
 
 import (
+	tcell "github.com/gdamore/tcell/v2"
+
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/debugstate"
+	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
 	"github.com/yairgd/gdbforge/internal/gdbforge/persist"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
@@ -159,6 +162,13 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	s.gdbMcp.SetDomain(appDebugDomain{app: a})
 	if a.cfg.IsDLV() {
 		s.gdbMcp.SetPromptToken(dlv.PromptToken)
+	}
+	if d := a.dlvBackend(); d != nil {
+		d.OnStopText = func(text string) {
+			if scr := a.Screen(); scr != nil {
+				_ = scr.PostEvent(tcell.NewEventInterrupt(events.GdbOutputMsg{Data: text}))
+			}
+		}
 	}
 	s.breaks.restoreSaved(savedBPs)
 	if wantExternal {

@@ -260,31 +260,74 @@ func (b *DLVBackend) execViaRPC(env CommandEnv, cmd string, ui bool) bool {
 
 func (b *DLVBackend) runRPCExec(c *dlv.Client, cmd string) {
 	done := func() { b.resuming.Store(false) }
+	// step runs one resume RPC and reports its stop like a console banner would.
+	step := func(fn func() (*api.DebuggerState, error)) {
+		go func() {
+			defer done()
+			st, err := fn()
+			b.noteStop(st, err)
+		}()
+	}
 	switch strings.TrimSpace(cmd) {
 	case "continue":
 		go func() {
 			defer done()
+			var last *api.DebuggerState
 			ch := c.RPC.Continue()
 			if ch != nil {
-				for range ch {
+				for st := range ch {
+					last = st
 				}
+			}
+			if last != nil {
+				b.noteStop(last, last.Err)
 			}
 		}()
 	case "next":
-		go func() { defer done(); _, _ = c.RPC.Next() }()
+		step(c.RPC.Next)
 	case "step":
-		go func() { defer done(); _, _ = c.RPC.Step() }()
+		step(c.RPC.Step)
 	case "stepout":
-		go func() { defer done(); _, _ = c.RPC.StepOut() }()
+		step(c.RPC.StepOut)
 	case "nexti":
-		go func() { defer done(); _, _ = c.RPC.StepInstruction(false) }()
+		step(func() (*api.DebuggerState, error) { return c.RPC.StepInstruction(false) })
 	case "stepi":
-		go func() { defer done(); _, _ = c.RPC.StepInstruction(true) }()
+		step(func() (*api.DebuggerState, error) { return c.RPC.StepInstruction(true) })
 	case "restart":
 		go func() { defer done(); _, _ = c.RPC.Restart(false) }()
 	default:
 		_ = b.SendLine(cmd)
 	}
+}
+
+// noteStop feeds the result of an rpc2 resume into the same parser a Delve console banner goes
+// through (OnStopText). The console never prints a banner for an rpc2 resume, so without this the
+// running flag, Code, Threads and Call Stack would not follow the stop.
+func (b *DLVBackend) noteStop(st *api.DebuggerState, err error) {
+	if b.OnStopText == nil {
+		return
+	}
+	var sb strings.Builder
+	switch {
+	case st != nil && st.Exited: // Delve also sets Err ("Process N has exited") for this
+		fmt.Fprintf(&sb, "Process has exited with status %d\n", st.ExitStatus)
+	case err != nil:
+		fmt.Fprintf(&sb, "Command failed: %v\n", err)
+	case st == nil:
+		return
+	default:
+		th := st.CurrentThread
+		if th == nil || th.File == "" {
+			return
+		}
+		fn := ""
+		if th.Function != nil {
+			fn = th.Function.Name()
+		}
+		fmt.Fprintf(&sb, "> %s() %s:%d (PC: %#x)\n", fn, th.File, th.Line, th.PC)
+	}
+	sb.WriteString(dlv.PromptToken + "\n")
+	b.OnStopText(sb.String())
 }
 
 func (b *DLVBackend) insertBreakpointRPC(file string, line int) bool {
