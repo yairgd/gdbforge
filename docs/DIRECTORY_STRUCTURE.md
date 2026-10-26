@@ -40,7 +40,7 @@ debugger application.
 | App events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
 | App state | `internal/gdbforge/debugstate` | Debugger session fields |
 | App DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers / string helpers |
-| Script host | `internal/luahost` | Generic Lua VM; debugger bindings come from `internal/gdbforge/luadebug` |
+| Script host | `internal/luahost` | Generic Lua VM; debugger bindings are services built in `internal/app` |
 
 Import guardrails: `task check-imports`.
 
@@ -67,7 +67,6 @@ gdbforge/
 │   │   ├── debugger/      # Backend-facing debugger interfaces
 │   │   ├── backend/       # backend.Backend — GDB/Delve policy surface
 │   │   ├── layout/        # Named workspace builders
-│   │   ├── luadebug/      # Debugger Lua bindings
 │   │   ├── persist/       # Breakpoint + history YAML
 │   │   └── widgets/       # Debugger panes (no gdb/mcp imports)
 │   ├── gdb/               # GDB MI2 backend
@@ -357,7 +356,7 @@ testable without a terminal.
 | Key binding in normal mode? | `internal/app/keybindings.go` + `input.go` |
 | Debugger session state? | `internal/gdbforge/debugstate` |
 | Breakpoint / history persistence? | `internal/gdbforge/persist` |
-| Debugger Lua binding? | `internal/gdbforge/luadebug` |
+| Debugger Lua function (also callable over MCP/REST)? | `internal/app/lua_services.go` |
 | Colon command for the debugger? | `internal/app/command_tree.go` |
 | Compose backends + controllers + UI? | `internal/app/setup.go` |
 | Split pane layout / window manager? | **termforge** — not this repo |

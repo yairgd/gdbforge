@@ -55,8 +55,9 @@ framework surfaces. `cmd/gdbforge` holds `main.go` alone and imports nothing but
 `internal/app` and `internal/ttyhold`.
 
 **Lua:** `internal/luahost` installs the generic script APIs. Debugger Lua bindings
-(`gdb`, `dlv_*`, `set_inferior_tty`, `program`) are registered from `internal/app` via
-`internal/gdbforge/luadebug.Install`, which keeps `luahost` free of debugger knowledge.
+(`gdb`, `dlv_*`, `set_inferior_tty`, `program`, the serial helpers) are services registered
+in `internal/app` and installed with `luahost.InstallServices`, which keeps `luahost` free of
+debugger knowledge.
 
 ---
 
@@ -114,7 +115,6 @@ flowchart BT
     backend["gdbforge/backend"]
     widgets["gdbforge/widgets"]
     layoutpkg["gdbforge/layout"]
-    luadebug["gdbforge/luadebug"]
     persist["gdbforge/persist"]
 
     app["internal/app"]
@@ -148,7 +148,6 @@ flowchart BT
     app --> backend
     app --> mcp
     app --> luahost
-    app --> luadebug
     app --> persist
     app --> debugstate
     app --> parse

@@ -6,7 +6,7 @@ description: Reference for the gdbforge Lua API, including panes, processes, ter
 
 User-facing reference for scripting gdbforge.
 
-**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`) are installed by `internal/app` via `gdbforge/luadebug.Install` from `wireUserLuaAPI` — they are present in the debugger app, not in a bare `luahost.New` runtime.
+**Install split:** Framework helpers (`print`, `register`, `spawn`, `pane.*`, …) ship with `luahost`. Debugger bindings (`gdb`, `gdb_query`, `dlv_connect`, `spawn_dlv_headless`, `set_inferior_tty`, `program`, `current_file`, `current_line`, `stop_file`, `stop_line`, the `serial_*` and `uart_send` helpers, …) are **services**: each one is defined once in `internal/app/lua_services.go` and installed into every Lua runtime with `luahost.InstallServices` — they are present in the debugger app, not in a bare `luahost.New` runtime. The read-only ones (and the `:AI` tools) are also served over REST and MCP with `-serve`; see [Services over REST and MCP](#services-over-rest-and-mcp).
  In-app summary: **`:help`** (Lua section). Architecture/status: [PLUGINS.md](PLUGINS.md). Installable workflows: [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md).
 
 Scripts are discovered in this order (first basename wins; nested dirs OK):
@@ -319,3 +319,49 @@ end
 - [USER_GUIDE.md](USER_GUIDE.md) — keys, `:set`, panes, external terminal UX
 - [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#external-terminal-stdio-tui-targets) — PTY / tty architecture
 - [lua/README.md](https://github.com/yairgd/gdbforge/blob/main/lua/README.md) — every catalog script, env vars, recipes
+
+## Services over REST and MCP
+
+Every debugger function above that is not Lua-only is a *service*: a name, help text, typed
+parameters and a handler, defined once and called from Lua, the `:AI` agent, REST and MCP.
+By default a service is Lua-only. Only services marked `Remote` are offered to REST and MCP:
+the `:AI` tools (`list_breakpoints`, `list_threads`, `list_frames`, `set_breakpoint`,
+`clear_breakpoint`, `gdb_command`), the typed run-control and inspection tools (`run_control`,
+`evaluate`, `read_memory`, `registers`) and the read-only queries (`program`, `debugger_path`,
+`current_file`, `current_line`, `stop_file`, `stop_line`). Serial, UART and process-starting
+functions stay Lua-only.
+
+```bash
+export GDBFORGE_TOKEN=$(head -c16 /dev/urandom | xxd -p)   # or -serve-token
+gdbforge -serve 127.0.0.1:7777 ./hello
+curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" localhost:7777/api          # services + JSON schema
+curl -s -H "Authorization: Bearer $GDBFORGE_TOKEN" -XPOST localhost:7777/api/list_frames -d '{}'
+claude mcp add --transport http gdbforge http://127.0.0.1:7777/mcp --header "Authorization: Bearer $GDBFORGE_TOKEN"
+```
+
+Example: start gdbforge with the service endpoint, then send a `b main` command to it from another terminal:
+
+```bash
+gdbforge -serve 127.0.0.1:17888 -serve-token tok123 ~/hello
+
+curl -H "Authorization: Bearer tok123" -XPOST localhost:17888/api/gdb_command -d '{"command":"b main"}'
+# {"result":"b main\r\n...~\"Breakpoint 2 at 0x118d: file hello.c, line 8.\\n\"\r\n^done\r\n(gdb) \r\n"}
+```
+
+The reply holds the raw debugger output. The typed services return less text: `run_control` with
+`{"action":"next"}` returns `{"state":"stopped","file":"…/hello.c","line":10}`, and `evaluate` with
+`{"expression":"sum"}` returns `5`.
+
+`-serve` is off by default, accepts loopback addresses only, and refuses to start without a
+token. `gdb_command` runs any debugger command, so treat the token like a shell password.
+
+The typed tools return small structured results instead of raw debugger output:
+
+| Service | Params | Returns |
+|---------|--------|---------|
+| `run_control` | `action` (`continue`, `next`, `step`, `finish`, `stepi`, `nexti`, `run`, `start`, `interrupt`), optional `wait` seconds (default 5, max 60) | `{state, file, line}`; `state` is `running` if the program has not stopped yet, and a stop with no file means the program exited |
+| `evaluate` | `expression` | the value as text (the program must be stopped) |
+| `read_memory` | `address`, `length` (1-4096) | `{address, length, hex}` (GDB only) |
+| `registers` | optional register names, or `all` | `{name: hex}` (GDB only). Default: the general registers that `info registers` shows (about 120 tokens on x86-64, r0-r15 and cpsr on ARM). Names outside that group (e.g. `xmm0`) are looked up in the full list; `all` returns everything (large) |
+
+They are plain Lua functions too: `gdbforge.evaluate("x")`, `gdbforge.registers("pc", "sp")`.
