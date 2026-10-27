@@ -728,6 +728,113 @@ Service → Event Bus → Data Model → Widget
 
 Widgets display models. Models subscribe to application events. Services never talk to widgets directly. The GDB and terminal sections below describe the current wiring toward this target.
 
+### Worked example: setting a breakpoint (GUI vs Lua / MCP / REST)
+
+One action, three entry points. The first two share the same controller code; the third goes
+straight to the debugger console and only rejoins at the refresh.
+
+```mermaid
+flowchart TD
+    subgraph GUI["GUI: Space in the Code pane"]
+        K["CodeWidget.breakAtSel"] --> E["Publish CodeBreakToggleMsg"]
+        E --> H["breakCtl.onCodeBreakToggle"]
+    end
+
+    subgraph SVC["Service: Lua / MCP / REST set_breakpoint(file, line)"]
+        S["service set_breakpoint"] --> D["appDebugDomain.SetBreakpoint"]
+    end
+
+    subgraph RAW["Service: Lua gdb('break main')"]
+        G["service gdb"] --> X["DebuggerApp.SendGdbExec"]
+    end
+
+    H --> C
+    D --> C
+
+    subgraph COMMON["Common code (breakCtl + models + backend)"]
+        C["1. BreakpointList.ToggleInsertClear"] --> P["2. syncViews: SetBreakInfos, red gutter (optimistic)"]
+        P --> I["3. applyBreakIntent: Backend.InsertBreakpoint"]
+    end
+
+    I --> PTY[("GDB / Delve")]
+    X --> PTY
+
+    PTY -->|"=breakpoint-created"| MI["MI parser: BreakpointsChanged"]
+    MI --> PB["PublishBreakpointsChanged"]
+    I -.->|"refresh immediately or deferred"| PB
+
+    subgraph REFRESH["Common refresh"]
+        PB --> R["breakCtl.runRefresh: -break-list"]
+        R --> M["BreakpointList.MergeFromGDB"]
+        M --> V["syncViews: BP pane, Code gutters, Asm marks"]
+    end
+
+    V --> DRAW["CodeWidget.cellStyle: BreakColor in gutter cols 4-7"]
+```
+
+**Call path with source links** (permalinks pinned to commit `ad272a2`, so they stay valid; they may not match the current head).
+
+*A. GUI: Space in the Code pane*
+
+1. [`CodeWidget.breakAtSel`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/widgets/code_widget.go#L296): key `" "` is bound at [`line 90`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/widgets/code_widget.go#L90); publishes `CodeBreakToggleMsg{Path, Line}`
+2. [`breakCtl.Register`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L501) → [`onCodeBreakToggleMsg`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L513) → [`breakCtl.onCodeBreakToggle`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L245)
+    1. [`BreakpointList.ToggleInsertClear`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/models/breakpoints.go#L214): model update, returns a `BreakIntent`
+    2. [`breakCtl.syncViews`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L49) → [`paintCodeMarks`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L389) → [`CodeWidget.SetBreakInfos`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/widgets/code_widget.go#L455): optimistic red gutter
+    3. [`breakCtl.applyBreakIntent`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L79) → [`GDBBackend.InsertBreakpoint`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/backend/ops.go#L78) → [`BreakInsertAt`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/backend/break_cmds.go#L12) → [`GDBBackend.SendMappedBreak`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/backend/command.go#L42) → GDB PTY
+
+*B. Service: Lua / MCP / REST `set_breakpoint(file, line)`*
+
+1. [`service "set_breakpoint"`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/mcp/tools.go#L49)
+2. [`appDebugDomain.SetBreakpoint`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/debug_domain.go#L71)
+    1. [`BreakpointList.ToggleInsertClear`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/models/breakpoints.go#L214): same call as A
+    2. [`breakCtl.syncViews`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L49) via `syncBreakpointViews`: same as A
+    3. [`breakCtl.applyBreakIntent`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L79): same as A
+
+*C. Service: Lua `gdb("break main")`*
+
+1. [`service "gdb"`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/lua_services.go#L132)
+2. [`luaCtl.onUI`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/lua_services.go#L33): hop to the UI thread
+3. [`DebuggerApp.SendGdbExec`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/lua_host.go#L118) → `backend.MapExec` → `backend.SendLine` → GDB PTY
+4. No model update and no optimistic paint
+
+*Common tail: confirm and repaint (A, B and C)*
+
+1. GDB emits `=breakpoint-created`; the MI parser sets [`BreakpointsChanged`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdb/mi_state.go#L153)
+2. [`consoleCtl.applyConsoleUpdate`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/gdb_console.go#L390) → [`DebuggerApp.PublishBreakpointsChanged`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/controllers.go#L211). A and B reach this through [`breakCtl.onChanged`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L485)
+3. [`breakCtl.onChangedMsg`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L492) → [`breakCtl.runRefresh`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L476) → [`FetchBreakpoints`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/backend/gdb_backend.go#L102) (`-break-list`)
+4. [`breakCtl.applyBreakInfos`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L363) → [`BreakpointList.MergeFromGDB`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/models/breakpoints.go#L78) → [`syncViews`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/app/breakpoints.go#L49)
+5. [`CodeWidget.cellStyle`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/widgets/code_widget.go#L496) → [`breakGutterColor`](https://github.com/yairgd/gdbforge/blob/ad272a2/internal/gdbforge/widgets/break_paint.go#L11): red in gutter columns 4-7
+
+
+| Step | Where | What |
+|------|-------|------|
+| Key to event | `widgets/code_widget.go` `breakAtSel` | Widget only publishes `CodeBreakToggleMsg`; it never talks to GDB |
+| Event to controller | `app/breakpoints.go` `Register`, `onCodeBreakToggle` | Bus subscription on the owning `breakCtl` |
+| Service to controller | `mcp/tools.go` `set_breakpoint` → `app/debug_domain.go` `SetBreakpoint` | Calls the same controller methods; no widget, no bus event |
+| Model | `models/breakpoints.go` `ToggleInsertClear` | Clears if enabled at that line, else appends a row; returns a `BreakIntent` |
+| Optimistic paint | `breakCtl.syncViews` → `CodeWidget.SetBreakInfos` | Mark shows before GDB answers |
+| Send | `breakCtl.applyBreakIntent` → `Backend.InsertBreakpoint` | Emits `break file:line` (GDB) or an rpc2 call (Delve) |
+| Confirm | `-break-list` → `MergeFromGDB` → `syncViews` | Replaces the optimistic row with GDB's number and resolved location |
+| Draw | `CodeWidget.cellStyle`, `widgets/break_paint.go` | Enabled, disabled and conditional get different colors |
+
+**Differences between the entry points**
+
+| | Space | `set_breakpoint` | `gdb("break …")` |
+|---|---|---|---|
+| Entry | key → widget event | service → domain adapter | service → console line |
+| Model update | `ToggleInsertClear` | `ToggleInsertClear` | only via the `-break-list` refresh |
+| Instant mark | yes | yes | no, after GDB confirms |
+| Semantics | toggle | idempotent set (`clear_breakpoint` is the inverse) | whatever GDB does |
+| Location | cursor line | explicit `file:line` | any GDB spec (`tbreak`, `*addr`, conditions) |
+
+**Why this shape.** Widgets publish intents and controllers own the logic, so a service can reuse
+the controller without faking a key press (the "service → model → widget" rule above). The raw
+console path exists for specs the model cannot express; it is correct but slower to show, because
+the model is rebuilt from GDB's own `=breakpoint-created` / `-break-list`.
+
+Delve has no `=breakpoint-created` record. Its console path refreshes after the next prompt
+(`DeferBreakpointRefresh`, `TakeDeferredBP`).
+
 ### Input → action → redraw
 
 gdbforge uses **two parallel event planes**:
