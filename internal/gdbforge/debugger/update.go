@@ -17,10 +17,12 @@ const (
 // ConsoleUpdate holds backend-neutral fields consumed by the console bridge
 // side-effect pipeline (stop, prompt, breakpoints, frame sync).
 type ConsoleUpdate struct {
-	Stopped            *StopInfo
-	InferiorExited     bool
-	PromptReady        bool
-	State              SessionState
+	Stopped        *StopInfo
+	InferiorExited bool
+	PromptReady    bool
+	State          SessionState
+	// TargetRunning is GDB's persistent run state (see gdb.MiUpdate.Running); false for Delve.
+	TargetRunning      bool
 	BreakpointsChanged bool
 	FrameSelected      *FrameInfo
 }
@@ -36,6 +38,7 @@ func FromGDBUpdate(u gdb.MiUpdate) ConsoleUpdate {
 		InferiorExited:     u.InferiorExited,
 		PromptReady:        u.PromptReady,
 		State:              u.State,
+		TargetRunning:      u.Running,
 		BreakpointsChanged: u.BreakpointsChanged,
 		FrameSelected:      fr,
 	}

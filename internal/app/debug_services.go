@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
+	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/termforge/service"
 )
 
@@ -60,21 +62,31 @@ func (c *luaCtl) stopState(ctx context.Context) (stopInfo, error) {
 	return si, err
 }
 
-// stoppedQuery checks the target is stopped and returns the session to query.
+// stoppedQuery checks the target is stopped and returns the session to query. With GDB the
+// run state comes from the MI tracker and the queries wait for their own reply.
 func (c *luaCtl) stoppedQuery(ctx context.Context) (queryFn, longFn func(string) (string, error), isDLV bool, err error) {
+	m := c.host.GdbMcp()
+	if b := c.host.Backend(); b != nil && b.Kind() == backend.DLV {
+		isDLV = true
+	}
+	if m != nil && !isDLV {
+		if tr := m.Tracker(ctx); tr != nil {
+			if tr.State() == gdb.StateRunningName {
+				return nil, nil, false, mcp.ErrTargetRunning("")
+			}
+			return func(cmd string) (string, error) { return m.QueryToken(ctx, cmd, 10*time.Second) },
+				func(cmd string) (string, error) { return m.QueryToken(ctx, cmd, 30*time.Second) }, false, nil
+		}
+	}
 	si, err := c.stopState(ctx)
 	if err != nil {
 		return nil, nil, false, err
 	}
 	if si.State == "running" {
-		return nil, nil, false, fmt.Errorf("target is running; use run_control interrupt first")
+		return nil, nil, false, mcp.ErrTargetRunning("")
 	}
-	m := c.host.GdbMcp()
 	if m == nil {
 		return nil, nil, false, errNoSessionSvc
-	}
-	if b := c.host.Backend(); b != nil && b.Kind() == backend.DLV {
-		isDLV = true
 	}
 	return func(cmd string) (string, error) { return m.Query(ctx, cmd) },
 		func(cmd string) (string, error) { return m.QueryLong(ctx, cmd) }, isDLV, nil
@@ -93,37 +105,15 @@ func (c *luaCtl) addDebugServices(r *service.Registry) {
 	str := func(n, help string) service.Param { return service.Param{Name: n, Type: service.String, Help: help} }
 	for _, s := range []service.Service{
 		{Name: "run_control", Remote: true,
-			Help: "Run control: continue, next, step, finish, stepi, nexti, run, start or interrupt. Waits up to `wait` seconds (default 5) for the program to stop and returns {state, file, line}; state \"running\" means it is still running; stopped with no file means the program exited.",
+			Help: "Run control: continue, next, step, finish, stepi, nexti, run, start or interrupt. Waits up to `wait` seconds (default 5) for the program to stop and returns {state, file, line, …}; state \"running\" means it is still running; stopped with no file means the program exited. The dedicated tools (interrupt, continue, step, …) take milliseconds.",
 			Params: []service.Param{str("action", "continue|next|step|finish|stepi|nexti|run|start|interrupt"),
 				{Name: "wait", Type: service.Number, Help: "seconds to wait for a stop, default 5, max 60", Optional: true}},
 			Run: func(ctx context.Context, a service.Args) (any, error) {
-				action := strings.TrimSpace(a.String("action"))
-				var err error
-				if e := c.onUI(ctx, func() { err = c.host.RunControl(action) }); e != nil {
-					return nil, e
-				}
-				if err != nil {
-					return nil, err
-				}
 				wait := defaultStopWait
 				if w, ok := a["wait"].(float64); ok && w >= 0 {
 					wait = time.Duration(w * float64(time.Second))
 				}
-				if wait > maxStopWait {
-					wait = maxStopWait
-				}
-				deadline := time.Now().Add(wait)
-				for {
-					si, err := c.stopState(ctx)
-					if err != nil || si.State == "stopped" || !time.Now().Before(deadline) {
-						return si, err
-					}
-					select {
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					case <-time.After(stopPoll):
-					}
-				}
+				return c.runControl(ctx, strings.TrimSpace(a.String("action")), min(wait, maxStopWait))
 			}},
 		{Name: "evaluate", Remote: true,
 			Help:   "Evaluate an expression in the current frame (the program must be stopped) and return its value as text.",
@@ -159,12 +149,12 @@ func (c *luaCtl) addDebugServices(r *service.Registry) {
 					return v, nil
 				}
 				if msg, ok := parse.MIError(out); ok {
-					return nil, fmt.Errorf("%s", msg)
+					return nil, mcp.MIFailure(msg)
 				}
 				return nil, fmt.Errorf("evaluate: unexpected reply")
 			}},
 		{Name: "read_memory", Remote: true,
-			Help: "Read target memory (GDB only; the program must be stopped). Returns {address, length, hex}; length is capped at 4096 bytes.",
+			Help: "Read target memory (GDB only; the program must be stopped). Returns {address, length, hex}, plus words32 (0x%08x strings in the target's byte order) and endian when length is a multiple of 4; length is capped at 4096 bytes.",
 			Params: []service.Param{str("address", "address or expression, e.g. 0x20000000 or &buf"),
 				{Name: "length", Type: service.Integer, Help: "number of bytes, 1-4096"}},
 			Run: func(ctx context.Context, a service.Args) (any, error) {
@@ -184,10 +174,15 @@ func (c *luaCtl) addDebugServices(r *service.Registry) {
 					return nil, err
 				}
 				if hex, ok := parse.MIMemoryHex(out); ok {
-					return map[string]any{"address": addr, "length": len(hex) / 2, "hex": hex}, nil
+					res := map[string]any{"address": addr, "length": len(hex) / 2, "hex": hex}
+					if len(hex)%8 == 0 && hex != "" {
+						endian := c.host.GdbMcp().Endian(ctx)
+						res["words32"], res["endian"] = words32(hex, endian), endian
+					}
+					return res, nil
 				}
 				if msg, ok := parse.MIError(out); ok {
-					return nil, fmt.Errorf("%s", msg)
+					return nil, mcp.MIFailure(msg)
 				}
 				return nil, fmt.Errorf("read_memory: unexpected reply")
 			}},
@@ -246,7 +241,7 @@ func (c *luaCtl) addDebugServices(r *service.Registry) {
 				vals := parse.MIRegisterValues(valsOut)
 				if len(names) == 0 || len(vals) == 0 {
 					if msg, ok := parse.MIError(valsOut + namesOut); ok {
-						return nil, fmt.Errorf("%s", msg)
+						return nil, mcp.MIFailure(msg)
 					}
 					return nil, fmt.Errorf("registers: unexpected reply")
 				}
@@ -275,4 +270,17 @@ func cleanDlvOutput(out, cmd string) string {
 		keep = append(keep, t)
 	}
 	return strings.Join(keep, "\n")
+}
+
+// words32 splits memory hex into 32-bit words as 0x%08x strings, in the target's byte order.
+func words32(hex, endian string) []string {
+	out := make([]string, 0, len(hex)/8)
+	for i := 0; i+8 <= len(hex); i += 8 {
+		w := hex[i : i+8]
+		if endian != "big" { // bytes are in memory order: little endian reverses them
+			w = w[6:8] + w[4:6] + w[2:4] + w[0:2]
+		}
+		out = append(out, "0x"+strings.ToLower(w))
+	}
+	return out
 }

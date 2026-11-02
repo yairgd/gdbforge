@@ -16,7 +16,13 @@ var (
 
 // ParseBreakList extracts breakpoint rows from -break-list output.
 // Includes pending breakpoints (original-location / pending="file:line").
-func ParseBreakList(raw string) []models.BreakInfo {
+func ParseBreakList(raw string) []models.BreakInfo { return parseBreakList(raw, false) }
+
+// ParseBreakListAll is ParseBreakList plus the rows that have no source location, such as
+// watchpoints and catchpoints (Type and What say what they are).
+func ParseBreakListAll(raw string) []models.BreakInfo { return parseBreakList(raw, true) }
+
+func parseBreakList(raw string, all bool) []models.BreakInfo {
 	var out []models.BreakInfo
 	idxs := bkptChunkRe.FindAllStringIndex(raw, -1)
 	for i, loc := range idxs {
@@ -64,9 +70,10 @@ func ParseBreakList(raw string) []models.BreakInfo {
 		if addr != "" {
 			addr = NormalizeAddr(addr)
 		}
-		if (file == "" || line < 1) && addr == "" {
+		if (file == "" || line < 1) && addr == "" && !all {
 			continue
 		}
+		hits, _ := strconv.Atoi(extractQuotedField(chunk, "times"))
 		out = append(out, models.BreakInfo{
 			Number:    num,
 			Enabled:   !strings.Contains(chunk, `enabled="n"`),
@@ -74,6 +81,10 @@ func ParseBreakList(raw string) []models.BreakInfo {
 			File:      unescapeMI(file),
 			Line:      line,
 			Addr:      addr,
+			Type:      extractQuotedField(chunk, "type"),
+			Temporary: extractQuotedField(chunk, "disp") == "del",
+			Hits:      hits,
+			What:      unescapeMI(extractQuotedField(chunk, "what")),
 		})
 	}
 	return out

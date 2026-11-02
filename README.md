@@ -216,6 +216,54 @@ Inside the app: open `:help`, step with `n` / `s` / `c`, quit with Ctrl-D or `:q
 
 More demos: `gcc -O0 -g -o stack_demo examples/stack_demo.c && ./bin/gdbforge ./stack_demo`.
 
+## Driving gdbforge from an AI agent (REST)
+
+`gdbforge help -mcp` prints these steps and the prompt to give the agent. `gdbforge -serve 127.0.0.1:7777 -serve-token T ./prog` serves the debugger over REST (`POST /api/<tool>`, JSON in and out) and MCP (`/mcp`), on loopback only. Clients send `Authorization: Bearer T`; `GET /api` lists every tool with its arguments. The tools work with any GDB target (gdbserver, OpenOCD, J-Link, ST-Link, kgdb, native).
+
+```bash
+H="Authorization: Bearer T"; API=http://127.0.0.1:7777/api
+```
+
+**Every REST reply carries the run state**, tracked from GDB's own `*running` / `*stopped` records: `state` is `running`, `stopped` or `disconnected`; when stopped it also has `stop_reason`, `pc`, `func`, `file`, `line` and, for a breakpoint or watchpoint stop, `bkpt_number`. An error has a code, for example `{"error":"target_running","hint":"call interrupt first","state":"running"}` (HTTP 409).
+
+```bash
+# Halt the target and wait for the stop (default 3000 ms, retried once)
+curl -s -H "$H" $API/interrupt -d '{}'
+# {"result":{"state":"stopped",...},"state":"stopped","stop_reason":"signal-received","pc":"0x00000100","func":"loop","file":"/src/a.c","line":42}
+
+# Resume and wait up to 5 s for a stop; "state":"running" means it did not stop in time
+curl -s -H "$H" $API/continue -d '{"wait_ms":5000}'
+# {"result":{...},"state":"stopped","stop_reason":"breakpoint-hit","bkpt_number":2,"func":"spi_isr",...}
+
+# Wait for a running target to stop, without resuming it
+curl -s -H "$H" $API/wait_for_stop -d '{"timeout_ms":10000}'
+
+# Step, and get the new location back
+curl -s -H "$H" $API/next   -d '{}'     # also: step, stepi, finish  (optional "timeout_ms")
+
+# Temporary breakpoint + continue + wait, in one call
+curl -s -H "$H" $API/run_to -d '{"location":"main.c:123","timeout_ms":5000}'
+# result: {"reached":true,"temp_breakpoint":"3",...}
+
+# Several reads on one halted snapshot, in one call; resumes only if this call halted the target
+curl -s -H "$H" $API/batch -d '{"halt":true,"resume":true,"ops":[
+  {"tool":"read_memory","args":{"address":"0xE000ED00","length":16}},
+  {"tool":"registers","args":{"names":["pc","sp","lr"]}}]}'
+
+# gdb_command returns the console text only (format "console", the default); "mi" is the raw
+# MI records and "both" returns both
+curl -s -H "$H" $API/gdb_command -d '{"command":"info registers pc"}'
+# {"result":"pc             0x401136            0x401136 <main+4>","state":"stopped",...}
+
+# read_memory adds "words32" (0x%08x, in the target's byte order) and "endian" when length % 4 == 0
+curl -s -H "$H" $API/read_memory -d '{"address":"&counter","length":8}'
+
+# Breakpoints and watchpoints: number, type, location, enabled, hits, temporary, condition
+curl -s -H "$H" $API/list_breakpoints -d '{}'
+```
+
+The state is GDB's view. `monitor halt`, `monitor go` or `monitor reset` change the target without telling GDB, so the state can be wrong after them. A command that GDB refuses because the target runs ("Selected thread is running") comes back as `target_running`; call `interrupt` first.
+
 ## Developers
 
 Full documentation (architecture, debugger integration, input/completion): **[gdbforge docs](https://yairgd.github.io/gdbforge/)** — local preview: `./docs/serve.sh` → <http://127.0.0.1:8765/gdbforge/>.

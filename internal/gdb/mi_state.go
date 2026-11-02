@@ -14,8 +14,12 @@ type MiUpdate struct {
 	PromptReady  bool
 	// PromptLine is the exact MI prompt record GDB emitted (e.g. "(gdb)").
 	// Empty unless PromptReady. UI must paint this text — never invent a prompt.
-	PromptLine         string
-	State              GdbState
+	PromptLine string
+	State      GdbState
+	// Running is the target's run state after this batch: set by ^running / *running and
+	// cleared by *stopped and thread-group-exited. Unlike State it persists across batches,
+	// so a bare (gdb) prompt that GDB prints while the target runs does not read as "stopped".
+	Running            bool
 	ErrorMsg           string
 	Stopped            *MiStopMsg
 	BreakpointsChanged bool
@@ -41,6 +45,7 @@ type MiFrameMsg struct {
 type GdbInputState struct {
 	lineBuf string
 	state   GdbState
+	running bool
 }
 
 func NewGdbInputState() *GdbInputState {
@@ -50,6 +55,7 @@ func NewGdbInputState() *GdbInputState {
 func (m *GdbInputState) Clear() {
 	m.lineBuf = ""
 	m.state = Done
+	m.running = false
 }
 
 // PushRaw accepts raw PTY chunks, splits on '\n', and processes each complete
@@ -70,6 +76,7 @@ func (m *GdbInputState) PushRaw(data string) MiUpdate {
 		m.lineBuf = m.lineBuf[i+1:]
 		m.consumeLine(line, &out)
 	}
+	out.Running = m.running
 	return out
 }
 
@@ -109,6 +116,10 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 	case strings.HasPrefix(line, "^running"):
 		m.state = Running
 		out.State = Running
+		m.running = true
+
+	case strings.HasPrefix(line, "*running"):
+		m.running = true
 
 	case strings.HasPrefix(line, "^done"), strings.HasPrefix(line, "^connected"), strings.HasPrefix(line, "^exit"):
 		m.state = Done
@@ -130,6 +141,7 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 			}
 		}
 		out.Stopped = &stop
+		m.running = false
 		// Inferior is no longer running — clear so a same-batch (gdb) prompt
 		// does not leave State==Running and re-arm InferiorRunning (Ctrl-Z).
 		m.state = Done
@@ -157,6 +169,7 @@ func (m *GdbInputState) consumeLine(line string, out *MiUpdate) {
 
 	case strings.HasPrefix(line, "=thread-group-exited"):
 		out.InferiorExited = true
+		m.running = false
 
 	case strings.HasPrefix(line, "=thread-selected"):
 		// CLI frame/f/up/down emit this with frame={level=…,fullname=…,line=…}.

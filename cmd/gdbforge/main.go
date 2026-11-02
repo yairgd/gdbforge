@@ -28,6 +28,10 @@ func main() {
 	if app.WantsListScripts(os.Args[1:]) {
 		os.Exit(app.ListBundledScripts(os.Stdout))
 	}
+	if app.WantsHelpMCP(os.Args[1:]) {
+		app.HelpMCP(os.Stdout)
+		os.Exit(0)
+	}
 	if wantsVersion(os.Args[1:]) {
 		fmt.Println(version)
 		os.Exit(0)
@@ -51,7 +55,7 @@ func main() {
 	}
 	defer dbg.Close()
 	if cfg.Serve != "" {
-		if err := service.ListenLoopback(cfg.Serve, service.WithToken(dbg.Services().Handler(), cfg.ServeToken)); err != nil {
+		if err := service.ListenLoopback(cfg.Serve, service.WithToken(dbg.RESTHandler(), cfg.ServeToken)); err != nil {
 			dbg.Close() // os.Exit skips the deferred Close; do not leave the debugger running
 			fmt.Fprintf(os.Stderr, "gdbforge: -serve: %v\n", err)
 			os.Exit(1)

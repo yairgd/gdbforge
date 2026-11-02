@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yairgd/gdbforge/internal/gdbforge/domain"
+	"github.com/yairgd/gdbforge/internal/gdbforge/models"
+	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/termforge/service"
 )
 
@@ -40,8 +43,28 @@ func Services(get func() *GdbMcpService) *service.Registry {
 		}
 	}
 	for _, sv := range []service.Service{
-		{Name: "list_breakpoints", Remote: true, Help: "List breakpoints from the shared model (same as the Breakpoints pane).",
-			Run: dom(func(d domain.DebugDomain, _ service.Args) (any, error) { return d.ListBreakpoints(), nil })},
+		{Name: "list_breakpoints", Remote: true,
+			Help: "List breakpoints and watchpoints: number, type, location, enabled, hit count, temporary (tbreak) and condition. Read from the debugger, so hit counts are current.",
+			Run: func(ctx context.Context, _ service.Args) (any, error) {
+				s := get()
+				if s == nil {
+					return nil, errNoSession
+				}
+				if s.isMI() && s.sess != nil {
+					raw, err := s.QueryToken(ctx, "-break-list", 10*time.Second)
+					if err != nil {
+						return nil, err
+					}
+					if msg, ok := parse.MIError(raw); ok {
+						return nil, MIFailure(msg)
+					}
+					return breakRows(parse.ParseBreakListAll(raw)), nil
+				}
+				if s.domain == nil {
+					return nil, errNoSession
+				}
+				return s.domain.ListBreakpoints(), nil
+			}},
 		{Name: "list_threads", Remote: true, Help: "List threads from the shared model (same as the Threads pane).",
 			Run: dom(func(d domain.DebugDomain, _ service.Args) (any, error) { return d.ListThreads(), nil })},
 		{Name: "list_frames", Remote: true, Help: "List call-stack frames from the shared model (same as the Call Stack pane).",
@@ -62,21 +85,35 @@ func Services(get func() *GdbMcpService) *service.Registry {
 				}
 				return fmt.Sprintf("ok: breakpoint cleared at %s:%d", file, line), nil
 			})},
-		{Name: "gdb_command", Remote: true, Help: "Run a raw GDB/MI or Delve command when no domain tool fits (continue, next, print, …).",
-			Params: []service.Param{{Name: "command", Type: service.String, Help: "Debugger command line"}},
+		{Name: "gdb_command", Remote: true,
+			Help: "Run a raw GDB/MI, GDB CLI or Delve command when no other tool fits (print, info, monitor, …). With GDB the reply is the console text only (format console, the default), the raw MI records (mi) or both. A command that needs a stopped target while it runs fails with target_running. timeout_ms (default 10000) is how long to wait for the reply.",
+			Params: []service.Param{{Name: "command", Type: service.String, Help: "Debugger command line"},
+				{Name: "format", Type: service.String, Help: "console (default) | mi | both", Optional: true},
+				{Name: "timeout_ms", Type: service.Integer, Help: "wait for the reply, default 10000, max 300000", Optional: true}},
 			Run: func(ctx context.Context, a service.Args) (any, error) {
 				s := get()
 				if s == nil {
 					return nil, errNoSession
 				}
-				out, err := s.GdbCommand(ctx, a.String("command"))
+				if !s.isMI() { // Delve: its CLI has no tokens or MI records
+					out, err := s.GdbCommand(ctx, a.String("command"))
+					if err != nil {
+						return nil, err
+					}
+					if out == "" {
+						return "(no output)", nil
+					}
+					return out, nil
+				}
+				timeout := 10 * time.Second
+				if ms := a.Int("timeout_ms"); ms > 0 {
+					timeout = min(time.Duration(ms)*time.Millisecond, 300*time.Second)
+				}
+				raw, err := s.CommandToken(ctx, a.String("command"), timeout)
 				if err != nil {
 					return nil, err
 				}
-				if out == "" {
-					return "(no output)", nil
-				}
-				return out, nil
+				return FormatReply(raw, a.String("format"))
 			}},
 	} {
 		r.Add(sv)
@@ -107,4 +144,31 @@ func (s *GdbMcpService) runTool(ctx context.Context, name string, input json.Raw
 		return "error: " + err.Error()
 	}
 	return string(b)
+}
+
+// BreakRow is one breakpoint or watchpoint as list_breakpoints reports it.
+type BreakRow struct {
+	Number    int    `json:"number"`
+	Type      string `json:"type"`
+	Location  string `json:"location"`
+	Enabled   bool   `json:"enabled"`
+	Hits      int    `json:"hits"`
+	Temporary bool   `json:"temporary"`
+	Condition string `json:"condition,omitempty"`
+}
+
+func breakRows(items []models.BreakInfo) []BreakRow {
+	rows := make([]BreakRow, 0, len(items))
+	for _, it := range items {
+		loc := it.What
+		switch {
+		case it.File != "" && it.Line > 0:
+			loc = fmt.Sprintf("%s:%d", it.File, it.Line)
+		case loc == "":
+			loc = it.Addr
+		}
+		rows = append(rows, BreakRow{Number: it.Number, Type: it.Type, Location: loc, Enabled: it.Enabled,
+			Hits: it.Hits, Temporary: it.Temporary, Condition: it.Condition})
+	}
+	return rows
 }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
@@ -39,6 +40,11 @@ type GdbMcpService struct {
 	// includes =breakpoint-created/deleted. Lets the UI refresh even if a
 	// Subscribe fan-out chunk was dropped.
 	OnBreakpointsChanged func()
+
+	// trMu guards tracker and endian, which describe the current session.
+	trMu    sync.Mutex
+	tracker *gdb.RunTracker
+	endian  string
 }
 
 func NewGdbMcpService(sess ptyx.Session, state *platform.AppState) *GdbMcpService {
@@ -69,6 +75,10 @@ func (s *GdbMcpService) SetSession(sess ptyx.Session) {
 		return
 	}
 	s.sess = sess
+	s.trMu.Lock()
+	s.tracker.Close()
+	s.tracker, s.endian = nil, ""
+	s.trMu.Unlock()
 }
 
 // Close cancels in-flight work placeholders; does not close the GDB session.

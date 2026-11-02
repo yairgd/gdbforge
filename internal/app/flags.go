@@ -124,6 +124,7 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  -log file         Append structured logs to file (off by default)\n")
 		fmt.Fprintf(os.Stderr, "  -serve addr       Serve debugger services over REST and MCP on a loopback address (off by default)\n")
 		fmt.Fprintf(os.Stderr, "  -serve-token tok  Bearer token that -serve requires (or GDBFORGE_TOKEN)\n")
+		fmt.Fprintf(os.Stderr, "  help -mcp         How to let an AI agent drive gdbforge (-serve), with the prompt to give it\n")
 		fmt.Fprintf(os.Stderr, "  -version          Print version and exit\n")
 		fmt.Fprintf(os.Stderr, "  -h, --help        Print help and exit\n")
 		fmt.Fprintf(os.Stderr, "  --                End of gdbforge options; rest passed to the debugger\n\n")

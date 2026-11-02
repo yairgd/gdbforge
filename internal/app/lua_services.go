@@ -23,6 +23,7 @@ func (c *luaCtl) services() *service.Registry {
 		c.svc = mcp.Services(func() *mcp.GdbMcpService { return c.host.GdbMcp() })
 		c.addServices(c.svc)
 		c.addDebugServices(c.svc)
+		c.addRunServices(c.svc)
 	})
 	return c.svc
 }

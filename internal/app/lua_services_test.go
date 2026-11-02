@@ -25,7 +25,7 @@ func TestServicesRegistry(t *testing.T) {
 		}
 	}
 	sort.Strings(remote)
-	wantRemote := "clear_breakpoint current_file current_line debugger_path evaluate gdb_command list_breakpoints list_frames list_threads program read_memory registers run_control set_breakpoint stop_file stop_line"
+	wantRemote := "batch clear_breakpoint continue current_file current_line debugger_path evaluate finish gdb_command interrupt list_breakpoints list_frames list_threads next program read_memory registers run_control run_to set_breakpoint step stepi stop_file stop_line wait_for_stop"
 	if got := strings.Join(remote, " "); got != wantRemote {
 		t.Fatalf("remote services:\n got %s\nwant %s", got, wantRemote)
 	}
@@ -115,5 +115,52 @@ func TestCleanDlvOutputError(t *testing.T) {
 	out := "print zz\r\nCommand failed: could not find symbol value for zz\r\n(dlv) "
 	if got := cleanDlvOutput(out, "print zz"); got != "Command failed: could not find symbol value for zz" {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestWords32(t *testing.T) {
+	if got := strings.Join(words32("78563412efbeadde", "little"), " "); got != "0x12345678 0xdeadbeef" {
+		t.Fatalf("little: %s", got)
+	}
+	if got := strings.Join(words32("12345678", "big"), " "); got != "0x12345678" {
+		t.Fatalf("big: %s", got)
+	}
+}
+
+func TestHelpMCP(t *testing.T) {
+	for _, args := range [][]string{{"help", "-mcp"}, {"help", "mcp"}, {"-h", "--mcp"}, {"--help", "-mcp"}} {
+		if !WantsHelpMCP(args) {
+			t.Errorf("WantsHelpMCP(%v) = false", args)
+		}
+	}
+	for _, args := range [][]string{nil, {"help"}, {"-mcp"}, {"help", "-mcp", "x"}, {"./prog", "-mcp"}, {"-serve", "mcp"}} {
+		if WantsHelpMCP(args) {
+			t.Errorf("WantsHelpMCP(%v) = true", args)
+		}
+	}
+	var out strings.Builder
+	HelpMCP(&out)
+	for _, want := range []string{"gdbforge -serve 127.0.0.1:7777 -serve-token <token> <app>", "Authorization: Bearer <token>", "claude mcp add"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("help -mcp text lacks %q", want)
+		}
+	}
+	// Every tool the prompt names must exist as a remote service, and the other way round
+	// for the tools an agent needs, so the prompt cannot drift from the registry.
+	a := &DebuggerApp{}
+	a.lua.host = a
+	remote := map[string]bool{}
+	for _, s := range a.Services().List() {
+		if s.Remote {
+			remote[s.Name] = true
+		}
+	}
+	for _, n := range HelpMCPAgentTools {
+		if !remote[n] {
+			t.Errorf("help -mcp names %q, which is not a remote service", n)
+		}
+		if !strings.Contains(out.String(), n) {
+			t.Errorf("help -mcp text does not mention %q", n)
+		}
 	}
 }

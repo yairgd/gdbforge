@@ -95,8 +95,9 @@ gdbforge.gdb_query(cmd [, timeout_sec])
   Run a debugger command and return its output: out, err (err is "" on success). Timeout default 120 s.
   Example: local out, err = gdbforge.gdb_query("info threads")
 
-gdbforge.gdb_command(command)
-  Run a raw GDB/MI or Delve command and return the raw reply. [Remote]
+gdbforge.gdb_command(command [, format [, timeout_ms]])
+  Run a GDB/MI, GDB CLI or Delve command. With GDB the reply is the console text (format "console", the
+  default), the raw MI records ("mi") or both. Fails with target_running if it needs a stopped target. [Remote]
   Example: gdbforge.gdb_command("info frame")
 
 gdbforge.gdb_ctrl_c()
@@ -107,6 +108,42 @@ gdbforge.run_control(action [, wait_sec])
   continue|next|step|finish|stepi|nexti|run|start|interrupt; waits up to wait_sec (default 5, max 60)
   for a stop. Returns {state, file, line}; state "running" = not stopped yet, no file = exited. [Remote]
   Example: local s = gdbforge.run_control("next"); gdbforge.print(s.file, s.line)
+
+gdbforge.interrupt([timeout_ms])
+  Halt the running target and wait (default 3000 ms, retried once). Returns the stop: {state, pc, func, file, line, ...}. [Remote]
+  Example: local s = gdbforge.interrupt(); gdbforge.print(s.func)
+
+gdbforge.continue([wait_ms])
+  Resume and wait up to wait_ms (default 5000; 0 = do not wait) for a stop. State "running" = still running. [Remote]
+  Example: local s = gdbforge.continue(2000); gdbforge.print(s.state, s.bkpt_number)
+
+gdbforge.wait_for_stop([timeout_ms])
+  Wait until the running target stops (default 5000 ms) without resuming it. [Remote]
+  Example: gdbforge.wait_for_stop(10000)
+
+gdbforge.step([timeout_ms])
+  Step one source line, into calls; waits (default 10000 ms) and returns the new location. [Remote]
+  Example: local s = gdbforge.step(); gdbforge.print(s.file, s.line)
+
+gdbforge.next([timeout_ms])
+  Step one source line, over calls; waits (default 10000 ms) and returns the new location. [Remote]
+  Example: local s = gdbforge.next(); gdbforge.print(s.file, s.line)
+
+gdbforge.stepi([timeout_ms])
+  Step one machine instruction; waits and returns the new location. [Remote]
+  Example: local s = gdbforge.stepi(); gdbforge.print(s.pc)
+
+gdbforge.finish([timeout_ms])
+  Run until the current function returns; waits (default 10000 ms) and returns the new location. [Remote]
+  Example: local s = gdbforge.finish(); gdbforge.print(s.func)
+
+gdbforge.run_to(location [, timeout_ms])
+  Temporary breakpoint + continue + wait, in one call (GDB). Returns the stop plus reached and temp_breakpoint. [Remote]
+  Example: local s = gdbforge.run_to("hello.c:23", 5000); gdbforge.print(s.reached)
+
+gdbforge.batch(ops, halt, resume)
+  Run tools in order on one halted snapshot (GDB). ops are {tool=..., args={...}} tables. Returns {results, halted, resumed}. [Remote]
+  Example: gdbforge.batch({{tool="registers"}, {tool="read_memory", args={address="$sp", length=16}}}, true, true)
 
 gdbforge.evaluate(expression)
   Value of an expression in the current frame, as text (program must be stopped). [Remote]

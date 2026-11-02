@@ -15,6 +15,12 @@ type BreakInfo struct {
 	File      string // fullname preferred, else file / pending path
 	Line      int    // 1-based; 0 for address-only breakpoints
 	Addr      string // normalized hex address when known (e.g. "0x401126")
+
+	// Filled from -break-list; the Breakpoints pane does not use them.
+	Type      string // "breakpoint", "hw watchpoint", …
+	Temporary bool   // disp="del" (tbreak)
+	Hits      int    // times=
+	What      string // watched expression, for watchpoints
 }
 
 // Conditional reports whether this breakpoint has a non-empty condition.

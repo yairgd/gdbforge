@@ -327,6 +327,7 @@ parameters and a handler, defined once and called from Lua, the `:AI` agent, RES
 By default a service is Lua-only. Only services marked `Remote` are offered to REST and MCP:
 the `:AI` tools (`list_breakpoints`, `list_threads`, `list_frames`, `set_breakpoint`,
 `clear_breakpoint`, `gdb_command`), the typed run-control and inspection tools (`run_control`,
+`interrupt`, `continue`, `wait_for_stop`, `step`, `next`, `stepi`, `finish`, `run_to`, `batch`,
 `evaluate`, `read_memory`, `registers`) and the read-only queries (`program`, `debugger_path`,
 `current_file`, `current_line`, `stop_file`, `stop_line`). Serial, UART and process-starting
 functions stay Lua-only.
@@ -384,9 +385,16 @@ curl -H "Authorization: Bearer tok123" -XPOST localhost:17888/api/gdb_command -d
 # {"result":"b main\r\n...~\"Breakpoint 2 at 0x118d: file hello.c, line 8.\\n\"\r\n^done\r\n(gdb) \r\n"}
 ```
 
-The reply holds the raw debugger output. The typed services return less text: `run_control` with
-`{"action":"next"}` returns `{"state":"stopped","file":"…/hello.c","line":10}`, and `evaluate` with
-`{"expression":"sum"}` returns `5`.
+With GDB the reply is the console text (`"format":"mi"` gives the raw MI records, `"both"` both). The typed
+services return less text: `next` returns `{"state":"stopped","file":"…/hello.c","line":10,…}`, and
+`evaluate` with `{"expression":"sum"}` returns `5`.
+
+Every REST reply also carries the run state beside `result`: `state` (`running`, `stopped`, `disconnected`)
+and, when stopped, `stop_reason`, `pc`, `func`, `file`, `line` and `bkpt_number`. It comes from GDB's own
+`*running` / `*stopped` records, not from prompts. Errors have a code: `target_running` (HTTP 409; call
+`interrupt`), `interrupt_timeout`, `timeout` (504), `not_supported`. The state is GDB's view: `monitor halt` /
+`monitor go` / `monitor reset` change the target without GDB telling it. MCP clients get the same tools;
+the run state is in the result of the run-control tools.
 
 `-serve` is off by default, accepts loopback addresses only, and refuses to start without a
 token. `gdb_command` runs any debugger command, so treat the token like a shell password.
@@ -396,8 +404,14 @@ The typed tools return small structured results instead of raw debugger output:
 | Service | Params | Returns |
 |---------|--------|---------|
 | `run_control` | `action` (`continue`, `next`, `step`, `finish`, `stepi`, `nexti`, `run`, `start`, `interrupt`), optional `wait` seconds (default 5, max 60) | `{state, file, line}`; `state` is `running` if the program has not stopped yet, and a stop with no file means the program exited |
+| `interrupt` | optional `timeout_ms` (default 3000) | halts the target, waits for the stop (one retry), returns the stop; an already stopped target just reports where |
+| `continue` | optional `wait_ms` (default 5000, 0 = do not wait) | the stop (`stopped` with reason, location and `bkpt_number`) or `state: running` if it did not stop in time |
+| `wait_for_stop` | optional `timeout_ms` (default 5000) | waits for a running target to stop, without resuming it |
+| `step`, `next`, `stepi`, `finish` | optional `timeout_ms` (default 10000) | the new location |
+| `run_to` | `location`, optional `timeout_ms` | temporary breakpoint + continue + wait: the stop, `reached`, `temp_breakpoint` (GDB only; the target must be stopped) |
+| `batch` | `ops` (`[{tool, args}]`), optional `halt`, `resume` | `{results:[{tool, result or error}], halted, resumed}`; reads on one halted snapshot. Resumes only if this call halted the target and no breakpoint stopped it. Run-control tools are not allowed inside (GDB only) |
 | `evaluate` | `expression` | the value as text (the program must be stopped) |
-| `read_memory` | `address`, `length` (1-4096) | `{address, length, hex}` (GDB only) |
+| `read_memory` | `address`, `length` (1-4096) | `{address, length, hex}`, plus `words32` and `endian` when `length` is a multiple of 4 (GDB only) |
 | `registers` | optional register names, or `all` | `{name: hex}` (GDB only). Default: the general registers that `info registers` shows (about 120 tokens on x86-64, r0-r15 and cpsr on ARM). Names outside that group (e.g. `xmm0`) are looked up in the full list; `all` returns everything (large) |
 
 They are plain Lua functions too: `gdbforge.evaluate("x")`, `gdbforge.registers("pc", "sp")`.

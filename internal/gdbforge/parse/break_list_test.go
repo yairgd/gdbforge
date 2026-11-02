@@ -46,3 +46,20 @@ func TestParseBreakListAddrOnly(t *testing.T) {
 		t.Fatalf("addr-only=%+v", got[0])
 	}
 }
+
+func TestParseBreakListAllKeepsWatchpointsAndHits(t *testing.T) {
+	raw := `^done,BreakpointTable={body=[bkpt={number="1",type="breakpoint",disp="del",enabled="y",addr="0x0000000000401126",func="main",file="hello.c",fullname="/tmp/hello.c",line="22",times="4"},bkpt={number="2",type="hw watchpoint",disp="keep",enabled="y",addr="",what="counter",times="1"}]}`
+	if got := ParseBreakList(raw); len(got) != 1 {
+		t.Fatalf("the pane parser must keep dropping watchpoints, got %d rows", len(got))
+	}
+	got := ParseBreakListAll(raw)
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2", len(got))
+	}
+	if !got[0].Temporary || got[0].Hits != 4 || got[0].Type != "breakpoint" {
+		t.Fatalf("first=%+v", got[0])
+	}
+	if got[1].Type != "hw watchpoint" || got[1].What != "counter" || got[1].Hits != 1 {
+		t.Fatalf("second=%+v", got[1])
+	}
+}
