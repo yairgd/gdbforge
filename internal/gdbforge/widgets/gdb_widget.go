@@ -131,8 +131,16 @@ func (w *GDBWidget) SetMouseOrigin(screenX, screenY int) {
 	}
 }
 
+// minTermCols is the narrowest pane the embedded terminal is resized to.
+const minTermCols = 8
+
 func (w *GDBWidget) Draw(c termforge.Canvas) {
 	if w == nil {
+		return
+	}
+	// xterm-go's reflow panics when a populated buffer shrinks to a very
+	// narrow width (observed at <= 7 cols), so skip painting such slivers.
+	if c.W() < minTermCols {
 		return
 	}
 	w.term.Paint(c, w.Focused())
