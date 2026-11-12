@@ -7,12 +7,21 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdb"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
+	"github.com/yairgd/gdbforge/internal/pydbg"
 	"github.com/yairgd/termforge"
 )
 
 // initBackend starts gdb or dlv before the TUI initializes the terminal.
 func (a *DebuggerApp) initBackend() error {
 	extTTY := inferiorTTYFromEnvOrCfg(a.cfg)
+	if a.cfg.IsPY() {
+		client, err := pydbg.NewClient(a.cfg.GDBPath, a.cfg.GDBArgs, pydbg.Options{InferiorTTY: extTTY})
+		if err != nil {
+			return err
+		}
+		a.backend = backend.NewPY(client)
+		return nil
+	}
 	if a.cfg.IsDLV() {
 		client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
 		if err != nil {

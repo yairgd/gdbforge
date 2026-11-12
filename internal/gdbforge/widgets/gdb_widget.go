@@ -14,8 +14,8 @@ const gdbScrollback = 8000
 // "> " is GDB's continuation prompt inside define/commands/if blocks, where
 // tab completion still has to see the bare input.
 var debuggerPrompts = termforge.PromptPrefixes{
-	Console: []string{"(gdb) ", "(dlv) "},
-	Strip:   []string{"(gdb) ", "(dlv) ", "> "},
+	Console: []string{"(gdb) ", "(dlv) ", "(py) "},
+	Strip:   []string{"(gdb) ", "(dlv) ", "(py) ", "> "},
 }
 
 func newGDBTerminal() *termforge.CompositeTerminal {

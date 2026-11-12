@@ -13,6 +13,7 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/gdbforge/internal/luahost"
 	"github.com/yairgd/gdbforge/internal/mcp"
+	"github.com/yairgd/gdbforge/internal/pydbg"
 	"github.com/yairgd/termforge/platform"
 	"github.com/yairgd/termforge/ptyx"
 )
@@ -55,7 +56,13 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 		wantExternal = wantsExternalTTY(a.cfg)
 	)
 	if s.backend == nil {
-		if a.cfg.IsDLV() {
+		if a.cfg.IsPY() {
+			client, err := pydbg.NewClient(a.cfg.GDBPath, a.cfg.GDBArgs, pydbg.Options{InferiorTTY: extTTY})
+			if err != nil {
+				return err
+			}
+			s.backend = backend.NewPY(client)
+		} else if a.cfg.IsDLV() {
 			client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
 			if err != nil {
 				return err
@@ -69,7 +76,7 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 			s.backend = backend.NewGDB(client)
 		}
 	}
-	if !a.cfg.IsDLV() {
+	if a.cfg.IsGDB() {
 		skipBreakMain = gdb.HasInitScript(a.cfg.GDBArgs)
 	}
 	boot = s.backend.TakeStartupOutput()
@@ -162,6 +169,8 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	s.gdbMcp.SetDomain(appDebugDomain{app: a})
 	if a.cfg.IsDLV() {
 		s.gdbMcp.SetPromptToken(dlv.PromptToken)
+	} else if a.cfg.IsPY() {
+		s.gdbMcp.SetPromptToken(pydbg.PromptToken)
 	}
 	if d := a.dlvBackend(); d != nil {
 		d.OnStopText = func(text string) {
@@ -189,6 +198,10 @@ func debuggerCLITTY(b backend.Backend) *ptyx.TTY {
 	case backend.DLV:
 		if db, ok := b.(*backend.DLVBackend); ok && db.Client != nil {
 			return db.Client.TTY
+		}
+	case backend.PY:
+		if pb, ok := b.(*backend.PYBackend); ok && pb.Client != nil {
+			return pb.Client.TTY
 		}
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
+	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/termforge"
 	"github.com/yairgd/termforge/execcli"
@@ -341,7 +342,7 @@ func (app *DebuggerApp) SetInferiorTTYCmd(args ...any) {
 // inferiorTTYCompletions is Tab after :set inferior-tty.
 func (app *DebuggerApp) inferiorTTYCompletions(prefix string, _ bool) []string {
 	cands := []string{"internal"}
-	if app == nil || !app.isDLV() {
+	if app == nil || app.backend == nil || app.backend.Kind() == backend.GDB {
 		cands = append(cands, "external")
 	}
 	var out []string

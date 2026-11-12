@@ -13,6 +13,7 @@ import (
 const (
 	BackendGDB = "gdb"
 	BackendDLV = "dlv"
+	BackendPY  = "py"
 )
 
 // SessionConfig holds CLI options for a debugger session.
@@ -29,8 +30,11 @@ const (
 //	gdbforge -d /usr/bin/gdb ./hello a b
 //	gdbforge -d /usr/bin/gdb -- -nx -x r5_debug.gdb ./zephyr.elf
 //	gdbforge -g dlv -d /usr/local/bin/dlv ./hello
+//	gdbforge -g py script.py
+//	gdbforge -g py -- -m pytest tests/x.py::test_foo
+//	gdbforge -g py --call pkg.mod:func
 type SessionConfig struct {
-	// Kind is the backend: gdb or dlv (from -g).
+	// Kind is the backend: gdb, dlv or py (from -g).
 	Kind string
 	// GDBPath is the debugger binary path (from -d). Name kept for GDB-era call sites.
 	GDBPath string
@@ -38,6 +42,8 @@ type SessionConfig struct {
 	// For gdb: injected after --interpreter=mi2 (cgdb-style "[gdb options]").
 	// For dlv: program and args after `dlv exec --`.
 	GDBArgs []string
+	// Call is "pkg.mod:func" from --call (py only); the script argument is not required then.
+	Call string
 	// Prog is a best-effort display hint (last non-flag arg); may be empty.
 	Prog string
 	// ProgArgs is kept for tests/legacy callers; unused when GDBArgs is set
@@ -90,12 +96,12 @@ func inferProg(gdbArgs []string) string {
 func normalizeKind(k string) (string, error) {
 	k = strings.ToLower(strings.TrimSpace(k))
 	switch k {
-	case BackendGDB, BackendDLV:
+	case BackendGDB, BackendDLV, BackendPY:
 		return k, nil
 	case "":
 		return BackendGDB, nil
 	default:
-		return "", fmt.Errorf("unknown backend %q (want gdb or dlv)", k)
+		return "", fmt.Errorf("unknown backend %q (want gdb, dlv or py)", k)
 	}
 }
 
@@ -107,7 +113,8 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	fs := flag.NewFlagSet("gdbforge", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	kind := fs.String("g", BackendGDB, "backend kind: gdb or dlv")
+	kind := fs.String("g", BackendGDB, "backend kind: gdb, dlv or py")
+	call := fs.String("call", "", "py backend: debug pkg.mod:func instead of a script")
 	// Empty default: filled from -g when -d is omitted.
 	debuggerPath := fs.String("d", "", "path to the debugger binary (default: matches -g)")
 	inferiorTTY := fs.String("inferior-tty", "", "external pts for program stdio, or external to open a new terminal (or GDBFORGE_INFERIOR_TTY)")
@@ -117,8 +124,9 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	fs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: gdbforge [gdbforge options] [--] [debugger options]\n\n")
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
-		fmt.Fprintf(os.Stderr, "  -g kind           Backend: gdb or dlv (default \"gdb\")\n")
-		fmt.Fprintf(os.Stderr, "  -d path           Debugger binary (default: gdb or dlv matching -g)\n")
+		fmt.Fprintf(os.Stderr, "  -g kind           Backend: gdb, dlv or py (default \"gdb\")\n")
+		fmt.Fprintf(os.Stderr, "  -call mod:func    With -g py: debug pkg.mod:func instead of a script\n")
+		fmt.Fprintf(os.Stderr, "  -d path           Debugger binary (default: gdb, dlv or python3 matching -g)\n")
 		fmt.Fprintf(os.Stderr, "  -inferior-tty pts External terminal slave for program stdio (TUI apps);\n")
 		fmt.Fprintf(os.Stderr, "                    \"external\" opens a new terminal (dlv: headless dlv runs there)\n")
 		fmt.Fprintf(os.Stderr, "  -log file         Append structured logs to file (off by default)\n")
@@ -139,6 +147,9 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  gdbforge -g gdb              # start without a program (attach/kernel debug)\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g py script.py\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g py -- -m pytest tests/x.py::test_foo\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g py --call pkg.mod:func\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -inferior-tty external -- ./hello             # TUI program in its own terminal\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv -inferior-tty external -- ./hello-go   # Go TUI program\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -d /usr/bin/gdb ./hello a b\n")
@@ -168,6 +179,9 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	path := strings.TrimSpace(*debuggerPath)
 	if path == "" {
 		path = backend
+		if backend == BackendPY {
+			path = "python3"
+		}
 	}
 
 	cfg := SessionConfig{Kind: backend, GDBPath: path}
@@ -184,6 +198,15 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	if cfg.Serve != "" && cfg.ServeToken == "" {
 		fs.Usage()
 		return SessionConfig{}, errors.New("-serve needs a token (-serve-token or GDBFORGE_TOKEN)")
+	}
+
+	cfg.Call = strings.TrimSpace(*call)
+	if cfg.Call != "" {
+		if backend != BackendPY {
+			fs.Usage()
+			return SessionConfig{}, errors.New("--call needs -g py")
+		}
+		return cfg, nil
 	}
 
 	if passThrough {
@@ -204,12 +227,15 @@ func ParseFlags(args []string) (SessionConfig, error) {
 			return cfg, nil
 		}
 		fs.Usage()
+		if backend == BackendPY {
+			return SessionConfig{}, errors.New("missing script (required for py)")
+		}
 		return SessionConfig{}, errors.New("missing prog (required for dlv)")
 	}
 	cfg.Prog = rest[0]
 	if len(rest) > 1 {
 		cfg.ProgArgs = append([]string{}, rest[1:]...)
-		if backend == BackendDLV {
+		if backend != BackendGDB {
 			// dlv exec -- prog args...
 			cfg.GDBArgs = append([]string{rest[0]}, rest[1:]...)
 		} else {
@@ -223,6 +249,10 @@ func ParseFlags(args []string) (SessionConfig, error) {
 
 func (c SessionConfig) IsDLV() bool {
 	return c.Kind == BackendDLV
+}
+
+func (c SessionConfig) IsPY() bool {
+	return c.Kind == BackendPY
 }
 
 func (c SessionConfig) IsGDB() bool {

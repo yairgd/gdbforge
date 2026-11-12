@@ -31,7 +31,7 @@ type stopInfo struct {
 func (c *luaCtl) stopState(ctx context.Context) (stopInfo, error) {
 	// Delve resumes over rpc2 and the console never prints the stop, so the UI's running flag
 	// is not reliable there: ask the server.
-	if b := c.host.Backend(); b != nil && b.Kind() == backend.DLV {
+	if b := c.host.Backend(); b != nil && b.Kind() != backend.GDB {
 		running, ok := b.TargetRunning()
 		if !ok { // the state query fails once the program has exited
 			return stopInfo{State: "stopped"}, nil
@@ -66,7 +66,7 @@ func (c *luaCtl) stopState(ctx context.Context) (stopInfo, error) {
 // run state comes from the MI tracker and the queries wait for their own reply.
 func (c *luaCtl) stoppedQuery(ctx context.Context) (queryFn, longFn func(string) (string, error), isDLV bool, err error) {
 	m := c.host.GdbMcp()
-	if b := c.host.Backend(); b != nil && b.Kind() == backend.DLV {
+	if b := c.host.Backend(); b != nil && b.Kind() != backend.GDB {
 		isDLV = true
 	}
 	if m != nil && !isDLV {

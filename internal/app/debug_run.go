@@ -41,7 +41,7 @@ func (c *luaCtl) gdbTracker(ctx context.Context) (*mcp.GdbMcpService, *gdb.RunTr
 	if m == nil {
 		return nil, nil
 	}
-	if b := c.host.Backend(); b != nil && b.Kind() == backend.DLV {
+	if b := c.host.Backend(); b != nil && b.Kind() != backend.GDB {
 		return nil, nil
 	}
 	return m, m.Tracker(ctx)

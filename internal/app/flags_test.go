@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -161,5 +162,65 @@ func TestParseFlagsServeNeedsToken(t *testing.T) {
 	cfg, err = ParseFlags([]string{"-serve", "127.0.0.1:7777", "./hello"})
 	if err != nil || cfg.ServeToken != "envtok" {
 		t.Fatalf("env token: cfg=%+v err=%v", cfg, err)
+	}
+}
+
+func TestParseFlagsPY(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		wantArgs []string
+		wantCall string
+	}{
+		{"script", []string{"-g", "py", "x.py"}, []string{"x.py"}, ""},
+		{"script args", []string{"-g", "py", "x.py", "a", "b"}, []string{"x.py", "a", "b"}, ""},
+		{"pass-through", []string{"-g", "py", "--", "-m", "pytest", "t.py::test_foo"}, []string{"-m", "pytest", "t.py::test_foo"}, ""},
+		{"call", []string{"-g", "py", "--call", "pkg.mod:func"}, nil, "pkg.mod:func"},
+		{"call single dash", []string{"-g", "py", "-call", "pkg.mod:func"}, nil, "pkg.mod:func"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := ParseFlags(c.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !cfg.IsPY() || cfg.IsGDB() || cfg.IsDLV() {
+				t.Fatalf("kind: %+v", cfg)
+			}
+			if cfg.GDBPath != "python3" {
+				t.Fatalf("GDBPath: got %q want python3", cfg.GDBPath)
+			}
+			if !reflect.DeepEqual(cfg.GDBArgs, c.wantArgs) {
+				t.Fatalf("GDBArgs: got %v want %v", cfg.GDBArgs, c.wantArgs)
+			}
+			if cfg.Call != c.wantCall {
+				t.Fatalf("Call: got %q want %q", cfg.Call, c.wantCall)
+			}
+		})
+	}
+}
+
+func TestParseFlagsPYExplicitBinary(t *testing.T) {
+	cfg, err := ParseFlags([]string{"-g", "py", "-d", "/usr/bin/python3.12", "x.py"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GDBPath != "/usr/bin/python3.12" {
+		t.Fatalf("GDBPath: got %q", cfg.GDBPath)
+	}
+}
+
+func TestParseFlagsPYRequiresScript(t *testing.T) {
+	_, err := ParseFlags([]string{"-g", "py"})
+	if err == nil || !strings.Contains(err.Error(), "missing script (required for py)") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestParseFlagsCallNeedsPY(t *testing.T) {
+	for _, g := range []string{"gdb", "dlv"} {
+		if _, err := ParseFlags([]string{"-g", g, "--call", "a.b:c", "./hello"}); err == nil {
+			t.Fatalf("-g %s: expected error", g)
+		}
 	}
 }

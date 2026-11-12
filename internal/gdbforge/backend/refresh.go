@@ -15,6 +15,7 @@ type Kind int
 const (
 	GDB Kind = iota
 	DLV
+	PY
 )
 
 // Querier runs one debugger console/MI command and returns captured text.
