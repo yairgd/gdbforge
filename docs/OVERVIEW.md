@@ -33,7 +33,7 @@ gdbforge should feel like **cgdb for the 2020s**: a keyboard-driven debugger wor
 The long-term direction:
 
 - **Cover the whole debugging session**, not just source display — probe bring-up, program I/O, and run control inside one workspace.
-- **Stay backend-agnostic**: GDB and Delve today behind one `backend.Backend` interface (`-g gdb|dlv`), with room for a native OpenOCD adapter.
+- **Stay backend-agnostic**: GDB, Delve and Python (debugpy) today behind one `backend.Backend` interface (`-g gdb|dlv|py`), with room for a native OpenOCD adapter.
 - **Scriptable automation** via Lua for custom workflows, target bring-up, and CI.
 - **Efficient rendering** — an off-screen grid with an incremental cell diff, so remote SSH sessions on large terminals stay responsive. That engine is termforge's.
 
@@ -47,7 +47,7 @@ gdbforge is a **terminal debugger in Go**, inspired by [cgdb](https://github.com
 |------|-------------|
 | **Model-driven UI** | Services → event bus → models → widgets; widgets never talk to services |
 | **Modular UI** | Widgets, layout engine, and rendering backend are separate layers |
-| **Backend agnostic** | `ptyx.Session` + `backend.Backend`; GDB and Delve via `-g gdb\|dlv`; `:AI` shares the live session |
+| **Backend agnostic** | `ptyx.Session` + `backend.Backend`; GDB, Delve and Python via `-g gdb\|dlv\|py`; `:AI` shares the live session |
 | **Terminal fidelity** | Unicode, box-drawing borders, ANSI-aware text rendering |
 | **Low latency feel** | Off-screen grid; only changed cells are flushed to the terminal |
 | **Contributor-friendly** | Clear package boundaries, documented architecture, browsable docs |
@@ -100,7 +100,7 @@ gdbforge is an external front-end: GDB remains the debugger, and MI keeps the so
 | **Assembly view** | Via GDB commands | Dedicated window (`layout asm`) | Assembly pane (`:b asm`) — GDB backend only |
 | **Register / memory views** | Via GDB commands | Register window (`layout regs`) | Via GDB commands only — no pane yet |
 | **Extensibility** | Limited | GDB Python, no UI hooks | Lua scripting (`gdbforge.*`); API not yet frozen |
-| **Backends** | GDB only | GDB only | GDB and Delve (`-g gdb\|dlv`); no native OpenOCD adapter |
+| **Backends** | GDB only | GDB only | GDB, Delve and Python (`-g gdb\|dlv\|py`); no native OpenOCD adapter |
 | **Rendering** | ncurses direct | Minimal | Widget → Canvas → Grid → tcell, with an incremental cell diff |
 | **Language** | C | C (GDB internals) | Go |
 | **Maturity** | Mature; packaged by most distributions | Mature; shipped inside GDB itself | v1.x releases since August 2026; small contributor base |

@@ -69,6 +69,7 @@ workspace. More detail: [FAQ](FAQ.md#how-is-gdbforge-different-from-cgdb) ·
 | **STM32 firmware** — bare-metal, Zephyr, or FreeRTOS | `:lua nucleo_f429zi` — ST-Link + OpenOCD or J-Link over SWD, stop at `main` | [STM32 and Zephyr](STM32_DEBUG.md) |
 | **Zynq UltraScale+ MPSoC** Cortex-A53 / Cortex-R5 | `:lua r5_baremetal_jlink` — J-Link GDB Server or OpenOCD + Digilent HS2 | [Zynq MPSoC](MPSOC_DEBUG.md) |
 | The **Linux kernel** or a loadable module | `:lua kgdb_uart` — kgdb over one UART with kdmx, two UARTs, or Ethernet | [Kernel and kgdb](KERNEL_KGDB.md) |
+| A **Python script**, module or pytest test | `gdbforge -g py script.py` — debugpy over DAP, `(py)` console evaluates Python in the paused frame | [Python debugging](PYTHON_DEBUG.md) |
 | A **Go program**, including one with its own TUI | `gdbforge -g dlv ./prog`, `:lua dlv_ext_port` for a separate terminal | [FAQ — Go and Delve](FAQ.md#can-i-debug-go-programs) |
 
 Probe and transport support comes from OpenOCD, the J-Link GDB Server, or `gdbserver`.

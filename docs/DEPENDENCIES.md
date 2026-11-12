@@ -32,7 +32,7 @@ other dependency.
 | Side | Where | Contents |
 |------|-------|----------|
 | **Framework** | `github.com/yairgd/termforge` (separate repo) | Widgets, split-tree window manager, tabs, canvas/grid rendering, colon commands, key bindings, PTY plumbing, terminal emulator pane |
-| **Application** | this repo | GDB and Delve backends, MI parsing and models, debugger widgets, MCP service, Lua debugger bindings, layouts, persistence |
+| **Application** | this repo | GDB, Delve and Python backends, MI parsing and models, debugger widgets, MCP service, Lua debugger bindings, layouts, persistence |
 
 This is a hard, compiler-enforced boundary: termforge cannot import gdbforge, because
 it does not depend on this module. The remaining rules below are about keeping the
@@ -46,7 +46,7 @@ it does not depend on this module. The remaining rules below are about keeping t
 - Only three packages import the termforge engine root: `internal/app`,
   `internal/gdbforge/widgets`, and `internal/gdbforge/layout`. Everything else uses
   the headless subpackages (`platform`, `commands`, `ptyx`, …) or no termforge at all.
-- Backends stay headless. `internal/gdb` and `internal/dlv` must not import the
+- Backends stay headless. `internal/gdb`, `internal/dlv` and `internal/pydbg` must not import the
   termforge engine root, so they can be tested with no terminal. They do use
   `termforge/ptyx` and `termforge/platform`, which carry no tcell dependency.
 
@@ -84,6 +84,7 @@ Module path: `github.com/yairgd/gdbforge`
 |------|-------------|
 | `gdb` | `internal/gdb` at runtime |
 | `dlv` | `internal/dlv` at runtime (`-g dlv`) |
+| `python3` + `debugpy` | `internal/pydbg` at runtime (`-g py`; `pip install debugpy`) |
 | `go` (see `go.mod` for version) | build |
 
 Run `go mod graph` or `go list -m all` for exact versions and transitive modules.

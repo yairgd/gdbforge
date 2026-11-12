@@ -1,5 +1,5 @@
 site_name: gdbforge
-site_description: Debug MCU firmware, embedded Linux apps, the Linux kernel and desktop programs from one terminal. gdbforge is a keyboard-driven, multi-pane GDB front-end that automates target bring-up with OpenOCD, J-Link, gdbserver and kgdb — and drives Delve for Go.
+site_description: Debug MCU firmware, embedded Linux apps, the Linux kernel and desktop programs from one terminal. gdbforge is a keyboard-driven, multi-pane GDB front-end that automates target bring-up with OpenOCD, J-Link, gdbserver and kgdb — and drives Delve for Go and debugpy for Python.
 site_url: https://yairgd.github.io/gdbforge/
 repo_url: https://github.com/yairgd/gdbforge
 repo_name: yairgd/gdbforge
@@ -57,6 +57,7 @@ nav:
       - FAQ: FAQ.md
   - Debugging guides:
       - Linux applications (local and remote): EMBEDDED_LINUX_DEBUG.md
+      - Python scripts and pytest (debugpy): PYTHON_DEBUG.md
       - STM32 and Zephyr firmware: STM32_DEBUG.md
       - Zynq MPSoC (Cortex-A53 / R5): MPSOC_DEBUG.md
       - Linux kernel and kgdb: KERNEL_KGDB.md

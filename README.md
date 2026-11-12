@@ -10,7 +10,7 @@
 
 # gdbforge
 
-**gdbforge** is a Vim-inspired multi-pane terminal front-end for GDB (and optionally Delve). It keeps the debugger's power in the TTY and adds a workspace for source, console, IO, threads, call stack, and breakpoints — with modes, a `:` command line, mouse/clipboard, and Lua automation.
+**gdbforge** is a Vim-inspired multi-pane terminal front-end for GDB (and optionally Delve and Python). It keeps the debugger's power in the TTY and adds a workspace for source, console, IO, threads, call stack, and breakpoints — with modes, a `:` command line, mouse/clipboard, and Lua automation.
 
 ## Typical use cases
 
@@ -20,6 +20,7 @@
 - **STM32** bare-metal — **Nucleo F429ZI**, **STM32F405** (ST-Link OpenOCD / J-Link; [STM32 guide](docs/STM32_DEBUG.md))
 - **Linux kernel** kgdb — UART, Ethernet, modules ([kernel guide](docs/KERNEL_KGDB.md))
 - **Go** programs via Delve (`-g dlv`), including TUI targets in an external terminal
+- **Python** scripts, modules and pytest via debugpy (`-g py`; needs `pip install debugpy`; [Python guide](docs/PYTHON_DEBUG.md))
 - Teams who want a **Vim-like** flow: normal / insert / command modes, panes, buffers
 
 ## Demo
@@ -210,6 +211,9 @@ Inside the app: open `:help`, step with `n` / `s` / `c`, quit with Ctrl-D or `:q
 # Delve (Go)
 ./bin/gdbforge -g dlv ./hello-go
 
+# Python (needs: pip install debugpy)
+./bin/gdbforge -g py script.py
+
 # Pass GDB options after --
 ./bin/gdbforge -- -nx -x ./board.gdb ./zephyr.elf
 ```
@@ -291,7 +295,7 @@ Published on [gdbforge docs](https://yairgd.github.io/gdbforge/) with search-fri
 
 | Doc | Contents |
 |-----|----------|
-| **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve, `:b io`, external terminal |
+| **[docs/PTY_ARCHITECTURE.md](docs/PTY_ARCHITECTURE.md)** | Dual PTY master/slave, GDB vs Delve vs Python, `:b io`, external terminal |
 | **[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)** | The termforge boundary; internal import rules |
 | **[docs/](docs/)** | Architecture, debugger integration, developer guides |
 

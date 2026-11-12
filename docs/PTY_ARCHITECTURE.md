@@ -353,6 +353,20 @@ So: **control plane = TCP** (plus a local PTY only for the connect CLI); **stdio
 
 ---
 
+## Mode E — Python (debugpy)
+
+Two PTYs, like Delve, but the console is gdbforge's own REPL and machine control is DAP over TCP:
+
+| Channel | Role | UI |
+|---------|------|-----|
+| Console `*ptyx.TTY` | `(py)` REPL goroutine on the slave side (line editing, history) | `:b gdb` via `WireCLI` |
+| Inferior `*ptyx.TTY` | `python -m debugpy …` stdin/stdout/stderr, fixed at spawn | `:b io` via `WireInferior` |
+| DAP (TCP, loopback) | Breakpoints, stepping, stack, threads, evaluate | no widget |
+
+`restart` respawns python on the same two PTYs. See [DEBUGGER_INTEGRATION.md](DEBUGGER_INTEGRATION.md#python-backend-peer-of-gdb-and-delve).
+
+---
+
 ## How `:b io` connects
 
 | Fact | Detail |

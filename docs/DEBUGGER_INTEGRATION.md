@@ -1,5 +1,5 @@
 ---
-description: Technical guide to gdbforge debugger integration with GDB MI2, Delve, PTYs, remote targets, and in-app AI services.
+description: Technical guide to gdbforge debugger integration with GDB MI2, Delve, Python (debugpy), PTYs, remote targets, and in-app AI services.
 ---
 
 # Debugger Integration
@@ -25,6 +25,7 @@ gdbforge connects to debug targets through **`backend.Backend`** (`internal/gdbf
 - [GDB console bridge](#gdb-console-bridge)
 - [Delve backend (peer of GDB)](#delve-backend-peer-of-gdb)
   - [Delve inferior I/O (dual PTY)](#delve-inferior-io-dual-pty)
+- [Python backend (peer of GDB and Delve)](#python-backend-peer-of-gdb-and-delve)
 - [Future OpenOCD integration](#future-openocd-integration)
 - [Future JTAG integration](#future-jtag-integration)
 - [Kernel debugging](#kernel-debugging)
@@ -804,6 +805,68 @@ Dual-PTY like GDB, but **`--tty` is spawn-only**:
 | `:set inferior-tty` / Lua `set_inferior_tty` | **Restarts** Delve with a new `--tty` (same program args) |
 
 For **Go TUI programs**, prefer **`:lua dlv_port`** (headless Delve in another window + `dlv connect`) so stdio never leaves that window and you avoid a mid-session restart. See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#mode-d--delve-headless--tcp-preferred-go-tui) and [External terminal (stdio / TUI targets)](#external-terminal-stdio-tui-targets).
+
+---
+
+## Python backend (peer of GDB and Delve)
+
+Python plugs into the same unified backend, driving [`debugpy`](https://github.com/microsoft/debugpy) over the Debug Adapter Protocol (DAP, JSON over TCP) where Delve uses rpc2:
+
+| Piece | Role |
+|-------|------|
+| CLI | `gdbforge -g py [-d python] script.py [args…]` · `gdbforge -g py -- -m module [args…]` |
+| `backend.PYBackend` | Semantic ops + capabilities; `DebuggerApp.backend` |
+| `internal/pydbg.Client` | Spawns `python -m debugpy --listen 127.0.0.1:PORT --wait-for-client`, attaches over DAP, owns the breakpoint table |
+| DAP client | `threads`, `stackTrace`, `setBreakpoints`, `continue`/`next`/`stepIn`/`stepOut`/`pause`, `evaluate` |
+| Console | Same `GDBWidget` + `consoleCtl`; prompt token `(py)`; a small REPL on a PTY inside gdbforge (no external debugger CLI) |
+| Pane refresh | `Backend.FetchStackList`, `RefreshThreadsAndStack`, `FetchBreakpoints` (DAP) |
+
+```mermaid
+flowchart LR
+  App["DebuggerApp"] --> BE["backend.Backend"]
+  BE --> PY["PYBackend · pydbg.Client"]
+  PY --> DAP["DAP over TCP"] --> DBG["python -m debugpy"]
+  PY --> PTY["(py) console PTY"]
+  PY --> IO["inferior PTY"] --> DBG
+```
+
+**Requirements:** `pip install debugpy` for the interpreter used (`-d` picks it, default `python3`). gdbforge checks `import debugpy` at start and prints the install hint if it fails. The script's directory is added to `PYTHONPATH`.
+
+**Startup:** the program starts stopped at its first statement (debugpy ignores `stopOnEntry` on attach, so gdbforge plants a hidden breakpoint there). `-m` targets have no entry stop; set a breakpoint and `c`. There is no default `break main`.
+
+**Console:** debugger words win, anything else is Python evaluated in the selected frame (`!line` forces Python). While stopped you can read and assign variables (`x`, `x = 99`, `df.shape`).
+
+| Command | Action |
+|---------|--------|
+| `b` / `break [file:line \| line \| func]` | Set a breakpoint (no argument: list) |
+| `tbreak` | Breakpoint removed at its first hit |
+| `clear` · `delete N` · `disable N` · `enable N` · `condition N [expr]` | Manage breakpoints |
+| `c` / `n` / `s` / `finish` / `pause` | Continue, step over, step in, step out, pause (Ctrl-C while running) |
+| `up` · `down` · `frame N` · `bt` | Move in / list the call stack |
+| `threads` · `thread ID` · `breakpoints` · `files` | Inspect |
+| `restart` / `run` / `start` | Kill, respawn, re-attach, resend breakpoints |
+| `quit` | Exit |
+
+Stops print `> func() file.py:42`; the Code arrow, Threads, Call Stack and Breakpoints panes follow them. Program stdout/stderr go to `:b io`.
+
+**Capability flags** (vs. the table above): `NavigationAsync` false, `WireCLILineTap` false, `DeferBreakpointRefresh` false, `BreakRefreshImmediate` true, `RequiresInferiorTTYRestart` true, `PaintTargetInConsole` false, `SupportsAssembly` false.
+
+**Limits (v1):**
+
+- Not supported: assembly, registers, `read_memory`, watchpoints, address breakpoints, remote attach, multi-process.
+- `--call pkg.mod:func` is parsed but not yet wired.
+- The REST/MCP run-control tools (`run_control`, `step`, …) are GDB-oriented and not yet connected to this backend; `evaluate` exists on the backend only.
+- `:set inferior-tty` (live) is not supported, as with Delve the tty is chosen at spawn.
+- Pane reads are skipped while the program runs; huge values are truncated in the console.
+- Persisted breakpoints from other files (for example a C source) are also sent to the Python session.
+
+Examples:
+
+```bash
+gdbforge -g py script.py
+gdbforge -g py -d ~/venv/bin/python script.py arg1
+gdbforge -g py -- -m pytest tests/test_x.py::test_foo
+```
 
 ---
 
