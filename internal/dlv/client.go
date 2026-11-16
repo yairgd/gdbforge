@@ -1,8 +1,8 @@
 package dlv
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -92,10 +92,11 @@ func newHeadlessRPCClient(dlvPath string, dlvArgs []string, extTTY string) (*Cli
 
 	env := delveEnv()
 	headArgs := headlessExecArgv(dlvPath, listenAddr, ttyPath, dlvArgs)
+	var headOut bytes.Buffer // dlv prints "could not launch process: …" here
 	headCmd := exec.Command(headArgs[0], headArgs[1:]...)
 	headCmd.Env = env
-	headCmd.Stdout = io.Discard
-	headCmd.Stderr = io.Discard
+	headCmd.Stdout = &headOut
+	headCmd.Stderr = &headOut
 	headCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := headCmd.Start(); err != nil {
 		c.closeInferior()
@@ -104,9 +105,18 @@ func newHeadlessRPCClient(dlvPath string, dlvArgs []string, extTTY string) (*Cli
 	c.headless = headCmd
 	c.listenAddr = listenAddr
 
-	rpc, err := DialRPC(listenAddr, startupPromptWait)
+	exited := make(chan struct{})
+	go func() { _ = headCmd.Wait(); close(exited) }() // headOut is complete once closed
+
+	rpc, err := dialRPCUntil(listenAddr, startupPromptWait, exited)
 	if err != nil {
+		_ = headCmd.Process.Kill()
+		<-exited
+		c.headless = nil
 		c.Close()
+		if msg := strings.TrimSpace(headOut.String()); msg != "" {
+			return nil, fmt.Errorf("%w\ndlv: %s", err, msg)
+		}
 		return nil, err
 	}
 	c.RPC = rpc
@@ -403,8 +413,7 @@ func (c *Client) Close() {
 		c.RPC = nil
 	}
 	if c.headless != nil && c.headless.Process != nil {
-		_ = c.headless.Process.Kill()
-		go func(cmd *exec.Cmd) { _ = cmd.Wait() }(c.headless) // reap: no [dlv] zombie
+		_ = c.headless.Process.Kill() // reaped by the Wait goroutine in newHeadlessRPCClient
 		c.headless = nil
 	}
 	c.closeInferior()

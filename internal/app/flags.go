@@ -42,6 +42,9 @@ type SessionConfig struct {
 	// For gdb: injected after --interpreter=mi2 (cgdb-style "[gdb options]").
 	// For dlv: program and args after `dlv exec --`.
 	GDBArgs []string
+	// Connect is host:port of an already-listening headless dlv (-connect, dlv only).
+	// No program is needed; dlv exec is not run locally.
+	Connect string
 	// Call is "pkg.mod:func" from --call (py only); the script argument is not required then.
 	Call string
 	// Prog is a best-effort display hint (last non-flag arg); may be empty.
@@ -114,6 +117,7 @@ func ParseFlags(args []string) (SessionConfig, error) {
 	fs.SetOutput(io.Discard)
 
 	kind := fs.String("g", BackendGDB, "backend kind: gdb, dlv or py")
+	connect := fs.String("connect", "", "dlv backend: connect to a headless dlv at host:port (no local program)")
 	call := fs.String("call", "", "py backend: debug pkg.mod:func instead of a script")
 	// Empty default: filled from -g when -d is omitted.
 	debuggerPath := fs.String("d", "", "path to the debugger binary (default: matches -g)")
@@ -126,6 +130,7 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "gdbforge Options:\n")
 		fmt.Fprintf(os.Stderr, "  -g kind           Backend: gdb, dlv or py (default \"gdb\")\n")
 		fmt.Fprintf(os.Stderr, "  -call mod:func    With -g py: debug pkg.mod:func instead of a script\n")
+		fmt.Fprintf(os.Stderr, "  -connect addr     With -g dlv: attach to a headless dlv at host:port (no local program needed)\n")
 		fmt.Fprintf(os.Stderr, "  -d path           Debugger binary (default: gdb, dlv or python3 matching -g)\n")
 		fmt.Fprintf(os.Stderr, "  -inferior-tty pts External terminal slave for program stdio (TUI apps);\n")
 		fmt.Fprintf(os.Stderr, "                    \"external\" opens a new terminal (dlv: headless dlv runs there)\n")
@@ -147,6 +152,8 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		fmt.Fprintf(os.Stderr, "  gdbforge -g gdb              # start without a program (attach/kernel debug)\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge ./hello\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv ./hello\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv              # start without a program, then :lua remotedlv ./app\n")
+		fmt.Fprintf(os.Stderr, "  gdbforge -g dlv -connect 192.168.20.50:2345   # dlv already running on the board\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g py script.py\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g py -- -m pytest tests/x.py::test_foo\n")
 		fmt.Fprintf(os.Stderr, "  gdbforge -g py --call pkg.mod:func\n")
@@ -200,6 +207,19 @@ func ParseFlags(args []string) (SessionConfig, error) {
 		return SessionConfig{}, errors.New("-serve needs a token (-serve-token or GDBFORGE_TOKEN)")
 	}
 
+	cfg.Connect = strings.TrimSpace(*connect)
+	if cfg.Connect != "" {
+		if backend != BackendDLV {
+			fs.Usage()
+			return SessionConfig{}, errors.New("-connect needs -g dlv")
+		}
+		// A program is optional: it only names the local binary for display.
+		if rest := fs.Args(); len(rest) > 0 && !passThrough {
+			cfg.Prog = rest[0]
+		}
+		return cfg, nil
+	}
+
 	cfg.Call = strings.TrimSpace(*call)
 	if cfg.Call != "" {
 		if backend != BackendPY {
@@ -221,16 +241,16 @@ func ParseFlags(args []string) (SessionConfig, error) {
 
 	rest := fs.Args()
 	if len(rest) == 0 {
-		if backend == BackendGDB {
+		if backend != BackendPY {
 			// A program is optional for attach workflows: kgdb, gdbserver,
-			// core files, and targets configured from the GDB console/Lua.
+			// core files, targets configured from the GDB console/Lua, and
+			// for dlv a later dlv_connect (e.g. :lua remotedlv).
 			return cfg, nil
 		}
 		fs.Usage()
 		if backend == BackendPY {
 			return SessionConfig{}, errors.New("missing script (required for py)")
 		}
-		return SessionConfig{}, errors.New("missing prog (required for dlv)")
 	}
 	cfg.Prog = rest[0]
 	if len(rest) > 1 {

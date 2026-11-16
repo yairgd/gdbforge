@@ -23,7 +23,7 @@ func (a *DebuggerApp) initBackend() error {
 		return nil
 	}
 	if a.cfg.IsDLV() {
-		client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
+		client, err := newDlvClient(a.cfg, extTTY)
 		if err != nil {
 			return err
 		}
@@ -36,6 +36,19 @@ func (a *DebuggerApp) initBackend() error {
 	}
 	a.backend = backend.NewGDB(client)
 	return nil
+}
+
+// newDlvClient attaches to a running headless dlv (-connect) or runs dlv exec.
+// With neither a program nor -connect it returns nil: the session starts idle
+// until dlv_connect (e.g. :lua remotedlv).
+func newDlvClient(cfg SessionConfig, extTTY string) (*dlv.Client, error) {
+	if cfg.Connect == "" && len(cfg.GDBArgs) == 0 {
+		return nil, nil
+	}
+	if cfg.Connect != "" {
+		return dlv.NewConnectClient(cfg.GDBPath, cfg.Connect)
+	}
+	return dlv.NewClientOpts(cfg.GDBPath, cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
 }
 
 // initBuiltins creates singleton shell views and starts the debug session.

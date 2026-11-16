@@ -135,10 +135,13 @@ func TestParseFlagsGDBWithoutProg(t *testing.T) {
 	}
 }
 
-func TestParseFlagsDLVRequiresProg(t *testing.T) {
-	_, err := ParseFlags([]string{"-g", "dlv"})
-	if err == nil {
-		t.Fatal("expected missing program error")
+func TestParseFlagsDLVWithoutProg(t *testing.T) {
+	cfg, err := ParseFlags([]string{"-g", "dlv"})
+	if err != nil || cfg.Kind != BackendDLV || len(cfg.GDBArgs) != 0 {
+		t.Fatalf("cfg=%+v err=%v", cfg, err)
+	}
+	if _, err := ParseFlags([]string{"-g", "py"}); err == nil {
+		t.Fatal("py still needs a script")
 	}
 }
 

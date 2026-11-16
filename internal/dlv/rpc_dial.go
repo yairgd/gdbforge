@@ -11,12 +11,23 @@ import (
 
 // DialRPC connects to a Delve headless JSON-RPC server.
 func DialRPC(addr string, timeout time.Duration) (*rpc2.RPCClient, error) {
+	return dialRPCUntil(addr, timeout, nil)
+}
+
+// dialRPCUntil is DialRPC that gives up early when stop is closed (the headless
+// dlv we started has exited, so nothing will ever listen).
+func dialRPCUntil(addr string, timeout time.Duration, stop <-chan struct{}) (*rpc2.RPCClient, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
+		select {
+		case <-stop:
+			return nil, fmt.Errorf("dlv rpc dial %s: dlv exited before listening", addr)
+		default:
+		}
 		conn, err := dialRPCConn(addr)
 		if err == nil {
 			return rpc2.NewClientFromConn(conn), nil

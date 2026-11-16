@@ -51,6 +51,7 @@ export GDBFORGE_TERMINAL=mate-terminal
 |--------|-----|---------|
 | `remotegdb` | External (gdbserver on board via SSH) | scp + ssh gdbserver + `target remote` |
 | `remotegdb_log` | — | Tail board gdbserver log in a terminal |
+| `remotedlv` | External (headless dlv on board via SSH) | scp + ssh `dlv exec --headless` + `dlv_connect`; `GDBFORGE_REMOTE_DLV` = dlv path on target |
 | `gdbserver_tui` | External (local gdbserver window) | Local `gdbserver` + `target remote` |
 | `terminal_debug` | External | Open tty + optional `file` / `break` / `run` |
 | `external_tty` | External | Open tty only; you `file` / `run` yourself |

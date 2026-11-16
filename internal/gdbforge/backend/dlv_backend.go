@@ -33,8 +33,13 @@ func NewDLV(client *dlv.Client) *DLVBackend {
 	}
 }
 
-func (b *DLVBackend) Kind() Kind            { return DLV }
-func (b *DLVBackend) Session() ptyx.Session { return b.client() }
+func (b *DLVBackend) Kind() Kind { return DLV }
+func (b *DLVBackend) Session() ptyx.Session {
+	if c := b.client(); c != nil {
+		return c
+	}
+	return nil // no typed-nil interface while idle (no program yet)
+}
 func (b *DLVBackend) Close() {
 	if c := b.client(); c != nil {
 		c.Close()

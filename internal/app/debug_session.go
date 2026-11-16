@@ -63,7 +63,7 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 			}
 			s.backend = backend.NewPY(client)
 		} else if a.cfg.IsDLV() {
-			client, err := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{InferiorTTY: extTTY})
+			client, err := newDlvClient(a.cfg, extTTY)
 			if err != nil {
 				return err
 			}
@@ -94,6 +94,8 @@ func (s *DebugSession) init(a *DebuggerApp) error {
 	}
 	if boot != "" {
 		s.gdbWidget.WriteBoot(boot)
+	} else if a.cfg.IsDLV() && s.backend.Session() == nil {
+		s.gdbWidget.WriteBoot("dlv: no program loaded — :lua remotedlv ./app (or start with -connect host:port)\n")
 	}
 	s.console.startGdbConsoleBridge()
 	a.registerBuiltin("gdb", s.gdbWidget)

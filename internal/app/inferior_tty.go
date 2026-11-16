@@ -95,6 +95,9 @@ func (a *DebuggerApp) setDlvInferiorTTY(path string) error {
 	if db == nil || db.Client == nil {
 		return fmt.Errorf("no dlv session")
 	}
+	if a.cfg.Connect != "" || len(a.cfg.GDBArgs) == 0 {
+		return fmt.Errorf("inferior tty is set on the remote dlv, not from gdbforge (no local program)")
+	}
 	ext := ""
 	if path != "" && path != "internal" {
 		ext = path
@@ -201,6 +204,9 @@ func (a *DebuggerApp) ConnectDlv(addr string) error {
 	a.tearDownDlvSession()
 
 	client, err := dlv.NewConnectClient(a.cfg.GDBPath, addr)
+	if err != nil && len(a.cfg.GDBArgs) == 0 {
+		return fmt.Errorf("dlv connect %s: %w", addr, err) // nothing local to restore
+	}
 	if err != nil {
 		fallback, ferr := dlv.NewClientOpts(a.cfg.GDBPath, a.cfg.GDBArgs, dlv.ClientOptions{})
 		if ferr != nil {
