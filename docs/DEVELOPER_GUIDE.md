@@ -48,7 +48,7 @@ description: Set up a gdbforge development environment, understand the codebase,
 
 ### Half-day path (implement a feature)
 
-Add: `termforge/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_msg.go`, `termforge/platform/buffer.go`, `termforge/ptyx/events.go`, and skim `docs/diagrams/*.mermaid`.
+Add: `termforge/widget_tree.go`, `node.go`, `tab.go`, `cmd_widget.go`, `internal/gdb/mi_state.go`, `termforge/platform/buffer.go`, `termforge/ptyx/events.go`, and skim `docs/diagrams/*.mermaid`.
 
 ### Mental model
 
@@ -125,7 +125,6 @@ Async path:
 | **Trie** | Prefix tree for multi-key bindings (`<C-w>h`, …) |
 | **SubmitMsg** | CmdLine submitted — carries `CmdID`, `Args`, full `Text` |
 | **MI2** | GDB machine interface v2 |
-| **MiMsg** | Parsed batch of MI lines (helper / tests) |
 | **MiUpdate** | Streaming display update from `GdbInputState.PushRaw` |
 | **GdbInputState** | Newline splitter; streams complete MI lines (no debounce timer) |
 | **BreakGutter** | Per-line/addr BP view (`Numbers`, `Enabled`, `Condition`) for Code/Asm |

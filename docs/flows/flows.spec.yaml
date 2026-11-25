@@ -118,7 +118,6 @@ flows:
     chain:
       - { symbol: onCodeBreakToggle, pkg: internal/app, recv: "(*breakCtl)", name: onCodeBreakToggle, indent: 0 }
       - { symbol: applyBreakIntent, pkg: internal/app, recv: "(*breakCtl)", name: applyBreakIntent, indent: 1 }
-      - { symbol: sendBreakpointCmd, pkg: internal/app, recv: "(*breakCtl)", name: sendBreakpointCmd, indent: 2 }
     breakpoints:
       - main.(*breakCtl).onCodeBreakToggle
 
@@ -523,7 +522,7 @@ flows:
     trigger: "e key in Code pane — toggle enabled/disabled without deleting"
     backend: [gdb, dlv]
     chain:
-      - { symbol: toggleCodeBreakEnable, pkg: internal/app, recv: "(*DebuggerApp)", name: toggleCodeBreakEnable, indent: 0 }
+      - { symbol: CodeBreakEnableToggleMsg, pkg: internal/app, recv: "(*breakCtl)", name: onCodeBreakEnableToggleMsg, indent: 0, note: "Published by CodeWidget e binding" }
       - { symbol: toggleCodeBreakEnableOn, pkg: internal/app, recv: "(*breakCtl)", name: toggleCodeBreakEnableOn, indent: 1 }
 
   - id: bp-asm-toggle

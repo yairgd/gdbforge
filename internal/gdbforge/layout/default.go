@@ -5,18 +5,6 @@ import (
 	"github.com/yairgd/termforge/platform"
 )
 
-// DefaultSpec builds the multi-pane default workspace.
-// Ratios come from AppState.DefaultLayoutRatios (Left, Output, BottomFirst).
-type DefaultSpec struct {
-	Ratios platform.DefaultLayoutRatios
-}
-
-func (s DefaultSpec) Name() string { return Default }
-
-func (s DefaultSpec) Build(panes Panes) *termforge.WidgetTree {
-	return BuildDefault(panes, s.Ratios)
-}
-
 // BuildDefault builds:
 //
 //	Vertical: left = Code over GDB; right = Output / Breakpoints / Threads / Call stack.

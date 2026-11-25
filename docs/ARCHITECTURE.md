@@ -1043,7 +1043,7 @@ See [Platform layer](#platform-layer). Today `termforge/ptyx` holds platform pri
 - **`gdb.GDBClient`** — **3 PTYs**: CLI (`CLITTY`), MI (`ptyx.Session` embed), inferior; bootstrap via `new-ui mi2`.
 - **`termforge.CompositeTerminal` + `WireTTY`** — xterm bridge for GDB/IO/exec panes.
 - **`mcp.GdbMcpService`** — `GdbCommand` + in-app LLM agent on MI `ptyx.Session`.
-- MI parsing: `MiMsg`, `GdbInputState` in `internal/gdb` (MI PTY stream only).
+- MI parsing: `GdbInputState` in `internal/gdb` (MI PTY stream only).
 
 **Dependency rule:** `termforge` → `core` ← `gdb` / `ptyx` / `mcp`. Never `gdb` → `termforge`.
 

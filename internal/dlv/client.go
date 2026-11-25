@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	PromptToken    = "(dlv)"
-	PromptLiveHost = PromptToken + " "
+	PromptToken = "(dlv)"
 
 	startupPromptWait = 30 * time.Second
 

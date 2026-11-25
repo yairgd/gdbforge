@@ -35,23 +35,6 @@ type LuaWidget struct {
 	useTick  bool
 }
 
-// NewLuaWidget loads src into a dedicated Lua VM bound to this pane.
-func NewLuaWidget(title, src string, onRegister luahost.OnRegister) (*LuaWidget, error) {
-	w := &LuaWidget{
-		BaseWidget: termforge.BaseWidget{PaneName: title},
-		tickEvery:  100 * time.Millisecond,
-		logLines:   nil,
-	}
-	w.rt = luahost.New(w, onRegister)
-	if err := w.rt.LoadString(src, title); err != nil {
-		w.rt.Close()
-		return nil, err
-	}
-	w.useTick = true
-	w.lastTick = time.Now()
-	return w, nil
-}
-
 // AdoptLuaWidget binds an existing Runtime to a new pane (create-or-focus games).
 // The widget owns rt for Close; the caller must not Close rt separately.
 func AdoptLuaWidget(title string, rt *luahost.Runtime) *LuaWidget {

@@ -380,12 +380,6 @@ func (a *DebuggerApp) presentLocation(codeW *widgets.CodeWidget, fr *models.Stac
 	}
 }
 
-// applyCodeStop is the UI-thread re-assert of location leaf content after a
-// buffer update (same policy as presentLocation).
-func (a *DebuggerApp) applyCodeStop(w *widgets.CodeWidget) {
-	a.presentLocation(w, nil)
-}
-
 // frameAtLevel returns the stack frame with the given level.
 func frameAtLevel(frames []models.StackFrame, level int) (models.StackFrame, bool) {
 	for _, fr := range frames {

@@ -6,7 +6,6 @@ import (
 
 	tcell "github.com/gdamore/tcell/v2"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/events"
 	"github.com/yairgd/gdbforge/internal/gdbforge/widgets"
 	"github.com/yairgd/termforge"
 	"github.com/yairgd/termforge/platform"
@@ -190,23 +189,6 @@ func (a *DebuggerApp) handleNormalKey(ev *tcell.EventKey) bool {
 		}
 	}
 	return true
-}
-
-// toggleCodeBreakEnable toggles enable/disable at the active CodeWidget cursor
-// (same as BreakpointWidget e). Disabled marks stay in the BP list and show yellow.
-func (a *DebuggerApp) toggleCodeBreakEnable() {
-	cw := a.activeCodeWidget()
-	if focused := a.focusedCode(); focused != nil {
-		cw = focused
-	}
-	if cw == nil {
-		return
-	}
-	if a.ctx.Bus != nil {
-		a.ctx.Bus.Dispatch(events.CodeBreakEnableToggleMsg{Path: cw.Path(), Line: cw.SelLine()})
-		return
-	}
-	a.breaks.toggleCodeBreakEnableOn(cw)
 }
 
 func (a *DebuggerApp) handleCommandKey(ev *tcell.EventKey) bool {

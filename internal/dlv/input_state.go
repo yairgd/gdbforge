@@ -259,29 +259,6 @@ func ResolveSourcePath(p string) string {
 	return abs
 }
 
-// IsPromptRecord reports whether line is Delve's interactive prompt.
-func IsPromptRecord(line string) bool {
-	return strings.TrimSpace(platform.StripANSI(line)) == PromptToken
-}
-
-// IsBarePromptHost reports a scrollback line that is only the Delve prompt.
-func IsBarePromptHost(line string) bool {
-	return strings.TrimSpace(platform.StripANSI(line)) == PromptToken
-}
-
-// LivePromptHost returns fromDLV with exactly one trailing space for input.
-func LivePromptHost(fromDLV string) string {
-	if fromDLV == "" {
-		return ""
-	}
-	return strings.TrimRight(fromDLV, " ") + " "
-}
-
-// StopNeedsUIRefresh is true for stops that should update Code / threads / stack.
-func StopNeedsUIRefresh(stop *gdb.MiStopMsg) bool {
-	return gdb.StopNeedsUIRefresh(stop)
-}
-
 // IsStackNavCmd reports Delve commands that change the selected frame without
 // a new "> " stop line.
 func IsStackNavCmd(cmd string) bool {

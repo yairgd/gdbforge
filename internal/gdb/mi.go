@@ -14,8 +14,6 @@ const (
 	Running
 )
 
-var state GdbState = Done
-
 func ExtractMIField(line, key string) string {
 	// מחפש pattern: key="value"
 
@@ -78,10 +76,6 @@ func ExpandTabs(s string, tabSize int) string {
 	return result.String()
 }
 
-// Helper function to validate octal digits (0-7)
-func isOctalDigit(ch byte) bool {
-	return ch >= '0' && ch <= '7'
-}
 func DecodeMIString(raw string) string {
 	return mitext.DecodeMIString(raw)
 }

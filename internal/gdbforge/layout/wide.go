@@ -12,15 +12,6 @@ const (
 	wideThreadsRatio          = 1.0 / 2.0 // Threads | Callstack
 )
 
-// WideSpec builds Code|IO over GDB|(Threads|Callstack / Breakpoints).
-type WideSpec struct{}
-
-func (WideSpec) Name() string { return Wide }
-
-func (WideSpec) Build(panes Panes) *termforge.WidgetTree {
-	return BuildWide(panes)
-}
-
 // BuildWide builds:
 //
 //	Horizontal: top = Code | Output; bottom = GDB | side.

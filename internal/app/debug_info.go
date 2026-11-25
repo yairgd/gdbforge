@@ -105,16 +105,6 @@ func (c *debugInfoCtl) syncCallStackViews() {
 	c.stackW.SetItems(c.stack.Items())
 }
 
-func (c *debugInfoCtl) applyThreadInfos(items []models.ThreadInfo) {
-	c.setThreadInfos(items)
-	c.syncThreadViews()
-}
-
-func (c *debugInfoCtl) applyStackFrames(frames []models.StackFrame) {
-	c.setStackFrames(frames)
-	c.syncCallStackViews()
-}
-
 func (c *debugInfoCtl) setThreadInfos(items []models.ThreadInfo) {
 	if c.threads == nil {
 		c.threads = &models.ThreadList{}

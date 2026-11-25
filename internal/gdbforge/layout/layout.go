@@ -36,12 +36,6 @@ type Panes struct {
 	Callstack   termforge.NodeWidget
 }
 
-// Spec builds the split layout for one named layout.
-type Spec interface {
-	Name() string
-	Build(panes Panes) *termforge.WidgetTree
-}
-
 func clampRatio(r float64) float64 {
 	if r < 0.1 {
 		return 0.1

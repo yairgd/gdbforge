@@ -121,18 +121,6 @@ func breakKey(it BreakInfo) string {
 	return fmt.Sprintf("num:%d", it.Number)
 }
 
-// BreakLoc formats a location for display (not a debugger command).
-func BreakLoc(it BreakInfo) string {
-	if it.File != "" && it.Line > 0 {
-		file := it.File
-		return fmt.Sprintf("%s:%d", file, it.Line)
-	}
-	if it.Addr != "" {
-		return "*" + it.Addr
-	}
-	return "?"
-}
-
 func breakIntentClear(it BreakInfo) BreakIntent {
 	if it.Number > 0 {
 		return BreakIntent{Kind: IntentDeleteByNumber, Number: it.Number, File: it.File, Line: it.Line, Addr: it.Addr}

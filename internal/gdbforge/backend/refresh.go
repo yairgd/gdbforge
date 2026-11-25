@@ -143,11 +143,3 @@ func StackList(ctx context.Context, kind Kind, q Querier, longCapture bool, log 
 	}
 	return nil, false
 }
-
-// MapBreakCmd rewrites break/clear for Delve; GDB cmds pass through.
-func MapBreakCmd(kind Kind, cmd string) string {
-	if kind == DLV {
-		return dlv.MapBreakCmd(cmd)
-	}
-	return cmd
-}

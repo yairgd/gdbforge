@@ -243,7 +243,6 @@ See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) 
 |------|----------------|
 | `gdb_client.go` | `GDBClient` — CLI + MI + inferior `*ptyx.TTY`; `new-ui mi2` bootstrap |
 | `mi.go` | MI string decode, field extraction, tab expansion |
-| `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
 | `parse/` | MI reply parsers → `models` (break list, frames, threads, disassembly, values) |
 

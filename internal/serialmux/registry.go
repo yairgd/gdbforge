@@ -33,13 +33,3 @@ func claim(device string) error {
 	}
 	return nil
 }
-
-// Lookup returns the open mux for device, if any.
-func Lookup(device string) *Mux {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	if registry.m == nil {
-		return nil
-	}
-	return registry.m[device]
-}

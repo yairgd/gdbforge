@@ -114,20 +114,6 @@ func (c *breakCtl) applyBreakIntent(intent models.BreakIntent) {
 	h.DeferBPRefresh()
 }
 
-// sendBreakpointCmd applies a legacy MI/CLI string (prefer applyBreakIntent).
-func (c *breakCtl) sendBreakpointCmd(cmd string) {
-	h := c.host
-	if h == nil || cmd == "" || h.Backend() == nil {
-		return
-	}
-	h.Backend().SendMappedBreak(c.cmdEnv(), cmd)
-	if h.Backend().BreakRefreshImmediate() {
-		c.onChanged()
-		return
-	}
-	h.DeferBPRefresh()
-}
-
 // restoreSaved reloads ./.gdbforge/breakpoints.yaml into GDB + UI.
 func (c *breakCtl) restoreSaved(saved []models.BreakInfo) {
 	h := c.host
@@ -603,13 +589,6 @@ func (c *breakCtl) reapplyAfterDlvConnect() {
 		c.applyBreakIntent(models.BreakIntent{Kind: models.IntentInsert, File: it.File, Line: it.Line})
 	}
 	c.onChanged()
-}
-
-func (c *breakCtl) hasAt(file string, line int) bool {
-	if c.list == nil || file == "" || line < 1 {
-		return false
-	}
-	return c.list.IndexOfFileLine(file, line) >= 0
 }
 
 // saveOnQuit writes snapshot to ./.gdbforge/breakpoints.yaml.

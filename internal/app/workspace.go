@@ -75,13 +75,6 @@ func (w *LayoutShell) Widget() termforge.Widget {
 	return w.tab
 }
 
-func (w *LayoutShell) setTab(tab *termforge.TabWidget) {
-	if w == nil {
-		return
-	}
-	w.tab = tab
-}
-
 func isCodeWidget(w termforge.Widget) bool {
 	_, ok := w.(*widgets.CodeWidget)
 	return ok

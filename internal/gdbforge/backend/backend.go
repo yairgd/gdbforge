@@ -38,7 +38,7 @@ type Backend interface {
 	SelectFrameCmd(level int) string
 	SelectThreadCmd(id string) string
 
-	// BreakRefreshImmediate is true when sendBreakpointCmd should call onBreakpointsChanged now (GDB).
+	// BreakRefreshImmediate is true when applyBreakIntent should call onBreakpointsChanged now (GDB).
 	BreakRefreshImmediate() bool
 
 	FetchBreakpoints(ctx context.Context, q Querier) ([]models.BreakInfo, bool)

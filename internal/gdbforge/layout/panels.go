@@ -11,15 +11,6 @@ const (
 	panelsThreadsRatio          = 1.0 / 2.0 // Threads | Callstack share equally
 )
 
-// PanelsSpec builds the Output + Threads|Callstack / Breakpoints side layout.
-type PanelsSpec struct{}
-
-func (PanelsSpec) Name() string { return Panels }
-
-func (PanelsSpec) Build(panes Panes) *termforge.WidgetTree {
-	return BuildPanels(panes)
-}
-
 // BuildPanels builds:
 //
 //	Vertical: left = Code over GDB; right = Output over bottom half.

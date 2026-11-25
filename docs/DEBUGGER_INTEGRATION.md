@@ -681,9 +681,9 @@ Incomplete lines remain in `lineBuf` across chunks.
 
 **Design rationale:** GDB often splits writes mid-line; newline buffering is required. Per-line dispatch is enough for correctness and feels faster than a 100ms debounce.
 
-### MiMsg (batch helper)
+### MiUpdate
 
-`MiMsg` / `NewMiMsg` / `CreateBufferForLine` remain as a batch-oriented helper for offline or test parsing. The live GDB pane uses streaming `MiUpdate` from `GdbInputState`.
+The GDB pane uses streaming `MiUpdate` from `GdbInputState`.
 
 ```go
 type MiUpdate struct {
@@ -699,7 +699,7 @@ type MiUpdate struct {
 
 `DecodeMIString` handles GDB's C-style escapes including **octal UTF-8 sequences** (`\342\235\214`). `ExpandTabs` expands tab stops for aligned output.
 
-Implementation: `mi.go`, `mi_msg.go`, `mi_state.go`.
+Implementation: `mi.go`, `mi_state.go`.
 
 ---
 

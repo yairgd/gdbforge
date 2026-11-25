@@ -387,7 +387,3 @@ func (a *DebuggerApp) toggleCallstackBreak() {
 	a.breaks.onCodeBreakToggle(fr.File, fr.Line)
 	a.RequestFrame()
 }
-
-func (a *DebuggerApp) hasBreakAt(file string, line int) bool {
-	return a.breaks.hasAt(file, line)
-}

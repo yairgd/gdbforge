@@ -5,7 +5,6 @@ package mitext
 
 import (
 	"strconv"
-	"strings"
 )
 
 // MI prompt record GDB emits over MI (exact line token after TrimSpace).
@@ -18,30 +17,6 @@ const (
 // IsMIPromptRecord reports whether line is GDB's MI prompt record.
 func IsMIPromptRecord(line string) bool {
 	return line == MIPromptToken
-}
-
-// IsBareMIPromptHost reports a scrollback line that is only the MI prompt
-// token (optional trailing space from a console-stream echo).
-func IsBareMIPromptHost(line string) bool {
-	return strings.TrimSpace(line) == MIPromptToken
-}
-
-// LivePromptHost returns fromGDB with exactly one trailing space for input.
-// Empty fromGDB yields empty (do not invent a token).
-func LivePromptHost(fromGDB string) string {
-	if fromGDB == "" {
-		return ""
-	}
-	return strings.TrimRight(fromGDB, " ") + " "
-}
-
-// IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").
-func IsCtrlCQuitLog(s string) bool {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return false
-	}
-	return t == "Quit" || strings.HasSuffix(t, " Quit") || strings.Contains(t, "Quit")
 }
 
 func isOctalDigit(ch byte) bool {

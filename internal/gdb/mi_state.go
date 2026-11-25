@@ -7,6 +7,15 @@ import (
 	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 )
 
+// MiStopMsg is the location of a *stopped record (also built by the Delve backend).
+type MiStopMsg struct {
+	Reason   string
+	ThreadId string
+	File     string // fullname or file from frame
+	Func     string
+	Line     int // 1-based
+}
+
 // MiUpdate is produced as soon as complete MI lines arrive — no debounce wait.
 type MiUpdate struct {
 	DisplayLines []string // console (~), make/shell raw PTY text, errors
@@ -280,11 +289,6 @@ func parseMiFrame(line string) (MiFrameMsg, bool) {
 	return fr, true
 }
 
-// IsCtrlCQuitLog reports GDB log-stream Ctrl-C feedback ("Quit" / "❌️ Quit").
-func IsCtrlCQuitLog(s string) bool {
-	return mitext.IsCtrlCQuitLog(s)
-}
-
 // Re-export MI prompt helpers from gdbforge/mitext for backend callers.
 const (
 	MIPromptToken    = mitext.MIPromptToken
@@ -293,12 +297,6 @@ const (
 
 // IsMIPromptRecord reports whether line is GDB's MI prompt record.
 func IsMIPromptRecord(line string) bool { return mitext.IsMIPromptRecord(line) }
-
-// IsBareMIPromptHost reports a scrollback line that is only the MI prompt token.
-func IsBareMIPromptHost(line string) bool { return mitext.IsBareMIPromptHost(line) }
-
-// LivePromptHost returns fromGDB with exactly one trailing space for input.
-func LivePromptHost(fromGDB string) string { return mitext.LivePromptHost(fromGDB) }
 
 func isCtrlCQuitLog(s string) bool {
 	t := strings.TrimSpace(s)

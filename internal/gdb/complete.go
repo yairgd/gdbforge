@@ -335,20 +335,6 @@ func QuoteCompleteArg(text string) string {
 	return b.String()
 }
 
-// CompleteNames runs MI -complete for prefix and returns match names.
-// Same shape as commands.Completer / CommandNode.CompleteArgs.
-// Uses PTYOwnerApp so the console paint policy matches other silent queries.
-func CompleteNames(sess ptyx.Session, state *platform.AppState, prefix string) []string {
-	res := Complete(sess, state, prefix)
-	if len(res.Matches) > 0 {
-		return res.Matches
-	}
-	if res.Completion != "" && res.Completion != prefix {
-		return []string{res.Completion}
-	}
-	return nil
-}
-
 // Complete runs -complete and returns the full parsed result.
 func Complete(sess ptyx.Session, state *platform.AppState, prefix string) CompleteResult {
 	if sess == nil {
