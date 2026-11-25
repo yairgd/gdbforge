@@ -140,7 +140,11 @@ flowchart BT
     backend --> dlv
     backend --> models
     gdb --> mitext
+    parse --> models
+    parse --> mitext
+    backend --> parse
     mcp --> gdb
+    mcp --> parse
     dlv --> gdb
 
     app --> termforge
@@ -175,13 +179,14 @@ tcell into a package that must stay testable without a terminal.
 | Package | May import | Must not import |
 |---------|------------|-----------------|
 | **`internal/gdb`** | stdlib, `termforge/ptyx`, `termforge/platform`, `gdbforge/mitext`, `gdbforge/models` | `termforge` (engine root), `tcell`, widgets |
+| **`internal/gdb/parse`** | stdlib, `gdbforge/models`, `gdbforge/mitext` | `gdb` (client), `termforge`, `tcell`, widgets |
 | **`internal/dlv`** | stdlib, `delve`, `termforge/ptyx`, `termforge/platform`, `gdb`, `gdbforge/models` | `termforge` (engine root), `tcell`, widgets |
-| **`internal/mcp`** | stdlib (incl. `net/http`), `termforge/ptyx`, `termforge/platform`, `gdb`, `gdbforge/domain` | `tcell`, widgets |
+| **`internal/mcp`** | stdlib (incl. `net/http`), `termforge/ptyx`, `termforge/platform`, `gdb`, `gdb/parse`, `gdbforge/domain` | `tcell`, widgets |
 | **`internal/luahost`** | stdlib, `gopher-lua` | `gdb`, `dlv`, `mcp`, `gdbforge/*` |
 | **`internal/serialmux`** | stdlib, `creack/pty`, `termforge/ptyx`, `termforge/devport` | widgets, `gdb`, `dlv` |
 | **`internal/gdbforge/mitext`** | stdlib | everything else — pure MI string helpers |
 | **`internal/gdbforge/models`** | stdlib | widgets, backends |
-| **`internal/gdbforge/backend`** | `gdb`, `dlv`, `models`, `termforge/ptyx`, `termforge/platform` | `termforge` (engine root), `tcell`, widgets |
+| **`internal/gdbforge/backend`** | `gdb`, `gdb/parse`, `dlv`, `models`, `termforge/ptyx`, `termforge/platform` | `termforge` (engine root), `tcell`, widgets |
 | **`internal/gdbforge/widgets`** | `termforge`, `termforge/platform`, `termforge/ptyx`, `tcell`, `chroma`, `events`, `models`, `debugstate`, `luahost`, stdlib | `gdb`, `mcp` |
 | **`internal/gdbforge/layout`** | `termforge`, `termforge/platform` | widgets, backends, `mcp` |
 | **`internal/app`** | everything | — (composition root) |
