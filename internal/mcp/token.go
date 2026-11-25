@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
 	"github.com/yairgd/termforge/platform"
 	"github.com/yairgd/termforge/ptyx"
 )

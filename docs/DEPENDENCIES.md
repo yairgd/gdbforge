@@ -110,7 +110,7 @@ flowchart BT
 
     models["gdbforge/models"]
     mitext["gdbforge/mitext"]
-    parse["gdbforge/parse"]
+    parse["gdb/parse"]
     events["gdbforge/events"]
     debugstate["gdbforge/debugstate"]
     backend["gdbforge/backend"]

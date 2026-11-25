@@ -39,7 +39,7 @@ debugger application.
 | Entry point | `cmd/gdbforge/main.go` | Version stamp + argv dispatch only — no application logic |
 | App events | `internal/gdbforge/events` | `GdbOutputMsg` (MI bridge) |
 | App state | `internal/gdbforge/debugstate` | Debugger session fields |
-| App DTOs | `internal/gdbforge/models`, `parse`, `mitext` | Break/thread/stack types + MI parsers / string helpers |
+| App DTOs | `internal/gdbforge/models`, `mitext` | Break/thread/stack types + MI string helpers |
 | Script host | `internal/luahost` | Generic Lua VM; debugger bindings are services built in `internal/app` |
 
 Import guardrails: `task check-imports`.
@@ -59,7 +59,6 @@ gdbforge/
 │   ├── ttyhold/           # --hold-inferior-tty helper (re-executed binary)
 │   ├── gdbforge/          # Debugger app layer
 │   │   ├── models/        # Break/thread/stack DTOs
-│   │   ├── parse/         # MI parsers
 │   │   ├── mitext/        # MI string unescape / prompt tokens
 │   │   ├── debugstate/    # Debugger session state
 │   │   ├── events/        # GdbOutputMsg (MI bridge)
@@ -70,6 +69,7 @@ gdbforge/
 │   │   ├── persist/       # Breakpoint + history YAML
 │   │   └── widgets/       # Debugger panes (no gdb/mcp imports)
 │   ├── gdb/               # GDB MI2 backend
+│   │   └── parse/         # MI reply parsers → models
 │   ├── dlv/               # Delve backend (rpc2 + CLI PTY)
 │   ├── mcp/               # HTTP/MCP surface
 │   ├── luahost/           # Lua VM + generic script API
@@ -189,7 +189,6 @@ task build
 | `models/threads.go` | `ThreadList` — stop snapshot |
 | `models/callstack.go` | `CallStack` — frame snapshot |
 | `models/assembly.go` | `AssemblyList` / `AsmLine` |
-| `parse/disassemble.go` | Disassembly parse for Assembly pane |
 | `persist/breakpoints.go` | `./.gdbforge/breakpoints.yaml` save/load |
 | `domain/domain.go` | `DebugDomain` — peer-controller surface (AI now; future Lua) |
 | `layout/` | Named workspace trees (`default`, `panels`, `classic`, `wide`) — geometry only |
@@ -246,6 +245,7 @@ See [PTY_ARCHITECTURE.md](PTY_ARCHITECTURE.md#serial-uart-vs-unix-pty-why-both) 
 | `mi.go` | MI string decode, field extraction, tab expansion |
 | `mi_msg.go` | Batch line parser → structured `MiMsg` (helper / tests) |
 | `mi_state.go` | Stream splitter: `PushRaw` → `MiUpdate` per complete MI line |
+| `parse/` | MI reply parsers → `models` (break list, frames, threads, disassembly, values) |
 
 **Rule:** no imports from `termforge`. GDB MI → `GdbOutputMsg` → parser; inferior/CLI bytes → `WireTTY` → `CompositeTerminal`.
 
@@ -350,7 +350,7 @@ testable without a terminal.
 | Application model (domain state)? | `internal/gdbforge/models` |
 | Peer control surface (AI / Lua)? | `internal/gdbforge/domain` (+ `internal/app/debug_domain.go` impl) |
 | Service (external I/O)? | `internal/gdb`, `internal/dlv`, or a new backend package |
-| GDB MI parsing? | `internal/gdb` + `internal/gdbforge/parse` |
+| GDB MI parsing? | `internal/gdb` + `internal/gdb/parse` |
 | Debugger pane (view of a model)? | `internal/gdbforge/widgets` |
 | Named workspace preset? | `internal/gdbforge/layout` |
 | Key binding in normal mode? | `internal/app/keybindings.go` + `input.go` |

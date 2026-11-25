@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/yairgd/gdbforge/internal/dlv"
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 )
 
 // Kind selects GDB MI vs Delve CLI query shapes.

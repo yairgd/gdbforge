@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/backend"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/gdbforge/internal/mcp"
 	"github.com/yairgd/termforge/service"
 )

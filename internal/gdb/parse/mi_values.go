@@ -3,6 +3,8 @@ package parse
 import (
 	"regexp"
 	"strings"
+
+	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 )
 
 var (
@@ -14,39 +16,13 @@ var (
 	miQuotedRe   = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"`)
 )
 
-// MIUnquote undoes the C-string escapes of an MI string value.
-func MIUnquote(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 >= len(s) {
-			b.WriteByte(s[i])
-			continue
-		}
-		i++
-		switch s[i] {
-		case 'n':
-			b.WriteByte('\n')
-		case 't':
-			b.WriteByte('\t')
-		case 'r':
-			b.WriteByte('\r')
-		default:
-			b.WriteByte(s[i])
-		}
-	}
-	return b.String()
-}
-
 // MIError returns the message of the last ^error record in raw.
 func MIError(raw string) (string, bool) {
 	m := miErrorRe.FindAllStringSubmatch(raw, -1)
 	if len(m) == 0 {
 		return "", false
 	}
-	return MIUnquote(m[len(m)-1][1]), true
+	return mitext.DecodeMIString(m[len(m)-1][1]), true
 }
 
 // MIEvaluateValue returns value from a -data-evaluate-expression reply.
@@ -55,7 +31,7 @@ func MIEvaluateValue(raw string) (string, bool) {
 	if len(m) == 0 {
 		return "", false
 	}
-	return MIUnquote(m[len(m)-1][1]), true
+	return mitext.DecodeMIString(m[len(m)-1][1]), true
 }
 
 // MIMemoryHex joins the contents of every block of a -data-read-memory-bytes reply.
@@ -96,7 +72,7 @@ func MIRegisterValues(raw string) map[int]string {
 		for _, c := range m[1] {
 			n = n*10 + int(c-'0')
 		}
-		out[n] = MIUnquote(m[2])
+		out[n] = mitext.DecodeMIString(m[2])
 	}
 	return out
 }
@@ -108,7 +84,7 @@ var miConsoleRe = regexp.MustCompile(`(?m)^~"((?:[^"\\]|\\.)*)"\s*$`)
 func MIConsoleText(raw string) string {
 	var b strings.Builder
 	for _, m := range miConsoleRe.FindAllStringSubmatch(strings.ReplaceAll(raw, "\r", ""), -1) {
-		b.WriteString(MIUnquote(m[1]))
+		b.WriteString(mitext.DecodeMIString(m[1]))
 	}
 	return b.String()
 }

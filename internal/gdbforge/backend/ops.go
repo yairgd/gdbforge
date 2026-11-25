@@ -6,8 +6,8 @@ import (
 
 	"github.com/yairgd/gdbforge/internal/dlv"
 	"github.com/yairgd/gdbforge/internal/gdb"
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 )
 
 // NavigationOpts controls frame/thread selection side effects.

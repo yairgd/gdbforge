@@ -5,7 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
+	"github.com/yairgd/gdbforge/internal/gdbforge/mitext"
 )
 
 // gdb_command reply formats.
@@ -27,7 +28,7 @@ var streamRe = regexp.MustCompile(`(?m)^[~@]"((?:[^"\\]|\\.)*)"\s*$`)
 func ConsoleText(raw string) string {
 	var b strings.Builder
 	for _, m := range streamRe.FindAllStringSubmatch(strings.ReplaceAll(raw, "\r", ""), -1) {
-		b.WriteString(parse.MIUnquote(m[1]))
+		b.WriteString(mitext.DecodeMIString(m[1]))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

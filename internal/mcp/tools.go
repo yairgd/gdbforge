@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/yairgd/gdbforge/internal/gdb/parse"
 	"github.com/yairgd/gdbforge/internal/gdbforge/domain"
 	"github.com/yairgd/gdbforge/internal/gdbforge/models"
-	"github.com/yairgd/gdbforge/internal/gdbforge/parse"
 	"github.com/yairgd/termforge/service"
 )
 
